@@ -11,13 +11,13 @@ import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
 import { useOperator } from '@/hooks/useFirestore';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
-import { MAX_CAPACITY, friendlyError, updateBoat, updateName } from '@/services/profile.service';
+import { friendlyError, updateBoat, updateName } from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 
 export default function BangkeroProfile() {
   const { user, profile } = useAuth();
-  const operator = useOperator(user?.uid ?? null);
+  const operator = useOperator(user?.id ?? null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -65,8 +65,8 @@ export default function BangkeroProfile() {
     try {
       // Boat first: it validates capacity and can throw, and failing before the
       // name write keeps a half-applied save from looking like a success.
-      if (boatDirty) await updateBoat({ uid: user.uid, boatName, capacity });
-      if (nameDirty) await updateName({ uid: user.uid, firstName, lastName, isBangkero: true });
+      if (boatDirty) await updateBoat({ uid: user.id, boatName, capacity });
+      if (nameDirty) await updateName({ uid: user.id, firstName, lastName, isBangkero: true });
       setSaved(true);
     } catch (e) {
       setError(friendlyError(e));

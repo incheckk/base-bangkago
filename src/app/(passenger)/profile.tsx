@@ -46,7 +46,7 @@ export default function PassengerProfile() {
     setSaving(true);
     setError(null);
     try {
-      await updateName({ uid: user.uid, firstName, lastName, isBangkero: false });
+      await updateName({ uid: user.id, firstName, lastName, isBangkero: false });
       setSaved(true);
     } catch (e) {
       setError(friendlyError(e));

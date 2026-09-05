@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type UserRole = 'passenger' | 'bangkero';
 
 /**
@@ -19,7 +17,7 @@ export interface UserDoc {
   firstName: string;
   lastName: string;
   role: UserRole;
-  createdAt: Timestamp;
+  createdAt: string; // ISO 8601
 }
 
 export interface OperatorDoc {
@@ -28,7 +26,7 @@ export interface OperatorDoc {
   boatName: string | null;
   capacity: number | null;
   isAvailable: boolean;
-  updatedAt: Timestamp;
+  updatedAt: string; // ISO 8601
 }
 
 export interface PierDoc {
@@ -66,18 +64,14 @@ export interface BookingDoc {
   paymentMethod: 'cash';
   status: BookingStatus;
 
-  // Set together when a bangkero accepts. Denormalized for the same reason the
-  // passenger fields are: the passenger's status screen is one read, no follow-up.
   operatorId: string | null;
   operatorName: string | null;
   operatorBoatName: string | null;
 
-  // Operator uids who declined. Filtered client-side so a decline hides the
-  // request from that bangkero without ending it for everyone else.
   rejectedBy: string[];
 
-  createdAt: Timestamp;
-  acceptedAt: Timestamp | null;
-  completedAt: Timestamp | null;
-  cancelledAt: Timestamp | null;
+  createdAt: string; // ISO 8601
+  acceptedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
 }

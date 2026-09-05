@@ -17,7 +17,7 @@ import { formatPhone } from '@/utils/phone';
 
 export default function BangkeroHome() {
   const { user, profile } = useAuth();
-  const uid = user?.uid ?? null;
+  const uid = user?.id ?? null;
 
   const operator = useOperator(uid);
   const requests = useOpenRequests(uid);

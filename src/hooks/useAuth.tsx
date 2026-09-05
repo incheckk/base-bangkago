@@ -1,7 +1,8 @@
+import type { Session, User } from '@supabase/supabase-js';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
+
+import { fetchUserDoc } from '../services/auth.service';
+import { supabase } from '../services/supabase';
 import type { UserDoc } from '../types/models';
 
 interface AuthState {
@@ -25,39 +26,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const t0 = Date.now();
-    return onAuthStateChanged(auth, (u) => {
-      if (__DEV__) console.log(`[timing] auth resolved +${Date.now() - t0}ms (user: ${u ? 'yes' : 'none'})`);
-      setUser(u);
+
+    // Resolves once with whatever session is already on disk (or none) —
+    // this is the equivalent of Firebase's first onAuthStateChanged fire.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (__DEV__) {
+        console.log(`[timing] session resolved +${Date.now() - t0}ms (user: ${session ? 'yes' : 'none'})`);
+      }
+      setUser(session?.user ?? null);
       setInitializing(false);
     });
+
+    // Fires on every subsequent sign-in / sign-out / token refresh.
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session: Session | null) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) { setProfile(null); setProfileLoading(false); return; }
     setProfileLoading(true);
+    setError(null);
 
-    // First Firestore read of the session — this is what gates the redirect
-    // after sign-in, so it is the number to watch if login feels slow.
+    // Firestore's onSnapshot gave live profile updates for free. Supabase
+    // needs an explicit Realtime channel for that, which isn't set up yet —
+    // this fetches once on sign-in, which covers every current use case
+    // since nothing else in the app edits another user's profile mid-session.
     const t0 = Date.now();
-    return onSnapshot(
-      doc(db, 'users', user.uid),
-      (snap) => {
-        if (__DEV__) {
-          console.log(
-            `[timing] profile snapshot +${Date.now() - t0}ms ` +
-            `(exists: ${snap.exists()}, from cache: ${snap.metadata.fromCache})`
-          );
-        }
-        setProfile(snap.exists() ? (snap.data() as UserDoc) : null);
+    fetchUserDoc(user.id)
+      .then((doc) => {
+        if (__DEV__) console.log(`[timing] profile fetched +${Date.now() - t0}ms (exists: ${!!doc})`);
+        setProfile(doc);
         setProfileLoading(false);
-        setError(null);
-      },
-      (e) => {
-        if (__DEV__) console.log(`[timing] profile FAILED +${Date.now() - t0}ms — ${e.code}`);
+      })
+      .catch((e) => {
+        if (__DEV__) console.log(`[timing] profile FAILED +${Date.now() - t0}ms`);
         setError(e.message);
         setProfileLoading(false);
-      }
-    );
+      });
   }, [user]);
 
   const value = useMemo(

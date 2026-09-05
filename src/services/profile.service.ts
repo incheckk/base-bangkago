@@ -1,7 +1,5 @@
-import { doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
-
-import { db } from './firebase';
 import { friendlyAuthError } from './auth.service';
+import { supabase } from './supabase';
 
 export const friendlyError = friendlyAuthError;
 
@@ -15,29 +13,27 @@ interface NameArgs {
 }
 
 /**
- * Renaming a bangkero has to touch two documents: users/ holds the private
- * record, operators/ holds the public displayName the passenger sees. A batch
- * keeps them from drifting apart if one write fails.
+ * Renaming a bangkero has to touch two tables: profiles holds the private
+ * record, operators holds the public display_name the passenger sees. This
+ * calls a Postgres function (update_display_name) so both writes commit in
+ * one transaction — the same guarantee writeBatch gave in Firestore, since
+ * a single Postgres function call is atomic by default.
  *
- * Bookings already placed keep the name they were written with — a past trip
- * should read the way it did when it happened, not silently rewrite itself.
+ * Bookings already placed keep the name they were written with — a past
+ * trip should read the way it did when it happened, not silently rewrite.
  */
 export async function updateName({ uid, firstName, lastName, isBangkero }: NameArgs): Promise<void> {
   const first = firstName.trim();
   const last = lastName.trim();
   if (!first || !last) throw new Error('First and last name are required.');
 
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'users', uid), { firstName: first, lastName: last });
-
-  if (isBangkero) {
-    batch.update(doc(db, 'operators', uid), {
-      displayName: `${first} ${last}`.trim(),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
-  await batch.commit();
+  const { error } = await supabase.rpc('update_display_name', {
+    p_uid: uid,
+    p_first_name: first,
+    p_last_name: last,
+    p_is_bangkero: isBangkero,
+  });
+  if (error) throw error;
 }
 
 interface BoatArgs {
@@ -58,9 +54,13 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
     }
   }
 
-  await updateDoc(doc(db, 'operators', uid), {
-    boatName: name || null,
-    capacity: parsed,
-    updatedAt: serverTimestamp(),
-  });
+  const { error } = await supabase
+    .from('operators')
+    .update({
+      boat_name: name || null,
+      capacity: parsed,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', uid);
+  if (error) throw error;
 }

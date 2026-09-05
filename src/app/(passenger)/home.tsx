@@ -20,7 +20,7 @@ export default function PassengerHome() {
   const { user, profile } = useAuth();
   const piers = usePiers();
   const operators = useAvailableOperatorCount();
-  const bookings = useRecentBookings(user?.uid ?? null);
+  const bookings = useRecentBookings(user?.id ?? null);
 
   return (
     <ScreenContainer padded={false}>

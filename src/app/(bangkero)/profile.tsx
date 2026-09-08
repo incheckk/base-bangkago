@@ -9,7 +9,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
-import { useOperator } from '@/hooks/useFirestore';
+import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { friendlyError, updateBoat, updateName } from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -17,7 +17,7 @@ import { formatPhone } from '@/utils/phone';
 
 export default function BangkeroProfile() {
   const { user, profile } = useAuth();
-  const operator = useOperator(user?.id ?? null);
+  const bangkero = useBangkero(user?.id ?? null);
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -37,11 +37,10 @@ export default function BangkeroProfile() {
   }, [profile]);
 
   useEffect(() => {
-    if (operator.data) {
-      setBoatName(operator.data.boatName ?? '');
-      setCapacity(operator.data.capacity != null ? String(operator.data.capacity) : '');
+    if (bangkero.data) {
+      setBoatName(bangkero.data.displayName ?? '');
     }
-  }, [operator.data]);
+  }, [bangkero.data]);
 
   useEffect(() => {
     if (!saved) return;
@@ -49,13 +48,11 @@ export default function BangkeroProfile() {
     return () => clearTimeout(t);
   }, [saved]);
 
-  const op = operator.data;
+  const op = bangkero.data;
   const nameDirty =
     !!profile && (firstName.trim() !== profile.firstName || lastName.trim() !== profile.lastName);
   const boatDirty =
-    !!op &&
-    (boatName.trim() !== (op.boatName ?? '') ||
-      capacity.trim() !== (op.capacity != null ? String(op.capacity) : ''));
+    !!op && boatName.trim() !== (op.displayName ?? '');
   const dirty = nameDirty || boatDirty;
 
   async function save() {
@@ -63,8 +60,6 @@ export default function BangkeroProfile() {
     setSaving(true);
     setError(null);
     try {
-      // Boat first: it validates capacity and can throw, and failing before the
-      // name write keeps a half-applied save from looking like a success.
       if (boatDirty) await updateBoat({ uid: user.id, boatName, capacity });
       if (nameDirty) await updateName({ uid: user.id, firstName, lastName, isBangkero: true });
       setSaved(true);
@@ -85,7 +80,7 @@ export default function BangkeroProfile() {
     }
   }
 
-  if (!profile || operator.loading) {
+  if (!profile || bangkero.loading) {
     return <ScreenContainer><LoadingState label="Loading profile…" /></ScreenContainer>;
   }
 

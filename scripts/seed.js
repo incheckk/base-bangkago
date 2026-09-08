@@ -4,28 +4,27 @@
  * overwrite by deterministic id, and bookings are wiped before rebuilding.
  *
  *   npm run seed
+ *
+ * Requires SUPABASE_SERVICE_ROLE_KEY in .env (see scripts/supabase.js).
  */
 
 const {
-  FieldValue, init, authEmail,
-  DEMO_PASSWORD, PIERS, ACCOUNTS,
+  supabase, authEmail,
+  DEMO_PASSWORD, PORTS, ACCOUNTS,
   buildRoutes, wipeBookings, writeSeedBookings,
-} = require('./lib');
+} = require('./supabase');
 
-async function seedPiers(db) {
-  const batch = db.batch();
-  for (const p of PIERS) {
-    batch.set(db.collection('piers').doc(p.pierId), { ...p, isActive: true });
-  }
-  await batch.commit();
-  return PIERS.length;
+async function seedPorts() {
+  const { error } = await supabase.from('ports').upsert(PORTS, { onConflict: 'id' });
+  if (error) throw error;
+  return PORTS.length;
 }
 
-async function seedRoutes(db) {
+async function seedRoutes() {
   const routes = buildRoutes();
-  const batch = db.batch();
-  for (const r of routes) batch.set(db.collection('routes').doc(r.routeId), r);
-  await batch.commit();
+  await supabase.from('routes').delete().neq('id', '');
+  const { error } = await supabase.from('routes').insert(routes);
+  if (error) throw error;
   return routes.length;
 }
 
@@ -33,64 +32,91 @@ async function seedRoutes(db) {
  * Creates the auth account if missing, resets the password if it exists.
  * Returns uid-keyed people so bookings can denormalize names.
  */
-async function seedAccounts(auth, db) {
+async function seedAccounts() {
   const people = {};
 
   for (const acct of ACCOUNTS) {
     const email = authEmail(acct.phone);
-    let user;
+    let uid;
 
-    try {
-      user = await auth.getUserByEmail(email);
-      await auth.updateUser(user.uid, { password: DEMO_PASSWORD });
-    } catch (e) {
-      if (e.code !== 'auth/user-not-found') throw e;
-      user = await auth.createUser({ email, password: DEMO_PASSWORD });
-    }
+    // Check if user already exists
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const existing = existingUsers?.users?.find((u) => u.email === email);
 
-    await db.collection('users').doc(user.uid).set({
-      uid: user.uid,
-      phone: acct.phone,
-      firstName: acct.firstName,
-      lastName: acct.lastName,
-      role: acct.role,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-
-    if (acct.role === 'bangkero') {
-      await db.collection('operators').doc(user.uid).set({
-        uid: user.uid,
-        displayName: `${acct.firstName} ${acct.lastName}`,
-        boatName: acct.boatName,
-        capacity: acct.capacity,
-        isAvailable: true, // both online, so one request lands on two operators
-        updatedAt: FieldValue.serverTimestamp(),
+    if (existing) {
+      uid = existing.id;
+      await supabase.auth.admin.updateUserById(uid, { password: DEMO_PASSWORD });
+    } else {
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password: DEMO_PASSWORD,
+        email_confirm: true,
       });
+      if (error) throw error;
+      uid = data.user.id;
     }
 
-    people[acct.phone] = { ...acct, uid: user.uid };
+    // Upsert users row
+    const { error: userError } = await supabase.from('users').upsert({
+      id: uid,
+      first_name: acct.firstName,
+      last_name: acct.lastName,
+      email: email,
+      phone_number: acct.phone,
+      user_role: acct.role,
+      is_verified: true,
+    }, { onConflict: 'id' });
+    if (userError) throw userError;
+
+    // Upsert bangkeros row for bangkeros
+    if (acct.role === 'bangkero') {
+      const { error: bangkeroError } = await supabase.from('bangkeros').upsert({
+        id: uid,
+        display_name: `${acct.firstName} ${acct.lastName}`,
+        verification_stat: 'verified',
+        is_available: true,
+      }, { onConflict: 'id' });
+      if (bangkeroError) throw bangkeroError;
+
+      // Create bangka record
+      const { data: existingBangka } = await supabase
+        .from('bangkas')
+        .select('id')
+        .eq('bangkero_id', uid)
+        .maybeSingle();
+
+      if (!existingBangka) {
+        const { error: bangkaError } = await supabase.from('bangkas').insert({
+          bangka_name: acct.boatName,
+          bangka_type: 'pump_boat',
+          capacity: acct.capacity,
+          bangkero_id: uid,
+        });
+        if (bangkaError) throw bangkaError;
+      }
+    }
+
+    people[acct.phone] = { ...acct, uid };
   }
 
   return people;
 }
 
 (async () => {
-  const { db, auth } = init();
-
   console.log('\nSeeding BangkaGo demo data…\n');
 
-  const piers = await seedPiers(db);
-  console.log(`  piers      ${piers}`);
+  const ports = await seedPorts();
+  console.log(`  ports       ${ports}`);
 
-  const routes = await seedRoutes(db);
-  console.log(`  routes     ${routes} (6 pairs, both directions)`);
+  const routes = await seedRoutes();
+  console.log(`  routes      ${routes} (6 pairs, both directions)`);
 
-  const people = await seedAccounts(auth, db);
-  console.log(`  accounts   ${Object.keys(people).length} (password: ${DEMO_PASSWORD})`);
+  const people = await seedAccounts();
+  console.log(`  accounts    ${Object.keys(people).length} (password: ${DEMO_PASSWORD})`);
 
-  const wiped = await wipeBookings(db);
-  const written = await writeSeedBookings(db, people);
-  console.log(`  bookings   ${written} historical (${wiped} removed first)`);
+  const wiped = await wipeBookings(supabase);
+  const written = await writeSeedBookings(supabase, people);
+  console.log(`  bookings    ${written} historical (${wiped} removed first)`);
 
   console.log(`
 Done. Sign in with any of:

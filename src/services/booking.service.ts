@@ -1,4 +1,4 @@
-import type { OperatorDoc, PierDoc, RouteDoc, UserDoc } from '../types/models';
+import type { BangkeroDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
 import { friendlyAuthError } from './auth.service';
 import { mapRouteRow } from './mappers';
 import { supabase } from './supabase';
@@ -6,18 +6,18 @@ import { supabase } from './supabase';
 /** Supabase speaks in error objects; screens need sentences. */
 export const friendlyError = friendlyAuthError;
 
-export const routeIdFor = (fromPierId: string, toPierId: string) =>
-  `${fromPierId}__${toPierId}`;
+export const routeIdFor = (startPortId: string, endPortId: string) =>
+  `${startPortId}__${endPortId}`;
 
-/** Fare lookup is a single indexed read on the generated id column, not a query. */
+/** Fare lookup by route ID. */
 export async function fetchRoute(
-  fromPierId: string,
-  toPierId: string
+  startPortId: string,
+  endPortId: string
 ): Promise<RouteDoc | null> {
   const { data, error } = await supabase
     .from('routes')
     .select('*')
-    .eq('id', routeIdFor(fromPierId, toPierId))
+    .eq('id', routeIdFor(startPortId, endPortId))
     .maybeSingle();
 
   if (error) throw error;
@@ -26,42 +26,38 @@ export async function fetchRoute(
 
 interface CreateArgs {
   passenger: UserDoc;
-  fromPier: PierDoc;
-  toPier: PierDoc;
+  fromPort: PortDoc;
+  toPort: PortDoc;
   passengerCount: number;
 }
 
 /**
- * id and ref are filled by the set_booking_ref trigger in Postgres, so this
- * insert doesn't need to invent them client-side the way the Firestore
- * version did with doc(collection(db, 'bookings')).
+ * Creates a booking. id and ref are filled by the set_booking_ref trigger.
  */
 export async function createBooking({
-  passenger, fromPier, toPier, passengerCount,
+  passenger, fromPort, toPort, passengerCount,
 }: CreateArgs): Promise<string> {
-  if (fromPier.pierId === toPier.pierId) {
-    throw new Error('Pick two different piers.');
+  if (fromPort.portId === toPort.portId) {
+    throw new Error('Pick two different ports.');
   }
 
-  const route = await fetchRoute(fromPier.pierId, toPier.pierId);
-  if (!route) throw new Error('No route runs between those two piers.');
+  const route = await fetchRoute(fromPort.portId, toPort.portId);
+  if (!route) throw new Error('No route runs between those two ports.');
   if (!route.isActive) throw new Error('That route is not running right now.');
 
   const { data, error } = await supabase
     .from('bookings')
     .insert({
-      passenger_id: passenger.uid,
+      user_id: passenger.uid,
       passenger_name: `${passenger.firstName} ${passenger.lastName}`.trim(),
       passenger_phone: passenger.phone,
-      from_pier_id: fromPier.pierId,
-      from_pier_name: fromPier.name,
-      to_pier_id: toPier.pierId,
-      to_pier_name: toPier.name,
-      passenger_count: passengerCount,
-      fare: route.fare,
-      estimated_minutes: route.estimatedMinutes,
-      payment_method: 'cash',
-      status: 'open',
+      from_port_name: fromPort.portName,
+      to_port_name: toPort.portName,
+      num_of_passenger: passengerCount,
+      total_price: route.baseFare * passengerCount,
+      route_id: route.routeId,
+      service_type: 'passenger',
+      trip_stat: 'open',
     })
     .select('id')
     .single();
@@ -70,32 +66,28 @@ export async function createBooking({
   return data.id;
 }
 
-/** Passenger withdraws. Stage 5's RLS policy only permits this while still open. */
+/** Passenger withdraws. */
 export async function cancelBooking(bookingId: string): Promise<void> {
   const { error } = await supabase
     .from('bookings')
-    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .update({ trip_stat: 'cancelled', cancelled_at: new Date().toISOString() })
     .eq('id', bookingId);
   if (error) throw error;
 }
 
 /**
- * First accept wins. There is no transaction here, same as the Firestore
- * version: a second bangkero tapping Accept hits a booking that is no
- * longer 'open', and Stage 5's RLS policy denies it. The race resolves in
- * the database, not in app code.
+ * First accept wins. RLS policy denies if booking is no longer 'open'.
  */
 export async function acceptBooking(
   bookingId: string,
-  operator: Pick<OperatorDoc, 'uid' | 'displayName' | 'boatName'>
+  bangkero: Pick<BangkeroDoc, 'uid' | 'displayName'>
 ): Promise<void> {
   const { error } = await supabase
     .from('bookings')
     .update({
-      status: 'accepted',
-      operator_id: operator.uid,
-      operator_name: operator.displayName,
-      operator_boat_name: operator.boatName,
+      trip_stat: 'accepted',
+      operator_id: bangkero.uid,
+      operator_name: bangkero.displayName,
       accepted_at: new Date().toISOString(),
     })
     .eq('id', bookingId);
@@ -103,37 +95,32 @@ export async function acceptBooking(
 }
 
 /**
- * A decline is recorded against the operator, not the booking — the request
- * stays open for everyone else. This calls a Postgres function
- * (append_rejected_by) rather than reading the array and writing it back,
- * because that read-modify-write would lose a concurrent decline from
- * another bangkero. The function does array_append in one atomic statement
- * — the same guarantee Firestore's arrayUnion() gave for free.
+ * A decline appends the bangkero's uid to rejected_by atomically.
  */
-export async function rejectBooking(bookingId: string, operatorUid: string): Promise<void> {
+export async function rejectBooking(bookingId: string, bangkeroUid: string): Promise<void> {
   const { error } = await supabase.rpc('append_rejected_by', {
     booking_id: bookingId,
-    operator_uid: operatorUid,
+    operator_uid: bangkeroUid,
   });
   if (error) throw error;
 }
 
-/** Only the assigned bangkero can complete; Stage 5's policy checks operator_id. */
+/** Only the assigned bangkero can complete. */
 export async function completeBooking(bookingId: string): Promise<void> {
   const { error } = await supabase
     .from('bookings')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .update({ trip_stat: 'completed', completed_at: new Date().toISOString() })
     .eq('id', bookingId);
   if (error) throw error;
 }
 
 export async function setAvailability(
-  operatorUid: string,
+  bangkeroUid: string,
   isAvailable: boolean
 ): Promise<void> {
   const { error } = await supabase
-    .from('operators')
+    .from('bangkeros')
     .update({ is_available: isAvailable, updated_at: new Date().toISOString() })
-    .eq('id', operatorUid);
+    .eq('id', bangkeroUid);
   if (error) throw error;
 }

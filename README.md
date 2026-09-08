@@ -4,14 +4,14 @@ Capstone prototype — a ride-hailing platform for sea travel between Mactan and
 Olango, Cebu. Passengers book boat trips; bangkeros (boat operators) receive the
 requests in real time.
 
-Expo SDK 57 · Expo Router v6 · TypeScript · Firebase Auth + Firestore.
+Expo SDK 54 · Expo Router v6 · TypeScript · Supabase Auth + Postgres.
 Runs in **Expo Go** — no custom native build.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # then fill in your Firebase web config
+cp .env.example .env   # then fill in your Supabase config
 npx expo start
 ```
 
@@ -26,9 +26,9 @@ src/
     index.tsx     role-based redirect
   components/     ScreenContainer, PrimaryButton, TextField, States, StatusPill
   hooks/          useAuth — AuthProvider + live profile subscription
-  services/       firebase (init), auth.service (signUp/signIn/signOut)
+  services/       supabase (init), auth.service (signUp/signIn/signOut)
   theme/          design tokens
-  types/          Firestore document models
+  types/          database models
   utils/          phone normalization (E.164 <-> synthetic auth email)
 ```
 

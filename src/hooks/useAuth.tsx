@@ -25,19 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const t0 = Date.now();
-
-    // Resolves once with whatever session is already on disk (or none) —
-    // this is the equivalent of Firebase's first onAuthStateChanged fire.
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (__DEV__) {
-        console.log(`[timing] session resolved +${Date.now() - t0}ms (user: ${session ? 'yes' : 'none'})`);
-      }
       setUser(session?.user ?? null);
       setInitializing(false);
     });
 
-    // Fires on every subsequent sign-in / sign-out / token refresh.
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session: Session | null) => {
       setUser(session?.user ?? null);
     });
@@ -50,19 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfileLoading(true);
     setError(null);
 
-    // Firestore's onSnapshot gave live profile updates for free. Supabase
-    // needs an explicit Realtime channel for that, which isn't set up yet —
-    // this fetches once on sign-in, which covers every current use case
-    // since nothing else in the app edits another user's profile mid-session.
-    const t0 = Date.now();
     fetchUserDoc(user.id)
       .then((doc) => {
-        if (__DEV__) console.log(`[timing] profile fetched +${Date.now() - t0}ms (exists: ${!!doc})`);
         setProfile(doc);
         setProfileLoading(false);
       })
       .catch((e) => {
-        if (__DEV__) console.log(`[timing] profile FAILED +${Date.now() - t0}ms`);
         setError(e.message);
         setProfileLoading(false);
       });

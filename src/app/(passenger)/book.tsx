@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { SeaMap } from '@/components/SeaMap';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
-import { usePiers } from '@/hooks/useFirestore';
+import { usePorts } from '@/hooks/useSupabase';
 import { createBooking, fetchRoute, friendlyError } from '@/services/booking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { RouteDoc } from '@/types/models';
@@ -16,7 +16,7 @@ const MAX_PASSENGERS = 12;
 
 export default function BookTrip() {
   const { profile } = useAuth();
-  const piers = usePiers();
+  const ports = usePorts();
 
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
@@ -29,8 +29,6 @@ export default function BookTrip() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Fare is looked up the moment both piers are chosen, so the passenger never
-  // reaches a summary screen and then learns the price.
   useEffect(() => {
     if (!fromId || !toId || fromId === toId) { setRoute(null); setRouteError(null); return; }
 
@@ -41,7 +39,7 @@ export default function BookTrip() {
     fetchRoute(fromId, toId)
       .then((r) => {
         if (cancelled) return;
-        if (!r) setRouteError('No route runs between those two piers.');
+        if (!r) setRouteError('No route runs between those two ports.');
         else if (!r.isActive) setRouteError('That route is not running right now.');
         setRoute(r && r.isActive ? r : null);
       })
@@ -57,14 +55,14 @@ export default function BookTrip() {
   }
 
   async function confirm() {
-    const fromPier = piers.data.find((p) => p.pierId === fromId);
-    const toPier = piers.data.find((p) => p.pierId === toId);
-    if (!profile || !fromPier || !toPier) return;
+    const fromPort = ports.data.find((p) => p.portId === fromId);
+    const toPort = ports.data.find((p) => p.portId === toId);
+    if (!profile || !fromPort || !toPort) return;
 
     setBusy(true);
     setFormError(null);
     try {
-      const id = await createBooking({ passenger: profile, fromPier, toPier, passengerCount: count });
+      const id = await createBooking({ passenger: profile, fromPort, toPort, passengerCount: count });
       router.replace(`/(passenger)/booking/${id}`);
     } catch (e) {
       setFormError(friendlyError(e));
@@ -72,11 +70,11 @@ export default function BookTrip() {
     }
   }
 
-  if (piers.loading) {
-    return <ScreenContainer><LoadingState label="Loading piers…" /></ScreenContainer>;
+  if (ports.loading) {
+    return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
   }
-  if (piers.error) {
-    return <ScreenContainer><ErrorState message={piers.error} /></ScreenContainer>;
+  if (ports.error) {
+    return <ScreenContainer><ErrorState message={ports.error} /></ScreenContainer>;
   }
 
   const ready = !!route && !!fromId && !!toId && fromId !== toId;
@@ -92,7 +90,7 @@ export default function BookTrip() {
         </View>
 
         <View style={styles.mapWrap}>
-          <SeaMap piers={piers.data} fromPierId={fromId} toPierId={toId} height={190} />
+          <SeaMap ports={ports.data} fromPortId={fromId} toPortId={toId} height={190} />
         </View>
 
         <View style={styles.body}>
@@ -104,10 +102,10 @@ export default function BookTrip() {
               </Pressable>
             )}
           </View>
-          <PierChips piers={piers.data} selected={fromId} disabled={toId} onSelect={setFromId} />
+          <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
 
           <Text style={[styles.sectionLabel, styles.spaced]}>DESTINATION</Text>
-          <PierChips piers={piers.data} selected={toId} disabled={fromId} onSelect={setToId} />
+          <PortChips ports={ports.data} selected={toId} disabled={fromId} onSelect={setToId} />
 
           <Text style={[styles.sectionLabel, styles.spaced]}>PASSENGERS</Text>
           <View style={styles.stepper}>
@@ -127,7 +125,7 @@ export default function BookTrip() {
               <Text style={styles.summaryError}>{routeError}</Text>
             ) : route ? (
               <>
-                <SummaryRow label="Fare per trip" value={`₱${route.fare}`} strong />
+                <SummaryRow label="Fare per trip" value={`₱${route.baseFare}`} strong />
                 <SummaryRow label="Estimated time" value={`${route.estimatedMinutes} min`} />
                 <SummaryRow label="Passengers" value={String(count)} />
                 <SummaryRow label="Payment" value="Cash on board" />
@@ -144,7 +142,7 @@ export default function BookTrip() {
           )}
 
           <PrimaryButton
-            label={route ? `Request boat · ₱${route.fare}` : 'Request boat'}
+            label={route ? `Request boat · ₱${route.baseFare}` : 'Request boat'}
             onPress={confirm}
             loading={busy}
             disabled={!ready}
@@ -158,23 +156,23 @@ export default function BookTrip() {
   );
 }
 
-function PierChips({
-  piers, selected, disabled, onSelect,
+function PortChips({
+  ports, selected, disabled, onSelect,
 }: {
-  piers: { pierId: string; name: string; island: string }[];
+  ports: { portId: string; portName: string }[];
   selected: string | null;
   disabled: string | null;
   onSelect: (id: string) => void;
 }) {
   return (
     <View style={styles.chips}>
-      {piers.map((p) => {
-        const active = p.pierId === selected;
-        const off = p.pierId === disabled;
+      {ports.map((p) => {
+        const active = p.portId === selected;
+        const off = p.portId === disabled;
         return (
           <Pressable
-            key={p.pierId}
-            onPress={() => onSelect(p.pierId)}
+            key={p.portId}
+            onPress={() => onSelect(p.portId)}
             disabled={off}
             style={({ pressed }) => [
               styles.chip,
@@ -184,7 +182,7 @@ function PierChips({
             ]}
           >
             <Text style={[styles.chipText, active && styles.chipTextActive, off && styles.chipTextOff]}>
-              {p.name}
+              {p.portName}
             </Text>
           </Pressable>
         );

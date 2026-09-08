@@ -34,10 +34,8 @@ yarn-error.*
 .env
 .env*.local
 
-# Firebase Admin SDK service account — a REAL secret, unlike the EXPO_PUBLIC_
-# web config. Full read/write on the project, bypasses all security rules.
-serviceAccountKey.json
-*-firebase-adminsdk-*.json
+# Supabase service role key — SECRET, only for seed/reset scripts.
+# Found in: Supabase Dashboard -> Project Settings -> API -> service_role (secret)
 
 # typescript
 *.tsbuildinfo

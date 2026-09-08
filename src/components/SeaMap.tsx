@@ -3,15 +3,14 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import { colors, radii } from '../theme/tokens';
-import type { PierDoc } from '../types/models';
+import type { PortDoc } from '../types/models';
 
 /**
  * Static chart of the Mactan–Olango corridor. No tiles, no API key, no location
  * permission — it cannot fail on venue wifi, which is the whole point.
  *
- * Coordinates are the 0–1 mapX/mapY on each pier doc, drawn into a 100×100
- * viewBox. Coastlines are hand-fitted Béziers, not real geometry: this is a
- * schematic for choosing piers, not a navigational chart.
+ * Port coordinates (latitude/longitude) are normalized to 0–1 for the SVG
+ * viewBox. Coastlines are hand-fitted Béziers, not real geometry.
  */
 
 const ISLANDS: { name: string; d: string; labelX: number; labelY: number }[] = [
@@ -41,7 +40,6 @@ const ISLANDS: { name: string; d: string; labelX: number; labelY: number }[] = [
   },
 ];
 
-// Shallow-water halos, drawn under the landmasses to suggest reef and depth.
 const SHALLOWS: { cx: number; cy: number; rx: number; ry: number }[] = [
   { cx: 10, cy: 36, rx: 30, ry: 40 },
   { cx: 55, cy: 37, rx: 21, ry: 19 },
@@ -49,16 +47,42 @@ const SHALLOWS: { cx: number; cy: number; rx: number; ry: number }[] = [
   { cx: 80, cy: 58, rx: 10, ry: 8 },
 ];
 
+/** Normalize lat/lng to 0–1 for SVG positioning. */
+function normalizeCoord(
+  lat: number, lng: number,
+  minLat: number, maxLat: number,
+  minLng: number, maxLng: number,
+): { x: number; y: number } {
+  const x = maxLng === minLng ? 0.5 : (lng - minLng) / (maxLng - minLng);
+  const y = maxLat === minLat ? 0.5 : 1 - (lat - minLat) / (maxLat - minLat); // flip Y so north is up
+  return { x: x * 100, y: y * 100 };
+}
+
 interface Props {
-  piers: PierDoc[];
-  fromPierId?: string | null;
-  toPierId?: string | null;
+  ports: PortDoc[];
+  fromPortId?: string | null;
+  toPortId?: string | null;
   height?: number;
 }
 
-export function SeaMap({ piers, fromPierId = null, toPierId = null, height = 200 }: Props) {
-  const from = piers.find((p) => p.pierId === fromPierId) ?? null;
-  const to = piers.find((p) => p.pierId === toPierId) ?? null;
+export function SeaMap({ ports, fromPortId = null, toPortId = null, height = 200 }: Props) {
+  // Compute bounds from port coordinates
+  const lats = ports.map((p) => p.latitude ?? 0).filter(Boolean);
+  const lngs = ports.map((p) => p.longitude ?? 0).filter(Boolean);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+
+  const from = ports.find((p) => p.portId === fromPortId) ?? null;
+  const to = ports.find((p) => p.portId === toPortId) ?? null;
+
+  const fromPos = from?.latitude && from?.longitude
+    ? normalizeCoord(from.latitude, from.longitude, minLat, maxLat, minLng, maxLng)
+    : null;
+  const toPos = to?.latitude && to?.longitude
+    ? normalizeCoord(to.latitude, to.longitude, minLat, maxLat, minLng, maxLng)
+    : null;
 
   return (
     <View style={[styles.wrap, { height }]}>
@@ -94,13 +118,12 @@ export function SeaMap({ piers, fromPierId = null, toPierId = null, height = 200
           </G>
         ))}
 
-        {/* Route line sits above land so it reads as a crossing, not a road. */}
-        {from && to && (
+        {fromPos && toPos && (
           <Line
-            x1={from.mapX * 100}
-            y1={from.mapY * 100}
-            x2={to.mapX * 100}
-            y2={to.mapY * 100}
+            x1={fromPos.x}
+            y1={fromPos.y}
+            x2={toPos.x}
+            y2={toPos.y}
             stroke={colors.primary}
             strokeWidth={0.9}
             strokeDasharray="2.5 2"
@@ -108,33 +131,32 @@ export function SeaMap({ piers, fromPierId = null, toPierId = null, height = 200
           />
         )}
 
-        {piers.map((p) => {
-          const x = p.mapX * 100;
-          const y = p.mapY * 100;
-          const active = p.pierId === fromPierId || p.pierId === toPierId;
-          // Flip labels inward near the right edge so they never clip.
-          const right = p.mapX > 0.62;
+        {ports.map((p) => {
+          if (!p.latitude || !p.longitude) return null;
+          const pos = normalizeCoord(p.latitude, p.longitude, minLat, maxLat, minLng, maxLng);
+          const active = p.portId === fromPortId || p.portId === toPortId;
+          const right = pos.x > 62;
 
           return (
-            <G key={p.pierId}>
-              {active && <Circle cx={x} cy={y} r={4} fill={colors.primary} opacity={0.22} />}
+            <G key={p.portId}>
+              {active && <Circle cx={pos.x} cy={pos.y} r={4} fill={colors.primary} opacity={0.22} />}
               <Circle
-                cx={x}
-                cy={y}
+                cx={pos.x}
+                cy={pos.y}
                 r={active ? 2 : 1.5}
                 fill={active ? colors.primary : colors.textSecondary}
                 stroke={colors.bgElevated}
                 strokeWidth={0.6}
               />
               <SvgText
-                x={right ? x - 3.4 : x + 3.4}
-                y={y + 1.1}
+                x={right ? pos.x - 3.4 : pos.x + 3.4}
+                y={pos.y + 1.1}
                 fill={active ? colors.text : colors.textSecondary}
                 fontSize={3.1}
                 fontWeight={active ? '700' : '400'}
                 textAnchor={right ? 'end' : 'start'}
               >
-                {p.name}
+                {p.portName}
               </SvgText>
             </G>
           );

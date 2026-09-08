@@ -1,6 +1,6 @@
-// src/services/supabase.ts — replaces firebase.ts
+// src/services/supabase.ts
 //
-// Unlike Firebase, this needs no Platform.OS branching: AsyncStorage has a
+// AsyncStorage has a
 // working web shim under Expo, so the same client config works on native
 // and web without a separate persistence path.
 import AsyncStorage from '@react-native-async-storage/async-storage';

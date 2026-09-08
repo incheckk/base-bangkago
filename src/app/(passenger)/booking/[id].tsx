@@ -6,7 +6,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
-import { useBooking } from '@/hooks/useFirestore';
+import { useBooking } from '@/hooks/useSupabase';
 import { cancelBooking, friendlyError } from '@/services/booking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
@@ -59,12 +59,11 @@ export default function BookingDetail() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.route}>{booking.fromPierName}</Text>
+          <Text style={styles.route}>{booking.fromPortName}</Text>
           <Text style={styles.arrow}>↓</Text>
-          <Text style={styles.route}>{booking.toPierName}</Text>
+          <Text style={styles.route}>{booking.toPortName}</Text>
         </View>
 
-        {/* Appears the moment a bangkero accepts — no refresh, same listener. */}
         {booking.status === 'accepted' && (
           <View style={styles.operator}>
             <Text style={styles.operatorLabel}>YOUR BANGKERO</Text>
@@ -76,12 +75,11 @@ export default function BookingDetail() {
         )}
 
         <View style={styles.details}>
-          <Row label="Passengers" value={String(booking.passengerCount)} />
-          <Row label="Fare" value={`₱${booking.fare}`} strong />
-          <Row label="Estimated time" value={`${booking.estimatedMinutes} min`} />
+          <Row label="Passengers" value={String(booking.numOfPassenger)} />
+          <Row label="Fare" value={`₱${booking.totalPrice}`} strong />
           <Row label="Payment" value="Cash on board" />
-          <Row label="Booked by" value={booking.passengerName} />
-          <Row label="Contact" value={formatPhone(booking.passengerPhone)} />
+          <Row label="Booked by" value={booking.passengerName ?? ''} />
+          <Row label="Contact" value={booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''} />
         </View>
 
         {!!actionError && (
@@ -102,7 +100,7 @@ export default function BookingDetail() {
 
           {booking.status === 'accepted' && (
             <Text style={styles.waiting}>
-              Your bangkero is on the way. Meet them at {booking.fromPierName}.
+              Your bangkero is on the way. Meet them at {booking.fromPortName}.
             </Text>
           )}
 

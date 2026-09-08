@@ -62,6 +62,15 @@ export default function SignIn() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <Pressable
+            onPress={() => router.back()}
+            disabled={busy}
+            hitSlop={8}
+            style={styles.backBtn}
+          >
+            <Text style={styles.backBtnText}>{'< Back'}</Text>
+          </Pressable>
+
           <Text style={styles.title}>Sign in</Text>
           <Text style={styles.subtitle}>Use the mobile number you registered with.</Text>
 
@@ -133,6 +142,8 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
+  backBtn: { alignSelf: 'flex-start', marginBottom: spacing.lg },
+  backBtnText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.caption, marginBottom: spacing.xxl },
   form: { marginBottom: spacing.xl },

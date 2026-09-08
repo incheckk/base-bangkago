@@ -29,9 +29,9 @@ where stated below.
 ## SCOPE FENCE
 
 **IN SCOPE**
-- Register / login / logout (Firebase Auth), passenger + bangkero roles
+- Register / login / logout (Supabase Auth), passenger + bangkero roles
 - Passenger: profile, pick pickup + destination pier, request a booking
-- Booking writes to Firestore
+- Booking writes to Supabase
 - Passenger sees confirmation + booking status
 - Available bangkeros receive the request in real time in a request list
 - Passenger can cancel their own open booking
@@ -62,8 +62,8 @@ tiles with a "Coming soon" badge. Chrome only, no behavior.
   iOS 16.4+. Do not "upgrade" this; it will break the demo phone.
 - **Expo Router v6**, file-based routing, router root is `src/app/`
 - TypeScript (`.tsx`)
-- Firebase JS SDK v9+ modular: **Auth + Firestore only**
-- Real-time updates via Firestore `onSnapshot`, never push notifications
+- **Supabase** JS SDK: **Auth + Postgres** via `@supabase/supabase-js`
+- Real-time updates via Supabase Realtime, never push notifications
 - Map is **static `react-native-svg`** — no `react-native-maps`, no tiles, no
   API key, no location permission. Cannot fail on venue wifi.
 
@@ -74,12 +74,11 @@ tiles with a "Coming soon" badge. Chrome only, no behavior.
 | Decision | Rationale (panel-ready) |
 |---|---|
 | Phone number as identifier, not email | Bangkeros are phone-first; many don't use email. |
-| Auth via synthetic email under the hood | `+639171234567` → `639171234567@bangkago.app` + password. Firebase Phone Auth needs reCAPTCHA (no DOM in RN) or a native build — neither works in Expo Go. SMS OTP is also the most fragile thing possible in a live demo. |
+| Auth via synthetic email under the hood | `+639171234567` → `639171234567@bangkago.app` + password. Phone Auth via OTP is fragile in a live demo. SMS delivery can fail, timeout, or arrive late. |
 | `initializeAuth` + AsyncStorage persistence | Session survives app reload; no re-typing credentials on stage. |
-| `experimentalAutoDetectLongPolling: true` | Firestore listeners survive networks that block WebChannel. |
 | Static SVG map | Deterministic, offline-safe, no API key, no permission prompt. |
 | Fixed pier list for pickup + destination | Piers are fixed infrastructure; a dropdown is more accurate than a dropped pin and makes bookings queryable by route. |
-| Flat fare per pier-pair | Fare is a constant-time `getDoc` on a deterministic route ID, not a query. |
+| Flat fare per pier-pair | Fare is a single row lookup by deterministic route ID, not a query. |
 | Broadcast to all available bangkeros | No distance ranking — every available operator sees the request and accepts manually. Automatic matching stays out of scope. |
 | First accept wins | The accepting bangkero is written onto the booking; it leaves every other operator's list. No locking or transaction — a second accept simply finds the booking no longer `open`. |
 | Reject is per-operator, not a status | A decline appends the operator uid to `rejectedBy[]` and hides the request from that bangkero only. One operator declining must not kill a request the other could take. |
@@ -104,8 +103,8 @@ tiles with a "Coming soon" badge. Chrome only, no behavior.
   operatorId, operatorName, operatorBoatName (null until accepted),
   rejectedBy (uid array), createdAt, acceptedAt, completedAt, cancelledAt
 
-**Security rules:** `piers` + `routes` are client-read-only (seeded via Admin
-SDK). Booking `create` requires role passenger + own uid + status `open`.
+**Row-Level Security policies:** `piers` + `routes` are client-read-only (seeded via
+service role key). Booking `create` requires role passenger + own uid + status `open`.
 No deletes anywhere. Booking `update` permits exactly four transitions:
 
 | Who | Transition | Guard |
@@ -121,14 +120,13 @@ does not own, so it must be narrowed to appending exactly one uid — the caller
 
 **Composite indexes: none required.** Every booking query filters on a single
 field (`passengerId`, `status`, or `operatorId`) and sorts newest-first in
-memory via `byNewest` in `useFirestore.ts`. Pairing a `where` with an `orderBy`
-on `createdAt` is what forces a composite index, and a missing index is a hard
+memory via `byNewest` in `useSupabase.ts`. Pairing a `where` with an `orderBy`
+on `created_at` is what forces a composite index, and a missing index is a hard
 query failure that only appears at runtime and takes minutes to build — three
 ways to lose a live demo. At prototype volume the in-memory sort is free.
 
-`firestore.indexes.json` still defines the three indexes for a production build;
-nothing in the app depends on them today. If booking volume ever makes the
-client-side sort untenable, restore the `orderBy` clauses and deploy that file.
+If booking volume ever makes the client-side sort untenable, add appropriate
+indexes in the Supabase dashboard.
 
 ---
 
@@ -139,13 +137,13 @@ client-side sort untenable, restore the `orderBy` clauses and deploy that file.
 - `src/types/models.ts` — four-status booking lifecycle, operator + rejectedBy fields
 - `src/utils/phone.ts` — normalizePhone, phoneToAuthEmail, formatPhone
   (verified against 16 cases; **no committed test suite** — no test runner installed)
-- `src/services/firebase.ts` — app/auth/db init, env-based config
+- `src/services/supabase.ts` — supabase client init, env-based config
 - `src/services/auth.service.ts` — signUp / signIn / signOut / fetchUserDoc,
-  `friendlyAuthError` translates Firebase's email vocabulary back to phone
+  `friendlyAuthError` translates error messages back to phone vocabulary
 - `src/services/booking.service.ts` — create / cancel / accept / reject / complete
 - `src/hooks/useAuth.tsx` — AuthProvider + live profile subscription.
   Emits `[timing]` logs under `__DEV__`; strip before final submission.
-- `src/hooks/useFirestore.ts` — usePiers, useAvailableOperatorCount,
+- `src/hooks/useSupabase.ts` — usePiers, useAvailableOperatorCount,
   useRecentBookings, useOpenRequests, useOperator, useBooking
 
 **Components — done:**
@@ -162,11 +160,8 @@ StatusPill, SeaMap, AuthErrorScreen
   Accept / Decline)
 
 **Infrastructure — done:**
-- `scripts/seed.js`, `scripts/reset.js`, `scripts/lib.js` — `npm run seed` / `npm run reset`
-- `firestore.rules`, `firestore.indexes.json`
+- `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` / `npm run reset`
 - `.env` (gitignored), `.env.example` committed
-- `serviceAccountKey.json` gitignored — this one is a REAL secret, unlike the
-  `EXPO_PUBLIC_` web config which is inlined into every bundle by design
 
 **Still stubs:** none. Remaining work is 3.11 (bangkero marks trip completed is
 already wired into `(bangkero)/home.tsx`; the separate assigned-trip screen is
@@ -174,10 +169,9 @@ optional) and stripping the `__DEV__` `[timing]` logs from `useAuth.tsx`.
 
 **Environment notes:**
 - Expo template leftovers deleted in full. `src/` is only BangkaGo code.
-- Firebase Console: Email/Password enabled ✅, Firestore created ✅,
-  rules published ✅. **Confirm which ruleset is live** — a permissive
-  `allow read, write: if request.auth != null` was offered as an emergency
-  unblock. If that is still deployed, nothing is enforced server-side.
+- Supabase project: Auth enabled, RLS policies configured.
+  Confirm which policies are live — a permissive policy may be deployed
+  as an emergency unblock. If that is still active, nothing is enforced server-side.
 - No composite indexes needed. If you ever add an `orderBy` to a booking query
   that already has a `where` on a different field, you have just reintroduced
   that requirement — sort with `byNewest` instead.
@@ -201,17 +195,17 @@ optional) and stripping the `__DEV__` `[timing]` logs from `useAuth.tsx`.
   3 service tiles (2 disabled), recent bookings. Bottom sheet is a **static
   card, not draggable** — fewer moving parts on stage.
 - ~~**3.7** — Booking flow.~~ **DONE.** Pier pickers, passenger stepper, fare
-  lookup, summary, confirm → Firestore write, live status screen + cancel.
+  lookup, summary, confirm → Supabase write, live status screen + cancel.
 - ~~**3.8** — Bangkero home.~~ **DONE.** Availability toggle, boat card, live
-  request list via `onSnapshot`, Accept / Decline.
+  request list via Supabase Realtime, Accept / Decline.
 - ~~**3.9** — Profile screens (both roles), boat name + capacity editing.~~ **DONE.**
   Names editable for both roles; boat name + capacity for bangkeros. Phone is
   read-only — the synthetic auth email is derived from it, so editing it would
-  desync Firestore from Auth. Rules enforce this, not just the UI.
+  desync auth from profile. RLS policies enforce this, not just the UI.
 - **3.10** — Seed + reset scripts.
 - **3.11** — Assigned-trip screen for the bangkero: accepted bookings list,
   **Mark completed**. Passenger's status screen reflects `accepted` → `completed`
-  live via `onSnapshot`.
+  live via Supabase Realtime.
 
 `booking.service.ts` (create / cancel / accept / reject / complete) is not
 written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
@@ -220,7 +214,7 @@ written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
 
 ## DEMO RELIABILITY — HARD REQUIREMENT
 
-- **Seed script** (Firebase Admin SDK, service account key, gitignored):
+- **Seed script** (Supabase service role key, in .env):
   - 5 piers: Mactan Pier 1 (Punta Engaño), Mactan Pier 2 (Maribago),
     Olango Island Port (Sta. Rosa), Caohagan Island, Nalusuan Island
   - 12 routes, both directions, ₱150–₱400, 15–55 min

@@ -1,6 +1,6 @@
 import type { AuthError } from '@supabase/supabase-js';
 
-import type { OperatorDoc, UserDoc, UserRole } from '../types/models';
+import type { BangkeroDoc, UserDoc, UserRole } from '../types/models';
 import { normalizePhone, phoneToAuthEmail } from '../utils/phone';
 import { supabase } from './supabase';
 
@@ -13,13 +13,8 @@ export interface SignUpParams {
 }
 
 /**
- * Creates the auth account and its profiles/ row in that order — and, for
- * bangkeros, the public operators/ row. Boat name and capacity stay null;
- * they're set from Profile so registration stays short. Same shape as the
- * Firebase version, just against Supabase tables instead of Firestore docs.
- *
- * NOTE: these inserts will fail with a permission/RLS error until Stage 5
- * adds policies to profiles/operators. That's expected right now, not a bug.
+ * Creates the auth account and its users/ row in that order — and, for
+ * bangkeros, the public bangkeros/ row. Boat data is set later from Profile.
  */
 export async function signUp({
   phone, password, firstName, lastName, role,
@@ -38,40 +33,56 @@ export async function signUp({
 
   const userDoc: UserDoc = {
     uid,
-    phone: e164,
     firstName: firstName.trim(),
+    middleName: null,
     lastName: lastName.trim(),
+    email: phoneToAuthEmail(e164),
+    phone: e164,
     role,
+    profilePhoto: null,
+    isVerified: false,
     createdAt: new Date().toISOString(),
   };
 
-  const { error: profileError } = await supabase.from('profiles').insert({
+  const { error: profileError } = await supabase.from('users').insert({
     id: uid,
-    phone: userDoc.phone,
     first_name: userDoc.firstName,
+    middle_name: null,
     last_name: userDoc.lastName,
-    role: userDoc.role,
+    email: userDoc.email,
+    phone_number: userDoc.phone,
+    user_role: userDoc.role,
+    profile_photo: null,
+    is_verified: false,
   });
   if (profileError) throw profileError;
 
   if (role === 'bangkero') {
-    const operatorDoc: OperatorDoc = {
+    const bangkeroDoc: BangkeroDoc = {
       uid,
+      govIssuedId: null,
+      boatRegistrationCert: null,
+      coastalPermit: null,
+      brgyClearance: null,
+      verificationStat: 'pending',
+      permitNumber: null,
       displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-      boatName: null,
-      capacity: null,
-      isAvailable: false, // off by default — the operator turns themselves on
+      isAvailable: false,
       updatedAt: new Date().toISOString(),
     };
 
-    const { error: operatorError } = await supabase.from('operators').insert({
+    const { error: bangkeroError } = await supabase.from('bangkeros').insert({
       id: uid,
-      display_name: operatorDoc.displayName,
-      boat_name: operatorDoc.boatName,
-      capacity: operatorDoc.capacity,
-      is_available: operatorDoc.isAvailable,
+      gov_issued_id: null,
+      boat_registration_cert: null,
+      coastal_permit: null,
+      brgy_clearance: null,
+      verification_stat: 'pending',
+      permit_number: null,
+      display_name: bangkeroDoc.displayName,
+      is_available: false,
     });
-    if (operatorError) throw operatorError;
+    if (bangkeroError) throw bangkeroError;
   }
 
   return userDoc;
@@ -95,8 +106,8 @@ export async function signOut(): Promise<void> {
 
 export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
   const { data, error } = await supabase
-    .from('profiles')
-    .select('id, phone, first_name, last_name, role, created_at')
+    .from('users')
+    .select('*')
     .eq('id', uid)
     .maybeSingle();
 
@@ -105,18 +116,21 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
 
   return {
     uid: data.id,
-    phone: data.phone,
     firstName: data.first_name,
+    middleName: data.middle_name,
     lastName: data.last_name,
-    role: data.role,
+    email: data.email,
+    phone: data.phone_number,
+    role: data.user_role,
+    profilePhoto: data.profile_photo,
+    isVerified: data.is_verified,
     createdAt: data.created_at,
   };
 }
 
 /**
  * Supabase speaks in message strings, not error codes; screens need
- * sentences. Same job as the Firebase version — matched on message text
- * since AuthError has no stable code enum the way FirebaseError.code did.
+ * sentences. Matched on message text since AuthError has no stable code enum.
  */
 export function friendlyAuthError(e: unknown): string {
   const err = e as AuthError | Error | undefined;

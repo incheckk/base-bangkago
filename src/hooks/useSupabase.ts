@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { mapBookingRow, mapOperatorRow, mapPierRow } from '../services/mappers';
+import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { supabase } from '../services/supabase';
-import type { BookingDoc, OperatorDoc, PierDoc } from '../types/models';
+import type { BangkeroDoc, BookingDoc, PortDoc } from '../types/models';
 
 interface Result<T> {
   data: T;
@@ -11,25 +11,19 @@ interface Result<T> {
 }
 
 /**
- * Newest first, sorted in memory — same reasoning as the Firestore version:
- * every query here filters on one column, and at prototype volume sorting
- * client-side costs nothing and needs no composite index to remember to
- * deploy.
+ * Newest first, sorted in memory.
  */
 const byNewest = (a: BookingDoc, b: BookingDoc) =>
   new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
 /**
  * Every hook below follows the same shape: fetch once, then subscribe to a
- * Realtime channel that just re-runs the same fetch on any change. This is
- * the Supabase equivalent of Firestore's onSnapshot — it isn't a diff-based
- * patch like onSnapshot gave for free, but at this data volume a refetch is
- * cheap and far easier to reason about than merging partial payloads by hand.
+ * Supabase Realtime channel that re-runs the same fetch on any change.
  */
 
-/** All active piers, sorted client-side by sortOrder. */
-export function usePiers(): Result<PierDoc[]> {
-  const [data, setData] = useState<PierDoc[]>([]);
+/** All active ports, sorted client-side by sortOrder. */
+export function usePorts(): Result<PortDoc[]> {
+  const [data, setData] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,12 +31,12 @@ export function usePiers(): Result<PierDoc[]> {
     let cancelled = false;
 
     const load = async () => {
-      const { data: rows, error: err } = await supabase.from('piers').select('*');
+      const { data: rows, error: err } = await supabase.from('ports').select('*');
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
       setData(
         (rows ?? [])
-          .map(mapPierRow)
+          .map(mapPortRow)
           .filter((p) => p.isActive)
           .sort((a, b) => a.sortOrder - b.sortOrder)
       );
@@ -53,8 +47,8 @@ export function usePiers(): Result<PierDoc[]> {
     load();
 
     const channel = supabase
-      .channel('piers-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'piers' }, load)
+      .channel('ports-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ports' }, load)
       .subscribe();
 
     return () => { cancelled = true; supabase.removeChannel(channel); };
@@ -63,8 +57,8 @@ export function usePiers(): Result<PierDoc[]> {
   return { data, loading, error };
 }
 
-/** Live count of bangkeros currently online. Drives the "boats available" badge. */
-export function useAvailableOperatorCount(): Result<number> {
+/** Live count of bangkeros currently online. */
+export function useAvailableBangkeroCount(): Result<number> {
   const [data, setData] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +68,7 @@ export function useAvailableOperatorCount(): Result<number> {
 
     const load = async () => {
       const { count, error: err } = await supabase
-        .from('operators')
+        .from('bangkeros')
         .select('*', { count: 'exact', head: true })
         .eq('is_available', true);
       if (cancelled) return;
@@ -87,8 +81,8 @@ export function useAvailableOperatorCount(): Result<number> {
     load();
 
     const channel = supabase
-      .channel('operators-availability')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'operators' }, load)
+      .channel('bangkeros-availability')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
       .subscribe();
 
     return () => { cancelled = true; supabase.removeChannel(channel); };
@@ -112,7 +106,7 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
       const { data: rows, error: err } = await supabase
         .from('bookings')
         .select('*')
-        .eq('passenger_id', passengerId);
+        .eq('user_id', passengerId);
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
       setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
@@ -126,7 +120,7 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
       .channel(`bookings-passenger-${passengerId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings', filter: `passenger_id=eq.${passengerId}` },
+        { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${passengerId}` },
         load
       )
       .subscribe();
@@ -139,19 +133,15 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
 
 /**
  * Open requests a given bangkero should see.
- *
- * Declines are still filtered client-side rather than in the query — Postgres
- * *could* do "array does not contain" server-side, but keeping this filter
- * here matches the Firestore version's reasoning: the open-request list is
- * small by nature, so filtering after the fetch costs nothing.
+ * Declines are filtered client-side.
  */
-export function useOpenRequests(operatorUid: string | null): Result<BookingDoc[]> {
+export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]> {
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!operatorUid) { setData([]); setLoading(false); return; }
+    if (!bangkeroUid) { setData([]); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
 
@@ -159,13 +149,13 @@ export function useOpenRequests(operatorUid: string | null): Result<BookingDoc[]
       const { data: rows, error: err } = await supabase
         .from('bookings')
         .select('*')
-        .eq('status', 'open');
+        .eq('trip_stat', 'open');
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
       setData(
         (rows ?? [])
           .map(mapBookingRow)
-          .filter((b) => !b.rejectedBy.includes(operatorUid))
+          .filter((b) => !b.rejectedBy.includes(bangkeroUid))
           .sort(byNewest)
       );
       setLoading(false);
@@ -174,29 +164,25 @@ export function useOpenRequests(operatorUid: string | null): Result<BookingDoc[]
 
     load();
 
-    // Realtime filters only support one column's equality per subscription,
-    // and we need "any change to any booking" here (a new open request, an
-    // accept that removes one, a decline that hides one) — so this listens
-    // unfiltered and refetches, same as usePiers above.
     const channel = supabase
       .channel('bookings-open-requests')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, load)
       .subscribe();
 
     return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [operatorUid]);
+  }, [bangkeroUid]);
 
   return { data, loading, error };
 }
 
 /** Bookings assigned to this bangkero, newest first. */
-export function useMyTrips(operatorUid: string | null, max = 10): Result<BookingDoc[]> {
+export function useMyTrips(bangkeroUid: string | null, max = 10): Result<BookingDoc[]> {
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!operatorUid) { setData([]); setLoading(false); return; }
+    if (!bangkeroUid) { setData([]); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
 
@@ -204,7 +190,7 @@ export function useMyTrips(operatorUid: string | null, max = 10): Result<Booking
       const { data: rows, error: err } = await supabase
         .from('bookings')
         .select('*')
-        .eq('operator_id', operatorUid);
+        .eq('operator_id', bangkeroUid);
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
       setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
@@ -215,23 +201,23 @@ export function useMyTrips(operatorUid: string | null, max = 10): Result<Booking
     load();
 
     const channel = supabase
-      .channel(`bookings-operator-${operatorUid}`)
+      .channel(`bookings-bangkero-${bangkeroUid}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${operatorUid}` },
+        { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` },
         load
       )
       .subscribe();
 
     return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [operatorUid, max]);
+  }, [bangkeroUid, max]);
 
   return { data, loading, error };
 }
 
-/** The signed-in bangkero's own operator row — drives the availability toggle. */
-export function useOperator(uid: string | null): Result<OperatorDoc | null> {
-  const [data, setData] = useState<OperatorDoc | null>(null);
+/** The signed-in bangkero's own row. */
+export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
+  const [data, setData] = useState<BangkeroDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -242,13 +228,13 @@ export function useOperator(uid: string | null): Result<OperatorDoc | null> {
 
     const load = async () => {
       const { data: row, error: err } = await supabase
-        .from('operators')
+        .from('bangkeros')
         .select('*')
         .eq('id', uid)
         .maybeSingle();
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
-      setData(row ? mapOperatorRow(row) : null);
+      setData(row ? mapBangkeroRow(row) : null);
       setLoading(false);
       setError(null);
     };
@@ -256,10 +242,10 @@ export function useOperator(uid: string | null): Result<OperatorDoc | null> {
     load();
 
     const channel = supabase
-      .channel(`operator-${uid}`)
+      .channel(`bangkero-${uid}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'operators', filter: `id=eq.${uid}` },
+        { event: '*', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
         load
       )
       .subscribe();
@@ -270,7 +256,7 @@ export function useOperator(uid: string | null): Result<OperatorDoc | null> {
   return { data, loading, error };
 }
 
-/** One booking, live — this is what makes the passenger's status screen update. */
+/** One booking, live. */
 export function useBooking(bookingId: string | null): Result<BookingDoc | null> {
   const [data, setData] = useState<BookingDoc | null>(null);
   const [loading, setLoading] = useState(true);

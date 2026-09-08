@@ -1,10 +1,11 @@
 /**
  * Philippine mobile numbers, normalized to E.164 for storage and to a synthetic
- * email for Firebase Auth. Bangkeros type their number a dozen different ways;
+ * email for auth. Bangkeros type their number a dozen different ways;
  * every one of them has to land on the same account.
+ *
+ * Uses Gmail plus-addressing (bangkago+{phone}@gmail.com) so Supabase
+ * accepts the email — gmail.com is a known-valid domain with MX records.
  */
-
-const AUTH_EMAIL_DOMAIN = 'bangkago.app';
 
 /**
  * Accepts any of: 0917 123 4567 · 0917-123-4567 · (0917) 1234567 · 9171234567
@@ -32,14 +33,14 @@ export function normalizePhone(raw: string): string | null {
 }
 
 /**
- * +639171234567 -> 639171234567@bangkago.app
- * Firebase Phone Auth needs reCAPTCHA or a native build, neither of which works
- * in Expo Go — so the phone number *is* the account, carried on a synthetic email.
+ * +639171234567 -> bangkago+639171234567@gmail.com
+ * Phone auth uses a synthetic email with Gmail plus-addressing —
+ * Supabase accepts it because gmail.com is a valid domain with MX records.
  */
 export function phoneToAuthEmail(phone: string): string {
   const e164 = normalizePhone(phone);
   if (!e164) throw new Error(`phoneToAuthEmail: not a valid PH mobile number: ${phone}`);
-  return `${e164.slice(1)}@${AUTH_EMAIL_DOMAIN}`;
+  return `bangkago+${e164.slice(1)}@gmail.com`;
 }
 
 /** +639171234567 -> "0917 123 4567" for display. Falls back to the input. */

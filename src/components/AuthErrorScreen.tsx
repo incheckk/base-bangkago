@@ -11,8 +11,8 @@ import { colors, spacing, typography } from '../theme/tokens';
  * Terminal error screen for the auth/profile layer.
  *
  * The guards render this when the profile subscription fails. It must always
- * offer a way out: signing out is an Auth call, so it still works when every
- * Firestore read is being denied. Without it a rules error is unrecoverable
+ * offer a way out: signing out is an auth call, so it still works when every
+ * database read is being denied. Without it a permission error is unrecoverable
  * without deleting the app.
  */
 export function AuthErrorScreen({ message }: { message: string }) {
@@ -36,8 +36,8 @@ export function AuthErrorScreen({ message }: { message: string }) {
       {isPermission && (
         <View style={styles.hint}>
           <Text style={styles.hintText}>
-            This usually means the Firestore security rules have not been deployed.
-            See firestore.rules in the project root.
+            This usually means Supabase Row Level Security policies have not been configured.
+            Check the RLS policies in the Supabase dashboard.
           </Text>
         </View>
       )}

@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useMyTrips, useOpenRequests, useOperator } from '@/hooks/useFirestore';
+import { useMyTrips, useOpenRequests, useBangkero } from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
@@ -19,14 +19,14 @@ export default function BangkeroHome() {
   const { user, profile } = useAuth();
   const uid = user?.id ?? null;
 
-  const operator = useOperator(uid);
+  const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
   const trips = useMyTrips(uid);
 
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const available = operator.data?.isAvailable ?? false;
+  const available = bangkero.data?.isAvailable ?? false;
 
   async function toggle(next: boolean) {
     if (!uid) return;
@@ -39,17 +39,15 @@ export default function BangkeroHome() {
   }
 
   async function accept(b: BookingDoc) {
-    if (!uid || !operator.data) return;
+    if (!uid || !bangkero.data) return;
     setPending(b.bookingId);
     setActionError(null);
     try {
       await acceptBooking(b.bookingId, {
         uid,
-        displayName: operator.data.displayName,
-        boatName: operator.data.boatName,
+        displayName: bangkero.data.displayName,
       });
     } catch (e) {
-      // Most likely another bangkero accepted first — the rule denies the write.
       setActionError(
         friendlyError(e) === 'You do not have permission to do that.'
           ? 'Another bangkero already took that trip.'
@@ -102,10 +100,10 @@ export default function BangkeroHome() {
         <View style={styles.boatCard}>
           <View style={styles.boatInfo}>
             <Text style={styles.boatName}>
-              {operator.data?.boatName ?? 'No boat name set'}
+              {bangkero.data?.displayName ?? 'No boat name set'}
             </Text>
             <Text style={styles.boatMeta}>
-              {operator.data?.capacity ? `${operator.data.capacity} passenger capacity` : 'Capacity not set'}
+              {bangkero.data?.verificationStat === 'verified' ? 'Verified' : 'Verification pending'}
             </Text>
           </View>
           <View style={styles.toggleWrap}>
@@ -115,7 +113,7 @@ export default function BangkeroHome() {
             <Switch
               value={available}
               onValueChange={toggle}
-              disabled={operator.loading || !operator.data}
+              disabled={bangkero.loading || !bangkero.data}
               trackColor={{ false: colors.border, true: colors.primaryDark }}
               thumbColor={available ? colors.primary : colors.textMuted}
             />
@@ -201,15 +199,15 @@ function RequestBody({ booking }: { booking: BookingDoc }) {
         <StatusPill status={booking.status} />
       </View>
       <Text style={styles.requestRoute}>
-        {booking.fromPierName} → {booking.toPierName}
+        {booking.fromPortName} → {booking.toPortName}
       </Text>
       <View style={styles.requestMeta}>
         <Text style={styles.metaItem}>
-          {booking.passengerCount} pax · ₱{booking.fare} · {booking.estimatedMinutes} min
+          {booking.numOfPassenger} pax · ₱{booking.totalPrice}
         </Text>
       </View>
       <Text style={styles.passenger}>
-        {booking.passengerName} · {formatPhone(booking.passengerPhone)}
+        {booking.passengerName} · {booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
       </Text>
     </>
   );

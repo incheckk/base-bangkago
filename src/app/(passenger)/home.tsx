@@ -6,7 +6,7 @@ import { SeaMap } from '@/components/SeaMap';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useAvailableOperatorCount, usePiers, useRecentBookings } from '@/hooks/useFirestore';
+import { useAvailableBangkeroCount, usePorts, useRecentBookings } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 
@@ -18,8 +18,8 @@ const SERVICES = [
 
 export default function PassengerHome() {
   const { user, profile } = useAuth();
-  const piers = usePiers();
-  const operators = useAvailableOperatorCount();
+  const ports = usePorts();
+  const bangkeros = useAvailableBangkeroCount();
   const bookings = useRecentBookings(user?.id ?? null);
 
   return (
@@ -38,22 +38,22 @@ export default function PassengerHome() {
         </View>
 
         <View style={styles.mapWrap}>
-          {piers.error ? (
+          {ports.error ? (
             <View style={styles.mapFallback}>
-              <Text style={styles.mapFallbackText}>Map unavailable — {piers.error}</Text>
+              <Text style={styles.mapFallbackText}>Map unavailable — {ports.error}</Text>
             </View>
           ) : (
-            <SeaMap piers={piers.data} height={210} />
+            <SeaMap ports={ports.data} height={210} />
           )}
 
           <View style={styles.badge}>
-            <View style={[styles.dot, operators.data === 0 && styles.dotOff]} />
+            <View style={[styles.dot, bangkeros.data === 0 && styles.dotOff]} />
             <Text style={styles.badgeText}>
-              {operators.loading
+              {bangkeros.loading
                 ? 'Checking boats…'
-                : operators.data === 0
+                : bangkeros.data === 0
                   ? 'No boats available'
-                  : `${operators.data} boat${operators.data === 1 ? '' : 's'} available`}
+                  : `${bangkeros.data} boat${bangkeros.data === 1 ? '' : 's'} available`}
             </Text>
           </View>
         </View>
@@ -124,9 +124,9 @@ function RecentTrips({
         >
           <View style={styles.tripTop}>
             <Text style={styles.tripRoute} numberOfLines={1}>
-              {b.fromPierName} → {b.toPierName}
+              {b.fromPortName} → {b.toPortName}
             </Text>
-            <Text style={styles.tripFare}>₱{b.fare}</Text>
+            <Text style={styles.tripFare}>₱{b.totalPrice}</Text>
           </View>
           <View style={styles.tripBottom}>
             <StatusPill status={b.status} />

@@ -2,8 +2,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { DemandBadge } from '@/components/DemandBadge';
+import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
@@ -11,6 +14,7 @@ import { useMyTrips, useOpenRequests, useBangkero } from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
+import { signOut } from '@/services/auth.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
@@ -25,6 +29,7 @@ export default function BangkeroHome() {
 
   const [pending, setPending] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const available = bangkero.data?.isAvailable ?? false;
 
@@ -81,16 +86,37 @@ export default function BangkeroHome() {
   }
 
   const activeTrips = trips.data.filter((t) => t.status === 'accepted');
+  const todayEarnings = trips.data
+    .filter((t) => t.status === 'completed')
+    .reduce((sum, t) => sum + t.totalPrice, 0);
 
   return (
     <ScreenContainer padded={false}>
+      <SideDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title="BangkaGo"
+        items={[
+          { icon: '🏠', label: 'Home', onPress: () => {} },
+          { icon: '🗺️', label: 'My Trips', onPress: () => {} },
+          { icon: '📊', label: 'Earnings', onPress: () => {} },
+          { icon: '👤', label: 'Profile', onPress: () => router.push('/(bangkero)/profile') },
+          { icon: '🚪', label: 'Sign out', onPress: () => signOut(), danger: true },
+        ]}
+      />
+
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>BANGKERO</Text>
-            <Text style={styles.greeting}>
-              {profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
-            </Text>
+          <View style={styles.headerLeft}>
+            <Pressable onPress={() => setDrawerOpen(true)} hitSlop={8}>
+              <Text style={styles.menuIcon}>☰</Text>
+            </Pressable>
+            <View style={styles.headerText}>
+              <Text style={styles.eyebrow}>BANGKERO</Text>
+              <Text style={styles.greeting}>
+                {profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
+              </Text>
+            </View>
           </View>
           <Pressable onPress={() => router.push('/(bangkero)/profile')} hitSlop={8}>
             <Text style={styles.profileLink}>Profile</Text>
@@ -103,7 +129,9 @@ export default function BangkeroHome() {
               {bangkero.data?.displayName ?? 'No boat name set'}
             </Text>
             <Text style={styles.boatMeta}>
-              {bangkero.data?.verificationStat === 'verified' ? 'Verified' : 'Verification pending'}
+              {bangkero.data?.verificationStat === 'verified'
+                ? '✓ Verified'
+                : 'Verification pending'}
             </Text>
           </View>
           <View style={styles.toggleWrap}>
@@ -126,9 +154,28 @@ export default function BangkeroHome() {
           </View>
         )}
 
+        <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
+        <View style={styles.demandRow}>
+          <DemandBadge level="high" predictedPassengers={32} />
+          <DemandBadge level="medium" predictedPassengers={18} />
+          <DemandBadge level="low" predictedPassengers={8} />
+        </View>
+
+        <Text style={styles.sectionLabel}>EARNINGS</Text>
+        <View style={styles.earningsRow}>
+          <View style={styles.earningsItem}>
+            <Text style={styles.earningsValue}>₱{todayEarnings}</Text>
+            <Text style={styles.earningsLabel}>Today</Text>
+          </View>
+          <View style={styles.earningsItem}>
+            <Text style={styles.earningsValue}>₱{todayEarnings * 5}</Text>
+            <Text style={styles.earningsLabel}>This Week</Text>
+          </View>
+        </View>
+
         {activeTrips.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>YOUR ACTIVE TRIPS</Text>
+            <Text style={styles.sectionLabel}>ACTIVE TRIPS</Text>
             {activeTrips.map((b) => (
               <View key={b.bookingId} style={[styles.request, styles.activeTrip]}>
                 <RequestBody booking={b} />
@@ -215,10 +262,13 @@ function RequestBody({ booking }: { booking: BookingDoc }) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
+
   header: {
     flexDirection: 'row', alignItems: 'flex-start',
     justifyContent: 'space-between', marginBottom: spacing.lg,
   },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
+  menuIcon: { color: colors.text, fontSize: 22, fontWeight: '700' },
   headerText: { flex: 1 },
   eyebrow: { ...typography.label, marginBottom: 2 },
   greeting: { ...typography.h2 },
@@ -251,6 +301,23 @@ const styles = StyleSheet.create({
   bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xxl, marginBottom: spacing.md },
+
+  demandRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+
+  earningsRow: {
+    flexDirection: 'row', gap: spacing.md,
+  },
+  earningsItem: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  earningsValue: { color: colors.primary, fontSize: 22, fontWeight: '700' },
+  earningsLabel: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
 
   offlineBox: {
     backgroundColor: colors.surface,

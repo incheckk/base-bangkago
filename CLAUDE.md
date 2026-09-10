@@ -1,15 +1,16 @@
-# BangkaGo — Capstone Prototype
+# BangkaGo — Capstone
 
 You are my senior React Native engineer for my capstone project: a ride-hailing
 platform for sea travel (Mactan / Olango, Cebu) where passengers book boat trips
 and bangkeros (boat operators) receive the requests.
 
-The capstone study is in `docs/`. Read it as source of truth for context and
-objectives — but the scope fence below overrides it.
+The capstone study is in `docs/`, and `BANGKAGO_KNOWLEDGE_BASE.md` carries the
+ERD the schema follows. Read both for context; the SCOPE section below states
+what is actually built.
 
-**THIS IS A PROTOTYPE FOR A PANEL PRESENTATION.** Functional, not a clickable
-mockup — real auth, real database writes, real-time updates. The scope stops
-where stated below.
+**BUILDING TOWARD THE FINAL PRODUCT.** Real auth, real database writes,
+real-time updates. The schema now covers the full ERD from the capstone study —
+25 tables — rather than the five-table demo slice this file originally described.
 
 ---
 
@@ -26,31 +27,32 @@ where stated below.
 
 ---
 
-## SCOPE FENCE
+## SCOPE
 
-**IN SCOPE**
+The original five-table scope fence is **superseded**. Migration
+`002_create_all_tables.sql` builds the full ERD, so payments, ratings, parcels,
+vessel tracking, weather, wallets, manifests, and demand predictions all have
+tables and are fair game.
+
+**Working end to end today — don't regress it:**
 - Register / login / logout (Supabase Auth), passenger + bangkero roles
-- Passenger: profile, pick pickup + destination pier, request a booking
-- Booking writes to Supabase
-- Passenger sees confirmation + booking status
-- Available bangkeros receive the request in real time in a request list
-- Passenger can cancel their own open booking
-- Bangkero accepts or declines a request; first accept wins and assigns the booking
-- Assigned bangkero marks the trip completed (`open` → `accepted` → `completed`)
-- **That's the end of the flow.**
+- Passenger picks pickup + destination port, requests a booking
+- Available bangkeros receive the request in real time
+- Bangkero accepts or declines; first accept wins and assigns the booking
+- Assigned bangkero marks the trip completed
+- Passenger cancels their own open booking
 
-**OUT OF SCOPE — do not build, do not suggest, do not scaffold "for later"**
-- Automatic matching / dispatch / distance ranking (accept is manual, broadcast stays)
-- Bangkero-created trip listings, schedules, or seat inventory
-- Live trip tracking, GPS streaming
-- Payment integration (payment is display-only, hardcoded `'cash'`)
-- Ratings, manifests, companion passenger details
-- Island hopping (multi-stop), Padala (parcel delivery)
-- Push notifications, weather APIs, admin/LGU dashboards, chat, offline sync
-- Google / social auth
+**Tables exist but have little or no UI yet** — check before assuming a feature
+is missing versus merely unwired: `payments`, `ratings`, `parcels` +
+`parcel_items`, `vessel_tracking`, `safety_alerts`, `weather_data`, `wallets` +
+`wallet_transactions`, `notifications`, `trip_manifest` + `manifest_passengers`
++ `manifest_parcels`, `island_packages`, `boat_rentals`, `route_stops`,
+`demand_predictions`, `passenger_details`, `bangkero_verification`.
 
-Island Hop and Padala **do** appear on the passenger home as visibly disabled
-tiles with a "Coming soon" badge. Chrome only, no behavior.
+**Still deliberately out:** Google / social auth, offline sync, real SMS OTP.
+
+Ask before building on a table that has no UI — having a column is not the same
+as having agreed on the behavior.
 
 ---
 
@@ -74,15 +76,16 @@ tiles with a "Coming soon" badge. Chrome only, no behavior.
 | Decision | Rationale (panel-ready) |
 |---|---|
 | Phone number as identifier, not email | Bangkeros are phone-first; many don't use email. |
-| Auth via synthetic email under the hood | `+639171234567` → `639171234567@bangkago.app` + password. Phone Auth via OTP is fragile in a live demo. SMS delivery can fail, timeout, or arrive late. |
-| `initializeAuth` + AsyncStorage persistence | Session survives app reload; no re-typing credentials on stage. |
+| Auth via synthetic email under the hood | `+639171234567` → `bangkago+639171234567@gmail.com` + password. Supabase rejects made-up domains like `@bangkago.app`, so gmail plus-addressing carries the phone number instead. OTP is fragile live — SMS can fail, timeout, or arrive late. |
+| AsyncStorage session persistence | `persistSession: true` + `storage: AsyncStorage`. Session survives app reload; no re-typing credentials on stage. No `Platform.OS` branching needed — AsyncStorage has a working web shim under Expo. |
 | Static SVG map | Deterministic, offline-safe, no API key, no permission prompt. |
-| Fixed pier list for pickup + destination | Piers are fixed infrastructure; a dropdown is more accurate than a dropped pin and makes bookings queryable by route. |
-| Flat fare per pier-pair | Fare is a single row lookup by deterministic route ID, not a query. |
+| Fixed port list for pickup + destination | Ports are fixed infrastructure; a dropdown is more accurate than a dropped pin and makes bookings queryable by route. |
+| Flat fare per port-pair | Fare is a single row lookup by deterministic route id (`startPortId__endPortId`), not a query. |
 | Broadcast to all available bangkeros | No distance ranking — every available operator sees the request and accepts manually. Automatic matching stays out of scope. |
 | First accept wins | The accepting bangkero is written onto the booking; it leaves every other operator's list. No locking or transaction — a second accept simply finds the booking no longer `open`. |
 | Reject is per-operator, not a status | A decline appends the operator uid to `rejectedBy[]` and hides the request from that bangkero only. One operator declining must not kill a request the other could take. |
-| `operators/` split from `users/` | Availability lookup must not expose private contact details. |
+| `bangkeros` split from `users` | Availability lookup must not expose private contact details. |
+| `bangkas` split from `bangkeros` | One operator can register more than one boat; capacity and permits belong to the vessel, not the person. |
 | Bookings denormalize names | Operator request list is one query, zero follow-up reads — that's what makes it feel instant. |
 | Booking ref = `BGO-` + 6 chars of doc ID | Sequential counters need a transaction; adds a live failure point for cosmetic gain. |
 | Status enum is `open \| accepted \| completed \| cancelled` | Every state has something that can set it: passenger cancels while open, bangkero accepts then completes. No orphan states. |
@@ -91,19 +94,47 @@ tiles with a "Coming soon" badge. Chrome only, no behavior.
 
 ---
 
-## DATA MODEL (approved, implemented in `src/types/models.ts`)
+## DATA MODEL
 
-- `users/{uid}` — uid, phone (E.164), firstName, lastName, role, createdAt
-- `operators/{uid}` — uid, displayName, boatName, capacity, isAvailable, updatedAt
-- `piers/{pierId}` — pierId, name, island, mapX, mapY (0–1 normalized), sortOrder, isActive
-- `routes/{fromPierId}__{toPierId}` — fromPierId, toPierId, fare, estimatedMinutes, isActive
-- `bookings/{id}` — bookingId, ref, passengerId, passengerName, passengerPhone,
-  fromPierId, fromPierName, toPierId, toPierName, passengerCount, fare,
-  estimatedMinutes, paymentMethod: 'cash', status,
-  operatorId, operatorName, operatorBoatName (null until accepted),
-  rejectedBy (uid array), createdAt, acceptedAt, completedAt, cancelledAt
+Source of truth is `migrations/002_create_all_tables.sql` (schema) and
+`003_add_rls_policies.sql` (35 policies). Run both in the Supabase SQL editor.
+**002 drops and recreates everything** — never re-run it against data you care
+about.
 
-**Row-Level Security policies:** `piers` + `routes` are client-read-only (seeded via
+**Naming changed from the prototype. Old names are gone:**
+
+| Old (do not use) | Actual table |
+|---|---|
+| `piers` | `ports` |
+| `operators` | `bangkeros` |
+| `profiles` | `users` |
+
+Core tables and their real columns:
+
+- `users` — id, first_name, middle_name, last_name, email, **phone_number**,
+  password_hash, **user_role**, profile_photo, is_verified, created_at
+- `ports` — id, **port_name**, location, latitude, longitude, sort_order, is_active
+- `routes` — id (`startPortId__endPortId`), **start_port_id**, **end_port_id**,
+  base_fare, estimated_minutes, distance_km, is_active
+- `bangkeros` — id, display_name, is_available, permit_number, gov_issued_id,
+  boat_registration_cert, coastal_permit, brgy_clearance, verification_stat, updated_at
+- `bangkas` — id, bangka_name, bangka_type, capacity, max_load_kg,
+  permit_number, bangka_photo, bangkero_id
+- `bookings` — id, ref, service_type, num_of_passenger, **trip_stat** (the status
+  column — *not* `status`), cancel_reason, depart_time, arrival_time,
+  **total_price**, created_at, user_id, bangka_id, route_id, package_id,
+  passenger_name, passenger_phone, from_port_name, to_port_name,
+  operator_id, operator_name, operator_boat_name, rejected_by,
+  accepted_at, completed_at, cancelled_at
+
+Gotchas that will cost you an hour each:
+- The booking status column is **`trip_stat`**, not `status`.
+- Ports carry real **latitude/longitude**, not the old normalized `mapX`/`mapY`.
+  `SeaMap` needs a projection from lat/lng to its 0–1 viewBox space.
+- `ref` is generated by the **`set_booking_ref` trigger** — never set it on insert.
+- Fare lives on `routes.base_fare`; `bookings.total_price` is fare × passengers.
+
+**Row-Level Security policies:** `ports` + `routes` are client-read-only (seeded via
 service role key). Booking `create` requires role passenger + own uid + status `open`.
 No deletes anywhere. Booking `update` permits exactly four transitions:
 
@@ -160,8 +191,26 @@ StatusPill, SeaMap, AuthErrorScreen
   Accept / Decline)
 
 **Infrastructure — done:**
-- `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` / `npm run reset`
-- `.env` (gitignored), `.env.example` committed
+- `migrations/002_create_all_tables.sql` (full ERD), `003_add_rls_policies.sql`
+  (35 policies). Both already applied to the hosted project.
+- `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
+  `npm run reset`. Seeded and verified: 5 ports, 12 routes, 3 accounts, 4 bookings.
+- `.env` (gitignored), `.env.example` committed with **placeholders only**
+
+**⚠️ Security debt:** the real `SUPABASE_SERVICE_ROLE_KEY` was committed in
+`.env.example` and is in git history. It bypasses every RLS policy. Rotate it
+(Dashboard → Project Settings → API Keys → service_role → Rotate) and update
+`.env`. Until rotated, treat the database as compromised.
+
+**Demo accounts** — password `demo1234`, auth emails are gmail plus-addressed
+(`bangkago+639171234567@gmail.com`) because Supabase rejects the `@bangkago.app`
+synthetic domain:
+- `0917 123 4567` Juan Dela Cruz — passenger
+- `0918 123 4567` Mang Lito — bangkero · MBCA Sto. Niño · 8 pax
+- `0919 123 4567` Pedro V. — bangkero · MBCA Bantay Dagat · 10 pax
+
+The `users` table also holds manual test signups (jan wan, wency wer, john
+floyd) — not duplicates, just accounts made by hand.
 
 **Still stubs:** none. Remaining work is 3.11 (bangkero marks trip completed is
 already wired into `(bangkero)/home.tsx`; the separate assigned-trip screen is
@@ -189,7 +238,7 @@ optional) and stripping the `__DEV__` `[timing]` logs from `useAuth.tsx`.
 - ~~**3.4** — Sign In, Sign Up, Role Select.~~ **DONE.** Role select folded into
   Sign Up as a segmented control rather than a third screen.
 - ~~**3.5** — `SeaMap` SVG component.~~ **DONE.** Hand-fitted Bézier coastlines,
-  shallow-water halos, pier pins from `mapX`/`mapY`, dashed route line, labels
+  shallow-water halos, port pins projected from latitude/longitude, dashed route line, labels
   flip inward past x > 0.62 so they never clip.
 - ~~**3.6** — Passenger home.~~ **DONE.** Map header, live boats-available badge,
   3 service tiles (2 disabled), recent bookings. Bottom sheet is a **static
@@ -215,7 +264,7 @@ written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
 ## DEMO RELIABILITY — HARD REQUIREMENT
 
 - **Seed script** (Supabase service role key, in .env):
-  - 5 piers: Mactan Pier 1 (Punta Engaño), Mactan Pier 2 (Maribago),
+  - 5 ports: Mactan Pier 1 (Punta Engaño), Mactan Pier 2 (Maribago),
     Olango Island Port (Sta. Rosa), Caohagan Island, Nalusuan Island
   - 12 routes, both directions, ₱150–₱400, 15–55 min
   - 3 accounts, all password `demo1234`:
@@ -226,7 +275,7 @@ written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
     isn't empty on first open
   - Two bangkeros so the demo shows one request landing on multiple operators
 - **Reset script**: wipe `bookings`, set operator `isAvailable` back to true,
-  leave piers/routes/accounts intact
+  leave ports/routes/accounts intact
 - Every screen must look correct with empty data. A blank list reads as broken.
 - **Don't make me type credentials on stage** — consider a dev-only quick-login
   row on the sign-in screen, gated behind `__DEV__`.

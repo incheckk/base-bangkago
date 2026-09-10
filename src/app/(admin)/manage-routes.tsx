@@ -9,9 +9,6 @@ import { LoadingState } from '@/components/States';
 import { getAllRoutes, createRoute, updateRoute, deleteRoute, getAllPorts } from '@/services/route.service';
 import type { RouteDoc, PortDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 export default function ManageRoutes() {
   const [routes, setRoutes] = useState<RouteDoc[]>([]);
   const [ports, setPorts] = useState<PortDoc[]>([]);
@@ -178,11 +175,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: ADMIN_ACCENT,
+    borderColor: colors.warning,
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-  formTitle: { ...typography.label, color: ADMIN_ACCENT, marginBottom: spacing.md },
+  formTitle: { ...typography.label, color: colors.warning, marginBottom: spacing.md },
   formActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   cancelBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
   cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
@@ -197,12 +194,12 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   routeName: { color: colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
-  fare: { color: ADMIN_ACCENT, fontSize: 16, fontWeight: '700' },
+  fare: { color: colors.warning, fontSize: 16, fontWeight: '700' },
   cardMeta: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
   metaText: { color: colors.textMuted, fontSize: 12 },
   cardActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: ADMIN_ACCENT },
-  editText: { color: ADMIN_ACCENT, fontSize: 13, fontWeight: '600' },
+  editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.warning },
+  editText: { color: colors.warning, fontSize: 13, fontWeight: '600' },
   deleteBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.danger },
   deleteText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
 });

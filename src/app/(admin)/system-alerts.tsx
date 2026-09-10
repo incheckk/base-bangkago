@@ -29,9 +29,9 @@ const SEVERITY_CONFIG: Record<AlertSeverity, { fg: string; bg: string; border: s
     label: 'Medium',
   },
   high: {
-    fg: '#F59E0B',
-    bg: 'rgba(245,158,11,0.08)',
-    border: 'rgba(245,158,11,0.3)',
+    fg: colors.warning,
+    bg: colors.warningTintSoft,
+    border: colors.warningBorder,
     label: 'High',
   },
   critical: {

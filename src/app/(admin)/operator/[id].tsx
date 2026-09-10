@@ -12,7 +12,7 @@ import type { VerificationStatus, BangkeroDoc } from '@/types/models';
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
   verified: { fg: colors.primary, bg: 'rgba(52,214,176,0.14)' },
-  pending: { fg: '#F59E0B', bg: 'rgba(245,158,11,0.14)' },
+  pending: { fg: colors.warning, bg: colors.warningTint },
   rejected: { fg: colors.danger, bg: 'rgba(224,82,82,0.14)' },
 };
 
@@ -120,7 +120,7 @@ export default function OperatorDetailScreen() {
               <Text style={styles.docLabel}>{doc.label}</Text>
               <Text style={[
                 styles.docStatus,
-                { color: isUploaded ? colors.primary : isMissing ? colors.danger : '#F59E0B' },
+                { color: isUploaded ? colors.primary : isMissing ? colors.danger : colors.warning },
               ]}>
                 {doc.status}
               </Text>

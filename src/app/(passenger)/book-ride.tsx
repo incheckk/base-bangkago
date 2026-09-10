@@ -1,12 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon, type IconName } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { SeaMap } from '@/components/SeaMap';
+import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { usePorts } from '@/hooks/useSupabase';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 type PassengerType = 'regular' | 'senior' | 'student' | 'child';
 type ServiceType = 'passenger' | 'cargo';
@@ -18,15 +22,16 @@ const PASSENGER_TYPES: { key: PassengerType; label: string; discount: number }[]
   { key: 'child', label: 'Child', discount: 50 },
 ];
 
-const SERVICE_TYPES: { key: ServiceType; label: string; icon: string }[] = [
-  { key: 'passenger', label: 'Passenger', icon: '🧑‍🤝‍🧑' },
-  { key: 'cargo', label: 'Cargo', icon: '📦' },
+const SERVICE_TYPES: { key: ServiceType; label: string; icon: IconName; hint: string }[] = [
+  { key: 'passenger', label: 'Passenger', icon: 'people', hint: 'Standard seat' },
+  { key: 'cargo', label: 'Cargo', icon: 'parcel', hint: '1.5× base rate' },
 ];
 
 const MAX_PASSENGERS = 12;
 const BASE_FARE = 85;
 
 export default function BookRide() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ from?: string; fromId?: string }>();
   const ports = usePorts();
 
@@ -79,36 +84,82 @@ export default function BookRide() {
   }
 
   if (ports.loading) {
-    return (
-      <ScreenContainer>
-        <Text style={styles.loadingText}>Loading ports…</Text>
-      </ScreenContainer>
-    );
+    return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
+  }
+  if (ports.error) {
+    return <ScreenContainer><ErrorState message={ports.error} /></ScreenContainer>;
   }
 
   const ready = !!fromId && !!toId && fromId !== toId && fare !== null;
 
   return (
     <ScreenContainer padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={10}>
-            <Text style={styles.back}>← Back</Text>
-          </Pressable>
-          <Text style={styles.title}>Book a Ride</Text>
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+        >
+          <Icon name="back" size={22} color={colors.text} />
+        </Pressable>
+        <Text style={styles.title}>Book a Ride</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: FOOTER_H + insets.bottom + spacing.xl }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* The route reads as one object, not two unrelated chip grids. The map
+            gives the choice a shape — you can see the crossing you just picked. */}
+        <View style={styles.routeCard}>
+          <View style={styles.mapWrap}>
+            <SeaMap ports={ports.data} fromPortId={fromId} toPortId={toId} height={150} />
+          </View>
+
+          <View style={styles.legs}>
+            <View style={styles.legRail}>
+              <View style={[styles.legDot, !!fromId && styles.legDotOn]} />
+              <View style={styles.legLine} />
+              <View style={[styles.legDot, styles.legDotEnd, !!toId && styles.legDotOn]} />
+            </View>
+
+            <View style={styles.legBody}>
+              <Text style={styles.legLabel}>FROM</Text>
+              <Text style={[styles.legValue, !fromPort && styles.legValueEmpty]} numberOfLines={1}>
+                {fromPort?.portName ?? 'Select a departure port'}
+              </Text>
+
+              <View style={styles.legDivider} />
+
+              <Text style={styles.legLabel}>TO</Text>
+              <Text style={[styles.legValue, !toPort && styles.legValueEmpty]} numberOfLines={1}>
+                {toPort?.portName ?? 'Select a destination'}
+              </Text>
+            </View>
+
+            <Pressable
+              onPress={swap}
+              disabled={!fromId && !toId}
+              accessibilityRole="button"
+              accessibilityLabel="Swap departure and destination"
+              style={({ pressed }) => [
+                styles.swapBtn,
+                (!fromId && !toId) && styles.swapBtnOff,
+                pressed && styles.swapBtnPressed,
+              ]}
+            >
+              <Icon name="route" size={18} color={colors.primary} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.sectionLabel}>FROM</Text>
+          <Text style={styles.sectionLabel}>DEPARTURE PORT</Text>
           <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
 
-          <View style={styles.swapRow}>
-            <Pressable onPress={swap} disabled={!fromId && !toId} style={styles.swapBtn}>
-              <Text style={styles.swapIcon}>⇅</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.sectionLabel}>TO</Text>
+          <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
           <PortChips ports={ports.data} selected={toId} disabled={fromId} onSelect={setToId} />
 
           <Text style={[styles.sectionLabel, styles.mtLg]}>DATE & TIME</Text>
@@ -121,79 +172,88 @@ export default function BookRide() {
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, styles.mtLg]}>PASSENGERS</Text>
-          <View style={styles.stepper}>
-            <StepButton label="−" onPress={() => setCount((c) => Math.max(1, c - 1))} disabled={count <= 1} />
-            <Text style={styles.stepValue}>{count}</Text>
-            <StepButton label="+" onPress={() => setCount((c) => Math.min(MAX_PASSENGERS, c + 1))} disabled={count >= MAX_PASSENGERS} />
+          <Text style={styles.sectionLabel}>PASSENGERS</Text>
+          <View style={styles.stepperCard}>
+            <StepButton icon="close" onPress={() => setCount((c) => Math.max(1, c - 1))} disabled={count <= 1} />
+            <View style={styles.stepValueWrap}>
+              <Text style={styles.stepValue}>{count}</Text>
+              <Text style={styles.stepUnit}>{count === 1 ? 'passenger' : 'passengers'}</Text>
+            </View>
+            <StepButton icon="check" onPress={() => setCount((c) => Math.min(MAX_PASSENGERS, c + 1))} disabled={count >= MAX_PASSENGERS} />
           </View>
 
           <Text style={[styles.sectionLabel, styles.mtLg]}>PASSENGER TYPE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {PASSENGER_TYPES.map((t) => (
-              <Pressable
-                key={t.key}
-                onPress={() => setPassengerType(t.key)}
-                style={[styles.chip, passengerType === t.key && styles.chipActive]}
-              >
-                <Text style={[styles.chipLabel, passengerType === t.key && styles.chipLabelActive]}>
-                  {t.label}{t.discount > 0 ? ` (${t.discount}% off)` : ''}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={styles.typeGrid}>
+            {PASSENGER_TYPES.map((t) => {
+              const active = passengerType === t.key;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => setPassengerType(t.key)}
+                  style={({ pressed }) => [
+                    styles.typeChip, active && styles.typeChipActive, pressed && !active && styles.pressed,
+                  ]}
+                >
+                  <Text style={[styles.typeLabel, active && styles.typeLabelActive]}>{t.label}</Text>
+                  {t.discount > 0 && (
+                    <Text style={[styles.typeDiscount, active && styles.typeDiscountActive]}>
+                      −{t.discount}%
+                    </Text>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
 
           <Text style={[styles.sectionLabel, styles.mtLg]}>SERVICE TYPE</Text>
           <View style={styles.serviceRow}>
-            {SERVICE_TYPES.map((s) => (
-              <Pressable
-                key={s.key}
-                onPress={() => setServiceType(s.key)}
-                style={[styles.serviceCard, serviceType === s.key && styles.serviceCardActive]}
-              >
-                <Text style={styles.serviceIcon}>{s.icon}</Text>
-                <Text style={[styles.serviceLabel, serviceType === s.key && styles.serviceLabelActive]}>
-                  {s.label}
-                </Text>
-              </Pressable>
-            ))}
+            {SERVICE_TYPES.map((s) => {
+              const active = serviceType === s.key;
+              return (
+                <Pressable
+                  key={s.key}
+                  onPress={() => setServiceType(s.key)}
+                  style={({ pressed }) => [
+                    styles.serviceCard, active && styles.serviceCardActive, pressed && !active && styles.pressed,
+                  ]}
+                >
+                  <Icon name={s.icon} size={22} color={active ? colors.primary : colors.textMuted} />
+                  <Text style={[styles.serviceLabel, active && styles.serviceLabelActive]}>{s.label}</Text>
+                  <Text style={styles.serviceHint}>{s.hint}</Text>
+                </Pressable>
+              );
+            })}
           </View>
-
-          <View style={styles.fareCard}>
-            {fare !== null ? (
-              <>
-                <View style={styles.fareRow}>
-                  <Text style={styles.fareLabel}>Fare estimate</Text>
-                  <Text style={styles.fareValue}>₱{fare}</Text>
-                </View>
-                <Text style={styles.fareNote}>
-                  {typeInfo.discount > 0
-                    ? `${typeInfo.discount}% ${passengerType} discount applied`
-                    : 'Standard fare'}
-                  {serviceType === 'cargo' ? ' · Cargo rate' : ''}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.fareEmpty}>Select ports to see fare estimate</Text>
-            )}
-          </View>
-
-          <PrimaryButton
-            label={fare !== null ? `Proceed to Payment · ₱${fare}` : 'Proceed to Payment'}
-            onPress={proceed}
-            disabled={!ready}
-          />
         </View>
       </ScrollView>
+
+      {/* Fare and the action stay on screen. Burying the total under a scroll
+          means deciding without seeing the price. */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+        <View style={styles.fareRow}>
+          <View>
+            <Text style={styles.fareLabel}>
+              {fare !== null ? 'Fare estimate' : 'Fare'}
+            </Text>
+            <Text style={styles.fareNote} numberOfLines={1}>
+              {fare === null
+                ? 'Pick both ports'
+                : `${typeInfo.discount > 0 ? `${typeInfo.discount}% ${passengerType} · ` : ''}${count} pax${serviceType === 'cargo' ? ' · Cargo' : ''}`}
+            </Text>
+          </View>
+          <Text style={[styles.fareValue, fare === null && styles.fareValueEmpty]}>
+            {fare !== null ? `₱${fare}` : '—'}
+          </Text>
+        </View>
+
+        <PrimaryButton label="Proceed to Payment" onPress={proceed} disabled={!ready} />
+      </View>
     </ScreenContainer>
   );
 }
 
 function PortChips({
-  ports,
-  selected,
-  disabled,
-  onSelect,
+  ports, selected, disabled, onSelect,
 }: {
   ports: { portId: string; portName: string }[];
   selected: string | null;
@@ -214,10 +274,17 @@ function PortChips({
               styles.portChip,
               active && styles.portChipActive,
               off && styles.portChipOff,
-              pressed && !active && !off && styles.chipPressed,
+              pressed && !active && !off && styles.pressed,
             ]}
           >
-            <Text style={[styles.portChipText, active && styles.portChipTextActive, off && styles.portChipTextOff]}>
+            {active && <Icon name="check" size={13} color={colors.primary} />}
+            <Text
+              style={[
+                styles.portChipText,
+                active && styles.portChipTextActive,
+                off && styles.portChipTextOff,
+              ]}
+            >
               {p.portName}
             </Text>
           </Pressable>
@@ -227,119 +294,163 @@ function PortChips({
   );
 }
 
-function StepButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled: boolean }) {
+/** `close` and `check` stand in for − and + — Ionicons has no clean plus/minus. */
+function StepButton({ icon, onPress, disabled }: { icon: IconName; onPress: () => void; disabled: boolean }) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [styles.stepBtn, disabled && styles.stepBtnOff, pressed && !disabled && styles.chipPressed]}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.stepBtn, disabled && styles.stepBtnOff, pressed && !disabled && styles.pressed]}
     >
-      <Text style={[styles.stepBtnText, disabled && styles.chipTextOff]}>{label}</Text>
+      <Text style={[styles.stepBtnText, disabled && styles.stepBtnTextOff]}>
+        {icon === 'close' ? '−' : '+'}
+      </Text>
     </Pressable>
   );
 }
 
+const FOOTER_H = 132;
+
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: spacing.xxl },
-  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.md },
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingBottom: spacing.md,
+  },
+  backBtn: {
+    width: touchTarget, height: touchTarget,
+    alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill,
+  },
+  backBtnPressed: { backgroundColor: colors.surface },
   title: { ...typography.h2 },
+
+  scroll: {},
   body: { paddingHorizontal: spacing.xl },
 
+  // ---------- route summary ----------
+  routeCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    overflow: 'hidden',
+    ...elevation.e2,
+  },
+  mapWrap: { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+
+  legs: { flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md },
+  legRail: { alignItems: 'center', paddingVertical: spacing.xs },
+  legDot: {
+    width: 10, height: 10, borderRadius: radii.pill,
+    borderWidth: 2, borderColor: colors.textMuted, backgroundColor: 'transparent',
+  },
+  legDotOn: { borderColor: colors.primary, backgroundColor: colors.primary },
+  legDotEnd: { borderRadius: radii.xs },
+  legLine: { width: 2, flex: 1, minHeight: 28, backgroundColor: colors.border, marginVertical: spacing.xxs },
+  legBody: { flex: 1 },
+  legLabel: { ...typography.label, marginBottom: spacing.xxs },
+  legValue: { ...typography.bodyStrong },
+  legValueEmpty: { color: colors.textMuted, fontWeight: '400' },
+  legDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
+
+  swapBtn: {
+    width: touchTarget, height: touchTarget, borderRadius: radii.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  swapBtnOff: { opacity: 0.35 },
+  swapBtnPressed: { borderColor: colors.primary },
+
+  // ---------- shared ----------
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mtLg: { marginTop: spacing.xl },
+  pressed: { opacity: 0.75 },
 
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   portChip: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
     backgroundColor: colors.surface,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    minHeight: 36,
   },
-  portChipActive: { backgroundColor: colors.surfaceAlt, borderColor: colors.primary },
-  portChipOff: { opacity: 0.35 },
-  chipPressed: { opacity: 0.75 },
-  portChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  portChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  portChipOff: { opacity: 0.3 },
+  portChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   portChipTextActive: { color: colors.primary },
   portChipTextOff: { color: colors.textMuted },
-
-  swapRow: { alignItems: 'center', marginVertical: spacing.sm },
-  swapBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swapIcon: { color: colors.primary, fontSize: 18, fontWeight: '700' },
 
   row: { flexDirection: 'row', gap: spacing.md },
   halfField: { flex: 1 },
 
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  stepBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
+  // ---------- stepper ----------
+  stepperCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing.sm,
   },
-  stepBtnOff: { opacity: 0.4 },
-  stepBtnText: { color: colors.text, fontSize: 20, fontWeight: '700' },
-  stepValue: { ...typography.h2, minWidth: 32, textAlign: 'center' },
+  stepBtn: {
+    width: touchTarget, height: touchTarget, borderRadius: radii.md,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  stepBtnOff: { opacity: 0.35 },
+  stepBtnText: { ...typography.h2, color: colors.primary, lineHeight: 26 },
+  stepBtnTextOff: { color: colors.textMuted },
+  stepValueWrap: { alignItems: 'center' },
+  stepValue: { ...typography.h2 },
+  stepUnit: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
 
-  chipRow: { gap: spacing.sm, paddingVertical: spacing.sm },
-  chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+  // ---------- passenger type ----------
+  typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  typeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    minHeight: 36,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  chipLabelActive: { color: colors.primaryText },
+  typeChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  typeLabel: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  typeLabelActive: { color: colors.primary },
+  typeDiscount: { ...typography.label, color: colors.success, letterSpacing: 0 },
+  typeDiscountActive: { color: colors.success },
 
+  // ---------- service type ----------
   serviceRow: { flexDirection: 'row', gap: spacing.md },
   serviceCard: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.sm,
+    alignItems: 'center', gap: spacing.xs,
   },
-  serviceCardActive: { backgroundColor: colors.surfaceAlt, borderColor: colors.primary },
-  serviceIcon: { fontSize: 24 },
-  serviceLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  serviceCardActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  serviceLabel: { ...typography.bodyStrong, color: colors.textSecondary },
   serviceLabelActive: { color: colors.primary },
+  serviceHint: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
 
-  fareCard: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing.lg,
-    marginBottom: spacing.xl,
+  // ---------- sticky footer ----------
+  footer: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.bgElevated,
+    borderTopWidth: 1, borderTopColor: colors.border,
+    paddingHorizontal: spacing.xl, paddingTop: spacing.md,
+    ...elevation.e3,
   },
-  fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  fareLabel: { ...typography.caption },
-  fareValue: { color: colors.primary, fontSize: 20, fontWeight: '700' },
-  fareNote: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs },
-  fareEmpty: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
-
-  loadingText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', marginTop: spacing.xxl },
-  chipTextOff: { color: colors.textMuted },
+  fareRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing.md, marginBottom: spacing.md,
+  },
+  fareLabel: { ...typography.label },
+  fareNote: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
+  fareValue: { ...typography.display, fontSize: 26, color: colors.primary },
+  fareValueEmpty: { color: colors.textMuted },
 });

@@ -6,9 +6,6 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { suspendUser } from '@/services/admin.service';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 export default function SuspendUser() {
   const params = useLocalSearchParams<{ userId?: string; userName?: string; role?: string }>();
   const [loading, setLoading] = useState(false);
@@ -89,17 +86,17 @@ const styles = StyleSheet.create({
   title: { ...typography.h1, marginBottom: spacing.xl },
 
   warningCard: {
-    backgroundColor: '#E0525220',
+    backgroundColor: colors.dangerTint,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: '#E05252',
+    borderColor: colors.danger,
     padding: spacing.lg,
     marginBottom: spacing.xl,
     alignItems: 'center',
     gap: spacing.sm,
   },
   warningIcon: { fontSize: 32 },
-  warningTitle: { color: '#E05252', fontSize: 16, fontWeight: '700' },
+  warningTitle: { color: colors.danger, fontSize: 16, fontWeight: '700' },
   warningText: { color: colors.textSecondary, fontSize: 13, textAlign: 'center', lineHeight: 18 },
 
   card: {

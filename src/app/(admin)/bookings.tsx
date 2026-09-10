@@ -143,6 +143,6 @@ const styles = StyleSheet.create({
   },
   metaItem: { color: colors.textSecondary, fontSize: 13 },
   metaDot: { color: colors.textMuted },
-  fare: { color: '#F59E0B', fontSize: 13, fontWeight: '700' },
+  fare: { color: colors.warning, fontSize: 13, fontWeight: '700' },
   date: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
 });

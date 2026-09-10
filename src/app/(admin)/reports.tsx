@@ -7,9 +7,6 @@ import { LoadingState } from '@/components/States';
 import { getAdminStats } from '@/services/admin.service';
 import type { AdminStats } from '@/services/admin.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 export default function Reports() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,13 +22,13 @@ export default function Reports() {
 
   const statCards = [
     { label: 'Total Users', value: stats?.totalUsers ?? 0, icon: '👥', color: colors.primary },
-    { label: 'Active Bangkeros', value: stats?.activeBangkeros ?? 0, icon: '🚢', color: ADMIN_ACCENT },
+    { label: 'Active Bangkeros', value: stats?.activeBangkeros ?? 0, icon: '🚢', color: colors.warning },
     { label: 'Total Trips', value: stats?.totalTrips ?? 0, icon: '📋', color: colors.accent },
-    { label: 'Total Revenue', value: `₱${(stats?.totalRevenue ?? 0).toLocaleString()}`, icon: '💰', color: '#34D6B0' },
+    { label: 'Total Revenue', value: `₱${(stats?.totalRevenue ?? 0).toLocaleString()}`, icon: '💰', color: colors.primary },
     { label: 'Trips Today', value: stats?.tripsToday ?? 0, icon: '📅', color: colors.primary },
-    { label: 'Revenue Today', value: `₱${(stats?.revenueToday ?? 0).toLocaleString()}`, icon: '💵', color: ADMIN_ACCENT },
+    { label: 'Revenue Today', value: `₱${(stats?.revenueToday ?? 0).toLocaleString()}`, icon: '💵', color: colors.warning },
     { label: 'New Users (7d)', value: stats?.newUsersThisWeek ?? 0, icon: '📈', color: colors.accent },
-    { label: 'Completed Today', value: stats?.completedTripsToday ?? 0, icon: '✅', color: '#34D6B0' },
+    { label: 'Completed Today', value: stats?.completedTripsToday ?? 0, icon: '✅', color: colors.primary },
     { label: 'Pending Approvals', value: stats?.pendingApprovals ?? 0, icon: '⏳', color: colors.warning },
     { label: 'Active Alerts', value: stats?.activeAlerts ?? 0, icon: '🔔', color: colors.danger },
   ];

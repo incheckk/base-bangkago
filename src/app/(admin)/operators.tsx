@@ -17,7 +17,7 @@ const FILTERS = [
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
   verified: { fg: colors.primary, bg: 'rgba(52,214,176,0.14)' },
-  pending: { fg: colors.warning, bg: 'rgba(245,158,11,0.14)' },
+  pending: { fg: colors.warning, bg: colors.warningTint },
   rejected: { fg: colors.danger, bg: 'rgba(224,82,82,0.14)' },
 };
 
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xl },
   title: { ...typography.h1 },
   countBadge: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: colors.warning,
     borderRadius: radii.pill,
     minWidth: 28,
     height: 28,
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
   },
-  countText: { color: '#1A1A1A', fontSize: 13, fontWeight: '700' },
+  countText: { color: colors.primaryText, fontSize: 13, fontWeight: '700' },
   list: { gap: spacing.md, marginTop: spacing.sm },
   card: {
     backgroundColor: colors.surface,
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     padding: spacing.lg,
   },
-  cardPressed: { borderColor: '#F59E0B' },
+  cardPressed: { borderColor: colors.warning },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {
     width: 44,

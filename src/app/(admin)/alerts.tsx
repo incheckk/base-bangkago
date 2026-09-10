@@ -7,9 +7,6 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 const FILTERS = [
   { key: 'active', label: 'Active' },
   { key: 'resolved', label: 'Resolved' },

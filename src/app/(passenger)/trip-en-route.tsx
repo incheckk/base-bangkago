@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sosText: {
-    color: '#FFFFFF',
+    color: colors.text,
     fontSize: 15,
     fontWeight: '700',
   },

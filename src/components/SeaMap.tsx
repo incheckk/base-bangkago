@@ -63,9 +63,23 @@ interface Props {
   fromPortId?: string | null;
   toPortId?: string | null;
   height?: number;
+  /** Edge-to-edge background mode: no border, no corner radius, absolute fill. */
+  fill?: boolean;
+  /** Tapping a port marker. Enables the invisible hit circles when provided. */
+  onPortPress?: (port: PortDoc) => void;
+  /** Highlighted independently of the from/to route pins. */
+  selectedPortId?: string | null;
 }
 
-export function SeaMap({ ports, fromPortId = null, toPortId = null, height = 200 }: Props) {
+export function SeaMap({
+  ports,
+  fromPortId = null,
+  toPortId = null,
+  height = 200,
+  fill = false,
+  onPortPress,
+  selectedPortId = null,
+}: Props) {
   // Compute bounds from port coordinates
   const lats = ports.map((p) => p.latitude ?? 0).filter(Boolean);
   const lngs = ports.map((p) => p.longitude ?? 0).filter(Boolean);
@@ -85,7 +99,7 @@ export function SeaMap({ ports, fromPortId = null, toPortId = null, height = 200
     : null;
 
   return (
-    <View style={[styles.wrap, { height }]}>
+    <View style={fill ? styles.fill : [styles.wrap, { height }]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
         <Rect x="0" y="0" width="100" height="100" fill={colors.bgElevated} />
 
@@ -134,12 +148,20 @@ export function SeaMap({ ports, fromPortId = null, toPortId = null, height = 200
         {ports.map((p) => {
           if (!p.latitude || !p.longitude) return null;
           const pos = normalizeCoord(p.latitude, p.longitude, minLat, maxLat, minLng, maxLng);
-          const active = p.portId === fromPortId || p.portId === toPortId;
+          const onRoute = p.portId === fromPortId || p.portId === toPortId;
+          const selected = p.portId === selectedPortId;
+          const active = onRoute || selected;
           const right = pos.x > 62;
 
           return (
             <G key={p.portId}>
               {active && <Circle cx={pos.x} cy={pos.y} r={4} fill={colors.primary} opacity={0.22} />}
+              {selected && (
+                <Circle
+                  cx={pos.x} cy={pos.y} r={6}
+                  fill="none" stroke={colors.primary} strokeWidth={0.5} opacity={0.6}
+                />
+              )}
               <Circle
                 cx={pos.x}
                 cy={pos.y}
@@ -158,6 +180,15 @@ export function SeaMap({ ports, fromPortId = null, toPortId = null, height = 200
               >
                 {p.portName}
               </SvgText>
+              {/* A 1.5-unit pin is far below a fingertip. This invisible disc is
+                  the real tap target — roughly 40pt on a phone-width viewBox. */}
+              {onPortPress && (
+                <Circle
+                  cx={pos.x} cy={pos.y} r={7}
+                  fill="transparent"
+                  onPress={() => onPortPress(p)}
+                />
+              )}
             </G>
           );
         })}
@@ -173,5 +204,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bgElevated,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
+  },
+  fill: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bgElevated,
   },
 });

@@ -7,9 +7,6 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 const MENU_ITEMS = [
   { key: 'operators', label: 'Manage Operators', icon: '🚤', route: '/(admin)/all-users' },
   { key: 'users', label: 'All Users', icon: '👥', route: '/(admin)/all-users' },
@@ -102,21 +99,21 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: ADMIN_ACCENT,
+    backgroundColor: colors.warning,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  initials: { color: '#1A1A1A', fontSize: 28, fontWeight: '700' },
+  initials: { color: colors.primaryText, fontSize: 28, fontWeight: '700' },
   name: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
   email: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.sm },
   roleBadge: {
-    backgroundColor: ADMIN_ACCENT + '20',
+    backgroundColor: colors.warning + '20',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
   },
-  roleText: { color: ADMIN_ACCENT, fontSize: 13, fontWeight: '700' },
+  roleText: { color: colors.warning, fontSize: 13, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
 

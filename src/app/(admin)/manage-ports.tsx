@@ -9,9 +9,6 @@ import { LoadingState } from '@/components/States';
 import { getAllPorts, createPort, updatePort, deletePort } from '@/services/route.service';
 import type { PortDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 export default function ManagePorts() {
   const [ports, setPorts] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,7 +132,7 @@ export default function ManagePorts() {
             <View key={p.portId} style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.portName}>{p.portName}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: p.isActive ? '#34D6B020' : '#E0525220' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: p.isActive ? colors.primaryTint : colors.dangerTint }]}>
                   <Text style={[styles.statusText, { color: p.isActive ? colors.primary : colors.danger }]}>
                     {p.isActive ? 'Active' : 'Inactive'}
                   </Text>
@@ -172,11 +169,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: ADMIN_ACCENT,
+    borderColor: colors.warning,
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-  formTitle: { ...typography.label, color: ADMIN_ACCENT, marginBottom: spacing.md },
+  formTitle: { ...typography.label, color: colors.warning, marginBottom: spacing.md },
   formActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   cancelBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
   cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
@@ -197,8 +194,8 @@ const styles = StyleSheet.create({
   cardMeta: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
   metaText: { color: colors.textMuted, fontSize: 12 },
   cardActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
-  editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: ADMIN_ACCENT },
-  editText: { color: ADMIN_ACCENT, fontSize: 13, fontWeight: '600' },
+  editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.warning },
+  editText: { color: colors.warning, fontSize: 13, fontWeight: '600' },
   deleteBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.danger },
   deleteText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
 });

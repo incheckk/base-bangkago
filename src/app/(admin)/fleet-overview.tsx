@@ -4,9 +4,6 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAllVesselTracking } from '@/hooks/useVesselTracking';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 export default function FleetOverviewScreen() {
   const tracking = useAllVesselTracking();
 
@@ -122,7 +119,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
   },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: ADMIN_ACCENT },
+  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
   countText: { color: colors.text, fontSize: 12, fontWeight: '600' },
 
   section: { marginBottom: spacing.xl },
@@ -157,7 +154,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  vesselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: ADMIN_ACCENT },
+  vesselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
   vesselId: { color: colors.text, fontSize: 15, fontWeight: '700' },
   vesselInfo: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   infoBlock: { minWidth: '40%' },

@@ -4,14 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { SideDrawer } from '@/components/SideDrawer';
+import { MENU_TITLE, menuFor } from '@/config/menu';
 import { StatusCard } from '@/components/StatusCard';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useAuth } from '@/hooks/useAuth';
-import { signOut } from '@/services/auth.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 const QUICK_ACTIONS = [
   { key: 'operators', icon: '🚤', label: 'Manage Operators', route: '/(admin)/all-users' },
   { key: 'trips', icon: '📋', label: 'View Trips', route: '/(admin)/active-trips' },
@@ -47,17 +44,8 @@ export default function AdminHome() {
       <SideDrawer
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title="Admin Menu"
-        items={[
-          { icon: '🏠', label: 'Home', onPress: () => {} },
-          { icon: '🚤', label: 'Manage Operators', onPress: () => router.push('/(admin)/all-users') },
-          { icon: '👥', label: 'All Users', onPress: () => router.push('/(admin)/all-users') },
-          { icon: '📋', label: 'Active Trips', onPress: () => router.push('/(admin)/active-trips') },
-          { icon: '🗺️', label: 'Fleet Overview', onPress: () => router.push('/(admin)/fleet-overview') },
-          { icon: '🚨', label: 'System Alerts', onPress: () => router.push('/(admin)/alerts') },
-          { icon: '👤', label: 'Profile', onPress: () => router.push('/(admin)/profile') },
-          { icon: '🚪', label: 'Sign Out', onPress: () => signOut(), danger: true },
-        ]}
+        title={MENU_TITLE.admin}
+        items={menuFor('admin')}
       />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -147,7 +135,7 @@ const styles = StyleSheet.create({
   },
   adminLabel: {
     ...typography.label,
-    color: ADMIN_ACCENT,
+    color: colors.warning,
     marginBottom: spacing.xs,
     letterSpacing: 2,
   },
@@ -171,12 +159,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: ADMIN_ACCENT,
+    borderColor: colors.warning,
     padding: spacing.lg,
   },
   statIcon: { fontSize: 22, marginBottom: spacing.sm },
   statValue: {
-    color: ADMIN_ACCENT,
+    color: colors.warning,
     fontSize: 28,
     fontWeight: '800',
     marginBottom: spacing.xs,
@@ -194,7 +182,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.md,
   },
-  actionPressed: { borderColor: ADMIN_ACCENT },
+  actionPressed: { borderColor: colors.warning },
   actionIcon: { fontSize: 22 },
   actionLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   actionArrow: { color: colors.textMuted, fontSize: 18 },

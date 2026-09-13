@@ -6,7 +6,9 @@ import { DemandBadge } from '@/components/DemandBadge';
 import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { Icon } from '@/components/Icon';
 import { SideDrawer } from '@/components/SideDrawer';
+import { MENU_TITLE, menuFor } from '@/config/menu';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,8 +16,7 @@ import { useMyTrips, useOpenRequests, useBangkero } from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
-import { signOut } from '@/services/auth.service';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
@@ -95,49 +96,48 @@ export default function BangkeroHome() {
       <SideDrawer
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title="BangkaGo"
-        items={[
-          { icon: '🏠', label: 'Home', onPress: () => {} },
-          { icon: '🗺️', label: 'My Trips', onPress: () => {} },
-          { icon: '📊', label: 'Earnings', onPress: () => {} },
-          { icon: '👤', label: 'Profile', onPress: () => router.push('/(bangkero)/profile') },
-          { icon: '🚪', label: 'Sign out', onPress: () => signOut(), danger: true },
-        ]}
+        title={MENU_TITLE.bangkero}
+        items={menuFor('bangkero')}
       />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable onPress={() => setDrawerOpen(true)} hitSlop={8}>
-              <Text style={styles.menuIcon}>☰</Text>
-            </Pressable>
-            <View style={styles.headerText}>
-              <Text style={styles.eyebrow}>BANGKERO</Text>
-              <Text style={styles.greeting}>
-                {profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
-              </Text>
-            </View>
+          <Pressable
+            onPress={() => setDrawerOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          >
+            <Icon name="menu" size={22} color={colors.text} />
+          </Pressable>
+
+          <View style={styles.headerText}>
+            <Text style={styles.eyebrow}>BANGKERO</Text>
+            <Text style={styles.greeting} numberOfLines={1}>
+              {profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
+            </Text>
           </View>
-          <Pressable onPress={() => router.push('/(bangkero)/profile')} hitSlop={8}>
-            <Text style={styles.profileLink}>Profile</Text>
+
+          <Pressable
+            onPress={() => router.push('/(bangkero)/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Profile"
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          >
+            <Icon name="profile" size={22} color={colors.text} />
           </Pressable>
         </View>
 
-        <View style={styles.boatCard}>
-          <View style={styles.boatInfo}>
-            <Text style={styles.boatName}>
-              {bangkero.data?.displayName ?? 'No boat name set'}
+        {/* Availability is the control the whole screen depends on, so it reads
+            as the primary object and changes colour with its state — you can
+            tell across a room whether this operator is receiving work. */}
+        <View style={[styles.statusCard, available && styles.statusCardOn]}>
+          <View style={styles.statusTop}>
+            <View style={[styles.statusDot, available ? styles.statusDotOn : styles.statusDotOff]} />
+            <Text style={[styles.statusWord, available && styles.statusWordOn]}>
+              {available ? 'ONLINE' : 'OFFLINE'}
             </Text>
-            <Text style={styles.boatMeta}>
-              {bangkero.data?.verificationStat === 'verified'
-                ? '✓ Verified'
-                : 'Verification pending'}
-            </Text>
-          </View>
-          <View style={styles.toggleWrap}>
-            <Text style={[styles.toggleLabel, available && styles.toggleLabelOn]}>
-              {available ? 'Online' : 'Offline'}
-            </Text>
+            <View style={styles.statusSpacer} />
             <Switch
               value={available}
               onValueChange={toggle}
@@ -145,6 +145,29 @@ export default function BangkeroHome() {
               trackColor={{ false: colors.border, true: colors.primaryDark }}
               thumbColor={available ? colors.primary : colors.textMuted}
             />
+          </View>
+
+          <Text style={styles.statusHint}>
+            {available
+              ? 'You are receiving booking requests.'
+              : 'Turn on to start receiving booking requests.'}
+          </Text>
+
+          <View style={styles.boatRow}>
+            <Icon name="boat" size={18} color={colors.textSecondary} />
+            <Text style={styles.boatName} numberOfLines={1}>
+              {bangkero.data?.displayName ?? 'No boat name set'}
+            </Text>
+            {bangkero.data?.verificationStat === 'verified' ? (
+              <View style={styles.verifiedPill}>
+                <Icon name="check" size={12} color={colors.success} />
+                <Text style={styles.verifiedText}>Verified</Text>
+              </View>
+            ) : (
+              <View style={styles.pendingPill}>
+                <Text style={styles.pendingText}>Pending</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -164,18 +187,27 @@ export default function BangkeroHome() {
         <Text style={styles.sectionLabel}>EARNINGS</Text>
         <View style={styles.earningsRow}>
           <View style={styles.earningsItem}>
+            <Icon name="cash" size={16} color={colors.primary} />
             <Text style={styles.earningsValue}>₱{todayEarnings}</Text>
-            <Text style={styles.earningsLabel}>Today</Text>
+            <Text style={styles.earningsLabel}>TODAY</Text>
           </View>
           <View style={styles.earningsItem}>
-            <Text style={styles.earningsValue}>₱{todayEarnings * 5}</Text>
-            <Text style={styles.earningsLabel}>This Week</Text>
+            <Icon name="receipt" size={16} color={colors.textSecondary} />
+            <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
+              ₱{todayEarnings * 5}
+            </Text>
+            <Text style={styles.earningsLabel}>THIS WEEK</Text>
           </View>
         </View>
 
         {activeTrips.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>ACTIVE TRIPS</Text>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabelInline}>ACTIVE TRIPS</Text>
+              <View style={styles.countPill}>
+                <Text style={styles.countPillText}>{activeTrips.length}</Text>
+              </View>
+            </View>
             {activeTrips.map((b) => (
               <View key={b.bookingId} style={[styles.request, styles.activeTrip]}>
                 <RequestBody booking={b} />
@@ -190,13 +222,23 @@ export default function BangkeroHome() {
           </>
         )}
 
-        <Text style={styles.sectionLabel}>INCOMING REQUESTS</Text>
+        <View style={styles.sectionHead}>
+          <Text style={styles.sectionLabelInline}>INCOMING REQUESTS</Text>
+          {available && requests.data.length > 0 && (
+            <View style={[styles.countPill, styles.countPillLive]}>
+              <Text style={styles.countPillTextLive}>{requests.data.length}</Text>
+            </View>
+          )}
+        </View>
 
         {!available ? (
           <View style={styles.offlineBox}>
+            <View style={styles.offlineIconRing}>
+              <Icon name="boat" size={24} color={colors.textMuted} />
+            </View>
             <Text style={styles.offlineTitle}>You are offline</Text>
             <Text style={styles.offlineText}>
-              Turn Online above to start receiving booking requests.
+              Turn on availability above to start receiving booking requests.
             </Text>
           </View>
         ) : requests.loading ? (
@@ -206,7 +248,7 @@ export default function BangkeroHome() {
         ) : requests.data.length === 0 ? (
           <View style={styles.stateBox}>
             <EmptyState
-              icon="📡"
+              icon="bell"
               title="No requests right now"
               message="New bookings appear here the moment a passenger sends one."
             />
@@ -215,19 +257,21 @@ export default function BangkeroHome() {
           requests.data.map((b) => (
             <View key={b.bookingId} style={styles.request}>
               <RequestBody booking={b} />
+              {/* Accept is the intended action and carries twice the width;
+                  giving a decline equal weight makes operators hesitate. */}
               <View style={styles.actions}>
                 <PrimaryButton
                   label="Decline"
                   variant="secondary"
                   onPress={() => decline(b)}
                   disabled={pending === b.bookingId}
-                  style={styles.actionBtn}
+                  style={styles.declineBtn}
                 />
                 <PrimaryButton
                   label="Accept"
                   onPress={() => accept(b)}
                   loading={pending === b.bookingId}
-                  style={styles.actionBtn}
+                  style={styles.acceptBtn}
                 />
               </View>
             </View>
@@ -245,112 +289,192 @@ function RequestBody({ booking }: { booking: BookingDoc }) {
         <Text style={styles.requestRef}>{booking.ref}</Text>
         <StatusPill status={booking.status} />
       </View>
-      <Text style={styles.requestRoute}>
-        {booking.fromPortName} → {booking.toPortName}
-      </Text>
-      <View style={styles.requestMeta}>
-        <Text style={styles.metaItem}>
-          {booking.numOfPassenger} pax · ₱{booking.totalPrice}
+
+      {/* Same origin/destination rail the passenger sees, so both sides of the
+          demo describe a trip the same way. */}
+      <View style={styles.routeRow}>
+        <View style={styles.rail}>
+          <View style={styles.railDot} />
+          <View style={styles.railLine} />
+          <View style={[styles.railDot, styles.railDotEnd]} />
+        </View>
+        <View style={styles.routeText}>
+          <Text style={styles.routePort} numberOfLines={1}>{booking.fromPortName}</Text>
+          <Text style={[styles.routePort, styles.routePortTo]} numberOfLines={1}>
+            {booking.toPortName}
+          </Text>
+        </View>
+        <View style={styles.fareWrap}>
+          <Text style={styles.fare}>₱{booking.totalPrice}</Text>
+          <Text style={styles.fareUnit}>{booking.numOfPassenger} pax</Text>
+        </View>
+      </View>
+
+      <View style={styles.passengerRow}>
+        <Icon name="profile" size={14} color={colors.textMuted} />
+        <Text style={styles.passenger} numberOfLines={1}>
+          {booking.passengerName}
+          {booking.passengerPhone ? ` · ${formatPhone(booking.passengerPhone)}` : ''}
         </Text>
       </View>
-      <Text style={styles.passenger}>
-        {booking.passengerName} · {booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
-      </Text>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
+  scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
 
+  // ---------- header ----------
   header: {
-    flexDirection: 'row', alignItems: 'flex-start',
-    justifyContent: 'space-between', marginBottom: spacing.lg,
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: spacing.xl, gap: spacing.sm,
+    marginHorizontal: -spacing.sm, // let the 44pt targets sit flush to the edge
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
-  menuIcon: { color: colors.text, fontSize: 22, fontWeight: '700' },
+  iconBtn: {
+    width: touchTarget, height: touchTarget,
+    alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill,
+  },
+  iconBtnPressed: { backgroundColor: colors.surface },
   headerText: { flex: 1 },
-  eyebrow: { ...typography.label, marginBottom: 2 },
+  eyebrow: { ...typography.label, marginBottom: spacing.xxs },
   greeting: { ...typography.h2 },
-  profileLink: { color: colors.primary, fontSize: 14, fontWeight: '600', paddingTop: spacing.md },
 
-  boatCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  // ---------- availability hero ----------
+  statusCard: {
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderRadius: radii.xl,
+    borderWidth: 1, borderColor: colors.border,
     padding: spacing.lg,
-    gap: spacing.md,
+    ...elevation.e2,
   },
-  boatInfo: { flex: 1 },
-  boatName: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  boatMeta: { ...typography.caption, marginTop: 2 },
-  toggleWrap: { alignItems: 'center', gap: 4 },
-  toggleLabel: { ...typography.caption, color: colors.textMuted, fontSize: 11, fontWeight: '700' },
-  toggleLabelOn: { color: colors.primary },
+  statusCardOn: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
+  statusTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  statusDot: { width: 10, height: 10, borderRadius: radii.pill },
+  statusDotOn: { backgroundColor: colors.primary },
+  statusDotOff: { backgroundColor: colors.textMuted },
+  statusWord: { ...typography.label, color: colors.textMuted, fontSize: 13 },
+  statusWordOn: { color: colors.primary },
+  statusSpacer: { flex: 1 },
+  statusHint: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
 
+  boatRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.lg, paddingTop: spacing.lg,
+    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+  },
+  boatName: { ...typography.bodyStrong, flex: 1 },
+  verifiedPill: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xxs,
+    backgroundColor: colors.successTint, borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs,
+  },
+  verifiedText: { ...typography.label, color: colors.success, letterSpacing: 0 },
+  pendingPill: {
+    backgroundColor: colors.warningTint, borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs,
+  },
+  pendingText: { ...typography.label, color: colors.warning, letterSpacing: 0 },
+
+  // ---------- error banner ----------
   banner: {
     marginTop: spacing.lg,
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { ...typography.caption, color: colors.danger, lineHeight: 18 },
 
-  sectionLabel: { ...typography.label, marginTop: spacing.xxl, marginBottom: spacing.md },
+  // ---------- sections ----------
+  sectionLabel: { ...typography.label, marginTop: spacing.huge, marginBottom: spacing.md },
+  sectionHead: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.huge, marginBottom: spacing.md,
+  },
+  sectionLabelInline: { ...typography.label },
+  countPill: {
+    minWidth: 20, height: 20, borderRadius: radii.pill,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs,
+  },
+  countPillText: { ...typography.label, color: colors.textSecondary, letterSpacing: 0 },
+  countPillLive: { backgroundColor: colors.primary },
+  countPillTextLive: { ...typography.label, color: colors.primaryText, letterSpacing: 0 },
 
   demandRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
 
-  earningsRow: {
-    flexDirection: 'row', gap: spacing.md,
-  },
+  // ---------- earnings ----------
+  earningsRow: { flexDirection: 'row', gap: spacing.md },
   earningsItem: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing.lg,
-    alignItems: 'center',
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    paddingVertical: spacing.lg, paddingHorizontal: spacing.md,
+    alignItems: 'center', gap: spacing.xs,
+    ...elevation.e1,
   },
-  earningsValue: { color: colors.primary, fontSize: 22, fontWeight: '700' },
-  earningsLabel: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  earningsValue: { ...typography.display, fontSize: 24, color: colors.primary },
+  earningsValueMuted: { color: colors.textSecondary },
+  earningsLabel: { ...typography.label },
 
+  // ---------- offline ----------
   offlineBox: {
     backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    borderStyle: 'dashed',
     padding: spacing.xl,
     alignItems: 'center',
   },
-  offlineTitle: { color: colors.textSecondary, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
-  offlineText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
-
-  stateBox: { minHeight: 180 },
-
-  request: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing.lg,
+  offlineIconRing: {
+    width: 56, height: 56, borderRadius: radii.pill,
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  activeTrip: { borderColor: colors.primary },
+  offlineTitle: { ...typography.bodyStrong, color: colors.textSecondary, marginBottom: spacing.xs },
+  offlineText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
+
+  stateBox: { minHeight: 200 },
+
+  // ---------- request cards ----------
+  request: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...elevation.e1,
+  },
+  activeTrip: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   requestTop: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: spacing.md, gap: spacing.sm,
   },
-  requestRef: { ...typography.caption, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
-  requestRoute: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  requestMeta: { marginTop: spacing.xs },
-  metaItem: { ...typography.caption, color: colors.primary, fontWeight: '600' },
-  passenger: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
+  requestRef: { ...typography.label, color: colors.textMuted, letterSpacing: 0.5 },
+
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rail: { alignItems: 'center' },
+  railDot: { width: 8, height: 8, borderRadius: radii.pill, backgroundColor: colors.primary },
+  railDotEnd: { borderRadius: radii.xs, backgroundColor: colors.textSecondary },
+  railLine: { width: 2, height: 18, backgroundColor: colors.border, marginVertical: spacing.xxs },
+  routeText: { flex: 1 },
+  routePort: { ...typography.bodyStrong },
+  routePortTo: { marginTop: spacing.md },
+  fareWrap: { alignItems: 'flex-end' },
+  fare: { ...typography.h2, color: colors.primary },
+  fareUnit: { ...typography.label, letterSpacing: 0, fontSize: 10 },
+
+  passengerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginTop: spacing.lg, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+  },
+  passenger: { ...typography.caption, color: colors.textMuted, flex: 1 },
 
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  actionBtn: { flex: 1 },
+  declineBtn: { flex: 1 },
+  acceptBtn: { flex: 2 },
 });

@@ -6,9 +6,6 @@ import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAllTrips } from '@/hooks/useAllTrips';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'open', label: 'Open' },
@@ -125,7 +122,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     padding: spacing.lg,
   },
-  cardPressed: { borderColor: ADMIN_ACCENT },
+  cardPressed: { borderColor: colors.warning },
 
   tripTop: {
     flexDirection: 'row',
@@ -148,7 +145,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   port: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  arrow: { color: ADMIN_ACCENT, fontSize: 15, fontWeight: '700' },
+  arrow: { color: colors.warning, fontSize: 15, fontWeight: '700' },
 
   tripDetails: {
     flexDirection: 'row',

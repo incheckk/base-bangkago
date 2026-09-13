@@ -8,9 +8,6 @@ import { LoadingState } from '@/components/States';
 import { getAllUsers } from '@/services/admin.service';
 import type { UserDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const ADMIN_ACCENT = '#F59E0B';
-
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'passenger', label: 'Passengers' },
@@ -20,7 +17,7 @@ const FILTERS = [
 
 const ROLE_COLORS: Record<string, string> = {
   passenger: colors.primary,
-  bangkero: ADMIN_ACCENT,
+  bangkero: colors.warning,
   admin: colors.accent,
 };
 
@@ -139,7 +136,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     padding: spacing.lg,
   },
-  cardPressed: { borderColor: ADMIN_ACCENT },
+  cardPressed: { borderColor: colors.warning },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: {
     width: 40,

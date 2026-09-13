@@ -120,7 +120,7 @@ export default function DocumentReviewScreen() {
               <Text style={styles.docLabel}>{doc.label}</Text>
               <Text style={[
                 styles.docStatus,
-                { color: isUploaded ? colors.primary : isMissing ? colors.danger : '#F59E0B' },
+                { color: isUploaded ? colors.primary : isMissing ? colors.danger : colors.warning },
               ]}>
                 {isUploaded ? 'Uploaded' : isMissing ? 'Missing' : 'Pending'}
               </Text>

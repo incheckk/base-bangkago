@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   label: { color: colors.textSecondary, fontSize: 13 },
   value: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  valueAccent: { color: '#F59E0B', fontSize: 13, fontWeight: '700' },
+  valueAccent: { color: colors.warning, fontSize: 13, fontWeight: '700' },
 
   center: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   emptyTitle: { ...typography.h2, marginTop: spacing.xxl, textAlign: 'center' },

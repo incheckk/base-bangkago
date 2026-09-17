@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -53,14 +54,9 @@ export default function PaymentScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={10}>
-            <Text style={styles.back}>← Back</Text>
-          </Pressable>
-          <Text style={styles.title}>Payment</Text>
-        </View>
+      <PassengerScreenHeader title="Payment" />
 
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.body}>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>BOOKING SUMMARY</Text>
@@ -151,9 +147,6 @@ export default function PaymentScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingBottom: spacing.xxl },
-  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.md },
-  title: { ...typography.h2 },
   body: { paddingHorizontal: spacing.xl },
 
   summaryCard: {

@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -83,7 +84,7 @@ export default function DocumentReviewScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
       <Text style={styles.eyebrow}>REVIEW</Text>
       <Text style={styles.title}>Document Review</Text>
 

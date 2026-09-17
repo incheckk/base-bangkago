@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -25,8 +26,8 @@ export default function PostTripScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Post Trip" subtitle="TRIP COMPLETE" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
 
         <View style={styles.hero}>
           <Text style={styles.heroIcon}>🎉</Text>
@@ -62,7 +63,7 @@ export default function PostTripScreen() {
         <View style={styles.footer}>
           <PrimaryButton
             label="View Earnings"
-            onPress={() => router.push('/(bangkero)/profile')}
+            onPress={() => router.push('/(bangkero)/earnings')}
           />
           <View style={{ height: spacing.md }} />
           <PrimaryButton
@@ -82,7 +83,6 @@ export default function PostTripScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   hero: {
     alignItems: 'center',

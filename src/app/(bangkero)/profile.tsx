@@ -4,6 +4,7 @@ import {
   Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,14 +18,18 @@ const MENU_ITEMS = [
   { key: 'trips', label: 'Trip History', icon: '🚤' },
   { key: 'documents', label: 'Documents', icon: '📄' },
   { key: 'weather', label: 'Weather', icon: '🌊' },
+  { key: 'qr', label: 'My QR Code', icon: '📱' },
+  { key: 'guide', label: 'Quick Guide', icon: '📖' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ] as const;
 
 const ROUTE_MAP: Record<string, string> = {
-  earnings: '/(bangkero)/profile',
+  earnings: '/(bangkero)/earnings',
   trips: '/(bangkero)/trips',
-  documents: '/(bangkero)/profile',
+  documents: '/(bangkero)/verify-boat',
   weather: '/(bangkero)/weather',
+  qr: '/(bangkero)/qr-code',
+  guide: '/(bangkero)/quick-guide',
   settings: '/(bangkero)/profile',
 };
 
@@ -54,8 +59,8 @@ export default function BangkeroProfileScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Profile" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
 
         <View style={styles.header}>
           <View style={styles.avatar}>
@@ -144,7 +149,6 @@ export default function BangkeroProfileScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   header: {
     alignItems: 'center',

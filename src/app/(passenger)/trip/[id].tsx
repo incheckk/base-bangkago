@@ -1,6 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
 import { LoadingState, ErrorState } from '@/components/States';
@@ -37,8 +38,8 @@ export default function TripDetailScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Trip Details" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
         <Text style={styles.eyebrow}>TRIP DETAILS</Text>
         <Text style={styles.title}>{booking.ref}</Text>
 
@@ -130,7 +131,6 @@ function capitalize(s: string) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
   eyebrow: { ...typography.label, marginBottom: 2 },
   title: { ...typography.h1, marginBottom: spacing.md },
   statusRow: { marginBottom: spacing.xl },

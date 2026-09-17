@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { usePorts } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -24,13 +25,7 @@ export default function SearchBoat() {
 
   return (
     <ScreenContainer padded={false}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.backBtn}>← Back</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>Select Port</Text>
-        <View style={{ width: 50 }} />
-      </View>
+      <PassengerScreenHeader title="Select Port" />
 
       <View style={styles.searchWrap}>
         <TextInput
@@ -69,13 +64,6 @@ export default function SearchBoat() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
-  },
-  backBtn: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-
   searchWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.md },
   searchInput: {
     backgroundColor: colors.surface, borderRadius: radii.md,

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -100,7 +101,7 @@ export default function ManagePorts() {
   return (
     <ScreenContainer padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.title}>Manage Ports</Text>
         <Text style={styles.count}>{ports.length} port{ports.length === 1 ? '' : 's'}</Text>
 

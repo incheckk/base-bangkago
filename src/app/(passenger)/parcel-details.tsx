@@ -1,7 +1,8 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { StatusPill } from '@/components/StatusPill';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -21,8 +22,7 @@ export default function ParcelDetails() {
   return (
     <ScreenContainer padded={false}>
       <View style={styles.container}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.title}>Parcel Details</Text>
+        <PassengerScreenHeader title="Parcel Details" />
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -80,8 +80,6 @@ export default function ParcelDetails() {
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   card: {
     backgroundColor: colors.surface,

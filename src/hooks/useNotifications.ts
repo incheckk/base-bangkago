@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { fetchNotifications, markNotificationRead } from '../services/notification.service';
 import type { NotificationDoc } from '../types/models';
@@ -15,6 +15,7 @@ export function useNotifications(userId: string | null): Result {
   const [data, setData] = useState<NotificationDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!userId) { setData([]); setLoading(false); return; }
@@ -36,12 +37,21 @@ export function useNotifications(userId: string | null): Result {
 
     load();
 
-    const channel = supabase
-      .channel('notifications-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase
+        .channel(`notifications-changes-${userId}-${mountId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, load)
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[useNotifications] subscription failed, notifications disabled');
+          }
+        });
+    } catch {
+      // Table might not exist — degrade gracefully
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
   }, [userId]);
 
   const markAsRead = async (id: string) => {

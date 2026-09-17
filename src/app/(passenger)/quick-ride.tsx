@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -24,23 +25,9 @@ const QUICK_ROUTES: {
 export default function QuickRide() {
   return (
     <ScreenContainer padded={false}>
-      {/* No side menu here: this is a booking flow, not a dashboard. A drawer
-          mid-task invites the user to wander off half-way through a booking,
-          and back is the only navigation this screen owes them. */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
-        >
-          <Icon name="back" size={22} color={colors.text} />
-        </Pressable>
-      </View>
+      <PassengerScreenHeader title="Book a Ride" subtitle="Pick a popular route, or search for a destination." />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Book a Ride</Text>
-        <Text style={styles.subtitle}>Pick a popular route, or search for a destination.</Text>
 
         <Pressable
           onPress={() => router.push('/(passenger)/search-boat')}
@@ -102,21 +89,7 @@ export default function QuickRide() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.xl, paddingTop: spacing.md,
-  },
-  backBtn: {
-    width: touchTarget, height: touchTarget,
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: radii.pill,
-    marginLeft: -spacing.sm, // optically aligns the glyph with the title below
-  },
-  backBtnPressed: { backgroundColor: colors.surface },
-
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
-  title: { ...typography.h1, marginTop: spacing.sm },
-  subtitle: { ...typography.caption, marginTop: spacing.xs, marginBottom: spacing.xl },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

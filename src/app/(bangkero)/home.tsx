@@ -53,6 +53,10 @@ export default function BangkeroHome() {
         uid,
         displayName: bangkero.data.displayName,
       });
+      router.push({
+        pathname: '/(bangkero)/booking-status',
+        params: { bookingId: b.bookingId },
+      });
     } catch (e) {
       setActionError(
         friendlyError(e) === 'You do not have permission to do that.'
@@ -209,7 +213,14 @@ export default function BangkeroHome() {
               </View>
             </View>
             {activeTrips.map((b) => (
-              <View key={b.bookingId} style={[styles.request, styles.activeTrip]}>
+              <Pressable
+                key={b.bookingId}
+                onPress={() => router.push({
+                  pathname: '/(bangkero)/booking-status',
+                  params: { bookingId: b.bookingId },
+                })}
+                style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
+              >
                 <RequestBody booking={b} />
                 <PrimaryButton
                   label="Mark completed"
@@ -217,7 +228,7 @@ export default function BangkeroHome() {
                   loading={pending === b.bookingId}
                   style={{ marginTop: spacing.md }}
                 />
-              </View>
+              </Pressable>
             ))}
           </>
         )}
@@ -449,6 +460,7 @@ const styles = StyleSheet.create({
     ...elevation.e1,
   },
   activeTrip: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+  requestPressed: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   requestTop: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: spacing.md, gap: spacing.sm,

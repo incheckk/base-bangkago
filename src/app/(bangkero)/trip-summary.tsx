@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +30,7 @@ export default function TripSummary() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Trip Summary" showDrawer={false} />
       <View style={styles.scroll}>
         <View style={styles.checkCircle}>
           <Text style={styles.checkMark}>✓</Text>

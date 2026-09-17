@@ -4,6 +4,7 @@ import { colors, radii, spacing } from '@/theme/tokens';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { StatusPill } from '@/components/StatusPill';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 
 const PASSENGERS = [
   { name: 'Juan Dela Cruz', seat: 'A1' },
@@ -15,6 +16,7 @@ export default function Booked() {
   return (
     <ScreenContainer>
       <View style={styles.container}>
+        <PassengerScreenHeader title="Booking Details" showDrawer={false} />
         {/* Booking reference */}
         <View style={styles.refContainer}>
           <Text style={styles.refLabel}>Booking Reference</Text>
@@ -70,7 +72,7 @@ export default function Booked() {
           />
           <PrimaryButton
             label="Back to Home"
-            onPress={() => router.replace('/')}
+            onPress={() => router.replace('/(passenger)/home')}
             variant="secondary"
           />
         </View>

@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
@@ -34,11 +35,9 @@ export default function BookingsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>ACTIVE</Text>
-        <Text style={styles.title}>My Bookings</Text>
+      <PassengerScreenHeader title="My Bookings" subtitle="ACTIVE" />
 
+      <ScrollView contentContainerStyle={styles.scroll}>
         {activeBookings.length === 0 ? (
           <EmptyState
             icon="🚤"
@@ -84,9 +83,6 @@ export default function BookingsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
   list: { gap: spacing.md },
   card: {
     backgroundColor: colors.surface,

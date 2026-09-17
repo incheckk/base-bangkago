@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -52,6 +53,7 @@ export default function BookingConfirmed() {
   return (
     <ScreenContainer>
       <View style={styles.container}>
+        <PassengerScreenHeader title="Booking Confirmed" showDrawer={false} />
         <View style={styles.topSection}>
           <Animated.View style={[styles.checkCircle, { transform: [{ scale: scaleAnim }] }]}>
             <Text style={styles.checkIcon}>✓</Text>

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -44,7 +45,7 @@ export default function OperatorsScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
       <Text style={styles.eyebrow}>MANAGEMENT</Text>
       <View style={styles.titleRow}>
         <Text style={styles.title}>Operators</Text>

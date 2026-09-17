@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -15,7 +16,7 @@ export default function AdminBookingDetail() {
     return (
       <ScreenContainer>
         <View style={styles.center}>
-          <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+          <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
           <Text style={styles.emptyTitle}>Booking not found</Text>
         </View>
       </ScreenContainer>
@@ -25,7 +26,7 @@ export default function AdminBookingDetail() {
   return (
     <ScreenContainer padded={false}>
       <View style={styles.header}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.headerTitle}>Booking Detail</Text>
         <View style={{ width: 50 }} />
       </View>

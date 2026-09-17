@@ -4,9 +4,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
-import { SeaMap } from '@/components/SeaMap';
+import { MapContainer } from '@/components/MapContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { usePorts } from '@/hooks/useSupabase';
@@ -94,17 +95,7 @@ export default function BookRide() {
 
   return (
     <ScreenContainer padded={false}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
-        >
-          <Icon name="back" size={22} color={colors.text} />
-        </Pressable>
-        <Text style={styles.title}>Book a Ride</Text>
-      </View>
+      <PassengerScreenHeader title="Book a Ride" />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: FOOTER_H + insets.bottom + spacing.xl }]}
@@ -115,7 +106,7 @@ export default function BookRide() {
             gives the choice a shape — you can see the crossing you just picked. */}
         <View style={styles.routeCard}>
           <View style={styles.mapWrap}>
-            <SeaMap ports={ports.data} fromPortId={fromId} toPortId={toId} height={150} />
+            <MapContainer ports={ports.data} fromPortId={fromId} toPortId={toId} height={150} />
           </View>
 
           <View style={styles.legs}>
@@ -313,17 +304,6 @@ function StepButton({ icon, onPress, disabled }: { icon: IconName; onPress: () =
 const FOOTER_H = 132;
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingHorizontal: spacing.lg, paddingBottom: spacing.md,
-  },
-  backBtn: {
-    width: touchTarget, height: touchTarget,
-    alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill,
-  },
-  backBtnPressed: { backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-
   scroll: {},
   body: { paddingHorizontal: spacing.xl },
 

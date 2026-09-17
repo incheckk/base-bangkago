@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -30,11 +30,8 @@ export default function WeatherScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Weather" subtitle="WEATHER" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>WEATHER</Text>
-        <Text style={styles.title}>Sea Conditions</Text>
 
         {loading ? (
           <View style={styles.placeholder}>
@@ -104,9 +101,6 @@ export default function WeatherScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   placeholder: {
     backgroundColor: colors.surface,

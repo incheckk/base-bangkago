@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FilterChips } from '@/components/FilterChips';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { TicketCard } from '@/components/TicketCard';
@@ -45,11 +46,9 @@ export default function TripsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>HISTORY</Text>
-        <Text style={styles.title}>Trip History</Text>
+      <PassengerScreenHeader title="Trip History" subtitle="HISTORY" />
 
+      <ScrollView contentContainerStyle={styles.scroll}>
         <FilterChips filters={FILTERS} active={activeFilter} onChange={setActiveFilter} />
 
         {filtered.length === 0 ? (
@@ -78,9 +77,6 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.lg },
   list: { gap: spacing.md },
   cardPress: { borderRadius: radii.md },
 });

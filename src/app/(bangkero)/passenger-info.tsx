@@ -1,9 +1,9 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
-import { useAuth } from '@/hooks/useAuth';
 import { useBooking } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
@@ -14,11 +14,8 @@ export default function PassengerInfo() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Passenger Info" showDrawer={false} />
       <View style={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>PASSENGER</Text>
-        <Text style={styles.title}>Passenger info</Text>
 
         {loading ? (
           <LoadingState label="Loading passenger…" />
@@ -71,7 +68,6 @@ export default function PassengerInfo() {
 const styles = StyleSheet.create({
   scroll: { flex: 1, paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
 
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
   eyebrow: { ...typography.label, marginBottom: 2 },
   title: { ...typography.h1, marginBottom: spacing.xl },
 

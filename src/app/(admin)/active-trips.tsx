@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -26,7 +27,7 @@ export default function ActiveTripsScreen() {
   return (
     <ScreenContainer padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.title}>Active Trips</Text>
         <Text style={styles.count}>
           {trips.loading ? 'Loading…' : `${trips.data.length} trip${trips.data.length === 1 ? '' : 's'}`}

@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,10 +29,8 @@ export default function NotificationsScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Notifications" subtitle="ALERTS" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>ALERTS</Text>
-        <Text style={styles.title}>Notifications</Text>
 
         {data.length === 0 ? (
           <EmptyState
@@ -76,9 +74,6 @@ function formatTimeAgo(iso: string) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
   list: { gap: spacing.md },
   card: {
     flexDirection: 'row',

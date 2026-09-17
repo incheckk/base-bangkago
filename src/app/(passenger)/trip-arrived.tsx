@@ -3,11 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '@/theme/tokens';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 
 export default function TripArrived() {
   return (
     <ScreenContainer>
       <View style={styles.container}>
+        <PassengerScreenHeader title="Arrived" showDrawer={false} />
         {/* Success icon */}
         <View style={styles.iconContainer}>
           <View style={styles.checkCircle}>
@@ -62,7 +64,7 @@ export default function TripArrived() {
           />
           <PrimaryButton
             label="Back to Home"
-            onPress={() => router.replace('/')}
+            onPress={() => router.replace('/(passenger)/home')}
             variant="secondary"
           />
         </View>

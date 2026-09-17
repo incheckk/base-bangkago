@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
@@ -38,8 +39,8 @@ export default function PassengerProfile() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Profile" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
 
         {/* Avatar */}
         <View style={styles.avatarWrap}>
@@ -107,7 +108,6 @@ function MenuItem({ label, onPress }: { label: string; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   avatarWrap: { alignItems: 'center', marginBottom: spacing.lg },
   avatar: {

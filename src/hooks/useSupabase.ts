@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { supabase } from '../services/supabase';
@@ -26,6 +26,7 @@ export function usePorts(): Result<PortDoc[]> {
   const [data, setData] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +48,7 @@ export function usePorts(): Result<PortDoc[]> {
     load();
 
     const channel = supabase
-      .channel('ports-changes')
+      .channel(`ports-changes-${mountId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ports' }, load)
       .subscribe();
 
@@ -62,6 +63,7 @@ export function useAvailableBangkeroCount(): Result<number> {
   const [data, setData] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +83,7 @@ export function useAvailableBangkeroCount(): Result<number> {
     load();
 
     const channel = supabase
-      .channel('bangkeros-availability')
+      .channel(`bangkeros-availability-${mountId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
       .subscribe();
 
@@ -96,6 +98,7 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!passengerId) { setData([]); setLoading(false); return; }
@@ -117,7 +120,7 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
     load();
 
     const channel = supabase
-      .channel(`bookings-passenger-${passengerId}`)
+      .channel(`bookings-passenger-${passengerId}-${mountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${passengerId}` },
@@ -139,6 +142,7 @@ export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
@@ -165,7 +169,7 @@ export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]
     load();
 
     const channel = supabase
-      .channel('bookings-open-requests')
+      .channel(`bookings-open-requests-${mountId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, load)
       .subscribe();
 
@@ -180,6 +184,7 @@ export function useMyTrips(bangkeroUid: string | null, max = 10): Result<Booking
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
@@ -201,7 +206,7 @@ export function useMyTrips(bangkeroUid: string | null, max = 10): Result<Booking
     load();
 
     const channel = supabase
-      .channel(`bookings-bangkero-${bangkeroUid}`)
+      .channel(`bookings-bangkero-${bangkeroUid}-${mountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` },
@@ -220,6 +225,7 @@ export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
   const [data, setData] = useState<BangkeroDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!uid) { setData(null); setLoading(false); return; }
@@ -242,7 +248,7 @@ export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
     load();
 
     const channel = supabase
-      .channel(`bangkero-${uid}`)
+      .channel(`bangkero-${uid}-${mountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
@@ -261,6 +267,7 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
   const [data, setData] = useState<BookingDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountId = useRef(0).current;
 
   useEffect(() => {
     if (!bookingId) { setData(null); setLoading(false); return; }
@@ -283,7 +290,7 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
     load();
 
     const channel = supabase
-      .channel(`booking-${bookingId}`)
+      .channel(`booking-${bookingId}-${mountId}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` },

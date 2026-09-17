@@ -40,5 +40,7 @@ export default function Index() {
     );
   }
 
-  return <Redirect href={profile.role === 'bangkero' ? '/(bangkero)/home' : '/(passenger)/home'} />;
+  if (profile.role === 'admin') return <Redirect href="/(admin)/home" />;
+  if (profile.role === 'bangkero') return <Redirect href="/(bangkero)/home" />;
+  return <Redirect href="/(passenger)/home" />;
 }

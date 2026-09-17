@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -55,11 +56,8 @@ export default function DepartureScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Departure" subtitle="MANIFEST & CHECKLIST" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>DEPARTURE</Text>
-        <Text style={styles.title}>Prepare to Depart</Text>
 
         <ProgressBar steps={steps} current={currentStep} />
 
@@ -100,6 +98,15 @@ export default function DepartureScreen() {
                 onPress={handleFinalize}
                 loading={finalizing}
                 disabled={finalizing}
+                style={styles.mt}
+              />
+            )}
+
+            {manifestFinalized && (
+              <PrimaryButton
+                label="View Passenger List"
+                variant="secondary"
+                onPress={() => router.push('/(bangkero)/passenger-list')}
                 style={styles.mt}
               />
             )}
@@ -159,7 +166,6 @@ export default function DepartureScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
   eyebrow: { ...typography.label, marginBottom: 2 },
   title: { ...typography.h1, marginBottom: spacing.xl },
   mt: { marginTop: spacing.lg },

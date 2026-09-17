@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -37,7 +38,7 @@ export default function AdminProfileScreen() {
   return (
     <ScreenContainer padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
 
         <View style={styles.header}>
           <View style={styles.avatar}>

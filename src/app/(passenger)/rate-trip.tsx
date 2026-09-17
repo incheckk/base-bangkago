@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StarRating } from '@/components/StarRating';
@@ -65,10 +66,8 @@ export default function RateTripScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Rate Trip" subtitle="RATE TRIP" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>RATE TRIP</Text>
-        <Text style={styles.title}>How was your trip?</Text>
 
         {/* Bangkero info */}
         <View style={styles.infoCard}>
@@ -130,9 +129,6 @@ export default function RateTripScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
 
   infoCard: {

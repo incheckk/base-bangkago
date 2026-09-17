@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,10 +32,8 @@ export default function WalletScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="My Wallet" subtitle="WALLET" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>WALLET</Text>
-        <Text style={styles.title}>My Wallet</Text>
 
         {/* Balance card */}
         <View style={styles.balanceCard}>
@@ -93,9 +91,6 @@ function formatTxType(type: string) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
   balanceCard: {
     backgroundColor: colors.primary,
     borderRadius: radii.lg,

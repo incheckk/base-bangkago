@@ -8,7 +8,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
-import { SeaMap } from '@/components/SeaMap';
+import { MapContainer } from '@/components/MapContainer';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
 import { MENU_TITLE, menuFor } from '@/config/menu';
@@ -34,10 +34,10 @@ const SHEET_EXPANDED = Math.round(SCREEN_H * 0.72);
 const SHEET_COLLAPSED = 232;
 const DRAG_RANGE = SHEET_EXPANDED - SHEET_COLLAPSED;
 
-const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean }[] = [
+const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; route?: string }[] = [
   { key: 'ride', icon: 'boat', label: 'Boat Ride', enabled: true },
   { key: 'island', icon: 'island', label: 'Island Hop', enabled: true },
-  { key: 'padala', icon: 'parcel', label: 'Padala', enabled: false },
+  { key: 'padala', icon: 'parcel', label: 'Padala', enabled: true, route: '/(passenger)/book-delivery' },
   { key: 'rental', icon: 'rental', label: 'Boat Rental', enabled: false },
 ];
 
@@ -60,7 +60,7 @@ export default function PassengerHome() {
   const snapTo = (expanded: boolean) => {
     'worklet';
     translateY.value = withSpring(expanded ? 0 : DRAG_RANGE, {
-      damping: 22, stiffness: 220, overshootClamping: true,
+      damping: 28, stiffness: 300, overshootClamping: true,
     });
   };
 
@@ -122,7 +122,7 @@ export default function PassengerHome() {
           <Text style={styles.mapFallbackText}>Map unavailable</Text>
         </View>
       ) : (
-        <SeaMap
+        <MapContainer
           ports={ports.data}
           fill
           onPortPress={(p) => setSelectedPort((cur) => (cur?.portId === p.portId ? null : p))}
@@ -224,12 +224,16 @@ export default function PassengerHome() {
             { paddingBottom: insets.bottom + spacing.xl },
           ]}
         >
-          <View style={styles.tiles}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tiles}
+          >
             {SERVICES.map((s) => (
               <Pressable
                 key={s.key}
                 disabled={!s.enabled}
-                onPress={() => router.push('/(passenger)/quick-ride')}
+                onPress={() => router.push((s.route ?? '/(passenger)/quick-ride') as any)}
                 style={({ pressed }) => [
                   styles.tile,
                   !s.enabled && styles.tileDisabled,
@@ -250,7 +254,7 @@ export default function PassengerHome() {
                 </Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
 
           <Pressable
             onPress={() => router.push('/(passenger)/quick-ride')}
@@ -432,9 +436,9 @@ const styles = StyleSheet.create({
   sheetScroll: {},
 
   // ---------- compact service tiles ----------
-  tiles: { flexDirection: 'row', gap: spacing.sm },
+  tiles: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.xxs },
   tile: {
-    flex: 1,
+    width: 80,
     backgroundColor: colors.surface, borderRadius: radii.md,
     borderWidth: 1, borderColor: colors.borderSubtle,
     paddingVertical: spacing.md, paddingHorizontal: spacing.xs,

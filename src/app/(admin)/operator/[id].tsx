@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -79,7 +80,7 @@ export default function OperatorDetailScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
 
       <View style={styles.header}>
         <View style={styles.avatar}>

@@ -1,7 +1,7 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
@@ -38,6 +38,7 @@ export default function BangkeroEarnings() {
   if (loading) {
     return (
       <ScreenContainer padded={false}>
+        <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
         <View style={styles.center}>
           <LoadingState label="Loading earnings…" />
         </View>
@@ -48,6 +49,7 @@ export default function BangkeroEarnings() {
   if (error) {
     return (
       <ScreenContainer padded={false}>
+        <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
         <View style={styles.center}>
           <ErrorState message={error} />
         </View>
@@ -57,11 +59,8 @@ export default function BangkeroEarnings() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>EARNINGS</Text>
-        <Text style={styles.title}>Your wallet</Text>
 
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Available Balance</Text>
@@ -128,10 +127,6 @@ function isToday(_id: string) {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
   center: { flex: 1, justifyContent: 'center' },
-
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   balanceCard: {
     backgroundColor: colors.surface,

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -33,7 +34,7 @@ export default function AdminBookings() {
   return (
     <ScreenContainer padded={false}>
       <View style={styles.header}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.headerTitle}>All Bookings</Text>
         <View style={{ width: 50 }} />
       </View>

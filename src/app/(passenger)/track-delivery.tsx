@@ -1,8 +1,9 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const STATUS_STEPS = ['Booked', 'Picked Up', 'In Transit', 'Out for Delivery', 'Delivered'];
@@ -22,8 +23,7 @@ export default function TrackDelivery() {
   return (
     <ScreenContainer padded={false}>
       <View style={styles.container}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.title}>Track Delivery</Text>
+        <PassengerScreenHeader title="Track Delivery" />
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -60,8 +60,6 @@ export default function TrackDelivery() {
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   card: {
     backgroundColor: colors.surface,

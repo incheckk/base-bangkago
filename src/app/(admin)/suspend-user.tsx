@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -25,7 +26,7 @@ export default function SuspendUser() {
             try {
               await suspendUser(params.userId!);
               Alert.alert('User Suspended', `${params.userName ?? 'User'} has been suspended.`, [
-                { text: 'OK', onPress: () => router.back() },
+                { text: 'OK', onPress: () => safeBack('/(admin)/home') },
               ]);
             } catch (e: any) {
               Alert.alert('Error', e.message ?? 'Failed to suspend user');
@@ -41,7 +42,7 @@ export default function SuspendUser() {
   return (
     <ScreenContainer padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.title}>Suspend User</Text>
 
         <View style={styles.warningCard}>

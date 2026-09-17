@@ -1,24 +1,24 @@
 import { router } from 'expo-router';
+import { safeBack } from '@/utils/navigation';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAllVesselTracking } from '@/hooks/useVesselTracking';
+import { usePorts } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 export default function FleetOverviewScreen() {
   const tracking = useAllVesselTracking();
+  const ports = usePorts();
 
   return (
     <ScreenContainer padded={false}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
+        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
         <Text style={styles.title}>Fleet Overview</Text>
 
         <View style={styles.mapArea}>
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapIcon}>🗺️</Text>
-            <Text style={styles.mapText}>Live Fleet Map</Text>
-            <Text style={styles.mapSub}>Real-time vessel positions</Text>
-          </View>
+          <MapContainer ports={ports.data} height={200} />
           <View style={styles.countBadge}>
             <View style={styles.dot} />
             <Text style={styles.countText}>

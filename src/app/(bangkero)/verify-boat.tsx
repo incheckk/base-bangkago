@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -43,10 +44,8 @@ export default function VerifyBoat() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Verify Boat" subtitle="UPLOAD DOCUMENTS" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.eyebrow}>STEP 1</Text>
-        <Text style={styles.title}>Upload Documents</Text>
 
         <View style={styles.progressWrap}>
           <ProgressBar steps={['Upload', 'Review', 'Approved']} current={0} />
@@ -93,7 +92,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxl,
     paddingBottom: spacing.xxl,
   },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
   eyebrow: { ...typography.label, marginBottom: 2 },
   title: { ...typography.h1, marginBottom: spacing.xl },
 

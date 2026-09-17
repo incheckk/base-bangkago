@@ -1,9 +1,9 @@
-import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { EmptyState } from '@/components/States';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -31,11 +31,8 @@ export default function TripsScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="My Trips" subtitle="TRIPS" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>TRIPS</Text>
-        <Text style={styles.title}>Trip History</Text>
 
         <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
@@ -86,9 +83,6 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.lg },
 
   placeholder: {
     backgroundColor: colors.surface,

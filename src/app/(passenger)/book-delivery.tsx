@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
@@ -47,10 +48,8 @@ export default function BookDelivery() {
 
   return (
     <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Book Delivery" subtitle="Send parcels and cargo between ports" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-        <Text style={styles.title}>Book Delivery</Text>
-        <Text style={styles.subtitle}>Send parcels and cargo between ports</Text>
 
         <Text style={styles.sectionLabel}>FROM PORT</Text>
         <View style={styles.chips}>
@@ -150,9 +149,6 @@ export default function BookDelivery() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  subtitle: { ...typography.caption, marginBottom: spacing.xl },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mt: { marginTop: spacing.xl },

@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
@@ -35,11 +36,8 @@ export default function PassengerList() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Passenger List" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>PASSENGERS</Text>
-        <Text style={styles.title}>Passenger list</Text>
 
         <View style={styles.searchBar}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -108,7 +106,6 @@ function badgeTextStyle(status: string) {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
 
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
   eyebrow: { ...typography.label, marginBottom: 2 },
   title: { ...typography.h1, marginBottom: spacing.xl },
 

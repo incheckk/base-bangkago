@@ -1835,7 +1835,334 @@ React Native App → FastAPI (Python) → Supabase (database)
 
 FastAPI would sit between the app and Supabase for any logic that can't run in Postgres functions (e.g., ML inference, external API calls).
 
-### 11.2 Socket.IO
+### 11.2 Random Forest Demand Prediction Algorithm
+
+**Capstone Title:** BANGKAGO: Inter-Island Logistics and Transportation Demand Prediction System with Real-Time Vessel Tracking
+
+**Status:** Designed — awaiting historical booking data from the prototype for training.
+
+#### 11.2.1 Algorithm Overview
+
+Random Forest is an ensemble learning method that constructs multiple decision trees during training and outputs the class that is the mode of the classes (classification) or mean prediction (regression) of the individual trees. For demand prediction, we use **Random Forest Regression** to predict the number of passengers on a given route at a given time.
+
+**Why Random Forest for this use case:**
+- Handles categorical features (day of week, route, weather condition) naturally
+- Robust to outliers (occasional demand spikes from events)
+- Provides feature importance rankings (which factors matter most for demand)
+- Works well with small-to-medium datasets (the booking data this prototype generates)
+- No assumption about data distribution (unlike linear regression)
+- Resistant to overfitting with proper hyperparameter tuning
+
+#### 11.2.2 Feature Engineering
+
+The model uses features from the `demand_predictions` table (defined in `docs/ERD_SCHEMA.md`):
+
+| Feature | Column | Type | Description |
+|---|---|---|---|
+| Day of week | `day_of_week` | int (0-6) | 0=Monday, 6=Sunday |
+| Hour of day | `hour_of_day` | int (0-23) | Scheduled departure hour |
+| Is weekend | `is_weekend` | bool | Saturday or Sunday |
+| Is holiday | `is_holiday` | bool | Philippine regular/special holiday |
+| Previous demand | `previous_demand` | int | Passengers on same route, same day last week |
+| 7-day average | `avg_demand_last_7_days` | float | Rolling average passengers over 7 days |
+| 30-day average | `avg_demand_last_30_days` | float | Rolling average passengers over 30 days |
+| Route ID | `route_id` | uuid | Encoded as numeric (route frequency encoding) |
+| Weather condition | `weather_id` | uuid | Encoded as numeric (weather severity scale) |
+| Month | derived | int (1-12) | Seasonal pattern capture |
+| Is pay day | derived | bool | 15th or 30th of month (higher spending) |
+
+**Target variable:** `predicted_passengers` (int) — the actual number of passengers booked on that route/date/hour.
+
+#### 11.2.3 Training Pipeline (Python + scikit-learn)
+
+```python
+# train_demand_model.py
+# BANGKAGO Demand Prediction - Random Forest Regressor
+
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import joblib
+import json
+from datetime import datetime
+
+# ============================================================
+# 1. DATA LOADING
+# ============================================================
+
+def load_training_data(supabase_url: str, supabase_key: str):
+    """
+    Load historical booking data from Supabase.
+    Joins bookings with routes, weather_data, and aggregates
+    into demand_predictions format.
+    """
+    from supabase import create_client
+
+    client = create_client(supabase_url, supabase_key)
+
+    # Aggregate bookings into demand records
+    # Group by: route, date, hour -> count passengers
+    response = client.table('demand_predictions').select('*').execute()
+
+    df = pd.DataFrame(response.data)
+    return df
+
+# ============================================================
+# 2. FEATURE ENGINEERING
+# ============================================================
+
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Transform raw demand data into model features."""
+
+    # Time-based features
+    df['day_of_week'] = pd.to_datetime(df['prediction_date']).dt.dayofweek
+    df['hour_of_day'] = pd.to_datetime(df['prediction_date']).dt.hour
+    df['month'] = pd.to_datetime(df['prediction_date']).dt.month
+    df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
+    df['is_payday'] = df['prediction_date'].apply(
+        lambda x: 1 if pd.to_datetime(x).day in [15, 30] else 0
+    )
+
+    # Lag features (previous demand)
+    df = df.sort_values(['route_id', 'prediction_date'])
+    df['previous_demand'] = df.groupby('route_id')['predicted_passengers'].shift(1)
+    df['avg_demand_last_7_days'] = (
+        df.groupby('route_id')['predicted_passengers']
+        .transform(lambda x: x.rolling(7, min_periods=1).mean())
+    )
+    df['avg_demand_last_30_days'] = (
+        df.groupby('route_id')['predicted_passengers']
+        .transform(lambda x: x.rolling(30, min_periods=1).mean())
+    )
+
+    # Fill NaN lag features with 0
+    df['previous_demand'] = df['previous_demand'].fillna(0)
+    df['avg_demand_last_7_days'] = df['avg_demand_last_7_days'].fillna(0)
+    df['avg_demand_last_30_days'] = df['avg_demand_last_30_days'].fillna(0)
+
+    # Encode categorical features
+    le_route = LabelEncoder()
+    df['route_encoded'] = le_route.fit_transform(df['route_id'])
+
+    le_weather = LabelEncoder()
+    df['weather_encoded'] = le_weather.fit_transform(df['weather_id'].fillna('unknown'))
+
+    return df, le_route, le_weather
+
+# ============================================================
+# 3. MODEL TRAINING
+# ============================================================
+
+FEATURE_COLUMNS = [
+    'day_of_week', 'hour_of_day', 'is_weekend', 'is_holiday',
+    'is_payday', 'month', 'previous_demand',
+    'avg_demand_last_7_days', 'avg_demand_last_30_days',
+    'route_encoded', 'weather_encoded'
+]
+
+def train_model(df: pd.DataFrame):
+    """Train Random Forest Regressor with cross-validation."""
+
+    X = df[FEATURE_COLUMNS]
+    y = df['predicted_passengers']
+
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # Initialize Random Forest
+    model = RandomForestRegressor(
+        n_estimators=100,        # Number of trees
+        max_depth=15,            # Prevent overfitting
+        min_samples_split=5,     # Minimum samples to split a node
+        min_samples_leaf=2,      # Minimum samples in leaf node
+        max_features='sqrt',     # Features per split (sqrt of total)
+        random_state=42,
+        n_jobs=-1                # Use all CPU cores
+    )
+
+    # Cross-validation
+    cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring='r2')
+    print(f"Cross-validation R² scores: {cv_scores}")
+    print(f"Mean R²: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+
+    # Train on full training set
+    model.fit(X_train, y_train)
+
+    # Evaluate on test set
+    y_pred = model.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
+
+    print(f"\nTest Set Performance:")
+    print(f"  MAE:  {mae:.2f} passengers")
+    print(f"  RMSE: {rmse:.2f} passengers")
+    print(f"  R²:   {r2:.4f}")
+
+    # Feature importance
+    importance = dict(zip(FEATURE_COLUMNS, model.feature_importances_))
+    print(f"\nFeature Importance:")
+    for feat, imp in sorted(importance.items(), key=lambda x: -x[1]):
+        print(f"  {feat}: {imp:.4f}")
+
+    return model, {
+        'mae': mae, 'rmse': rmse, 'r2': r2,
+        'cv_r2_mean': cv_scores.mean(),
+        'cv_r2_std': cv_scores.std(),
+        'feature_importance': importance
+    }
+
+# ============================================================
+# 4. INFERENCE API (FastAPI endpoint)
+# ============================================================
+
+# from fastapi import FastAPI
+# app = FastAPI()
+#
+# @app.post("/predict-demand")
+# async def predict_demand(features: DemandFeatures):
+#     """
+#     Predict passenger demand for a route/time.
+#
+#     Input: route_id, prediction_date, weather_id, is_holiday
+#     Output: predicted_passengers, confidence_score
+#     """
+#     model = joblib.load("demand_model.pkl")
+#
+#     # Engineer features from input
+#     feature_vector = prepare_features(features)
+#
+#     # Predict
+#     prediction = model.predict([feature_vector])[0]
+#
+#     # Confidence from tree agreement
+#     tree_predictions = [tree.predict([feature_vector])[0]
+#                        for tree in model.estimators_]
+#     confidence = 1 - (np.std(tree_predictions) / np.mean(tree_predictions))
+#
+#     return {
+#         "predicted_passengers": max(0, round(prediction)),
+#         "confidence_score": round(min(1, max(0, confidence)), 2),
+#         "route_id": features.route_id,
+#         "prediction_date": features.prediction_date
+#     }
+
+# ============================================================
+# 5. MODEL PERSISTENCE
+# ============================================================
+
+def save_model(model, metrics: dict, version: str = "1.0"):
+    """Save trained model and metrics for deployment."""
+    joblib.dump(model, f"demand_model_v{version}.pkl")
+
+    with open(f"model_metrics_v{version}.json", "w") as f:
+        json.dump({
+            "version": version,
+            "trained_at": datetime.now().isoformat(),
+            "algorithm": "RandomForestRegressor",
+            "features": FEATURE_COLUMNS,
+            **metrics
+        }, f, indent=2)
+
+# ============================================================
+# 6. MAIN TRAINING SCRIPT
+# ============================================================
+
+if __name__ == "__main__":
+    import os
+
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    print("Loading training data...")
+    df = load_training_data(SUPABASE_URL, SUPABASE_KEY)
+    print(f"Loaded {len(df)} demand records")
+
+    print("\nEngineering features...")
+    df, le_route, le_weather = engineer_features(df)
+
+    print("\nTraining Random Forest model...")
+    model, metrics = train_model(df)
+
+    print("\nSaving model...")
+    save_model(model, metrics, version="1.0")
+
+    print("\nTraining complete!")
+```
+
+#### 11.2.4 Integration with Mobile App
+
+The trained model is served via a FastAPI endpoint. The mobile app consumes predictions in two ways:
+
+**1. Bangkero Home — Demand Badges**
+
+```typescript
+// In useDemandPredictions hook (future)
+const predictions = await fetch(`${API_URL}/predict-demand`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    route_id: 'mactan-pier-2-to-olango',
+    prediction_date: new Date().toISOString(),
+    weather_id: currentWeatherId,
+    is_holiday: isPhilippineHoliday()
+  })
+});
+
+// Returns: { predicted_passengers: 32, confidence_score: 0.87 }
+// Displayed as DemandBadge components on bangkero home
+```
+
+**2. Admin Dashboard — Route Optimization**
+
+```typescript
+// Batch predictions for all routes
+const forecasts = await fetch(`${API_URL}/forecast-all-routes`, {
+  method: 'POST',
+  body: JSON.stringify({ date: selectedDate })
+});
+
+// Used for: fleet allocation, schedule optimization, fare adjustment
+```
+
+#### 11.2.5 Model Performance Benchmarks (Expected)
+
+Based on similar inter-island transportation datasets:
+
+| Metric | Target | Notes |
+|---|---|---|
+| MAE | < 5 passengers | Average prediction error |
+| R² | > 0.75 | Variance explained by model |
+| Training data needed | > 1000 booking records | Minimum for stable predictions |
+| Retraining frequency | Weekly | As new booking data accumulates |
+
+#### 11.2.6 Data Flow Diagram
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Mobile App      │     │  FastAPI      │     │  Supabase       │
+│  (React Native)  │────▶│  (Python)     │────▶│  (PostgreSQL)   │
+│                  │     │               │     │                 │
+│  - Books rides   │     │  - Serves     │     │  - Stores       │
+│  - Views demand  │◀────│    predictions│◀────│    bookings     │
+│  - Generates     │     │  - Trains     │     │  - Weather data │
+│    training data │     │    model      │     │  - Demand preds │
+└─────────────────┘     └──────────────┘     └─────────────────┘
+```
+
+#### 11.2.7 Deployment Notes
+
+- **Phase 1 (Current):** Mobile app generates booking data. No ML yet.
+- **Phase 2:** Collect >1000 bookings. Train initial model. Deploy to FastAPI.
+- **Phase 3:** Integrate predictions into bangkero home (demand badges).
+- **Phase 4:** Admin dashboard uses predictions for fleet optimization.
+
+### 11.3 Socket.IO
 
 **Status:** Set aside — Supabase Realtime handles all real-time needs.
 

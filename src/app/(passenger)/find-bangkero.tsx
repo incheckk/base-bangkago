@@ -2,13 +2,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '@/theme/tokens';
+import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { usePorts } from '@/hooks/useSupabase';
 
 export default function FindBangkero() {
   const params = useLocalSearchParams<{ from?: string; to?: string; pax?: string; fare?: string }>();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [searching, setSearching] = useState(true);
+  const ports = usePorts();
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -30,9 +34,10 @@ export default function FindBangkero() {
   return (
     <ScreenContainer>
       <View style={styles.container}>
-        {/* Map placeholder */}
+        <PassengerScreenHeader title="Finding Boat" showDrawer={false} />
+        {/* Map */}
         <View style={styles.mapArea}>
-          <Text style={styles.mapPlaceholder}>Tracking area</Text>
+          <MapContainer ports={ports.data} height={280} />
         </View>
 
         {/* Searching indicator */}

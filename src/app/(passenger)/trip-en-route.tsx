@@ -2,21 +2,26 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '@/theme/tokens';
+import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
 import { StarRating } from '@/components/StarRating';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { usePorts } from '@/hooks/useSupabase';
 
 const STEPS = ['Boarded', 'En Route', 'Arriving', 'Arrived'];
 
 export default function TripEnRoute() {
   const [currentStep, setCurrentStep] = useState(1);
+  const ports = usePorts();
 
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll}>
+        <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
         {/* Map area */}
         <View style={styles.mapArea}>
-          <Text style={styles.mapPlaceholder}>Live tracking</Text>
+          <MapContainer ports={ports.data} height={260} />
         </View>
 
         <View style={styles.content}>
@@ -66,14 +71,14 @@ export default function TripEnRoute() {
           <View style={styles.actions}>
             <Pressable
               style={styles.sosButton}
-              onPress={() => {}}
+              onPress={() => router.push('/(passenger)/report-issue')}
             >
               <Text style={styles.sosText}>SOS — Emergency</Text>
             </Pressable>
 
             <Pressable
               style={styles.contactButton}
-              onPress={() => {}}
+              onPress={() => {/* TODO: phone call integration */}}
             >
               <Text style={styles.contactText}>Contact Bangkero</Text>
             </Pressable>

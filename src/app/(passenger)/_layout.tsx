@@ -25,6 +25,7 @@ export default function PassengerLayout() {
   // No profile doc — hand back to "/", which owns the recovery path.
   if (!profile) return <Redirect href="/" />;
 
+  if (profile.role === 'admin') return <Redirect href="/(admin)/home" />;
   if (profile.role !== 'passenger') return <Redirect href="/(bangkero)/home" />;
 
   return (

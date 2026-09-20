@@ -14,6 +14,7 @@ import {
 } from '@/services/booking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
+import { safeBack } from '@/utils/navigation';
 
 export default function BookingStatus() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -42,7 +43,7 @@ export default function BookingStatus() {
     setActionError(null);
     try {
       await rejectBooking(booking.bookingId, uid);
-      router.back();
+      safeBack('/(bangkero)/home');
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -59,7 +60,7 @@ export default function BookingStatus() {
     setActionError(null);
     try {
       await completeBooking(booking.bookingId);
-    router.push('/(bangkero)/departure');
+      router.push('/(bangkero)/trip-summary');
     } catch (e) {
       setActionError(friendlyError(e));
     }

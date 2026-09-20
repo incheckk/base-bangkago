@@ -123,7 +123,7 @@ export default function BangkeroHome() {
           </View>
 
           <Pressable
-            onPress={() => router.push('/(bangkero)/profile')}
+            onPress={() => router.replace('/(bangkero)/profile')}
             accessibilityRole="button"
             accessibilityLabel="Profile"
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}

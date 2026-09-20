@@ -62,14 +62,20 @@ export default function PostTripScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
+            label="View Trip Summary"
+            onPress={() => router.push('/(bangkero)/trip-summary')}
+          />
+          <View style={{ height: spacing.md }} />
+          <PrimaryButton
             label="View Earnings"
+            variant="secondary"
             onPress={() => router.push('/(bangkero)/earnings')}
           />
           <View style={{ height: spacing.md }} />
           <PrimaryButton
             label="Back to Home"
             variant="secondary"
-            onPress={() => router.push('/(bangkero)/home')}
+            onPress={() => router.replace('/(bangkero)/home')}
           />
         </View>
 

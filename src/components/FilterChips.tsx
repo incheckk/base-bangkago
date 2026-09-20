@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { colors, radii, spacing } from '../theme/tokens';
 
 interface FilterChip {
@@ -15,7 +15,12 @@ interface Props {
 
 export function FilterChips({ filters, active, onChange }: Props) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.scroll}
+      contentContainerStyle={styles.row}
+    >
       {filters.map((f) => {
         const isActive = f.key === active;
         return (
@@ -33,7 +38,8 @@ export function FilterChips({ filters, active, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: { gap: spacing.sm, paddingVertical: spacing.sm },
+  scroll: { flexGrow: 0, flexShrink: 0 },
+  row: { gap: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center' },
   chip: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
@@ -41,6 +47,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
   },
   chipActive: {
     backgroundColor: colors.primary,

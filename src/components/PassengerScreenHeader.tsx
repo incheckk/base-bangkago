@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon } from './Icon';
 import { SideDrawer } from './SideDrawer';
@@ -17,7 +16,6 @@ interface Props {
 }
 
 export function PassengerScreenHeader({ title, subtitle, showBack = true, showDrawer = true }: Props) {
-  const insets = useSafeAreaInsets();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -29,7 +27,7 @@ export function PassengerScreenHeader({ title, subtitle, showBack = true, showDr
         items={menuFor('passenger')}
       />
 
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.header}>
         {showBack && (
           <Pressable
             onPress={() => safeBack('/(passenger)/home')}
@@ -66,10 +64,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
-  titleWrap: { flex: 1 },
+  titleWrap: { flex: 1, minWidth: 0 },
   title: { ...typography.title, color: colors.text },
   subtitle: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
   iconBtn: {

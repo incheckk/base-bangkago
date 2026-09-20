@@ -17,9 +17,11 @@ export function TicketCard({ booking, compact = false }: Props) {
         <StatusPill status={booking.status} />
       </View>
       <View style={styles.routeRow}>
-        <Text style={styles.port}>{booking.fromPortName}</Text>
-        <Text style={styles.arrow}>→</Text>
-        <Text style={styles.port}>{booking.toPortName}</Text>
+        <Text style={styles.port} numberOfLines={2}>{booking.fromPortName}</Text>
+        <View style={styles.routeToRow}>
+          <Text style={styles.arrow}>→</Text>
+          <Text style={styles.port} numberOfLines={2}>{booking.toPortName}</Text>
+        </View>
       </View>
       {!compact && (
         <View style={styles.details}>
@@ -55,11 +57,16 @@ const styles = StyleSheet.create({
   },
   ref: { color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
   routeRow: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+  routeToRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  port: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  port: { color: colors.text, fontSize: 15, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   arrow: { color: colors.primary, fontSize: 15, fontWeight: '700' },
   details: {
     flexDirection: 'row',

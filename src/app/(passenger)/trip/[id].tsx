@@ -51,9 +51,11 @@ export default function TripDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ROUTE</Text>
           <View style={styles.routeRow}>
-            <Text style={styles.port}>{booking.fromPortName}</Text>
-            <Text style={styles.arrow}>→</Text>
-            <Text style={styles.port}>{booking.toPortName}</Text>
+            <Text style={styles.port} numberOfLines={2}>{booking.fromPortName}</Text>
+            <View style={styles.routeToRow}>
+              <Text style={styles.arrow}>→</Text>
+              <Text style={styles.port} numberOfLines={2}>{booking.toPortName}</Text>
+            </View>
           </View>
         </View>
 
@@ -109,7 +111,7 @@ function InfoRow({ label, value, highlight = false }: { label: string; value: st
   return (
     <View style={infoStyles.row}>
       <Text style={infoStyles.label}>{label}</Text>
-      <Text style={[infoStyles.value, highlight && infoStyles.highlight]}>{value}</Text>
+      <Text style={[infoStyles.value, highlight && infoStyles.highlight]} numberOfLines={2}>{value}</Text>
     </View>
   );
 }
@@ -144,11 +146,16 @@ const styles = StyleSheet.create({
   },
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   routeRow: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+  },
+  routeToRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  port: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  port: { color: colors.text, fontSize: 18, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   arrow: { color: colors.primary, fontSize: 18, fontWeight: '700' },
   cancelReason: { color: colors.danger, fontSize: 14, lineHeight: 20 },
 });
@@ -159,8 +166,9 @@ const infoStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.xs,
+    gap: spacing.md,
   },
-  label: { color: colors.textSecondary, fontSize: 14 },
-  value: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  label: { color: colors.textSecondary, fontSize: 14, flexShrink: 0 },
+  value: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1, minWidth: 0, textAlign: 'right', marginLeft: spacing.md },
   highlight: { color: colors.primary, fontSize: 16 },
 });

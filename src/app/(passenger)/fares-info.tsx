@@ -43,9 +43,11 @@ export default function FaresInfo() {
         {routes.map((r) => (
           <View key={r.routeId} style={styles.routeCard}>
             <View style={styles.routeHeader}>
-              <Text style={styles.routeFrom}>{getPortName(r.startPortId)}</Text>
-              <Text style={styles.routeArrow}>→</Text>
-              <Text style={styles.routeTo}>{getPortName(r.endPortId)}</Text>
+              <Text style={styles.routeFrom} numberOfLines={2}>{getPortName(r.startPortId)}</Text>
+              <View style={styles.routeToRow}>
+                <Text style={styles.routeArrow}>→</Text>
+                <Text style={styles.routeTo} numberOfLines={2}>{getPortName(r.endPortId)}</Text>
+              </View>
             </View>
             <View style={styles.routeMeta}>
               <Text style={styles.routeFare}>₱{r.baseFare}</Text>
@@ -90,10 +92,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.borderSubtle,
     padding: spacing.lg, marginBottom: spacing.sm,
   },
-  routeHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  routeFrom: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  routeHeader: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.xs, marginBottom: spacing.sm },
+  routeToRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  routeFrom: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   routeArrow: { color: colors.primary, fontSize: 14, fontWeight: '700' },
-  routeTo: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  routeTo: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   routeMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   routeFare: { color: colors.primary, fontSize: 15, fontWeight: '800' },
   routeDot: { color: colors.textMuted },

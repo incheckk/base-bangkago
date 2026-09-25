@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,14 +37,14 @@ export default function AdminProfileScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader title="Profile" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
 
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.initials}>{initials}</Text>
           </View>
-          <Text style={styles.name}>
+          <Text style={styles.name} numberOfLines={1}>
             {profile ? `${profile.firstName} ${profile.lastName}` : 'Loading…'}
           </Text>
           <Text style={styles.email}>{profile?.email ?? ''}</Text>
@@ -93,7 +93,6 @@ export default function AdminProfileScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   header: { alignItems: 'center', marginBottom: spacing.xl },
   avatar: {
@@ -105,9 +104,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  initials: { color: colors.primaryText, fontSize: 28, fontWeight: '700' },
-  name: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
-  email: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.sm },
+  initials: { flexShrink: 1, color: colors.primaryText, fontSize: 28, fontWeight: '700' },
+  name: { flexShrink: 1, color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
+  email: { flexShrink: 1, color: colors.textSecondary, fontSize: 14, marginBottom: spacing.sm },
   roleBadge: {
     backgroundColor: colors.warning + '20',
     paddingHorizontal: spacing.lg,
@@ -136,19 +135,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   menuPressed: { backgroundColor: colors.bgElevated },
-  menuIcon: { fontSize: 18, marginRight: spacing.md },
+  menuIcon: { flexShrink: 1, fontSize: 18, marginRight: spacing.md },
   menuLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   menuArrow: { color: colors.textMuted, fontSize: 20 },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginTop: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   footer: { marginTop: spacing.xxl },
 });

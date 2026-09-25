@@ -75,7 +75,9 @@ const styles = StyleSheet.create({
 
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   typeCard: {
-    width: '47%',
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 140,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
@@ -85,8 +87,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   typeCardActive: { backgroundColor: colors.surfaceAlt, borderColor: colors.primary },
-  typeIcon: { fontSize: 24 },
-  typeLabel: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  typeIcon: { flexShrink: 1, fontSize: 24 },
+  typeLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   typeLabelActive: { color: colors.primary },
 
   textareaWrap: { minHeight: 100 },

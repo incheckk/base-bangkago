@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ScreenContainer } from '@/components/ScreenContainer';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useOperators } from '@/hooks/useOperators';
@@ -17,9 +18,9 @@ const FILTERS = [
 ];
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
-  verified: { fg: colors.primary, bg: 'rgba(52,214,176,0.14)' },
+  verified: { fg: colors.primary, bg: colors.primaryTint },
   pending: { fg: colors.warning, bg: colors.warningTint },
-  rejected: { fg: colors.danger, bg: 'rgba(224,82,82,0.14)' },
+  rejected: { fg: colors.danger, bg: colors.dangerTint },
 };
 
 export default function OperatorsScreen() {
@@ -44,15 +45,13 @@ export default function OperatorsScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-      <Text style={styles.eyebrow}>MANAGEMENT</Text>
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>Operators</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{data.length}</Text>
-        </View>
-      </View>
+    <ScreenContainer padded={false}>
+      <AdminScreenHeader
+        eyebrow="MANAGEMENT"
+        title="Operators"
+        subtitle={`${data.length} operator${data.length === 1 ? '' : 's'}`}
+      />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
@@ -79,7 +78,7 @@ export default function OperatorsScreen() {
                     </Text>
                   </View>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.name}>{op.displayName}</Text>
+                    <Text style={styles.name} numberOfLines={1}>{op.displayName}</Text>
                     <Text style={styles.permit}>
                       {op.permitNumber ?? 'No permit number'}
                     </Text>
@@ -102,17 +101,13 @@ export default function OperatorsScreen() {
         </View>
       )}
     </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xl },
-  title: { ...typography.h1 },
   countBadge: {
     backgroundColor: colors.warning,
     borderRadius: radii.pill,
@@ -122,7 +117,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
   },
-  countText: { color: colors.primaryText, fontSize: 13, fontWeight: '700' },
   list: { gap: spacing.md, marginTop: spacing.sm },
   card: {
     backgroundColor: colors.surface,
@@ -141,16 +135,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  avatarText: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
   cardInfo: { flex: 1 },
-  name: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  permit: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  name: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  permit: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: 2 },
   badge: {
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radii.pill,
   },
-  badgeText: { fontSize: 12, fontWeight: '700' },
+  badgeText: { flexShrink: 1, fontSize: 12, fontWeight: '700' },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -158,5 +152,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusLabel: { color: colors.textSecondary, fontSize: 12 },
+  statusLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 12 },
 });

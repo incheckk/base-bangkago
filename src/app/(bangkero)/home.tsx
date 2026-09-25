@@ -2,13 +2,12 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { DemandBadge } from '@/components/DemandBadge';
 import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Icon } from '@/components/Icon';
-import { SideDrawer } from '@/components/SideDrawer';
-import { MENU_TITLE, menuFor } from '@/config/menu';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,8 +29,15 @@ export default function BangkeroHome() {
   const trips = useMyTrips(uid);
 
   const [pending, setPending] = useState<string | null>(null);
+  /**
+   * Bookings already acted on in this session. Realtime removes the row a
+   * moment after the write lands, and in that gap `pending` has already been
+   * cleared — leaving Accept / Decline / Mark completed live on a booking that
+   * is no longer actionable. This keeps them disabled until the row leaves.
+   */
+  const [acted, setActed] = useState<Set<string>>(new Set());
+  const markActed = (id: string) => setActed((prev) => new Set(prev).add(id));
   const [actionError, setActionError] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const available = bangkero.data?.isAvailable ?? false;
 
@@ -54,6 +60,7 @@ export default function BangkeroHome() {
         uid,
         displayName: bangkero.data.displayName,
       });
+      markActed(b.bookingId);
       createNotification(
         b.userId,
         'Booking Accepted',
@@ -79,6 +86,7 @@ export default function BangkeroHome() {
     setActionError(null);
     try {
       await rejectBooking(b.bookingId, uid);
+      markActed(b.bookingId);
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -90,6 +98,7 @@ export default function BangkeroHome() {
     setActionError(null);
     try {
       await completeBooking(b.bookingId);
+      markActed(b.bookingId);
       createNotification(
         b.userId,
         'Trip Completed',
@@ -108,40 +117,23 @@ export default function BangkeroHome() {
 
   return (
     <ScreenContainer padded={false}>
-      <SideDrawer
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title={MENU_TITLE.bangkero}
-        items={menuFor('bangkero')}
-      />
-
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Pressable
-            onPress={() => setDrawerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Open menu"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="menu" size={22} color={colors.text} />
-          </Pressable>
-
-          <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>BANGKERO</Text>
-            <Text style={styles.greeting} numberOfLines={1}>
-              {profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
-            </Text>
-          </View>
-
+      <BangkeroScreenHeader
+        eyebrow="BANGKERO"
+        title={profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
+        showBack={false}
+        right={
           <Pressable
             onPress={() => router.replace('/(bangkero)/profile')}
             accessibilityRole="button"
             accessibilityLabel="Profile"
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
           >
-            <Icon name="profile" size={22} color={colors.text} />
+            <Icon name="profile" size={20} color={colors.text} />
           </Pressable>
-        </View>
+        }
+      />
+
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Availability is the control the whole screen depends on, so it reads
             as the primary object and changes colour with its state — you can
@@ -234,9 +226,10 @@ export default function BangkeroHome() {
               >
                 <RequestBody booking={b} />
                 <PrimaryButton
-                  label="Mark completed"
+                  label={acted.has(b.bookingId) ? 'Completed' : 'Mark completed'}
                   onPress={() => complete(b)}
                   loading={pending === b.bookingId}
+                  disabled={acted.has(b.bookingId)}
                   style={{ marginTop: spacing.md }}
                 />
               </Pressable>
@@ -286,13 +279,14 @@ export default function BangkeroHome() {
                   label="Decline"
                   variant="secondary"
                   onPress={() => decline(b)}
-                  disabled={pending === b.bookingId}
+                  disabled={pending === b.bookingId || acted.has(b.bookingId)}
                   style={styles.declineBtn}
                 />
                 <PrimaryButton
                   label="Accept"
                   onPress={() => accept(b)}
                   loading={pending === b.bookingId}
+                  disabled={acted.has(b.bookingId)}
                   style={styles.acceptBtn}
                 />
               </View>
@@ -347,19 +341,11 @@ const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
 
   // ---------- header ----------
-  header: {
-    flexDirection: 'row', alignItems: 'center',
-    marginBottom: spacing.xl, gap: spacing.sm,
-    marginHorizontal: -spacing.sm, // let the 44pt targets sit flush to the edge
-  },
   iconBtn: {
     width: touchTarget, height: touchTarget,
     alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill,
   },
   iconBtnPressed: { backgroundColor: colors.surface },
-  headerText: { flex: 1 },
-  eyebrow: { ...typography.label, marginBottom: spacing.xxs },
-  greeting: { ...typography.h2 },
 
   // ---------- availability hero ----------
   statusCard: {
@@ -374,10 +360,10 @@ const styles = StyleSheet.create({
   statusDot: { width: 10, height: 10, borderRadius: radii.pill },
   statusDotOn: { backgroundColor: colors.primary },
   statusDotOff: { backgroundColor: colors.textMuted },
-  statusWord: { ...typography.label, color: colors.textMuted, fontSize: 13 },
+  statusWord: { flexShrink: 1, ...typography.label, color: colors.textMuted, fontSize: 13 },
   statusWordOn: { color: colors.primary },
   statusSpacer: { flex: 1 },
-  statusHint: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
+  statusHint: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
 
   boatRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -406,7 +392,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.md,
   },
-  bannerText: { ...typography.caption, color: colors.danger, lineHeight: 18 },
+  bannerText: { flexShrink: 1, ...typography.caption, color: colors.danger, lineHeight: 18 },
 
   // ---------- sections ----------
   sectionLabel: { ...typography.label, marginTop: spacing.huge, marginBottom: spacing.md },
@@ -420,9 +406,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs,
   },
-  countPillText: { ...typography.label, color: colors.textSecondary, letterSpacing: 0 },
+  countPillText: { flexShrink: 1, ...typography.label, color: colors.textSecondary, letterSpacing: 0 },
   countPillLive: { backgroundColor: colors.primary },
-  countPillTextLive: { ...typography.label, color: colors.primaryText, letterSpacing: 0 },
+  countPillTextLive: { flexShrink: 1, ...typography.label, color: colors.primaryText, letterSpacing: 0 },
 
   demandRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
 
@@ -437,7 +423,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', gap: spacing.xs,
     ...elevation.e1,
   },
-  earningsValue: { ...typography.display, fontSize: 24, color: colors.primary },
+  earningsValue: { flexShrink: 1, ...typography.display, fontSize: 24, color: colors.primary },
   earningsValueMuted: { color: colors.textSecondary },
   earningsLabel: { ...typography.label },
 
@@ -476,7 +462,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: spacing.md, gap: spacing.sm,
   },
-  requestRef: { ...typography.label, color: colors.textMuted, letterSpacing: 0.5 },
+  requestRef: { flexShrink: 1, ...typography.label, color: colors.textMuted, letterSpacing: 0.5 },
 
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rail: { alignItems: 'center' },
@@ -484,11 +470,11 @@ const styles = StyleSheet.create({
   railDotEnd: { borderRadius: radii.xs, backgroundColor: colors.textSecondary },
   railLine: { width: 2, height: 18, backgroundColor: colors.border, marginVertical: spacing.xxs },
   routeText: { flex: 1 },
-  routePort: { ...typography.bodyStrong },
+  routePort: { flexShrink: 1, ...typography.bodyStrong },
   routePortTo: { marginTop: spacing.md },
   fareWrap: { alignItems: 'flex-end' },
-  fare: { ...typography.h2, color: colors.primary },
-  fareUnit: { ...typography.label, letterSpacing: 0, fontSize: 10 },
+  fare: { flexShrink: 1, ...typography.h2, color: colors.primary },
+  fareUnit: { flexShrink: 1, ...typography.label, letterSpacing: 0, fontSize: 10 },
 
   passengerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

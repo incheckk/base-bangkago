@@ -69,15 +69,15 @@ export default function BookingDetail() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.route}>{booking.fromPortName}</Text>
+          <Text style={styles.route} numberOfLines={1}>{booking.fromPortName}</Text>
           <Text style={styles.arrow}>↓</Text>
-          <Text style={styles.route}>{booking.toPortName}</Text>
+          <Text style={styles.route} numberOfLines={1}>{booking.toPortName}</Text>
         </View>
 
         {booking.status === 'accepted' && (
           <View style={styles.operator}>
             <Text style={styles.operatorLabel}>YOUR BANGKERO</Text>
-            <Text style={styles.operatorName}>{booking.operatorName}</Text>
+            <Text style={styles.operatorName} numberOfLines={1}>{booking.operatorName}</Text>
             {!!booking.operatorBoatName && (
               <Text style={styles.operatorBoat}>{booking.operatorBoatName}</Text>
             )}
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: spacing.xl, gap: spacing.md,
   },
-  ref: { ...typography.h2, letterSpacing: 1 },
+  ref: { flexShrink: 1, ...typography.h2, letterSpacing: 1 },
 
   card: {
     backgroundColor: colors.surface,
@@ -151,20 +151,20 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: 'center',
   },
-  route: { color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  route: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
   arrow: { color: colors.primary, fontSize: 18, marginVertical: spacing.sm },
 
   operator: {
     marginTop: spacing.lg,
-    backgroundColor: 'rgba(52,214,176,0.10)',
+    backgroundColor: colors.primaryTint,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.primary,
     padding: spacing.lg,
   },
   operatorLabel: { ...typography.label, color: colors.primary, marginBottom: spacing.sm },
-  operatorName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  operatorBoat: { ...typography.caption, marginTop: 2 },
+  operatorName: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
+  operatorBoat: { flexShrink: 1, ...typography.caption, marginTop: 2 },
 
   details: {
     marginTop: spacing.lg,
@@ -175,19 +175,19 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.md },
-  rowLabel: { ...typography.caption },
+  rowLabel: { flexShrink: 1, ...typography.caption },
   rowValue: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
   rowValueStrong: { color: colors.primary, fontSize: 15, fontWeight: '700' },
 
   banner: {
     marginTop: spacing.lg,
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   actions: { marginTop: spacing.xl },
   waiting: { ...typography.caption, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 18 },

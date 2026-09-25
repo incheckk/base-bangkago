@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '../theme/tokens';
+import { SEVERITY, type Severity } from '../theme/severity';
 
-type Severity = 'low' | 'medium' | 'high' | 'critical';
 
 interface Props {
   title: string;
@@ -11,12 +11,7 @@ interface Props {
   timestamp?: string;
 }
 
-const SEVERITY_CONFIG: Record<Severity, { fg: string; bg: string; border: string }> = {
-  low: { fg: colors.textSecondary, bg: 'rgba(169,190,196,0.08)', border: colors.borderSubtle },
-  medium: { fg: colors.warning, bg: 'rgba(232,169,60,0.08)', border: 'rgba(232,169,60,0.3)' },
-  high: { fg: colors.accent, bg: 'rgba(232,89,60,0.08)', border: 'rgba(232,89,60,0.3)' },
-  critical: { fg: colors.danger, bg: 'rgba(224,82,82,0.08)', border: 'rgba(224,82,82,0.3)' },
-};
+const SEVERITY_CONFIG = SEVERITY;
 
 export function StatusCard({ title, message, severity, timestamp }: Props) {
   const config = SEVERITY_CONFIG[severity];

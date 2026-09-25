@@ -1,3 +1,4 @@
+import React from 'react';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -10,12 +11,16 @@ import { colors, elevation, radii, spacing, touchTarget, typography } from '@/th
 
 interface Props {
   title?: string;
+  /** Small all-caps line above the title. Matches AdminScreenHeader. */
+  eyebrow?: string;
   subtitle?: string;
   showBack?: boolean;
   showDrawer?: boolean;
+  /** Optional trailing control rendered before the menu button. */
+  right?: React.ReactNode;
 }
 
-export function BangkeroScreenHeader({ title, subtitle, showBack = true, showDrawer = true }: Props) {
+export function BangkeroScreenHeader({ title, eyebrow, subtitle, showBack = true, showDrawer = true, right }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -40,9 +45,12 @@ export function BangkeroScreenHeader({ title, subtitle, showBack = true, showDra
         )}
 
         <View style={styles.titleWrap}>
+          {!!eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
           {!!title && <Text style={styles.title} numberOfLines={1}>{title}</Text>}
           {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
         </View>
+
+        {right}
 
         {showDrawer && (
           <Pressable
@@ -69,6 +77,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   titleWrap: { flex: 1, minWidth: 0 },
+  eyebrow: { ...typography.label, marginBottom: spacing.xxs },
   title: { ...typography.title, color: colors.text },
   subtitle: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
   iconBtn: {

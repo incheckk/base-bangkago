@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ScreenContainer } from '@/components/ScreenContainer';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { TicketCard } from '@/components/TicketCard';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -11,9 +12,9 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { VerificationStatus, BangkeroDoc } from '@/types/models';
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
-  verified: { fg: colors.primary, bg: 'rgba(52,214,176,0.14)' },
+  verified: { fg: colors.primary, bg: colors.primaryTint },
   pending: { fg: colors.warning, bg: colors.warningTint },
-  rejected: { fg: colors.danger, bg: 'rgba(224,82,82,0.14)' },
+  rejected: { fg: colors.danger, bg: colors.dangerTint },
 };
 
 const DOC_STATUS = ['Uploaded', 'Pending', 'Missing'] as const;
@@ -74,8 +75,9 @@ export default function OperatorDetailScreen() {
   };
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
+    <ScreenContainer padded={false}>
+      <AdminScreenHeader title="Operator" />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
       <View style={styles.header}>
         <View style={styles.avatar}>
@@ -84,7 +86,7 @@ export default function OperatorDetailScreen() {
           </Text>
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.name}>{operator.displayName}</Text>
+          <Text style={styles.name} numberOfLines={1}>{operator.displayName}</Text>
           <Text style={styles.permit}>
             {operator.permitNumber ?? 'No permit number'}
           </Text>
@@ -156,14 +158,13 @@ export default function OperatorDetailScreen() {
         </View>
       )}
     </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   header: {
     flexDirection: 'row',
@@ -179,16 +180,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.text, fontSize: 24, fontWeight: '700' },
+  avatarText: { flexShrink: 1, color: colors.text, fontSize: 24, fontWeight: '700' },
   headerInfo: { flex: 1 },
-  name: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  permit: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  name: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
+  permit: { flexShrink: 1, color: colors.textMuted, fontSize: 13, marginTop: 2 },
   badge: {
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radii.pill,
   },
-  badgeText: { fontSize: 13, fontWeight: '700' },
+  badgeText: { flexShrink: 1, fontSize: 13, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
 
@@ -198,7 +199,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   docCard: {
-    width: '47%',
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 140,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
@@ -206,10 +209,10 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     alignItems: 'center',
   },
-  docCardMissing: { borderColor: 'rgba(224,82,82,0.3)' },
-  docCardOk: { borderColor: 'rgba(52,214,176,0.3)' },
-  docIcon: { fontSize: 28, marginBottom: spacing.sm },
-  docLabel: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: spacing.xs },
+  docCardMissing: { borderColor: colors.dangerBorder },
+  docCardOk: { borderColor: colors.primaryBorder },
+  docIcon: { flexShrink: 1, fontSize: 28, marginBottom: spacing.sm },
+  docLabel: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: spacing.xs },
   docStatus: { fontSize: 12, fontWeight: '600' },
 
   actions: {

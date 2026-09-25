@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { getAdminStats } from '@/services/admin.service';
@@ -36,9 +36,8 @@ export default function Reports() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader title="Reports & Analytics" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>Reports & Analytics</Text>
 
         <View style={styles.grid}>
           {statCards.map((s) => (
@@ -56,12 +55,12 @@ export default function Reports() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   statCard: {
-    width: '47%',
+    flexBasis: '47%',
+    flexGrow: 1,
+    minWidth: 140,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     borderWidth: 1,
@@ -70,7 +69,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xs,
   },
-  statIcon: { fontSize: 24 },
-  statValue: { fontSize: 20, fontWeight: '800' },
+  statIcon: { flexShrink: 1, fontSize: 24 },
+  statValue: { flexShrink: 1, fontSize: 20, fontWeight: '800' },
   statLabel: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
 });

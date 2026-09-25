@@ -8,6 +8,25 @@ import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useRecentBookings } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import type { BookingDoc } from '@/types/models';
+
+/**
+ * Which timestamp matters depends on where the booking ended up. Showing
+ * `createdAt` on a finished trip answers the wrong question — the list had no
+ * date at all, so a completed and a cancelled trip looked equally undated.
+ */
+function statusDate(b: BookingDoc): { label: string; iso: string } | null {
+  if (b.status === 'completed' && b.completedAt) return { label: 'Completed', iso: b.completedAt };
+  if (b.status === 'cancelled' && b.cancelledAt) return { label: 'Cancelled', iso: b.cancelledAt };
+  if (b.status === 'accepted' && b.acceptedAt) return { label: 'Accepted', iso: b.acceptedAt };
+  if (b.createdAt) return { label: 'Requested', iso: b.createdAt };
+  return null;
+}
+
+const fmt = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-PH', {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  });
 
 export default function BookingsScreen() {
   const { user } = useAuth();
@@ -57,20 +76,31 @@ export default function BookingsScreen() {
                   <StatusPill status={b.status} />
                 </View>
                 <View style={styles.routeRow}>
-                  <Text style={styles.port}>{b.fromPortName}</Text>
-                  <Text style={styles.arrow}>→</Text>
-                  <Text style={styles.port}>{b.toPortName}</Text>
+                  <View style={styles.rail}>
+                    <View style={styles.railDot} />
+                    <View style={styles.railLine} />
+                    <View style={[styles.railDot, styles.railDotEnd]} />
+                  </View>
+                  <View style={styles.routeText}>
+                    <Text style={styles.port} numberOfLines={1}>{b.fromPortName}</Text>
+                    <Text style={[styles.port, styles.portTo]} numberOfLines={1}>
+                      {b.toPortName}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.details}>
-                  <Text style={styles.detail}>{b.numOfPassenger} pax</Text>
-                  <Text style={styles.detail}>·</Text>
-                  <Text style={styles.detail}>₱{b.totalPrice}</Text>
-                  {b.operatorName && (
-                    <>
-                      <Text style={styles.detail}>·</Text>
-                      <Text style={styles.detail}>{b.operatorName}</Text>
-                    </>
-                  )}
+                  <Text style={styles.detail} numberOfLines={1}>
+                    {b.numOfPassenger} pax · ₱{b.totalPrice}
+                    {b.operatorName ? ` · ${b.operatorName}` : ''}
+                  </Text>
+                  {(() => {
+                    const d = statusDate(b);
+                    return d ? (
+                      <Text style={styles.dateLine} numberOfLines={1}>
+                        {d.label} {fmt(d.iso)}
+                      </Text>
+                    ) : null;
+                  })()}
                 </View>
               </Pressable>
             ))}
@@ -97,19 +127,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  ref: { color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
-  routeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  port: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  arrow: { color: colors.primary, fontSize: 15, fontWeight: '700' },
-  details: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  detail: { color: colors.textSecondary, fontSize: 13 },
+  ref: { ...typography.label, color: colors.textMuted, letterSpacing: 0.5, flexShrink: 1 },
+
+  // Ports stack on a rail instead of sitting side by side. Two long port names
+  // on one row cannot fit a phone width, and RN defaults flexShrink to 0 — so
+  // the old row let text run straight out past the card border.
+  routeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rail: { alignItems: 'center' },
+  railDot: { width: 8, height: 8, borderRadius: radii.pill, backgroundColor: colors.primary },
+  railDotEnd: { borderRadius: radii.xs, backgroundColor: colors.textSecondary },
+  railLine: { width: 2, height: 18, backgroundColor: colors.border, marginVertical: spacing.xxs },
+  routeText: { flex: 1, minWidth: 0 },
+  port: { flexShrink: 1, ...typography.bodyStrong },
+  portTo: { marginTop: spacing.md },
+
+  details: { marginTop: spacing.md },
+  detail: { flexShrink: 1, ...typography.caption, color: colors.textSecondary },
+  dateLine: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.xxs },
 });

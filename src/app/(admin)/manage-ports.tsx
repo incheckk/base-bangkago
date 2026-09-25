@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { LoadingState } from '@/components/States';
 import { getAllPorts, createPort, updatePort, deletePort } from '@/services/route.service';
 import type { PortDoc } from '@/types/models';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 export default function ManagePorts() {
   const [ports, setPorts] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,10 +100,11 @@ export default function ManagePorts() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader
+      title="Manage Ports"
+      subtitle={`${ports.length} port${ports.length === 1 ? '' : 's'}`}
+      />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>Manage Ports</Text>
-        <Text style={styles.count}>{ports.length} port{ports.length === 1 ? '' : 's'}</Text>
 
         {showForm && (
           <View style={styles.formCard}>
@@ -132,14 +133,14 @@ export default function ManagePorts() {
           {ports.map((p) => (
             <View key={p.portId} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.portName}>{p.portName}</Text>
+                <Text style={styles.portName} numberOfLines={1}>{p.portName}</Text>
                 <View style={[styles.statusBadge, { backgroundColor: p.isActive ? colors.primaryTint : colors.dangerTint }]}>
                   <Text style={[styles.statusText, { color: p.isActive ? colors.primary : colors.danger }]}>
                     {p.isActive ? 'Active' : 'Inactive'}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.location}>{p.location}</Text>
+              <Text style={styles.location} numberOfLines={1}>{p.location}</Text>
               <View style={styles.cardMeta}>
                 <Text style={styles.metaText}>Lat: {p.latitude ?? '—'}</Text>
                 <Text style={styles.metaText}>Lng: {p.longitude ?? '—'}</Text>
@@ -162,9 +163,6 @@ export default function ManagePorts() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  count: { ...typography.caption, marginBottom: spacing.xl },
 
   formCard: {
     backgroundColor: colors.surface,
@@ -174,9 +172,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-  formTitle: { ...typography.label, color: colors.warning, marginBottom: spacing.md },
+  formTitle: { flexShrink: 1, ...typography.label, color: colors.warning, marginBottom: spacing.md },
   formActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  cancelBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
+  cancelBtn: { minHeight: touchTarget, flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
   cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 
   list: { gap: spacing.md },
@@ -190,10 +188,10 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   portName: { color: colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.pill },
-  statusText: { fontSize: 12, fontWeight: '700' },
-  location: { color: colors.textMuted, fontSize: 13, marginTop: spacing.xs },
+  statusText: { flexShrink: 1, fontSize: 12, fontWeight: '700' },
+  location: { flexShrink: 1, color: colors.textMuted, fontSize: 13, marginTop: spacing.xs },
   cardMeta: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
-  metaText: { color: colors.textMuted, fontSize: 12 },
+  metaText: { flexShrink: 1, color: colors.textMuted, fontSize: 12 },
   cardActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.warning },
   editText: { color: colors.warning, fontSize: 13, fontWeight: '600' },

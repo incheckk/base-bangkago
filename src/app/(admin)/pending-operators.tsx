@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ScreenContainer } from '@/components/ScreenContainer';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useOperators } from '@/hooks/useOperators';
@@ -16,9 +17,9 @@ const FILTERS = [
 ];
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
-  verified: { fg: colors.primary, bg: 'rgba(52,214,176,0.14)' },
+  verified: { fg: colors.primary, bg: colors.primaryTint },
   pending: { fg: colors.warning, bg: colors.warningTint },
-  rejected: { fg: colors.danger, bg: 'rgba(224,82,82,0.14)' },
+  rejected: { fg: colors.danger, bg: colors.dangerTint },
 };
 
 export default function PendingOperatorsScreen() {
@@ -43,18 +44,13 @@ export default function PendingOperatorsScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.eyebrow}>APPROVALS</Text>
-          <Text style={styles.title}>Pending Approvals</Text>
-        </View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{data.length}</Text>
-        </View>
-      </View>
+    <ScreenContainer padded={false}>
+      <AdminScreenHeader
+        eyebrow="APPROVALS"
+        title="Pending Approvals"
+        subtitle={`${data.length} awaiting review`}
+      />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
@@ -81,7 +77,7 @@ export default function PendingOperatorsScreen() {
                     </Text>
                   </View>
                   <View style={styles.cardInfo}>
-                    <Text style={styles.name}>{op.displayName}</Text>
+                    <Text style={styles.name} numberOfLines={1}>{op.displayName}</Text>
                     <Text style={styles.permit}>
                       {op.permitNumber ?? 'No permit number'}
                     </Text>
@@ -107,6 +103,7 @@ export default function PendingOperatorsScreen() {
         </View>
       )}
     </ScrollView>
+    </ScreenContainer>
   );
 }
 
@@ -120,10 +117,8 @@ function DocDot({ label, uploaded }: { label: string; uploaded: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   header: {
     flexDirection: 'row',
@@ -131,9 +126,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xl,
   },
-  headerLeft: { flex: 1 },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1 },
   countBadge: {
     backgroundColor: colors.warning,
     borderRadius: radii.pill,
@@ -143,7 +135,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  countText: { color: colors.primaryText, fontSize: 15, fontWeight: '700' },
 
   list: { gap: spacing.md, marginTop: spacing.sm },
   card: {
@@ -163,16 +154,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  avatarText: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
   cardInfo: { flex: 1 },
-  name: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  permit: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  name: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  permit: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: 2 },
   badge: {
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radii.pill,
   },
-  badgeText: { fontSize: 12, fontWeight: '700' },
+  badgeText: { flexShrink: 1, fontSize: 12, fontWeight: '700' },
 
   docsRow: {
     flexDirection: 'row',
@@ -181,7 +172,7 @@ const styles = StyleSheet.create({
   },
   docDotWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   docDot: { width: 7, height: 7, borderRadius: 4 },
-  docDotLabel: { color: colors.textSecondary, fontSize: 11 },
+  docDotLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 11 },
 
   reviewLink: { color: colors.warning, fontSize: 13, fontWeight: '600', marginTop: spacing.md },
 });

@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   sosPressed: { opacity: 0.8 },
   sosSent: { backgroundColor: colors.primaryDark },
-  sosText: {
+  sosText: { flexShrink: 1,
     color: colors.text,
     fontSize: 36,
     fontWeight: '900',
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   },
 
   sentBanner: {
-    backgroundColor: 'rgba(52,214,176,0.12)',
+    backgroundColor: colors.primaryTint,
     borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: radii.md,
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
   },
 
   errorBanner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,

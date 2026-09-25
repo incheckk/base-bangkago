@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   cardContent: { flex: 1 },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
-  cardMessage: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: spacing.sm },
-  cardTime: { color: colors.textMuted, fontSize: 12 },
+  cardTitle: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
+  cardMessage: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 18, marginBottom: spacing.sm },
+  cardTime: { flexShrink: 1, color: colors.textMuted, fontSize: 12 },
 });

@@ -47,8 +47,8 @@ export default function SearchBoat() {
           >
             <Text style={styles.itemIcon}>📍</Text>
             <View style={styles.itemContent}>
-              <Text style={styles.itemName}>{port.portName}</Text>
-              {!!port.location && <Text style={styles.itemLocation}>{port.location}</Text>}
+              <Text style={styles.itemName} numberOfLines={1}>{port.portName}</Text>
+              {!!port.location && <Text style={styles.itemLocation} numberOfLines={1}>{port.location}</Text>}
             </View>
             <Text style={styles.itemArrow}>→</Text>
           </Pressable>
@@ -82,8 +82,8 @@ const styles = StyleSheet.create({
   itemPressed: { borderColor: colors.primary },
   itemIcon: { fontSize: 20 },
   itemContent: { flex: 1 },
-  itemName: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  itemLocation: { ...typography.caption, marginTop: 2 },
+  itemName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  itemLocation: { flexShrink: 1, ...typography.caption, marginTop: 2 },
   itemArrow: { color: colors.primary, fontSize: 16, fontWeight: '700' },
 
   empty: { alignItems: 'center', paddingTop: spacing.xxl },

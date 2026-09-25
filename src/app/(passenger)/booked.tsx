@@ -14,7 +14,7 @@ const PASSENGERS = [
 
 export default function Booked() {
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
       <View style={styles.container}>
         <PassengerScreenHeader title="Booking Details" showDrawer={false} />
         {/* Booking reference */}
@@ -177,12 +177,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  seatText: {
+  seatText: { flexShrink: 1,
     color: colors.primary,
     fontSize: 11,
     fontWeight: '700',
   },
-  passengerName: {
+  passengerName: { flexShrink: 1,
     color: colors.text,
     fontSize: 13,
     fontWeight: '500',

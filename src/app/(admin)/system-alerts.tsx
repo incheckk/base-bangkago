@@ -1,13 +1,15 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ScreenContainer } from '@/components/ScreenContainer';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { SEVERITY } from '@/theme/severity';
 import type { AlertSeverity, SafetyAlertDoc } from '@/types/models';
 
 const FILTERS = [
@@ -16,32 +18,7 @@ const FILTERS = [
   { key: 'all', label: 'All' },
 ];
 
-const SEVERITY_CONFIG: Record<AlertSeverity, { fg: string; bg: string; border: string; label: string }> = {
-  low: {
-    fg: colors.textSecondary,
-    bg: 'rgba(169,190,196,0.08)',
-    border: colors.borderSubtle,
-    label: 'Low',
-  },
-  medium: {
-    fg: colors.warning,
-    bg: 'rgba(232,169,60,0.08)',
-    border: 'rgba(232,169,60,0.3)',
-    label: 'Medium',
-  },
-  high: {
-    fg: colors.warning,
-    bg: colors.warningTintSoft,
-    border: colors.warningBorder,
-    label: 'High',
-  },
-  critical: {
-    fg: colors.danger,
-    bg: 'rgba(224,82,82,0.08)',
-    border: 'rgba(224,82,82,0.3)',
-    label: 'Critical',
-  },
-};
+const SEVERITY_CONFIG = SEVERITY;
 
 function formatTimeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -81,18 +58,13 @@ export default function SystemAlertsScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.eyebrow}>SYSTEM</Text>
-          <Text style={styles.title}>Safety Alerts</Text>
-        </View>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{data.filter((a) => !a.isResolved).length}</Text>
-        </View>
-      </View>
+    <ScreenContainer padded={false}>
+      <AdminScreenHeader
+        eyebrow="SYSTEM"
+        title="Safety Alerts"
+        subtitle={`${data.filter((a) => !a.isResolved).length} unresolved`}
+      />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
@@ -115,15 +87,21 @@ export default function SystemAlertsScreen() {
         </View>
       )}
 
+      {/* No handler exists yet. A button that looks live but does nothing is
+          worse than one that says so — this matches the "Coming soon" treatment
+          used for the disabled service tiles. */}
       <View style={styles.composeWrap}>
         <PrimaryButton
           label="Compose Notification"
           onPress={() => {}}
           variant="secondary"
+          disabled
           style={styles.composeBtn}
         />
+        <Text style={styles.composeHint}>Coming soon</Text>
       </View>
     </ScrollView>
+    </ScreenContainer>
   );
 }
 
@@ -170,10 +148,8 @@ function AlertCard({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
 
   header: {
     flexDirection: 'row',
@@ -181,9 +157,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xl,
   },
-  headerLeft: { flex: 1 },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1 },
   countBadge: {
     backgroundColor: colors.danger,
     borderRadius: radii.pill,
@@ -193,7 +166,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
   },
-  countText: { color: colors.text, fontSize: 15, fontWeight: '700' },
 
   list: { gap: spacing.md, marginTop: spacing.sm },
 
@@ -213,9 +185,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.pill,
   },
-  severityText: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  timestamp: { color: colors.textMuted, fontSize: 11 },
-  alertMessage: {
+  severityText: { flexShrink: 1, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  timestamp: { flexShrink: 1, color: colors.textMuted, fontSize: 11 },
+  alertMessage: { flexShrink: 1,
     color: colors.text,
     fontSize: 14,
     lineHeight: 20,
@@ -227,5 +199,6 @@ const styles = StyleSheet.create({
   resolvedLabel: { color: colors.primary, fontSize: 13, fontWeight: '700' },
 
   composeWrap: { marginTop: spacing.xl },
+  composeHint: { ...typography.label, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
   composeBtn: { width: '100%' },
 });

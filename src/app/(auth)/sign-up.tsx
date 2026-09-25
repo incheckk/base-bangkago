@@ -4,11 +4,12 @@ import {
   KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { friendlyAuthError, signUp } from '@/services/auth.service';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { UserRole } from '@/types/models';
 import { normalizePhone } from '@/utils/phone';
 
@@ -68,10 +69,11 @@ export default function SignUp() {
           <Pressable
             onPress={() => router.back()}
             disabled={busy}
-            hitSlop={8}
-            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
           >
-            <Text style={styles.backBtnText}>{'< Back'}</Text>
+            <Icon name="back" size={20} color={colors.text} />
           </Pressable>
 
           <Text style={styles.title}>Create account</Text>
@@ -176,8 +178,15 @@ export default function SignUp() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
-  backBtn: { alignSelf: 'flex-start', marginBottom: spacing.lg },
-  backBtnText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  backBtn: {
+    alignSelf: 'flex-start',
+    width: touchTarget, height: touchTarget,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: radii.pill,
+    marginLeft: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  backBtnPressed: { backgroundColor: colors.surface },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.caption, marginBottom: spacing.xl },
   groupLabel: { ...typography.label, marginBottom: spacing.sm },
@@ -193,19 +202,19 @@ const styles = StyleSheet.create({
   },
   roleCardActive: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   rolePressed: { opacity: 0.8 },
-  roleLabel: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
+  roleLabel: { flexShrink: 1, ...typography.bodyStrong, fontWeight: '700', color: colors.textSecondary },
   roleLabelActive: { color: colors.primary },
-  roleHint: { ...typography.caption, color: colors.textMuted, marginTop: 2, fontSize: 12 },
+  roleHint: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 2, fontSize: 12 },
   form: { marginBottom: spacing.xl },
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, ...typography.caption, color: colors.danger, lineHeight: 18 },
   note: { ...typography.caption, color: colors.textMuted, marginTop: spacing.md, textAlign: 'center' },
   switch: { alignSelf: 'center', marginTop: spacing.xl },
   switchText: { ...typography.caption },

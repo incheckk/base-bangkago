@@ -125,13 +125,13 @@ const styles = StyleSheet.create({
   railLine: { width: 2, height: 22, backgroundColor: colors.border, marginVertical: spacing.xxs },
 
   routeBody: { flex: 1 },
-  routeFrom: { ...typography.bodyStrong },
-  routeTo: { ...typography.bodyStrong, marginTop: spacing.md },
+  routeFrom: { flexShrink: 1, ...typography.bodyStrong },
+  routeTo: { flexShrink: 1, ...typography.bodyStrong, marginTop: spacing.md },
   routeMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
-  routeTime: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
+  routeTime: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11 },
 
   routeFareWrap: { alignItems: 'flex-end' },
-  routeFare: { ...typography.h2, color: colors.primary },
+  routeFare: { flexShrink: 1, ...typography.h2, color: colors.primary },
   routeFareUnit: { ...typography.label, letterSpacing: 0, fontSize: 10 },
 
   infoBtn: {

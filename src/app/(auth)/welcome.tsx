@@ -1,19 +1,45 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
-import { colors, spacing, typography } from '@/theme/tokens';
+import { colors, elevation, radii, spacing, typography } from '@/theme/tokens';
+
+const FEATURES: { icon: 'boat' | 'route' | 'cash'; text: string }[] = [
+  { icon: 'boat', text: 'Book a bangka in seconds' },
+  { icon: 'route', text: 'Fixed fares, no haggling' },
+  { icon: 'cash', text: 'Pay cash on board' },
+];
 
 export default function Welcome() {
   return (
     <ScreenContainer>
       <View style={styles.hero}>
-        <Text style={styles.mark}>⛵</Text>
+        {/* A vector mark in a branded ring, not a 64pt emoji — the OS draws
+            emoji differently on every device, which is the last thing a brand
+            mark should do. */}
+        <View style={styles.markRing}>
+          <View style={styles.markInner}>
+            <Icon name="boat" size={38} color={colors.primary} />
+          </View>
+        </View>
+
         <Text style={styles.title}>BangkaGo</Text>
         <Text style={styles.tagline}>
-          Book a boat between Mactan and Olango — no haggling at the pier.
+          Sea travel between Mactan and Olango, booked from your phone.
         </Text>
+
+        <View style={styles.features}>
+          {FEATURES.map((f) => (
+            <View key={f.text} style={styles.featureRow}>
+              <View style={styles.featureIcon}>
+                <Icon name={f.icon} size={14} color={colors.primary} />
+              </View>
+              <Text style={styles.featureText}>{f.text}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
       <View style={styles.actions}>
@@ -34,20 +60,45 @@ export default function Welcome() {
 
 const styles = StyleSheet.create({
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  mark: { fontSize: 64, marginBottom: spacing.lg },
-  title: { ...typography.h1, fontSize: 34, marginBottom: spacing.md },
+
+  markRing: {
+    width: 96, height: 96, borderRadius: radii.pill,
+    backgroundColor: colors.primaryTint,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.xl,
+  },
+  markInner: {
+    width: 72, height: 72, borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+    ...elevation.e2,
+  },
+
+  title: { ...typography.display, letterSpacing: -0.5, marginBottom: spacing.sm },
   tagline: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
+
+  features: { marginTop: spacing.huge, gap: spacing.md, alignSelf: 'stretch' },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  featureIcon: {
+    width: 26, height: 26, borderRadius: radii.pill,
+    backgroundColor: colors.primaryTint,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  featureText: { ...typography.caption, color: colors.textSecondary, flex: 1 },
+
   actions: { paddingBottom: spacing.xl },
   legal: {
     ...typography.caption,
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.lg,
+    fontSize: 11,
   },
 });

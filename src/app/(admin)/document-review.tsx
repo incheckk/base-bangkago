@@ -1,8 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { ScreenContainer } from '@/components/ScreenContainer';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
@@ -92,10 +93,9 @@ export default function DocumentReviewScreen() {
   const rejectAll = () => decide('rejected');
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
-      <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-      <Text style={styles.eyebrow}>REVIEW</Text>
-      <Text style={styles.title}>Document Review</Text>
+    <ScreenContainer padded={false}>
+      <AdminScreenHeader eyebrow="REVIEW" title="Document Review" />
+      <ScrollView contentContainerStyle={styles.scroll}>
 
       <View style={styles.opCard}>
         <View style={styles.opAvatar}>
@@ -104,7 +104,7 @@ export default function DocumentReviewScreen() {
           </Text>
         </View>
         <View style={styles.opInfo}>
-          <Text style={styles.opName}>{operator.displayName}</Text>
+          <Text style={styles.opName} numberOfLines={1}>{operator.displayName}</Text>
           <Text style={styles.opPermit}>
             {operator.permitNumber ?? 'No permit number'}
           </Text>
@@ -191,16 +191,13 @@ export default function DocumentReviewScreen() {
         />
       </View>
     </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   opCard: {
     flexDirection: 'row',
@@ -221,10 +218,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  opAvatarText: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  opAvatarText: { flexShrink: 1, color: colors.text, fontSize: 20, fontWeight: '700' },
   opInfo: { flex: 1 },
-  opName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  opPermit: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  opName: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
+  opPermit: { flexShrink: 1, color: colors.textMuted, fontSize: 13, marginTop: 2 },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
 
@@ -236,15 +233,15 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
-  docCardOk: { borderColor: 'rgba(52,214,176,0.3)' },
-  docCardMissing: { borderColor: 'rgba(224,82,82,0.3)' },
+  docCardOk: { borderColor: colors.primaryBorder },
+  docCardMissing: { borderColor: colors.dangerBorder },
   docTop: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  docIcon: { fontSize: 24 },
+  docIcon: { flexShrink: 1, fontSize: 24 },
   docLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   docStatus: { fontSize: 13, fontWeight: '600' },
   docActions: { flexDirection: 'row', gap: spacing.sm },
@@ -263,14 +260,14 @@ const styles = StyleSheet.create({
   },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   bottomActions: {
     flexDirection: 'row',

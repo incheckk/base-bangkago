@@ -157,12 +157,12 @@ export default function DepartureScreen() {
               <View style={styles.divider} />
               <View style={styles.tripRow}>
                 <Text style={styles.tripLabel}>Passengers</Text>
-                <Text style={styles.tripValue}>{passengers.length} ({manifest.totalPassengersOnBoard} pax)</Text>
+                <Text style={styles.tripValue} numberOfLines={1}>{passengers.length} ({manifest.totalPassengersOnBoard} pax)</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.tripRow}>
                 <Text style={styles.tripLabel}>Parcels</Text>
-                <Text style={styles.tripValue}>{parcels.length} ({manifest.totalParcelsOnBoard} items)</Text>
+                <Text style={styles.tripValue} numberOfLines={1}>{parcels.length} ({manifest.totalParcelsOnBoard} items)</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.tripRow}>
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   emptyHint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, textAlign: 'center' },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     width: '100%',
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xxl, marginBottom: spacing.md },
 
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tripLabel: { color: colors.textSecondary, fontSize: 14 },
-  tripValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  tripValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   tripValueOk: { color: colors.primary },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
 
@@ -336,9 +336,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   weatherRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  weatherIcon: { fontSize: 28 },
-  weatherLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  weatherStatus: { fontSize: 12, marginTop: 2 },
+  weatherIcon: { flexShrink: 1, fontSize: 28 },
+  weatherLabel: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  weatherStatus: { flexShrink: 1, fontSize: 12, marginTop: 2 },
   weatherSafe: { color: colors.primary },
   weatherUnsafe: { color: colors.danger },
   weatherText: { color: colors.textMuted, fontSize: 14 },
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   checkItemDone: {
     color: colors.primary,
   },
-  checkIcon: { fontSize: 14 },
+  checkIcon: { flexShrink: 1, fontSize: 14 },
 
   footer: { marginTop: spacing.xxl },
 });

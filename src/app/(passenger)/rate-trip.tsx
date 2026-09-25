@@ -47,7 +47,7 @@ export default function RateTripScreen() {
 
   if (submitted) {
     return (
-      <ScreenContainer>
+      <ScreenContainer padded={false}>
         <View style={styles.center}>
           <Text style={styles.thanksIcon}>⭐</Text>
           <Text style={styles.thanksTitle}>Thank you!</Text>
@@ -76,7 +76,7 @@ export default function RateTripScreen() {
           {boatName && (
             <>
               <Text style={[styles.infoLabel, { marginTop: spacing.md }]}>BOAT</Text>
-              <Text style={styles.infoValue}>{boatName}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{boatName}</Text>
             </>
           )}
         </View>
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   infoLabel: { ...typography.label, marginBottom: spacing.xs },
-  infoValue: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  infoValue: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
 
   ratingSection: {
     backgroundColor: colors.surface,
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingLabel: { ...typography.label, marginBottom: spacing.md },
-  ratingHint: { color: colors.primary, fontSize: 14, fontWeight: '600', marginTop: spacing.md },
+  ratingHint: { flexShrink: 1, color: colors.primary, fontSize: 14, fontWeight: '600', marginTop: spacing.md },
 
   commentSection: { marginBottom: spacing.xl },
   commentLabel: { ...typography.label, marginBottom: spacing.sm },
@@ -168,14 +168,14 @@ const styles = StyleSheet.create({
   },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   thanksIcon: { fontSize: 48, marginBottom: spacing.lg },
   thanksTitle: { ...typography.h1, textAlign: 'center', marginBottom: spacing.md },

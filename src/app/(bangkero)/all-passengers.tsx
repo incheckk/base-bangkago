@@ -19,7 +19,7 @@ export default function AllPassengers() {
         {manifest && (
           <View style={styles.headerCard}>
             <Text style={styles.headerRef}>Manifest #{manifest.manifestId.slice(0, 8)}</Text>
-            <Text style={styles.headerCount}>
+            <Text style={styles.headerCount} numberOfLines={1}>
               {passengers.length} passenger{passengers.length !== 1 ? 's' : ''} on board
             </Text>
           </View>
@@ -39,7 +39,7 @@ export default function AllPassengers() {
           passengers.map((p) => (
             <View key={p.manifestPassengerId} style={styles.card}>
               <View style={styles.cardTop}>
-                <Text style={styles.name}>{p.passengerName}</Text>
+                <Text style={styles.name} numberOfLines={1}>{p.passengerName}</Text>
                 <View style={[styles.badge, p.boardedAt && styles.badgeOn]}>
                   <Text style={[styles.badgeText, p.boardedAt && styles.badgeTextOn]}>
                     {p.boardedAt ? 'Boarded' : 'Pending'}
@@ -51,7 +51,7 @@ export default function AllPassengers() {
                   <Text style={styles.metaText}>{p.actualWeightKg} kg</Text>
                 )}
                 {p.boardedAt && (
-                  <Text style={styles.metaText}>
+                  <Text style={styles.metaText} numberOfLines={1}>
                     Boarded {new Date(p.boardedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Text>
                 )}
@@ -78,8 +78,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-  headerRef: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginBottom: 4 },
-  headerCount: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  headerRef: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginBottom: 4 },
+  headerCount: { flexShrink: 1, color: colors.primary, fontSize: 15, fontWeight: '700' },
 
   card: {
     backgroundColor: colors.surface,
@@ -100,15 +100,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(169,190,196,0.14)',
+    backgroundColor: colors.neutralTint,
   },
-  badgeOn: { backgroundColor: 'rgba(52,214,176,0.14)' },
-  badgeText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
+  badgeOn: { backgroundColor: colors.primaryTint },
+  badgeText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   badgeTextOn: { color: colors.primary },
 
   cardMeta: {
     flexDirection: 'row',
     gap: spacing.md,
   },
-  metaText: { ...typography.caption, color: colors.textMuted, fontSize: 12 },
+  metaText: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 12 },
 });

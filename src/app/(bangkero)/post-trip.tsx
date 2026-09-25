@@ -125,10 +125,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   checkItemDone: { color: colors.primary },
-  checkIcon: { fontSize: 14 },
+  checkIcon: { flexShrink: 1, fontSize: 14 },
 
   completeBanner: {
-    backgroundColor: 'rgba(52,214,176,0.12)',
+    backgroundColor: colors.primaryTint,
     borderColor: colors.primary,
     borderWidth: 1,
     borderRadius: radii.md,

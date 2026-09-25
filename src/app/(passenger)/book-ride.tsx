@@ -271,7 +271,7 @@ export default function BookRide() {
                 : `${typeInfo.discount > 0 ? `${typeInfo.discount}% ${passengerType} · ` : ''}${count} pax${serviceType === 'cargo' ? ' · Cargo' : ''}`}
             </Text>
           </View>
-          <Text style={[styles.fareValue, fare === null && styles.fareValueEmpty]}>
+          <Text style={[styles.fareValue, fare === null && styles.fareValueEmpty]} numberOfLines={1}>
             {fare !== null ? `₱${fare}` : '—'}
           </Text>
         </View>
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   legLine: { width: 2, flex: 1, minHeight: 28, backgroundColor: colors.border, marginVertical: spacing.xxs },
   legBody: { flex: 1 },
   legLabel: { ...typography.label, marginBottom: spacing.xxs },
-  legValue: { ...typography.bodyStrong },
+  legValue: { flexShrink: 1, ...typography.bodyStrong },
   legValueEmpty: { color: colors.textMuted, fontWeight: '400' },
   legDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
 
@@ -420,11 +420,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepBtnOff: { opacity: 0.35 },
-  stepBtnText: { ...typography.h2, color: colors.primary, lineHeight: 26 },
+  stepBtnText: { flexShrink: 1, ...typography.h2, color: colors.primary, lineHeight: 26 },
   stepBtnTextOff: { color: colors.textMuted },
   stepValueWrap: { alignItems: 'center' },
-  stepValue: { ...typography.h2 },
-  stepUnit: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
+  stepValue: { flexShrink: 1, ...typography.h2 },
+  stepUnit: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11 },
 
   // ---------- passenger type ----------
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -437,9 +437,9 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   typeChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  typeLabel: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  typeLabel: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   typeLabelActive: { color: colors.primary },
-  typeDiscount: { ...typography.label, color: colors.success, letterSpacing: 0 },
+  typeDiscount: { flexShrink: 1, ...typography.label, color: colors.success, letterSpacing: 0 },
   typeDiscountActive: { color: colors.success },
 
   // ---------- service type ----------
@@ -453,9 +453,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', gap: spacing.xs,
   },
   serviceCardActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  serviceLabel: { ...typography.bodyStrong, color: colors.textSecondary },
+  serviceLabel: { flexShrink: 1, ...typography.bodyStrong, color: colors.textSecondary },
   serviceLabelActive: { color: colors.primary },
-  serviceHint: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
+  serviceHint: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11 },
 
   // ---------- sticky footer ----------
   footer: {
@@ -469,8 +469,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: spacing.md, marginBottom: spacing.md,
   },
-  fareLabel: { ...typography.label },
-  fareNote: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
-  fareValue: { ...typography.display, fontSize: 26, color: colors.primary },
+  fareLabel: { flexShrink: 1, ...typography.label },
+  fareNote: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
+  fareValue: { flexShrink: 1, ...typography.display, fontSize: 26, color: colors.primary },
   fareValueEmpty: { color: colors.textMuted },
 });

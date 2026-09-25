@@ -92,19 +92,19 @@ export default function BookingStatus() {
                 <StatusPill status={booking.status} />
               </View>
               <View style={styles.refRoute}>
-                <Text style={styles.refPort}>{booking.fromPortName}</Text>
+                <Text style={styles.refPort} numberOfLines={1}>{booking.fromPortName}</Text>
                 <Text style={styles.refArrow}>→</Text>
-                <Text style={styles.refPort}>{booking.toPortName}</Text>
+                <Text style={styles.refPort} numberOfLines={1}>{booking.toPortName}</Text>
               </View>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.cardLabel}>PASSENGER INFO</Text>
-              <Text style={styles.cardValue}>{booking.passengerName ?? 'N/A'}</Text>
+              <Text style={styles.cardValue} numberOfLines={1}>{booking.passengerName ?? 'N/A'}</Text>
               <Text style={styles.cardSub}>
                 {booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
               </Text>
-              <Text style={styles.cardSub}>{booking.numOfPassenger} pax · ₱{booking.totalPrice}</Text>
+              <Text style={styles.cardSub} numberOfLines={1}>{booking.numOfPassenger} pax · ₱{booking.totalPrice}</Text>
             </View>
 
             {!!actionError && (
@@ -184,13 +184,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
-  refText: { color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
+  refText: { flexShrink: 1, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
   refRoute: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  refPort: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  refPort: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   refArrow: { color: colors.primary, fontSize: 15, fontWeight: '700' },
 
   card: {
@@ -202,18 +202,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   cardLabel: { ...typography.label, marginBottom: spacing.sm },
-  cardValue: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  cardSub: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  cardValue: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  cardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
   actionBtn: { flex: 1 },

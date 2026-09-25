@@ -27,7 +27,7 @@ export default function PassengerInfo() {
           <>
             <View style={styles.card}>
               <Text style={styles.label}>NAME</Text>
-              <Text style={styles.value}>{booking.passengerName ?? 'N/A'}</Text>
+              <Text style={styles.value} numberOfLines={1}>{booking.passengerName ?? 'N/A'}</Text>
             </View>
 
             <View style={styles.card}>
@@ -49,14 +49,14 @@ export default function PassengerInfo() {
 
             <View style={styles.card}>
               <Text style={styles.label}>ROUTE</Text>
-              <Text style={styles.value}>
+              <Text style={styles.value} numberOfLines={1}>
                 {booking.fromPortName} → {booking.toPortName}
               </Text>
             </View>
 
             <View style={styles.card}>
               <Text style={styles.label}>WEIGHT DECLARATION</Text>
-              <Text style={styles.value}>{booking.numOfPassenger} pax · ₱{booking.totalPrice}</Text>
+              <Text style={styles.value} numberOfLines={1}>{booking.numOfPassenger} pax · ₱{booking.totalPrice}</Text>
             </View>
           </>
         )}
@@ -80,5 +80,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   label: { ...typography.label, marginBottom: spacing.sm },
-  value: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  value: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
 });

@@ -234,10 +234,10 @@ const styles = StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   summaryRowLabel: { ...typography.caption },
-  summaryRowValue: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  summaryRowValue: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  totalValue: { color: colors.primary, fontSize: 22, fontWeight: '700' },
+  totalValue: { flexShrink: 1, color: colors.primary, fontSize: 22, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mtLg: { marginTop: spacing.xl },
@@ -255,11 +255,11 @@ const styles = StyleSheet.create({
   },
   methodCardActive: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   methodPressed: { opacity: 0.8 },
-  methodIcon: { fontSize: 28 },
+  methodIcon: { flexShrink: 1, fontSize: 28 },
   methodInfo: { flex: 1 },
-  methodName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  methodName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   methodNameActive: { color: colors.primary },
-  methodDesc: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  methodDesc: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: 2 },
   radio: {
     width: 22,
     height: 22,
@@ -275,12 +275,12 @@ const styles = StyleSheet.create({
   bottomPad: { marginTop: spacing.xl },
 
   errorBanner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  errorText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  errorText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 });

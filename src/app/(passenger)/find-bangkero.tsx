@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
   },
-  detailValue: {
+  detailValue: { flexShrink: 1,
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',

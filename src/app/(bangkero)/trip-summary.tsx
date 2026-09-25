@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     alignItems: 'center',
   },
-  statValue: { color: colors.primary, fontSize: 20, fontWeight: '700' },
+  statValue: { flexShrink: 1, color: colors.primary, fontSize: 20, fontWeight: '700' },
   statLabel: { ...typography.caption, color: colors.textMuted, marginTop: 4, fontSize: 11 },
 
   fareCard: {
@@ -164,11 +164,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  fareLabel: { color: colors.textSecondary, fontSize: 14 },
-  fareValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  fareLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 14 },
+  fareValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   fareDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.sm },
   fareTotal: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  fareTotalValue: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  fareTotalValue: { flexShrink: 1, color: colors.primary, fontSize: 15, fontWeight: '700' },
 
   footer: { width: '100%', marginTop: spacing.sm },
 });

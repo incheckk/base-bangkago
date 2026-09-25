@@ -67,7 +67,7 @@ export default function WalletScreen() {
                     )}
                   </View>
                 </View>
-                <Text style={[styles.txAmount, tx.type === 'credit' || tx.type === 'top_up' ? styles.txCredit : styles.txDebit]}>
+                <Text style={[styles.txAmount, tx.type === 'credit' || tx.type === 'top_up' ? styles.txCredit : styles.txDebit]} numberOfLines={1}>
                   {tx.type === 'credit' || tx.type === 'top_up' ? '+' : '-'}₱{tx.amount.toFixed(2)}
                 </Text>
               </View>
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceLabel: { color: colors.primaryText, fontSize: 13, fontWeight: '600', marginBottom: spacing.xs },
-  balanceAmount: { color: colors.primaryText, fontSize: 32, fontWeight: '700' },
+  balanceAmount: { flexShrink: 1, color: colors.primaryText, fontSize: 32, fontWeight: '700' },
   sectionTitle: { ...typography.h2, marginBottom: spacing.md },
   list: { gap: spacing.sm },
   txCard: {
@@ -120,12 +120,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  txIconCredit: { backgroundColor: 'rgba(52,214,176,0.14)' },
-  txIconDebit: { backgroundColor: 'rgba(224,82,82,0.14)' },
-  txIconText: { fontSize: 16, fontWeight: '700', color: colors.text },
-  txType: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  txRef: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  txAmount: { fontSize: 15, fontWeight: '700' },
+  txIconCredit: { backgroundColor: colors.primaryTint },
+  txIconDebit: { backgroundColor: colors.dangerTint },
+  txIconText: { flexShrink: 1, fontSize: 16, fontWeight: '700', color: colors.text },
+  txType: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  txRef: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  txAmount: { flexShrink: 1, fontSize: 15, fontWeight: '700' },
   txCredit: { color: colors.primary },
   txDebit: { color: colors.danger },
 });

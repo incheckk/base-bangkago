@@ -23,7 +23,10 @@ export const colors = {
 
   text: '#F2F5F4',
   textSecondary: '#A9BEC4',
-  textMuted: '#5F7883',
+  // Lightened from #5F7883: that failed WCAG even for large text on
+  // surfaceAlt (2.97:1). This clears 3:1 everywhere and 4.5:1 on bg/surface —
+  // it matters under projector glare, where muted text vanishes first.
+  textMuted: '#7592A0',
   textOnDisabled: '#4A6672',
 
   // Translucent fills for pills, banners and badges. These were previously
@@ -36,10 +39,28 @@ export const colors = {
   // wash reads as a rendering artefact rather than a deliberate surface.
   warningTintSoft: 'rgba(232,169,60,0.08)',
   warningBorder: 'rgba(232,169,60,0.30)',
+  // Soft fill + visible border for full-width status surfaces. Severity styling
+  // used to be redeclared per screen as raw rgba, which is how "high" ended up
+  // orange on two screens and amber on a third.
+  neutralTint: 'rgba(169,190,196,0.08)',
+  accentTintSoft: 'rgba(232,89,60,0.08)',
+  accentBorder: 'rgba(232,89,60,0.30)',
+  dangerTintSoft: 'rgba(224,82,82,0.08)',
+  dangerBorder: 'rgba(224,82,82,0.30)',
+  primaryBorder: 'rgba(52,214,176,0.30)',
   dangerTint: 'rgba(224,82,82,0.12)',
   infoTint: 'rgba(75,168,232,0.12)',
   // Scrim for content floating over the map or a photo.
   scrim: 'rgba(10,22,32,0.85)',
+  // Dimming layer behind a modal or drawer.
+  backdrop: 'rgba(0,0,0,0.55)',
+  // Wash for an icon sitting ON a primary-filled surface.
+  onPrimaryWash: 'rgba(4,36,29,0.18)',
+  // Map pins only. Deliberately outside the brand ramp: these sit on OSM
+  // raster tiles, where teal and amber both lose contrast against the water
+  // and landmass colours the tiles already use.
+  mapMarker: '#FFD700',
+  mapMarkerActive: '#FFA500',
 } as const;
 
 export const spacing = {

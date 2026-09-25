@@ -107,7 +107,7 @@ export default function BangkeroEarnings() {
                     )}
                   </View>
                 </View>
-                <Text style={[styles.txAmount, { color: meta.color }]}>
+                <Text style={[styles.txAmount, { color: meta.color }]} numberOfLines={1}>
                   {tx.type === 'credit' || tx.type === 'top_up' ? '+' : '-'}₱{tx.amount.toFixed(2)}
                 </Text>
               </View>
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceLabel: { ...typography.caption, color: colors.textSecondary, marginBottom: spacing.sm },
-  balanceAmount: { color: colors.primary, fontSize: 36, fontWeight: '700' },
+  balanceAmount: { flexShrink: 1, color: colors.primary, fontSize: 36, fontWeight: '700' },
 
   summaryRow: {
     flexDirection: 'row',
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   summaryLabel: { ...typography.label, marginBottom: spacing.sm },
-  summaryValue: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  summaryValue: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
 
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   },
   txLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
   txDot: { width: 8, height: 8, borderRadius: 4 },
-  txLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  txRef: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  txAmount: { fontSize: 15, fontWeight: '700' },
+  txLabel: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  txRef: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  txAmount: { flexShrink: 1, fontSize: 15, fontWeight: '700' },
 });

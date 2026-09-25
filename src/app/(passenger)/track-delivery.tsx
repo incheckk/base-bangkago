@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   cardTitle: { ...typography.label, marginBottom: spacing.md },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.xs },
   label: { ...typography.caption },
-  value: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  value: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
 
   progressCard: {
     backgroundColor: colors.surface,
@@ -141,8 +141,8 @@ const styles = StyleSheet.create({
   checkmark: { color: colors.primaryText, fontSize: 10, fontWeight: '700' },
   line: { width: 2, height: 16, backgroundColor: colors.borderSubtle },
   lineActive: { backgroundColor: colors.primary },
-  stepLabel: { color: colors.textMuted, fontSize: 13 },
+  stepLabel: { flexShrink: 1, color: colors.textMuted, fontSize: 13 },
   stepLabelActive: { color: colors.text, fontWeight: '600' },
 
-  eta: { color: colors.primary, fontSize: 18, fontWeight: '700' },
+  eta: { flexShrink: 1, color: colors.primary, fontSize: 18, fontWeight: '700' },
 });

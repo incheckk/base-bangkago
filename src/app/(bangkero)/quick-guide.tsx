@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -14,9 +15,8 @@ const STEPS = [
 export default function QuickGuide() {
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader eyebrow="WELCOME" title="How BangkaGo Works" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.eyebrow}>WELCOME</Text>
-        <Text style={styles.title}>How BangkaGo Works</Text>
         <Text style={styles.subtitle}>
           Join as a bangkero and connect with passengers looking for boat rides along the coast.
         </Text>
@@ -75,8 +75,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumText: { color: colors.primaryText, fontSize: 16, fontWeight: '700' },
+  stepNumText: { flexShrink: 1, color: colors.primaryText, fontSize: 16, fontWeight: '700' },
   stepContent: { flex: 1 },
-  stepTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
-  stepDesc: { ...typography.caption, color: colors.textSecondary },
+  stepTitle: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
+  stepDesc: { flexShrink: 1, ...typography.caption, color: colors.textSecondary },
 });

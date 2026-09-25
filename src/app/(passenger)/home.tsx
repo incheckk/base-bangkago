@@ -180,7 +180,7 @@ export default function PassengerHome() {
       {/* ---------- boats-online pill ---------- */}
       <View style={[styles.statusPill, { top: insets.top + 78 }]}>
         <View style={[styles.dot, bangkeros.data === 0 && styles.dotOff]} />
-        <Text style={styles.statusText}>
+        <Text style={styles.statusText} numberOfLines={1}>
           {bangkeros.loading
             ? 'Checking…'
             : bangkeros.data === 0
@@ -303,7 +303,7 @@ export default function PassengerHome() {
                     </Text>
                     <Text style={styles.tripFare}>₱{b.totalPrice}</Text>
                   </View>
-                  <Text style={styles.tripDate}>
+                  <Text style={styles.tripDate} numberOfLines={1}>
                     {new Date(b.createdAt).toLocaleDateString('en-PH', {
                       month: 'short', day: 'numeric',
                     })}
@@ -345,8 +345,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     ...elevation.e1,
   },
-  greeting: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
-  name: { ...typography.title, marginTop: spacing.xxs },
+  greeting: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11 },
+  name: { flexShrink: 1, ...typography.title, marginTop: spacing.xxs },
 
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   iconBtn: {
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderWidth: 2, borderColor: colors.bg,
   },
-  notifBadgeText: { ...typography.micro, fontSize: 10 },
+  notifBadgeText: { flexShrink: 1, ...typography.micro, fontSize: 10 },
 
   // ---------- floating status pill ----------
   statusPill: {
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
   },
   dot: { width: 7, height: 7, borderRadius: radii.pill, backgroundColor: colors.primary },
   dotOff: { backgroundColor: colors.textMuted },
-  statusText: { ...typography.caption, color: colors.text, fontWeight: '600' },
+  statusText: { flexShrink: 1, ...typography.caption, color: colors.text, fontWeight: '600' },
 
   // ---------- port callout ----------
   callout: {
@@ -394,8 +394,8 @@ const styles = StyleSheet.create({
   },
   calloutBody: { flex: 1 },
   calloutLabel: { ...typography.label, color: colors.primary },
-  calloutName: { ...typography.bodyStrong, marginTop: spacing.xxs },
-  calloutMeta: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
+  calloutName: { flexShrink: 1, ...typography.bodyStrong, marginTop: spacing.xxs },
+  calloutMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
   calloutBtn: {
     backgroundColor: colors.primary,
     borderRadius: radii.pill,
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   ctaPressed: { backgroundColor: colors.primaryDark },
   ctaIconWrap: {
     width: 36, height: 36, borderRadius: radii.pill,
-    backgroundColor: 'rgba(4,36,29,0.18)',
+    backgroundColor: colors.onPrimaryWash,
     alignItems: 'center', justifyContent: 'center',
   },
   ctaTextWrap: { flex: 1 },
@@ -496,6 +496,6 @@ const styles = StyleSheet.create({
   tripPressed: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
   tripTop: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   tripRoute: { ...typography.caption, color: colors.text, fontWeight: '600', flex: 1 },
-  tripFare: { ...typography.caption, color: colors.primary, fontWeight: '700' },
-  tripDate: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.xxs },
+  tripFare: { flexShrink: 1, ...typography.caption, color: colors.primary, fontWeight: '700' },
+  tripDate: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.xxs },
 });

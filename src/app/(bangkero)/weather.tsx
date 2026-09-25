@@ -121,8 +121,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
-  heroIcon: { fontSize: 48, marginBottom: spacing.md },
-  heroCondition: {
+  heroIcon: { flexShrink: 1, fontSize: 48, marginBottom: spacing.md },
+  heroCondition: { flexShrink: 1,
     color: colors.text,
     fontSize: 20,
     fontWeight: '700',
@@ -133,9 +133,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
   },
-  badgeSafe: { backgroundColor: 'rgba(52,214,176,0.15)' },
-  badgeUnsafe: { backgroundColor: 'rgba(224,82,82,0.15)' },
-  badgeText: { fontSize: 13, fontWeight: '700' },
+  badgeSafe: { backgroundColor: colors.primaryTint },
+  badgeUnsafe: { backgroundColor: colors.dangerTint },
+  badgeText: { flexShrink: 1, fontSize: 13, fontWeight: '700' },
   badgeTextSafe: { color: colors.primary },
   badgeTextUnsafe: { color: colors.danger },
 
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statLabel: { ...typography.label, marginBottom: spacing.sm },
-  statValue: { color: colors.text, fontSize: 28, fontWeight: '700' },
+  statValue: { flexShrink: 1, color: colors.text, fontSize: 28, fontWeight: '700' },
   statUnit: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   conditionLabel: { color: colors.textSecondary, fontSize: 14 },
-  conditionValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  conditionValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   divider: {
     height: 1,
     backgroundColor: colors.borderSubtle,

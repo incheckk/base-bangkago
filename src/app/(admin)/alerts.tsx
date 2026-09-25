@@ -1,25 +1,21 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { SEVERITY } from '@/theme/severity';
 const FILTERS = [
   { key: 'active', label: 'Active' },
   { key: 'resolved', label: 'Resolved' },
   { key: 'all', label: 'All' },
 ];
 
-const SEVERITY_CONFIG: Record<string, { fg: string; bg: string; border: string }> = {
-  low: { fg: colors.textSecondary, bg: 'rgba(169,190,196,0.08)', border: colors.borderSubtle },
-  medium: { fg: colors.warning, bg: 'rgba(232,169,60,0.08)', border: 'rgba(232,169,60,0.3)' },
-  high: { fg: colors.accent, bg: 'rgba(232,89,60,0.08)', border: 'rgba(232,89,60,0.3)' },
-  critical: { fg: colors.danger, bg: 'rgba(224,82,82,0.08)', border: 'rgba(224,82,82,0.3)' },
-};
+const SEVERITY_CONFIG = SEVERITY;
 
 export default function AlertsScreen() {
   const [filter, setFilter] = useState('active');
@@ -33,12 +29,11 @@ export default function AlertsScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader
+      title="System Alerts"
+      subtitle={alerts.loading ? 'Loading…' : `${filtered.length} alert${filtered.length === 1 ? '' : 's'}`}
+      />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>System Alerts</Text>
-        <Text style={styles.count}>
-          {alerts.loading ? 'Loading…' : `${filtered.length} alert${filtered.length === 1 ? '' : 's'}`}
-        </Text>
 
         <View style={styles.chipsWrap}>
           <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
@@ -79,7 +74,7 @@ export default function AlertsScreen() {
 
                   <Text style={styles.alertMessage}>{a.message}</Text>
 
-                  <Text style={styles.alertTime}>
+                  <Text style={styles.alertTime} numberOfLines={1}>
                     {new Date(a.createdAt).toLocaleString('en-PH', {
                       month: 'short',
                       day: 'numeric',
@@ -110,9 +105,6 @@ export default function AlertsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  count: { ...typography.caption, marginBottom: spacing.lg },
   chipsWrap: { marginBottom: spacing.md },
 
   stateBox: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
@@ -128,7 +120,7 @@ const styles = StyleSheet.create({
   },
   emptyIcon: { fontSize: 32, marginBottom: spacing.sm },
   emptyTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  emptyText: { ...typography.caption, marginTop: spacing.xs },
+  emptyText: { flexShrink: 1, ...typography.caption, marginTop: spacing.xs },
 
   list: { gap: spacing.md },
   alertCard: {
@@ -143,18 +135,18 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   severityDot: { width: 8, height: 8, borderRadius: 4 },
-  severityLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  severityLabel: { flexShrink: 1, fontSize: 11, fontWeight: '700', letterSpacing: 1 },
   resolvedBadge: {
     marginLeft: 'auto',
-    backgroundColor: 'rgba(52,214,176,0.15)',
+    backgroundColor: colors.primaryTint,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
   resolvedText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
 
-  alertMessage: { color: colors.text, fontSize: 14, lineHeight: 20, marginBottom: spacing.sm },
-  alertTime: { color: colors.textMuted, fontSize: 12 },
+  alertMessage: { flexShrink: 1, color: colors.text, fontSize: 14, lineHeight: 20, marginBottom: spacing.sm },
+  alertTime: { flexShrink: 1, color: colors.textMuted, fontSize: 12 },
 
   resolveRow: { marginTop: spacing.md },
   resolveBtn: { alignSelf: 'flex-start' },

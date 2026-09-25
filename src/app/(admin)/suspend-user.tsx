@@ -3,6 +3,7 @@ import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -41,9 +42,8 @@ export default function SuspendUser() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader title="Suspend User" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>Suspend User</Text>
 
         <View style={styles.warningCard}>
           <Text style={styles.warningIcon}>⚠️</Text>
@@ -56,7 +56,7 @@ export default function SuspendUser() {
         <View style={styles.card}>
           <View style={styles.row}>
             <Text style={styles.label}>User</Text>
-            <Text style={styles.value}>{params.userName ?? 'Unknown'}</Text>
+            <Text style={styles.value} numberOfLines={1}>{params.userName ?? 'Unknown'}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.row}>
@@ -83,8 +83,6 @@ export default function SuspendUser() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   warningCard: {
     backgroundColor: colors.dangerTint,
@@ -110,7 +108,7 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
   label: { ...typography.caption },
-  value: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  valueSmall: { color: colors.textMuted, fontSize: 12 },
+  value: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  valueSmall: { flexShrink: 1, color: colors.textMuted, fontSize: 12 },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
 });

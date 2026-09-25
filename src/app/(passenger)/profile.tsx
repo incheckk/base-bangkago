@@ -87,7 +87,7 @@ export default function PassengerProfile() {
 
         {/* Info */}
         <View style={styles.info}>
-          <Text style={styles.name}>{displayFirst} {displayLast}</Text>
+          <Text style={styles.name} numberOfLines={1}>{displayFirst} {displayLast}</Text>
           <Text style={styles.email}>{profile.email ?? formatPhone(profile.phone)}</Text>
           <Text style={styles.phone}>{formatPhone(profile.phone)}</Text>
         </View>
@@ -186,12 +186,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.primaryText, fontSize: 28, fontWeight: '700' },
+  avatarText: { flexShrink: 1, color: colors.primaryText, fontSize: 28, fontWeight: '700' },
 
   info: { alignItems: 'center', marginBottom: spacing.xl },
-  name: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
-  email: { color: colors.textSecondary, fontSize: 14, marginBottom: 2 },
-  phone: { color: colors.textMuted, fontSize: 13 },
+  name: { flexShrink: 1, color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
+  email: { flexShrink: 1, color: colors.textSecondary, fontSize: 14, marginBottom: 2 },
+  phone: { flexShrink: 1, color: colors.textMuted, fontSize: 13 },
 
   editRow: { alignItems: 'center', marginBottom: spacing.xl },
   editBtn: { minWidth: 180 },
@@ -223,18 +223,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderSubtle,
   },
-  menuLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  menuLabel: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   menuChevron: { color: colors.textMuted, fontSize: 20 },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   footer: { marginTop: spacing.lg },
 });

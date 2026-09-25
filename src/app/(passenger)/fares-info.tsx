@@ -98,9 +98,9 @@ const styles = StyleSheet.create({
   routeArrow: { color: colors.primary, fontSize: 14, fontWeight: '700' },
   routeTo: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   routeMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  routeFare: { color: colors.primary, fontSize: 15, fontWeight: '800' },
+  routeFare: { flexShrink: 1, color: colors.primary, fontSize: 15, fontWeight: '800' },
   routeDot: { color: colors.textMuted },
-  routeDetail: { color: colors.textSecondary, fontSize: 13 },
+  routeDetail: { flexShrink: 1, color: colors.textSecondary, fontSize: 13 },
 
   infoCard: {
     flexDirection: 'row', gap: spacing.md,
@@ -108,8 +108,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.borderSubtle,
     padding: spacing.lg, marginBottom: spacing.sm,
   },
-  infoIcon: { fontSize: 22 },
+  infoIcon: { flexShrink: 1, fontSize: 22 },
   infoContent: { flex: 1 },
-  infoTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 4 },
-  infoDesc: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  infoTitle: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 4 },
+  infoDesc: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 });

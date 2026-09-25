@@ -4,11 +4,12 @@ import {
   KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { friendlyAuthError, signIn } from '@/services/auth.service';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import { normalizePhone } from '@/utils/phone';
 
 // Matches the accounts created by the Phase 3.10 seed script.
@@ -65,10 +66,11 @@ export default function SignIn() {
           <Pressable
             onPress={() => router.back()}
             disabled={busy}
-            hitSlop={8}
-            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
           >
-            <Text style={styles.backBtnText}>{'< Back'}</Text>
+            <Icon name="back" size={20} color={colors.text} />
           </Pressable>
 
           <Text style={styles.title}>Sign in</Text>
@@ -142,20 +144,27 @@ export default function SignIn() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
-  backBtn: { alignSelf: 'flex-start', marginBottom: spacing.lg },
-  backBtnText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  backBtn: {
+    alignSelf: 'flex-start',
+    width: touchTarget, height: touchTarget,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: radii.pill,
+    marginLeft: -spacing.sm, // optically aligns the glyph with the title below
+    marginBottom: spacing.md,
+  },
+  backBtnPressed: { backgroundColor: colors.surface },
   title: { ...typography.h1, marginBottom: spacing.xs },
   subtitle: { ...typography.caption, marginBottom: spacing.xxl },
   form: { marginBottom: spacing.xl },
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, ...typography.caption, color: colors.danger, lineHeight: 18 },
   switch: { alignSelf: 'center', marginTop: spacing.xl },
   switchText: { ...typography.caption },
   switchLink: { color: colors.primary, fontWeight: '700' },
@@ -169,11 +178,11 @@ const styles = StyleSheet.create({
   devChip: {
     flex: 1,
     backgroundColor: colors.surfaceAlt,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
+    borderRadius: radii.md,
+    minHeight: touchTarget,
+    alignItems: 'center', justifyContent: 'center',
   },
   devChipPressed: { opacity: 0.7 },
-  devChipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  devChipText: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   devHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, fontSize: 11 },
 });

@@ -1,15 +1,15 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { LoadingState } from '@/components/States';
 import { getAllRoutes, createRoute, updateRoute, deleteRoute, getAllPorts } from '@/services/route.service';
 import type { RouteDoc, PortDoc } from '@/types/models';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 export default function ManageRoutes() {
   const [routes, setRoutes] = useState<RouteDoc[]>([]);
   const [ports, setPorts] = useState<PortDoc[]>([]);
@@ -109,10 +109,11 @@ export default function ManageRoutes() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader
+      title="Manage Routes"
+      subtitle={`${routes.length} route${routes.length === 1 ? '' : 's'}`}
+      />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>Manage Routes</Text>
-        <Text style={styles.count}>{routes.length} route{routes.length === 1 ? '' : 's'}</Text>
 
         {showForm && (
           <View style={styles.formCard}>
@@ -143,12 +144,12 @@ export default function ManageRoutes() {
           {routes.map((r) => (
             <View key={r.routeId} style={styles.card}>
               <View style={styles.cardHeader}>
-                <Text style={styles.routeName}>{getPortName(r.startPortId)} → {getPortName(r.endPortId)}</Text>
+                <Text style={styles.routeName} numberOfLines={1}>{getPortName(r.startPortId)} → {getPortName(r.endPortId)}</Text>
                 <Text style={styles.fare}>₱{r.baseFare}</Text>
               </View>
               <View style={styles.cardMeta}>
-                <Text style={styles.metaText}>{r.distanceKm ? `${r.distanceKm} km` : '—'}</Text>
-                <Text style={styles.metaText}>{r.estimatedMinutes ? `${r.estimatedMinutes} min` : '—'}</Text>
+                <Text style={styles.metaText} numberOfLines={1}>{r.distanceKm ? `${r.distanceKm} km` : '—'}</Text>
+                <Text style={styles.metaText} numberOfLines={1}>{r.estimatedMinutes ? `${r.estimatedMinutes} min` : '—'}</Text>
               </View>
               <View style={styles.cardActions}>
                 <Pressable onPress={() => editRoute(r)} style={styles.editBtn}>
@@ -168,9 +169,6 @@ export default function ManageRoutes() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  count: { ...typography.caption, marginBottom: spacing.xl },
 
   formCard: {
     backgroundColor: colors.surface,
@@ -180,9 +178,9 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.xl,
   },
-  formTitle: { ...typography.label, color: colors.warning, marginBottom: spacing.md },
+  formTitle: { flexShrink: 1, ...typography.label, color: colors.warning, marginBottom: spacing.md },
   formActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  cancelBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
+  cancelBtn: { minHeight: touchTarget, flex: 1, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', borderRadius: radii.md, backgroundColor: colors.surfaceAlt },
   cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 
   list: { gap: spacing.md },
@@ -195,9 +193,9 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   routeName: { color: colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
-  fare: { color: colors.warning, fontSize: 16, fontWeight: '700' },
+  fare: { flexShrink: 1, color: colors.warning, fontSize: 16, fontWeight: '700' },
   cardMeta: { flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm },
-  metaText: { color: colors.textMuted, fontSize: 12 },
+  metaText: { flexShrink: 1, color: colors.textMuted, fontSize: 12 },
   cardActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   editBtn: { flex: 1, paddingVertical: spacing.sm, alignItems: 'center', borderRadius: radii.sm, borderWidth: 1, borderColor: colors.warning },
   editText: { color: colors.warning, fontSize: 13, fontWeight: '600' },

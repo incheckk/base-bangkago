@@ -105,7 +105,7 @@ export default function ArrivedScreen() {
             <Text style={styles.checkIcon}>✓</Text>
           </View>
           <Text style={styles.title}>Arrived at Destination</Text>
-          <Text style={styles.subtitle}>
+          <Text style={styles.subtitle} numberOfLines={1}>
             {durationMin !== null ? `Trip duration: ${durationMin} minutes` : 'Trip completed'}
           </Text>
         </View>
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
-  subtitle: {
+  subtitle: { flexShrink: 1,
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
@@ -252,19 +252,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   cardLabel: { color: colors.textSecondary, fontSize: 14 },
-  cardValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  cardValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   statusPending: { color: colors.warning },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   parcelCard: {
     backgroundColor: colors.surface,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xs,
   },
-  parcelName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  parcelName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   parcelStatus: {
     fontSize: 12,
     fontWeight: '700',
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   },
   parcelStatusOk: { color: colors.primary },
   parcelStatusBad: { color: colors.danger },
-  parcelMeta: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
+  parcelMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
   parcelBtn: { marginTop: spacing.xs },
 
   footer: { marginTop: spacing.xxl },

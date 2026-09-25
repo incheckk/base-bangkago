@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  docIconText: { fontSize: 18 },
+  docIconText: { flexShrink: 1, fontSize: 18 },
   docLabel: { flex: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   uploadBtn: {
     paddingHorizontal: spacing.lg,
@@ -125,8 +125,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   uploadBtnDone: {
-    backgroundColor: 'rgba(52,214,176,0.15)',
+    backgroundColor: colors.primaryTint,
   },
-  uploadText: { color: colors.primaryText, fontSize: 13, fontWeight: '700' },
+  uploadText: { flexShrink: 1, color: colors.primaryText, fontSize: 13, fontWeight: '700' },
   uploadTextDone: { color: colors.primary },
 });

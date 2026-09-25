@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,11 +20,8 @@ export default function QrCode() {
 
   return (
     <ScreenContainer padded={false}>
+      <BangkeroScreenHeader eyebrow="VERIFICATION" title="Scan to Verify" />
       <View style={styles.scroll}>
-        <Text style={styles.back} onPress={() => router.back()}>← Back</Text>
-
-        <Text style={styles.eyebrow}>VERIFICATION</Text>
-        <Text style={styles.title}>Scan to Verify</Text>
 
         <View style={styles.qrBox}>
           <View style={styles.qrPlaceholder}>
@@ -34,7 +32,7 @@ export default function QrCode() {
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>BOAT NAME</Text>
-            <Text style={styles.infoValue}>{boatName}</Text>
+            <Text style={styles.infoValue} numberOfLines={1}>{boatName}</Text>
           </View>
           <View style={styles.infoDivider} />
           <View style={styles.infoRow}>

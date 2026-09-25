@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ProgressBar } from '@/components/ProgressBar';
@@ -8,10 +10,11 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function BoatUnderReview() {
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Boat Verification" showBack={false} />
       <View style={styles.container}>
         <View style={styles.iconWrap}>
-          <Text style={styles.icon}>⏳</Text>
+          <Icon name="history" size={34} color={colors.warning} />
         </View>
 
         <View style={styles.progressWrap}>
@@ -50,7 +53,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(232,169,60,0.14)',
+    backgroundColor: colors.warningTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,

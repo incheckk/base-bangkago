@@ -11,7 +11,7 @@ import { usePorts } from '@/hooks/useSupabase';
 import { routeIdFor } from '@/services/booking.service';
 import { getAllRoutes } from '@/services/route.service';
 import type { RouteDoc } from '@/types/models';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 interface ParcelItem {
   itemName: string;
@@ -108,7 +108,7 @@ export default function BookDelivery() {
               style={[styles.chip, fromId === p.portId && styles.chipActive, toId === p.portId && styles.chipDisabled]}
               disabled={toId === p.portId}
             >
-              <Text style={[styles.chipText, fromId === p.portId && styles.chipTextActive]}>{p.portName}</Text>
+              <Text style={[styles.chipText, fromId === p.portId && styles.chipTextActive]} numberOfLines={1}>{p.portName}</Text>
             </Pressable>
           ))}
         </View>
@@ -125,7 +125,7 @@ export default function BookDelivery() {
                 style={[styles.chip, toId === p.portId && styles.chipActive, off && styles.chipDisabled]}
                 disabled={off}
               >
-                <Text style={[styles.chipText, toId === p.portId && styles.chipTextActive]}>{p.portName}</Text>
+                <Text style={[styles.chipText, toId === p.portId && styles.chipTextActive]} numberOfLines={1}>{p.portName}</Text>
               </Pressable>
             );
           })}
@@ -173,7 +173,7 @@ export default function BookDelivery() {
           </View>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Estimated Fare</Text>
-            <Text style={styles.fareValue}>{cargoFare !== null ? `₱${cargoFare}` : '—'}</Text>
+            <Text style={styles.fareValue} numberOfLines={1}>{cargoFare !== null ? `₱${cargoFare}` : '—'}</Text>
           </View>
         </View>
 
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipDisabled: { opacity: 0.35 },
-  chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  chipText: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   chipTextActive: { color: colors.primaryText },
 
   itemCard: {
@@ -232,12 +232,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   itemHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  itemNumber: { ...typography.label, marginBottom: 0 },
+  itemNumber: { flexShrink: 1, ...typography.label, marginBottom: 0 },
   removeText: { color: colors.danger, fontSize: 13, fontWeight: '600' },
   itemRow: { flexDirection: 'row', gap: spacing.md },
   itemHalf: { flex: 1 },
 
-  addItemBtn: {
+  addItemBtn: { minHeight: touchTarget, justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.primary,
     borderStyle: 'dashed',
@@ -259,5 +259,5 @@ const styles = StyleSheet.create({
   },
   fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fareLabel: { ...typography.caption },
-  fareValue: { color: colors.primary, fontSize: 16, fontWeight: '700' },
+  fareValue: { flexShrink: 1, color: colors.primary, fontSize: 16, fontWeight: '700' },
 });

@@ -1,16 +1,19 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, spacing, typography } from '@/theme/tokens';
 
 export default function DocumentsApproved() {
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Verification Result" showBack={false} />
       <View style={styles.container}>
         <View style={styles.iconWrap}>
-          <Text style={styles.icon}>✓</Text>
+          <Icon name="check" size={34} color={colors.success} />
         </View>
 
         <Text style={styles.title}>Congratulations!</Text>
@@ -42,7 +45,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(52,214,176,0.14)',
+    backgroundColor: colors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,

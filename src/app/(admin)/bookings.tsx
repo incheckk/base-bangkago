@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
@@ -33,11 +33,7 @@ export default function AdminBookings() {
 
   return (
     <ScreenContainer padded={false}>
-      <View style={styles.header}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.headerTitle}>All Bookings</Text>
-        <View style={{ width: 50 }} />
-      </View>
+      <AdminScreenHeader title="All Bookings" />
 
       <View style={styles.searchWrap}>
         <TextInput
@@ -52,7 +48,7 @@ export default function AdminBookings() {
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-        <Text style={styles.count}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
+        <Text style={styles.count} numberOfLines={1}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
 
         {loading ? (
           <View style={styles.stateBox}><Text style={styles.loadingText}>Loading…</Text></View>
@@ -74,17 +70,17 @@ export default function AdminBookings() {
                 <Text style={styles.ref}>{b.ref}</Text>
                 <StatusPill status={b.status as any} />
               </View>
-              <Text style={styles.route}>
+              <Text style={styles.route} numberOfLines={1}>
                 {b.fromPortName} → {b.toPortName}
               </Text>
               <View style={styles.cardMeta}>
-                <Text style={styles.metaItem}>{b.passengerName ?? 'Passenger'}</Text>
+                <Text style={styles.metaItem} numberOfLines={1}>{b.passengerName ?? 'Passenger'}</Text>
                 <Text style={styles.metaDot}>·</Text>
                 <Text style={styles.metaItem}>{b.numOfPassenger} pax</Text>
                 <Text style={styles.metaDot}>·</Text>
                 <Text style={styles.fare}>₱{b.totalPrice}</Text>
               </View>
-              <Text style={styles.date}>
+              <Text style={styles.date} numberOfLines={1}>
                 {new Date(b.createdAt).toLocaleDateString('en-PH', {
                   month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
                 })}
@@ -102,8 +98,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
   },
-  back: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
 
   searchWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   searchInput: {
@@ -114,11 +108,11 @@ const styles = StyleSheet.create({
   },
 
   list: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  count: { ...typography.caption, marginBottom: spacing.md },
+  count: { flexShrink: 1, ...typography.caption, marginBottom: spacing.md },
 
   stateBox: { minHeight: 160, alignItems: 'center', justifyContent: 'center' },
   loadingText: { color: colors.textMuted, fontSize: 13 },
-  errorText: { color: colors.danger, fontSize: 13 },
+  errorText: { flexShrink: 1, color: colors.danger, fontSize: 13 },
   emptyBox: {
     backgroundColor: colors.surface, borderRadius: radii.md,
     borderWidth: 1, borderColor: colors.borderSubtle,
@@ -137,13 +131,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: spacing.sm,
   },
-  ref: { color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
-  route: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
+  ref: { flexShrink: 1, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
+  route: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
   cardMeta: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
   },
-  metaItem: { color: colors.textSecondary, fontSize: 13 },
+  metaItem: { flexShrink: 1, color: colors.textSecondary, fontSize: 13 },
   metaDot: { color: colors.textMuted },
-  fare: { color: colors.warning, fontSize: 13, fontWeight: '700' },
-  date: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
+  fare: { flexShrink: 1, color: colors.warning, fontSize: 13, fontWeight: '700' },
+  date: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
 });

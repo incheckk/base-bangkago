@@ -63,7 +63,7 @@ export default function TripsScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.route}>
+              <Text style={styles.route} numberOfLines={1}>
                 {trip.fromPortName} → {trip.toPortName}
               </Text>
               <View style={styles.cardMeta}>
@@ -110,21 +110,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.sm,
   },
-  cardRef: { ...typography.caption, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
+  cardRef: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5 },
   statusBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.pill,
   },
-  statusCompleted: { backgroundColor: 'rgba(52,214,176,0.15)' },
-  statusActive: { backgroundColor: 'rgba(232,169,60,0.15)' },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  statusCompleted: { backgroundColor: colors.primaryTint },
+  statusActive: { backgroundColor: colors.warningTint },
+  statusText: { flexShrink: 1, fontSize: 11, fontWeight: '700' },
   statusTextCompleted: { color: colors.primary },
   statusTextActive: { color: colors.warning },
 
-  route: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
+  route: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
-  metaItem: { ...typography.caption, color: colors.textMuted },
+  metaItem: { flexShrink: 1, ...typography.caption, color: colors.textMuted },
   metaFare: { color: colors.primary, fontWeight: '600' },
   metaDivider: { color: colors.textMuted, marginHorizontal: spacing.sm },
 });

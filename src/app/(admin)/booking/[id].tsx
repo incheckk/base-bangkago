@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
 import { useAllTrips } from '@/hooks/useAllTrips';
@@ -15,8 +15,8 @@ export default function AdminBookingDetail() {
   if (!booking) {
     return (
       <ScreenContainer>
+        <AdminScreenHeader title="Booking" />
         <View style={styles.center}>
-          <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
           <Text style={styles.emptyTitle}>Booking not found</Text>
         </View>
       </ScreenContainer>
@@ -25,11 +25,7 @@ export default function AdminBookingDetail() {
 
   return (
     <ScreenContainer padded={false}>
-      <View style={styles.header}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.headerTitle}>Booking Detail</Text>
-        <View style={{ width: 50 }} />
-      </View>
+      <AdminScreenHeader title="Booking Detail" />
 
       <View style={styles.content}>
         <View style={styles.refRow}>
@@ -39,17 +35,17 @@ export default function AdminBookingDetail() {
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>ROUTE</Text>
-          <Text style={styles.route}>{booking.fromPortName} → {booking.toPortName}</Text>
+          <Text style={styles.route} numberOfLines={1}>{booking.fromPortName} → {booking.toPortName}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>PASSENGER</Text>
-          <Text style={styles.info}>{booking.passengerName ?? 'N/A'}</Text>
+          <Text style={styles.info} numberOfLines={1}>{booking.passengerName ?? 'N/A'}</Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>OPERATOR</Text>
-          <Text style={styles.info}>{booking.operatorName ?? 'Not assigned'}</Text>
+          <Text style={styles.info} numberOfLines={1}>{booking.operatorName ?? 'Not assigned'}</Text>
         </View>
 
         <View style={styles.card}>
@@ -64,7 +60,7 @@ export default function AdminBookingDetail() {
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Created</Text>
-            <Text style={styles.value}>
+            <Text style={styles.value} numberOfLines={1}>
               {new Date(booking.createdAt).toLocaleDateString('en-PH', {
                 month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
               })}
@@ -73,7 +69,7 @@ export default function AdminBookingDetail() {
           {booking.departTime && (
             <View style={styles.row}>
               <Text style={styles.label}>Departure</Text>
-              <Text style={styles.value}>
+              <Text style={styles.value} numberOfLines={1}>
                 {new Date(booking.departTime).toLocaleTimeString('en-PH', {
                   hour: '2-digit', minute: '2-digit',
                 })}
@@ -83,7 +79,7 @@ export default function AdminBookingDetail() {
           {booking.arrivalTime && (
             <View style={styles.row}>
               <Text style={styles.label}>Arrival</Text>
-              <Text style={styles.value}>
+              <Text style={styles.value} numberOfLines={1}>
                 {new Date(booking.arrivalTime).toLocaleTimeString('en-PH', {
                   hour: '2-digit', minute: '2-digit',
                 })}
@@ -101,8 +97,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
   },
-  back: { color: colors.primary, fontSize: 15, fontWeight: '600' },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
 
   content: { paddingHorizontal: spacing.xl },
 
@@ -110,7 +104,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: spacing.xl,
   },
-  ref: { color: colors.textMuted, fontSize: 13, letterSpacing: 0.5 },
+  ref: { flexShrink: 1, color: colors.textMuted, fontSize: 13, letterSpacing: 0.5 },
 
   card: {
     backgroundColor: colors.surface, borderRadius: radii.md,
@@ -118,15 +112,15 @@ const styles = StyleSheet.create({
     padding: spacing.lg, marginBottom: spacing.md,
   },
   cardLabel: { ...typography.label, marginBottom: spacing.sm },
-  route: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  info: { color: colors.textSecondary, fontSize: 14 },
+  route: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
+  info: { flexShrink: 1, color: colors.textSecondary, fontSize: 14 },
   row: {
     flexDirection: 'row', justifyContent: 'space-between',
     paddingVertical: spacing.xs,
   },
   label: { color: colors.textSecondary, fontSize: 13 },
-  value: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  valueAccent: { color: colors.warning, fontSize: 13, fontWeight: '700' },
+  value: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
+  valueAccent: { flexShrink: 1, color: colors.warning, fontSize: 13, fontWeight: '700' },
 
   center: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   emptyTitle: { ...typography.h2, marginTop: spacing.xxl, textAlign: 'center' },

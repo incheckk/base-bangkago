@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -44,12 +45,15 @@ export default function BookingConfirmed() {
   const fare = parseInt(params.fare ?? '0', 10);
 
   return (
-    <ScreenContainer>
-      <View style={styles.container}>
-        <PassengerScreenHeader title="Booking Confirmed" showDrawer={false} />
+    <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Booking Confirmed" showDrawer={false} />
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.topSection}>
           <Animated.View style={[styles.checkCircle, { transform: [{ scale: scaleAnim }] }]}>
-            <Text style={styles.checkIcon}>✓</Text>
+            <Icon name="check" size={40} color={colors.primaryText} />
           </Animated.View>
 
           <Animated.View style={{ opacity: fadeAnim }}>
@@ -82,7 +86,7 @@ export default function BookingConfirmed() {
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Passengers</Text>
-            <Text style={styles.detailValue}>
+            <Text style={styles.detailValue} numberOfLines={1}>
               {paxCount} · {(params.passengerType ?? 'Regular').charAt(0).toUpperCase() +
                 (params.passengerType ?? 'Regular').slice(1)}
             </Text>
@@ -106,17 +110,21 @@ export default function BookingConfirmed() {
             style={styles.secondaryBtn}
           />
         </Animated.View>
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  // `alignItems: 'center'` here was the bug: on a flex:1 column it shrinks
+  // every child to its content width, so the details card and buttons stopped
+  // filling the screen. Centring belongs on the hero block, not the column.
+  // ScreenContainer is now padded={false} so this padding is not doubled.
+  scroll: {
+    flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
   },
 
   topSection: {
@@ -126,16 +134,11 @@ const styles = StyleSheet.create({
   checkCircle: {
     width: 80,
     height: 80,
-    borderRadius: 40,
+    borderRadius: radii.pill,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
-  },
-  checkIcon: {
-    color: colors.primaryText,
-    fontSize: 40,
-    fontWeight: '700',
   },
 
   title: {
@@ -148,9 +151,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   refValue: {
+    ...typography.display,
     color: colors.primary,
     fontSize: 24,
-    fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 2,
     marginTop: spacing.sm,
@@ -169,17 +172,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  routeText: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  routeArrow: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  routeText: { ...typography.title, flex: 1, minWidth: 0 },
+  routeArrow: { ...typography.title, color: colors.primary, fontWeight: '700' },
   divider: {
     height: 1,
     backgroundColor: colors.borderSubtle,
@@ -191,14 +185,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   detailLabel: { ...typography.caption },
-  detailValue: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  detailValue: { ...typography.caption, color: colors.text, fontWeight: '600', flexShrink: 1 },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  totalLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  totalValue: { color: colors.primary, fontSize: 22, fontWeight: '700' },
+  totalLabel: { ...typography.bodyStrong, fontWeight: '700' },
+  totalValue: { flexShrink: 1, ...typography.display, fontSize: 22, color: colors.primary },
 
   actions: {
     width: '100%',

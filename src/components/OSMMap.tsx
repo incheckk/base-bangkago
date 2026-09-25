@@ -29,10 +29,10 @@ const MAX_ZOOM = 15;
 // Hard bounds: Lapu-Lapu + Olango islands with padding
 const BOUNDS: [[number, number], [number, number]] = [[10.22, 123.92], [10.40, 124.12]];
 
-const MARKER_COLOR = '#FFD700'; // Yellow markers
-const MARKER_ACTIVE_COLOR = '#FFA500'; // Orange for active/selected
-const ROUTE_COLOR = '#34D6B0'; // Teal for route lines
-const VESSEL_COLOR = '#E05252'; // Red for vessel positions
+const MARKER_COLOR = colors.mapMarker;
+const MARKER_ACTIVE_COLOR = colors.mapMarkerActive;
+const ROUTE_COLOR = colors.primary;
+const VESSEL_COLOR = colors.danger;
 
 function buildLeafletHTML(
   ports: PortDoc[],
@@ -54,7 +54,7 @@ function buildLeafletHTML(
       L.circleMarker([${p.latitude}, ${p.longitude}], {
         radius: ${radius},
         fillColor: '${color}',
-        color: '#0A1620',
+        color: '${colors.bg}',
         weight: 2,
         opacity: 1,
         fillOpacity: 0.85
@@ -79,7 +79,7 @@ function buildLeafletHTML(
       L.circleMarker([${v.latitude}, ${v.longitude}], {
         radius: 8,
         fillColor: '${VESSEL_COLOR}',
-        color: '#FFFFFF',
+        color: '${colors.text}',
         weight: 2,
         opacity: 1,
         fillOpacity: 0.9

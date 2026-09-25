@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget } from '@/theme/tokens';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
@@ -17,8 +17,8 @@ export default function TripEnRoute() {
 
   return (
     <ScreenContainer>
+      <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
         {/* Map area */}
         <View style={styles.mapArea}>
           <MapContainer ports={ports.data} height={260} />
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   stepDotTextActive: {
     color: colors.primaryText,
   },
-  stepLabel: {
+  stepLabel: { flexShrink: 1,
     color: colors.textMuted,
     fontSize: 10,
     marginTop: spacing.xs,
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   actions: { gap: spacing.md },
-  sosButton: {
+  sosButton: { minHeight: touchTarget, justifyContent: 'center',
     backgroundColor: colors.danger,
     borderRadius: radii.pill,
     paddingVertical: spacing.md,
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  contactButton: {
+  contactButton: { minHeight: touchTarget, justifyContent: 'center',
     backgroundColor: colors.surfaceAlt,
     borderRadius: radii.pill,
     paddingVertical: spacing.md,

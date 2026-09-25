@@ -70,7 +70,7 @@ export default function PassengerList() {
               onPress={() => router.push({ pathname: '/(bangkero)/passenger-info', params: { bookingId: t.bookingId } })}
             >
               <View style={styles.cardTop}>
-                <Text style={styles.name}>{t.passengerName ?? 'Unknown'}</Text>
+                <Text style={styles.name} numberOfLines={1}>{t.passengerName ?? 'Unknown'}</Text>
                 <View style={[styles.badge, badgeStyle(t.status)]}>
                   <Text style={[styles.badgeText, badgeTextStyle(t.status)]}>{t.status}</Text>
                 </View>
@@ -78,7 +78,7 @@ export default function PassengerList() {
               <View style={styles.cardMeta}>
                 <Text style={styles.metaText}>{t.ref}</Text>
                 <Text style={styles.metaText}>·</Text>
-                <Text style={styles.metaText}>{t.fromPortName} → {t.toPortName}</Text>
+                <Text style={styles.metaText} numberOfLines={1}>{t.fromPortName} → {t.toPortName}</Text>
               </View>
               {t.passengerPhone && (
                 <Text style={styles.phone}>{t.passengerPhone}</Text>
@@ -92,9 +92,9 @@ export default function PassengerList() {
 }
 
 function badgeStyle(status: string) {
-  if (status === 'accepted') return { backgroundColor: 'rgba(52,214,176,0.14)' };
-  if (status === 'completed') return { backgroundColor: 'rgba(169,190,196,0.14)' };
-  return { backgroundColor: 'rgba(232,169,60,0.14)' };
+  if (status === 'accepted') return { backgroundColor: colors.primaryTint };
+  if (status === 'completed') return { backgroundColor: colors.neutralTint };
+  return { backgroundColor: colors.warningTint };
 }
 
 function badgeTextStyle(status: string) {
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.pill,
   },
-  badgeText: { fontSize: 12, fontWeight: '700' },
+  badgeText: { flexShrink: 1, fontSize: 12, fontWeight: '700' },
 
   cardMeta: {
     flexDirection: 'row',
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.xs,
   },
-  metaText: { ...typography.caption, color: colors.textMuted, fontSize: 12 },
+  metaText: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 12 },
 
-  phone: { ...typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
+  phone: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: spacing.xs },
 });

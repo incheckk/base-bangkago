@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAllVesselTracking } from '@/hooks/useVesselTracking';
@@ -13,15 +13,14 @@ export default function FleetOverviewScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader title="Fleet Overview" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>Fleet Overview</Text>
 
         <View style={styles.mapArea}>
           <MapContainer ports={ports.data} height={200} />
           <View style={styles.countBadge}>
             <View style={styles.dot} />
-            <Text style={styles.countText}>
+            <Text style={styles.countText} numberOfLines={1}>
               {tracking.loading
                 ? 'Loading…'
                 : `${tracking.data.length} vessel${tracking.data.length === 1 ? '' : 's'} tracked`}
@@ -52,7 +51,7 @@ export default function FleetOverviewScreen() {
                   <View style={styles.vesselInfo}>
                     <View style={styles.infoBlock}>
                       <Text style={styles.infoLabel}>Speed</Text>
-                      <Text style={styles.infoValue}>
+                      <Text style={styles.infoValue} numberOfLines={1}>
                         {v.speed !== null ? `${v.speed} kn` : 'N/A'}
                       </Text>
                     </View>
@@ -66,7 +65,7 @@ export default function FleetOverviewScreen() {
                     </View>
                     <View style={styles.infoBlock}>
                       <Text style={styles.infoLabel}>Last Update</Text>
-                      <Text style={styles.infoValue}>
+                      <Text style={styles.infoValue} numberOfLines={1}>
                         {new Date(v.recordedAt).toLocaleTimeString('en-PH', {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -86,8 +85,6 @@ export default function FleetOverviewScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xl },
 
   mapArea: {
     marginBottom: spacing.xl,
@@ -112,7 +109,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(10,22,32,0.85)',
+    backgroundColor: colors.scrim,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
@@ -120,7 +117,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.warning },
-  countText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  countText: { flexShrink: 1, color: colors.text, fontSize: 12, fontWeight: '600' },
 
   section: { marginBottom: spacing.xl },
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
@@ -155,9 +152,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   vesselDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.warning },
-  vesselId: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  vesselId: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   vesselInfo: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   infoBlock: { minWidth: '40%' },
   infoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: 2 },
-  infoValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  infoValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
 });

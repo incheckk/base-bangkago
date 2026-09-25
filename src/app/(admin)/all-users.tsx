@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { safeBack } from '@/utils/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
@@ -55,10 +55,11 @@ export default function AllUsersScreen() {
 
   return (
     <ScreenContainer padded={false}>
+      <AdminScreenHeader
+      title="All Users"
+      subtitle={`${filtered.length} user${filtered.length === 1 ? '' : 's'}`}
+      />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.back} onPress={() => safeBack('/(admin)/home')}>← Back</Text>
-        <Text style={styles.title}>All Users</Text>
-        <Text style={styles.count}>{filtered.length} user{filtered.length === 1 ? '' : 's'}</Text>
 
         <View style={styles.searchWrap}>
           <TextInput
@@ -88,8 +89,8 @@ export default function AllUsersScreen() {
                   </Text>
                 </View>
                 <View style={styles.userInfo}>
-                  <Text style={styles.userName}>{`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || 'Unknown'}</Text>
-                  <Text style={styles.userDate}>
+                  <Text style={styles.userName} numberOfLines={1}>{`${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || 'Unknown'}</Text>
+                  <Text style={styles.userDate} numberOfLines={1}>
                     Joined {u.createdAt
                       ? new Date(u.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
                       : 'N/A'}
@@ -111,9 +112,6 @@ export default function AllUsersScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
-  back: { color: colors.primary, fontSize: 14, fontWeight: '600', marginBottom: spacing.lg },
-  title: { ...typography.h1, marginBottom: spacing.xs },
-  count: { ...typography.caption, marginBottom: spacing.lg },
 
   searchWrap: { marginBottom: spacing.md },
   searchInput: {
@@ -147,14 +145,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  avatarText: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
   userInfo: { flex: 1 },
-  userName: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  userDate: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  userName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+  userDate: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: 2 },
   roleBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
   },
-  roleText: { fontSize: 12, fontWeight: '700' },
+  roleText: { flexShrink: 1, fontSize: 12, fontWeight: '700' },
 });

@@ -10,9 +10,9 @@ interface Props {
 }
 
 const CONFIG: Record<DemandLevel, { text: string; color: string; bg: string }> = {
-  low: { text: 'Low Demand', color: colors.textSecondary, bg: 'rgba(169,190,196,0.14)' },
-  medium: { text: 'Moderate', color: colors.warning, bg: 'rgba(232,169,60,0.14)' },
-  high: { text: 'High Demand', color: colors.primary, bg: 'rgba(52,214,176,0.14)' },
+  low: { text: 'Low Demand', color: colors.textSecondary, bg: colors.neutralTint },
+  medium: { text: 'Moderate', color: colors.warning, bg: colors.warningTint },
+  high: { text: 'High Demand', color: colors.primary, bg: colors.primaryTint },
 };
 
 export function DemandBadge({ level, predictedPassengers }: Props) {

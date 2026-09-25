@@ -137,7 +137,7 @@ export default function BangkeroProfileScreen() {
           <View style={styles.avatar}>
             <Text style={styles.initials}>{initials}</Text>
           </View>
-          <Text style={styles.name}>
+          <Text style={styles.name} numberOfLines={1}>
             {profile ? `${displayFirst} ${displayLast}` : 'Loading…'}
           </Text>
           <Text style={styles.phone}>
@@ -222,7 +222,7 @@ export default function BangkeroProfileScreen() {
             <View style={styles.divider} />
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Capacity</Text>
-              <Text style={styles.infoValue}>
+              <Text style={styles.infoValue} numberOfLines={1}>
                 {bangkaCapacity ? `${bangkaCapacity} pax` : '—'}
               </Text>
             </View>
@@ -295,23 +295,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  initials: {
+  initials: { flexShrink: 1,
     color: colors.text,
     fontSize: 24,
     fontWeight: '700',
   },
-  name: {
+  name: { flexShrink: 1,
     color: colors.text,
     fontSize: 20,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
-  phone: {
+  phone: { flexShrink: 1,
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
-  boatName: {
+  boatName: { flexShrink: 1,
     ...typography.caption,
     color: colors.textMuted,
     marginBottom: spacing.sm,
@@ -321,8 +321,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
   },
-  badgeVerified: { backgroundColor: 'rgba(52,214,176,0.15)' },
-  badgePending: { backgroundColor: 'rgba(232,169,60,0.15)' },
+  badgeVerified: { backgroundColor: colors.primaryTint },
+  badgePending: { backgroundColor: colors.warningTint },
   badgeText: { fontSize: 12, fontWeight: '700' },
   badgeTextVerified: { color: colors.primary },
   badgeTextPending: { color: colors.warning },
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   infoLabel: { color: colors.textSecondary, fontSize: 14 },
-  infoValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  infoValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   statusOnline: { color: colors.primary },
   statusOffline: { color: colors.textMuted },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
@@ -379,19 +379,19 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   menuPressed: { backgroundColor: colors.bgElevated },
-  menuIcon: { fontSize: 18, marginRight: spacing.md },
+  menuIcon: { flexShrink: 1, fontSize: 18, marginRight: spacing.md },
   menuLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   menuArrow: { color: colors.textMuted, fontSize: 20 },
 
   banner: {
-    backgroundColor: 'rgba(224,82,82,0.12)',
+    backgroundColor: colors.dangerTint,
     borderColor: colors.danger,
     borderWidth: 1,
     borderRadius: radii.md,
     padding: spacing.md,
     marginTop: spacing.lg,
   },
-  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   footer: { marginTop: spacing.xxl },
 });

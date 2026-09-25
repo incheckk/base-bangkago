@@ -7,7 +7,7 @@ import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 
 export default function TripArrived() {
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
       <View style={styles.container}>
         <PassengerScreenHeader title="Arrived" showDrawer={false} />
         {/* Success icon */}

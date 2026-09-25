@@ -134,7 +134,7 @@ function capitalize(s: string) {
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
   eyebrow: { ...typography.label, marginBottom: 2 },
-  title: { ...typography.h1, marginBottom: spacing.md },
+  title: { flexShrink: 1, ...typography.h1, marginBottom: spacing.md },
   statusRow: { marginBottom: spacing.xl },
   section: {
     backgroundColor: colors.surface,
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   port: { color: colors.text, fontSize: 18, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   arrow: { color: colors.primary, fontSize: 18, fontWeight: '700' },
-  cancelReason: { color: colors.danger, fontSize: 14, lineHeight: 20 },
+  cancelReason: { flexShrink: 1, color: colors.danger, fontSize: 14, lineHeight: 20 },
 });
 
 const infoStyles = StyleSheet.create({

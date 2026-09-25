@@ -1,16 +1,19 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function DocumentsRejected() {
   return (
-    <ScreenContainer>
+    <ScreenContainer padded={false}>
+      <BangkeroScreenHeader title="Verification Result" showBack={false} />
       <View style={styles.container}>
         <View style={styles.iconWrap}>
-          <Text style={styles.icon}>✕</Text>
+          <Icon name="close" size={34} color={colors.danger} />
         </View>
 
         <Text style={styles.title}>Documents Not Approved</Text>
@@ -50,7 +53,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(224,82,82,0.14)',
+    backgroundColor: colors.dangerTint,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xl,
@@ -65,10 +68,10 @@ const styles = StyleSheet.create({
   },
   reasonBox: {
     width: '100%',
-    backgroundColor: 'rgba(224,82,82,0.08)',
+    backgroundColor: colors.dangerTintSoft,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: 'rgba(224,82,82,0.25)',
+    borderColor: colors.dangerBorder,
     padding: spacing.lg,
     marginTop: spacing.xl,
   },

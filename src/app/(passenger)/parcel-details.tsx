@@ -41,7 +41,7 @@ export default function ParcelDetails() {
 
           <View style={styles.row}>
             <Text style={styles.label}>Route</Text>
-            <Text style={styles.value}>{params.fromPort ?? '?'} → {params.toPort ?? '?'}</Text>
+            <Text style={styles.value} numberOfLines={1}>{params.fromPort ?? '?'} → {params.toPort ?? '?'}</Text>
           </View>
           <View style={styles.divider} />
 
@@ -59,7 +59,7 @@ export default function ParcelDetails() {
 
           <View style={styles.row}>
             <Text style={styles.label}>Booked</Text>
-            <Text style={styles.value}>
+            <Text style={styles.value} numberOfLines={1}>
               {params.createdAt
                 ? new Date(params.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
                 : 'N/A'}
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   value: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 2, textAlign: 'right' },
   fareValue: { color: colors.primary, fontSize: 16, fontWeight: '700', flex: 2, textAlign: 'right' },
   divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.xs },
-  itemsText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
+  itemsText: { flexShrink: 1, color: colors.textSecondary, fontSize: 14, lineHeight: 20 },
   statusBadge: { backgroundColor: colors.surfaceAlt, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radii.pill },
-  statusText: { color: colors.primary, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  statusText: { flexShrink: 1, color: colors.primary, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 });

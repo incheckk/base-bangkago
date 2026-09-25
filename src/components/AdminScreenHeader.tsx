@@ -1,6 +1,4 @@
-import React from 'react';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from './Icon';
@@ -10,17 +8,38 @@ import { safeBack } from '@/utils/navigation';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 interface Props {
-  title?: string;
-  /** Small all-caps line above the title. Matches AdminScreenHeader. */
+  title: string;
+  /** Small all-caps line above the title, e.g. "MANAGEMENT". */
   eyebrow?: string;
+  /** Secondary line under the title — typically a record count. */
   subtitle?: string;
   showBack?: boolean;
   showDrawer?: boolean;
-  /** Optional trailing control rendered before the menu button. */
+  /** Optional trailing control, e.g. an "Add" button. */
   right?: React.ReactNode;
 }
 
-export function PassengerScreenHeader({ title, eyebrow, subtitle, showBack = true, showDrawer = true, right }: Props) {
+/**
+ * Header for the admin stack.
+ *
+ * Admin screens each hand-rolled `<Text onPress>← Back</Text>`, which gives a
+ * tap area the size of the glyph — about 38×16 against a 44pt minimum. This
+ * puts the control in a real 44pt button and makes the seventeen screens agree
+ * on spacing and type.
+ *
+ * MUST be rendered as a sibling ABOVE the screen's ScrollView, never inside it.
+ * It mounts SideDrawer, whose overlay uses absoluteFillObject — inside a
+ * ScrollView that resolves against the scroll content view, so the drawer gets
+ * sized to the full content height and scrolls away with it.
+ */
+export function AdminScreenHeader({
+  title,
+  eyebrow,
+  subtitle,
+  showBack = true,
+  showDrawer = true,
+  right,
+}: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
@@ -28,14 +47,14 @@ export function PassengerScreenHeader({ title, eyebrow, subtitle, showBack = tru
       <SideDrawer
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={MENU_TITLE.passenger}
-        items={menuFor('passenger')}
+        title={MENU_TITLE.admin}
+        items={menuFor('admin')}
       />
 
       <View style={styles.header}>
         {showBack && (
           <Pressable
-            onPress={() => safeBack('/(passenger)/home')}
+            onPress={() => safeBack('/(admin)/home')}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
@@ -46,7 +65,7 @@ export function PassengerScreenHeader({ title, eyebrow, subtitle, showBack = tru
 
         <View style={styles.titleWrap}>
           {!!eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
-          {!!title && <Text style={styles.title} numberOfLines={1}>{title}</Text>}
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
           {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
         </View>
 
@@ -76,10 +95,12 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
-  titleWrap: { flex: 1, minWidth: 0 },
+  titleWrap: { flex: 1, minWidth: 0, paddingHorizontal: spacing.xs },
   eyebrow: { ...typography.label, marginBottom: spacing.xxs },
+  // Matches Passenger/Bangkero headers. Using h2 here made admin screen titles
+  // visibly larger than the same element in the other two roles.
   title: { ...typography.title, color: colors.text },
-  subtitle: { ...typography.caption, color: colors.textMuted, marginTop: 1 },
+  subtitle: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
   iconBtn: {
     width: touchTarget,
     height: touchTarget,

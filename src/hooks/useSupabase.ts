@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { useChannelId } from './useChannelId';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { supabase } from '../services/supabase';
 import type { BangkeroDoc, BookingDoc, PortDoc } from '../types/models';
@@ -26,7 +27,7 @@ export function usePorts(): Result<PortDoc[]> {
   const [data, setData] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,13 +48,18 @@ export function usePorts(): Result<PortDoc[]> {
 
     load();
 
-    const channel = supabase
-      .channel(`ports-changes-${mountId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ports' }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`ports-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ports' }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, []);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [channelId]);
 
   return { data, loading, error };
 }
@@ -63,7 +69,7 @@ export function useAvailableBangkeroCount(): Result<number> {
   const [data, setData] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     let cancelled = false;
@@ -82,13 +88,18 @@ export function useAvailableBangkeroCount(): Result<number> {
 
     load();
 
-    const channel = supabase
-      .channel(`bangkeros-availability-${mountId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`bangkeros-availability-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, []);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [channelId]);
 
   return { data, loading, error };
 }
@@ -98,7 +109,7 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!passengerId) { setData([]); setLoading(false); return; }
@@ -119,17 +130,22 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
 
     load();
 
-    const channel = supabase
-      .channel(`bookings-passenger-${passengerId}-${mountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${passengerId}` },
-        load
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`bookings-passenger-${passengerId}-${channelId}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${passengerId}` },
+          load
+        )
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [passengerId, max]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [passengerId, max, channelId]);
 
   return { data, loading, error };
 }
@@ -142,7 +158,7 @@ export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
@@ -168,13 +184,18 @@ export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]
 
     load();
 
-    const channel = supabase
-      .channel(`bookings-open-requests-${mountId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`bookings-open-requests-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bangkeroUid]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bangkeroUid, channelId]);
 
   return { data, loading, error };
 }
@@ -184,7 +205,7 @@ export function useMyTrips(bangkeroUid: string | null, max = 10): Result<Booking
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
@@ -205,17 +226,22 @@ export function useMyTrips(bangkeroUid: string | null, max = 10): Result<Booking
 
     load();
 
-    const channel = supabase
-      .channel(`bookings-bangkero-${bangkeroUid}-${mountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` },
-        load
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`bookings-bangkero-${bangkeroUid}-${channelId}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` },
+          load
+        )
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bangkeroUid, max]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bangkeroUid, max, channelId]);
 
   return { data, loading, error };
 }
@@ -225,7 +251,7 @@ export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
   const [data, setData] = useState<BangkeroDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!uid) { setData(null); setLoading(false); return; }
@@ -247,17 +273,22 @@ export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
 
     load();
 
-    const channel = supabase
-      .channel(`bangkero-${uid}-${mountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
-        load
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`bangkero-${uid}-${channelId}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
+          load
+        )
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [uid]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [uid, channelId]);
 
   return { data, loading, error };
 }
@@ -267,7 +298,7 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
   const [data, setData] = useState<BookingDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const mountId = useRef(0).current;
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bookingId) { setData(null); setLoading(false); return; }
@@ -289,17 +320,22 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
 
     load();
 
-    const channel = supabase
-      .channel(`booking-${bookingId}-${mountId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` },
-        load
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`booking-${bookingId}-${channelId}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` },
+          load
+        )
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bookingId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bookingId, channelId]);
 
   return { data, loading, error };
 }

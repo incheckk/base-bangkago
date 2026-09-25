@@ -17,7 +17,7 @@ export default function TripArrived() {
           </View>
         </View>
 
-        <Text style={styles.title}>You've arrived!</Text>
+        <Text style={styles.title}>You&apos;ve arrived!</Text>
         <Text style={styles.subtitle}>Thank you for riding with BangkaGo</Text>
 
         {/* Route summary */}

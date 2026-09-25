@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import { getRatingsByUser, submitRating } from '../services/rating.service';
 import type { RatingDoc } from '../types/models';
 
@@ -14,6 +15,7 @@ export function useRatings(userId: string | null): Result {
   const [data, setData] = useState<RatingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!userId) { setData([]); setLoading(false); return; }
@@ -35,13 +37,18 @@ export function useRatings(userId: string | null): Result {
 
     load();
 
-    const channel = supabase
-      .channel('ratings-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ratings', filter: `user_id=eq.${userId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`ratings-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'ratings', filter: `user_id=eq.${userId}` }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [userId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [userId, channelId]);
 
   const doSubmitRating = async (rating: Omit<RatingDoc, 'ratingId' | 'createdAt'>) => {
     try {

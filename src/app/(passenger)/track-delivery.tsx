@@ -4,21 +4,60 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { useChannelId } from '@/hooks/useChannelId';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const STATUS_STEPS = ['Booked', 'Picked Up', 'In Transit', 'Out for Delivery', 'Delivered'];
 
+function stepForStatus(status?: string): number {
+  if (status === 'pending') return 0;
+  if (status === 'in_transit') return 2;
+  if (status === 'delivered') return 4;
+  if (status === 'returned') return 4;
+  return 1;
+}
+
 export default function TrackDelivery() {
-  const params = useLocalSearchParams<{ parcelId?: string; status?: string; receiverName?: string; toPort?: string }>();
-  const [currentStep, setCurrentStep] = useState(2);
+  const params = useLocalSearchParams<{
+    parcelId?: string;
+    status?: string;
+    receiverName?: string;
+    toPort?: string;
+  }>();
+  const [currentStep, setCurrentStep] = useState(stepForStatus(params.status));
+  const [liveStatus, setLiveStatus] = useState<string | undefined>(params.status);
+  const channelId = useChannelId();
 
   useEffect(() => {
-    const s = params.status;
-    if (s === 'pending') setCurrentStep(0);
-    else if (s === 'in_transit') setCurrentStep(2);
-    else if (s === 'delivered') setCurrentStep(4);
-    else setCurrentStep(1);
-  }, [params.status]);
+    setCurrentStep(stepForStatus(liveStatus ?? params.status));
+  }, [liveStatus, params.status]);
+
+  useEffect(() => {
+    const parcelId = params.parcelId;
+    if (!parcelId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`parcel-${parcelId}-${channelId}`);
+      channel
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'parcels', filter: `id=eq.${parcelId}` },
+          (payload) => {
+            const next = (payload.new as { status?: string }).status;
+            if (next) setLiveStatus(next);
+          }
+        )
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
+
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, [params.parcelId, channelId]);
+
+  const status = liveStatus ?? params.status;
 
   return (
     <ScreenContainer padded={false}>
@@ -33,6 +72,10 @@ export default function TrackDelivery() {
           <View style={styles.row}>
             <Text style={styles.label}>Destination</Text>
             <Text style={styles.value}>{params.toPort ?? 'N/A'}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={styles.label}>Status</Text>
+            <Text style={styles.value}>{(status ?? 'pending').replace('_', ' ')}</Text>
           </View>
         </View>
 
@@ -51,7 +94,7 @@ export default function TrackDelivery() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Estimated Arrival</Text>
-          <Text style={styles.eta}>{params.status === 'delivered' ? 'Delivered' : '1-2 business days'}</Text>
+          <Text style={styles.eta}>{status === 'delivered' ? 'Delivered' : '1-2 business days'}</Text>
         </View>
       </View>
     </ScreenContainer>

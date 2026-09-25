@@ -16,6 +16,7 @@ import { useMyTrips, useOpenRequests, useBangkero } from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
+import { createNotification } from '@/services/notification.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
@@ -53,6 +54,11 @@ export default function BangkeroHome() {
         uid,
         displayName: bangkero.data.displayName,
       });
+      createNotification(
+        b.userId,
+        'Booking Accepted',
+        `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.`
+      ).catch(() => {});
       router.push({
         pathname: '/(bangkero)/booking-status',
         params: { bookingId: b.bookingId },
@@ -84,6 +90,11 @@ export default function BangkeroHome() {
     setActionError(null);
     try {
       await completeBooking(b.bookingId);
+      createNotification(
+        b.userId,
+        'Trip Completed',
+        `Your trip ${b.ref} has been completed. Safe travels!`
+      ).catch(() => {});
     } catch (e) {
       setActionError(friendlyError(e));
     }

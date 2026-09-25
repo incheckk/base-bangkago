@@ -8,10 +8,11 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useBooking } from '@/hooks/useSupabase';
+import { useBangkero, useBooking } from '@/hooks/useSupabase';
 import {
-  acceptBooking, completeBooking, rejectBooking, friendlyError,
+  acceptBooking, rejectBooking, friendlyError,
 } from '@/services/booking.service';
+import { createNotification } from '@/services/notification.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 import { safeBack } from '@/utils/navigation';
@@ -20,6 +21,7 @@ export default function BookingStatus() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
   const { user } = useAuth();
   const { data: booking, loading, error } = useBooking(bookingId ?? null);
+  const bangkero = useBangkero(user?.id ?? null);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -30,7 +32,17 @@ export default function BookingStatus() {
     setPending(true);
     setActionError(null);
     try {
-      await acceptBooking(booking.bookingId, { uid, displayName: '' });
+      await acceptBooking(booking.bookingId, {
+        uid,
+        displayName: bangkero.data?.displayName ?? '',
+      });
+      if (booking.userId) {
+        createNotification(
+          booking.userId,
+          'Booking Accepted',
+          `Your trip ${booking.ref} was accepted.`
+        ).catch(() => {});
+      }
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -52,19 +64,6 @@ export default function BookingStatus() {
 
   async function handleStartTrip() {
     router.push('/(bangkero)/departure');
-  }
-
-  async function handleComplete() {
-    if (!booking) return;
-    setPending(true);
-    setActionError(null);
-    try {
-      await completeBooking(booking.bookingId);
-      router.push('/(bangkero)/trip-summary');
-    } catch (e) {
-      setActionError(friendlyError(e));
-    }
-    setPending(false);
   }
 
   function handleContactPassenger() {

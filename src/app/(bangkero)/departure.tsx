@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -11,6 +11,10 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
+import { friendlyError } from '@/services/booking.service';
+import { createManifest } from '@/services/manifest.service';
+import { createNotification } from '@/services/notification.service';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const CHECKLIST_ITEMS = [
@@ -30,12 +34,71 @@ export default function DepartureScreen() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [finalizing, setFinalizing] = useState(false);
   const [departing, setDeparting] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [routeContext, setRouteContext] = useState<{ from: string; to: string } | null>(null);
+  const [hasBangka, setHasBangka] = useState<boolean | null>(null);
 
   const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.key]);
   const manifestFinalized = manifest?.status === 'finalized';
 
+  useEffect(() => {
+    if (!bangkeroId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [bangkaRes, bookingRes] = await Promise.all([
+          supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).maybeSingle(),
+          supabase
+            .from('bookings')
+            .select('route_id')
+            .eq('operator_id', bangkeroId)
+            .eq('trip_stat', 'accepted')
+            .order('accepted_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        if (cancelled) return;
+        setHasBangka(!!bangkaRes.data);
+        if (bookingRes.data?.route_id) {
+          const [from, to] = bookingRes.data.route_id.split('__');
+          if (from && to) setRouteContext({ from, to });
+        }
+      } catch {
+        if (!cancelled) setHasBangka(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [bangkeroId]);
+
   function toggleCheck(key: string) {
     setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  async function handleGenerate() {
+    if (!bangkeroId || generating) return;
+    setGenerating(true);
+    setGenError(null);
+    try {
+      const { data: bangka } = await supabase
+        .from('bangkas')
+        .select('id')
+        .eq('bangkero_id', bangkeroId)
+        .maybeSingle();
+      if (!bangka) throw new Error('Set up your boat in Profile first.');
+      if (!routeContext) {
+        throw new Error('No active accepted trip found for this route.');
+      }
+      await createManifest({
+        bangkaId: bangka.id,
+        bangkeroId,
+        departurePortId: routeContext.from,
+        arrivalPortId: routeContext.to,
+      });
+    } catch (e) {
+      setGenError(friendlyError(e));
+    }
+    setGenerating(false);
   }
 
   async function handleFinalize() {
@@ -46,6 +109,24 @@ export default function DepartureScreen() {
 
   function handleDepart() {
     setDeparting(true);
+    if (bangkeroId) {
+      supabase
+        .from('bookings')
+        .select('id, ref, user_id')
+        .eq('operator_id', bangkeroId)
+        .eq('trip_stat', 'accepted')
+        .then(({ data }) => {
+          (data ?? []).forEach((b) => {
+            if (b.user_id) {
+              createNotification(
+                b.user_id,
+                'Trip Departed',
+                `Boat for trip ${b.ref} has departed.`
+              ).catch(() => {});
+            }
+          });
+        });
+    }
     setTimeout(() => {
       router.push('/(bangkero)/arrived');
     }, 1000);
@@ -158,7 +239,31 @@ export default function DepartureScreen() {
               />
             </View>
           </>
-        ) : null}
+        ) : (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyTitle}>No manifest yet</Text>
+            <Text style={styles.emptyText}>
+              Generate a manifest for your accepted trip before departure.
+            </Text>
+            {!!genError && (
+              <View style={styles.banner}>
+                <Text style={styles.bannerText}>{genError}</Text>
+              </View>
+            )}
+            <PrimaryButton
+              label="Generate Manifest"
+              onPress={handleGenerate}
+              loading={generating}
+              disabled={generating || hasBangka === false || !routeContext}
+            />
+            {hasBangka === false && (
+              <Text style={styles.emptyHint}>Set up your boat in Profile first.</Text>
+            )}
+            {!routeContext && hasBangka !== false && (
+              <Text style={styles.emptyHint}>Accept a booking trip to load its route.</Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </ScreenContainer>
   );
@@ -179,6 +284,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   placeholderText: { color: colors.textMuted, fontSize: 14 },
+
+  emptyBox: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: spacing.xs },
+  emptyText: { color: colors.textMuted, fontSize: 13, textAlign: 'center', marginBottom: spacing.lg },
+  emptyHint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, textAlign: 'center' },
+
+  banner: {
+    backgroundColor: 'rgba(224,82,82,0.12)',
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    width: '100%',
+  },
+  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xxl, marginBottom: spacing.md },
 

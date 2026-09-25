@@ -1,6 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/utils/navigation';
-import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -37,7 +36,6 @@ export default function OperatorDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, loading, error } = useOperators();
   const { data: trips } = useAllTrips();
-  const [actionLoading, setActionLoading] = useState(false);
 
   if (loading) {
     return (
@@ -68,14 +66,11 @@ export default function OperatorDetailScreen() {
   const docs = getDocs(operator);
   const recentTrips = trips.filter((t) => t.operatorId === id).slice(0, 5);
 
-  const handleApprove = () => {
-    setActionLoading(true);
-    setTimeout(() => setActionLoading(false), 800);
-  };
-
-  const handleReject = () => {
-    setActionLoading(true);
-    setTimeout(() => setActionLoading(false), 800);
+  const goToReview = (status?: 'approved' | 'rejected') => {
+    router.push({
+      pathname: '/(admin)/document-review',
+      params: { id: operator.uid, intent: status ?? 'review' },
+    });
   };
 
   return (
@@ -133,15 +128,13 @@ export default function OperatorDetailScreen() {
       {operator.verificationStat === 'pending' && (
         <View style={styles.actions}>
           <PrimaryButton
-            label="Approve"
-            onPress={handleApprove}
-            loading={actionLoading}
+            label="Review & Approve"
+            onPress={() => goToReview('approved')}
             style={styles.actionBtn}
           />
           <PrimaryButton
-            label="Reject"
-            onPress={handleReject}
-            loading={actionLoading}
+            label="Review & Reject"
+            onPress={() => goToReview('rejected')}
             variant="danger"
             style={styles.actionBtn}
           />

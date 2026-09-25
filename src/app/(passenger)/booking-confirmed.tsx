@@ -7,15 +7,6 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
-function generateRef(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let id = '';
-  for (let i = 0; i < 6; i++) {
-    id += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return `BGO-${id}`;
-}
-
 export default function BookingConfirmed() {
   const params = useLocalSearchParams<{
     fromName: string;
@@ -25,9 +16,11 @@ export default function BookingConfirmed() {
     count: string;
     passengerType: string;
     fare: string;
+    ref?: string;
+    bookingId?: string;
   }>();
 
-  const bookingRef = useRef(generateRef());
+  const bookingRef = params.ref ?? params.bookingId ?? '—';
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -62,7 +55,7 @@ export default function BookingConfirmed() {
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={styles.title}>Booking Confirmed!</Text>
             <Text style={styles.refLabel}>Booking Reference</Text>
-            <Text style={styles.refValue}>{bookingRef.current}</Text>
+            <Text style={styles.refValue}>{bookingRef}</Text>
           </Animated.View>
         </View>
 

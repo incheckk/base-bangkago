@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import { getTrackingByBangka, getAllVesselPositions, logPosition } from '../services/tracking.service';
 import type { VesselTrackingDoc } from '../types/models';
 
@@ -7,6 +8,7 @@ export function useVesselTracking(bangkaId: string | null) {
   const [data, setData] = useState<VesselTrackingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bangkaId) { setData([]); setLoading(false); return; }
@@ -28,13 +30,18 @@ export function useVesselTracking(bangkaId: string | null) {
 
     load();
 
-    const channel = supabase
-      .channel(`vessel-tracking-${bangkaId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vessel_tracking', filter: `bangka_id=eq.${bangkaId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`vessel-tracking-${bangkaId}-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vessel_tracking', filter: `bangka_id=eq.${bangkaId}` }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bangkaId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bangkaId, channelId]);
 
   const updatePosition = async (lat: number, lng: number, speed: number) => {
     if (!bangkaId) return;
@@ -52,6 +59,7 @@ export function useAllVesselTracking() {
   const [data, setData] = useState<VesselTrackingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     let cancelled = false;
@@ -72,13 +80,18 @@ export function useAllVesselTracking() {
 
     load();
 
-    const channel = supabase
-      .channel('all-vessel-tracking')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'vessel_tracking' }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`all-vessel-tracking-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'vessel_tracking' }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, []);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [channelId]);
 
   return { data, loading, error };
 }

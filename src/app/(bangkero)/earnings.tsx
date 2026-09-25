@@ -69,7 +69,7 @@ export default function BangkeroEarnings() {
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Today's Earnings</Text>
+            <Text style={styles.summaryLabel}>Today&apos;s Earnings</Text>
             <Text style={styles.summaryValue}>₱{todayCredits.toFixed(2)}</Text>
           </View>
           <View style={styles.summaryCard}>

@@ -10,14 +10,17 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusCard } from '@/components/StatusCard';
 import { useAuth } from '@/hooks/useAuth';
 import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
+import { friendlyError } from '@/services/booking.service';
+import { createAlert } from '@/services/safety-alert.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function SosAlertScreen() {
   const { profile } = useAuth();
   const portId = profile?.uid ? 'p1' : null;
-  const { data: alerts, loading } = useSafetyAlerts(portId);
+  const { data: alerts } = useSafetyAlerts(portId);
 
-  const [alertState, setAlertState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [alertState, setAlertState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [sendError, setSendError] = useState<string | null>(null);
 
   function handleSos() {
     Alert.alert(
@@ -28,9 +31,21 @@ export default function SosAlertScreen() {
         {
           text: 'Send Alert',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             setAlertState('sending');
-            setTimeout(() => setAlertState('sent'), 1500);
+            setSendError(null);
+            try {
+              const who = profile ? `${profile.firstName} ${profile.lastName}` : 'a bangkero';
+              await createAlert({
+                message: `Emergency SOS from ${who}. Immediate assistance needed.`,
+                severity: 'critical',
+                portId: portId ?? undefined,
+              });
+              setAlertState('sent');
+            } catch (e) {
+              setSendError(friendlyError(e));
+              setAlertState('error');
+            }
           },
         },
       ],
@@ -52,12 +67,16 @@ export default function SosAlertScreen() {
               pressed && alertState === 'idle' && styles.sosPressed,
             ]}
           >
-            <Text style={styles.sosText}>{alertState === 'sent' ? '✓' : 'SOS'}</Text>
+            <Text style={styles.sosText}>
+              {alertState === 'sending' ? '…' : alertState === 'sent' ? '✓' : 'SOS'}
+            </Text>
           </Pressable>
           <Text style={styles.sosLabel}>
-            {alertState === 'sent'
-              ? 'Alert Sent'
-              : 'Tap to send emergency alert to coast guard'}
+            {alertState === 'sending'
+              ? 'Sending alert…'
+              : alertState === 'sent'
+                ? 'Alert Sent'
+                : 'Tap to send emergency alert to coast guard'}
           </Text>
         </View>
 
@@ -65,6 +84,14 @@ export default function SosAlertScreen() {
           <View style={styles.sentBanner}>
             <Text style={styles.sentBannerText}>
               Emergency alert has been sent. Stay in position and await assistance.
+            </Text>
+          </View>
+        )}
+
+        {alertState === 'error' && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerText}>
+              {sendError ?? 'Failed to send alert. Try again.'}
             </Text>
           </View>
         )}
@@ -134,6 +161,22 @@ const styles = StyleSheet.create({
   },
   sentBannerText: {
     color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  errorBanner: {
+    backgroundColor: 'rgba(224,82,82,0.12)',
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  errorBannerText: {
+    color: colors.danger,
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',

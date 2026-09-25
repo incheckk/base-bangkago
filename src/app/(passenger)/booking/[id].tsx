@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useBooking } from '@/hooks/useSupabase';
 import { cancelBooking, friendlyError } from '@/services/booking.service';
+import { createNotification } from '@/services/notification.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 
@@ -25,6 +26,13 @@ export default function BookingDetail() {
     setActionError(null);
     try {
       await cancelBooking(id);
+      if (booking?.operatorId) {
+        createNotification(
+          booking.operatorId,
+          'Booking Cancelled',
+          `Trip ${booking.ref} was cancelled by the passenger.`
+        ).catch(() => {});
+      }
     } catch (e) {
       setActionError(friendlyError(e));
     }

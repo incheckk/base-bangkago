@@ -11,6 +11,9 @@ import { MapContainer } from '@/components/MapContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { usePorts } from '@/hooks/useSupabase';
+import { routeIdFor } from '@/services/booking.service';
+import { getAllRoutes } from '@/services/route.service';
+import type { RouteDoc } from '@/types/models';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 type PassengerType = 'regular' | 'senior' | 'student' | 'child';
@@ -29,7 +32,6 @@ const SERVICE_TYPES: { key: ServiceType; label: string; icon: IconName; hint: st
 ];
 
 const MAX_PASSENGERS = 12;
-const BASE_FARE = 85;
 
 export default function BookRide() {
   const insets = useSafeAreaInsets();
@@ -43,18 +45,49 @@ export default function BookRide() {
   const [count, setCount] = useState(1);
   const [passengerType, setPassengerType] = useState<PassengerType>('regular');
   const [serviceType, setServiceType] = useState<ServiceType>('passenger');
+  const [routes, setRoutes] = useState<RouteDoc[] | null>(null);
+  const [routesError, setRoutesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getAllRoutes()
+      .then((r) => {
+        if (alive) setRoutes(r);
+      })
+      .catch((e: unknown) => {
+        if (alive) setRoutesError(e instanceof Error ? e.message : 'Could not load routes.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (params.fromId) setFromId(params.fromId);
   }, [params.fromId]);
 
+  const activeRoutes = (routes ?? []).filter((r) => r.isActive);
+  const routeFor = (from: string | null, to: string | null): RouteDoc | null => {
+    if (!from || !to) return null;
+    const id = routeIdFor(from, to);
+    return activeRoutes.find((r) => r.routeId === id) ?? null;
+  };
+
+  useEffect(() => {
+    if (!routes || !fromId || !toId) return;
+    const id = routeIdFor(fromId, toId);
+    if (!routes.some((r) => r.isActive && r.routeId === id)) setToId(null);
+  }, [fromId, toId, routes]);
+
   const fromPort = ports.data.find((p) => p.portId === fromId);
   const toPort = ports.data.find((p) => p.portId === toId);
   const typeInfo = PASSENGER_TYPES.find((t) => t.key === passengerType)!;
 
+  const route = routeFor(fromId, toId);
+
   const fare = (() => {
-    if (!fromPort || !toPort || fromId === toId) return null;
-    const base = serviceType === 'cargo' ? BASE_FARE * 1.5 : BASE_FARE;
+    if (!route) return null;
+    const base = serviceType === 'cargo' ? route.baseFare * 1.5 : route.baseFare;
     const discounted = base * (1 - typeInfo.discount / 100);
     return Math.round(discounted * count);
   })();
@@ -84,11 +117,11 @@ export default function BookRide() {
     });
   }
 
-  if (ports.loading) {
+  if (ports.loading || routes === null) {
     return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
   }
-  if (ports.error) {
-    return <ScreenContainer><ErrorState message={ports.error} /></ScreenContainer>;
+  if (ports.error || routesError) {
+    return <ScreenContainer><ErrorState message={ports.error ?? routesError ?? 'Could not load routes.'} /></ScreenContainer>;
   }
 
   const ready = !!fromId && !!toId && fromId !== toId && fare !== null;
@@ -151,7 +184,13 @@ export default function BookRide() {
           <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
 
           <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
-          <PortChips ports={ports.data} selected={toId} disabled={fromId} onSelect={setToId} />
+          <PortChips
+            ports={ports.data}
+            selected={toId}
+            disabled={fromId}
+            isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
+            onSelect={setToId}
+          />
 
           <Text style={[styles.sectionLabel, styles.mtLg]}>DATE & TIME</Text>
           <View style={styles.row}>
@@ -244,18 +283,19 @@ export default function BookRide() {
 }
 
 function PortChips({
-  ports, selected, disabled, onSelect,
+  ports, selected, disabled, isBlocked, onSelect,
 }: {
   ports: { portId: string; portName: string }[];
   selected: string | null;
   disabled: string | null;
+  isBlocked?: (portId: string) => boolean;
   onSelect: (id: string) => void;
 }) {
   return (
     <View style={styles.chips}>
       {ports.map((p) => {
         const active = p.portId === selected;
-        const off = p.portId === disabled;
+        const off = p.portId === disabled || !!isBlocked?.(p.portId);
         return (
           <Pressable
             key={p.portId}

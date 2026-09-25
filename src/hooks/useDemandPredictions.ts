@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import { getDemandForRoute } from '../services/demand.service';
 import type { DemandPredictionDoc } from '../types/models';
 
@@ -7,6 +8,7 @@ export function useDemandPredictions(routeId: string | null) {
   const [data, setData] = useState<DemandPredictionDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!routeId) { setData([]); setLoading(false); return; }
@@ -28,13 +30,18 @@ export function useDemandPredictions(routeId: string | null) {
 
     load();
 
-    const channel = supabase
-      .channel('demand-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'demand_predictions', filter: `route_id=eq.${routeId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`demand-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'demand_predictions', filter: `route_id=eq.${routeId}` }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [routeId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [routeId, channelId]);
 
   return { data, loading, error };
 }

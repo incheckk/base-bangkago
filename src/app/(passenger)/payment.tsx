@@ -5,6 +5,10 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { useAuth } from '@/hooks/useAuth';
+import { createBooking, friendlyError } from '@/services/booking.service';
+import { createParcel } from '@/services/parcel.service';
+import { createPayment } from '@/services/payment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'bank_transfer';
@@ -22,6 +26,7 @@ const PAYMENT_METHODS: {
 ];
 
 export default function PaymentScreen() {
+  const { profile, profileLoading } = useAuth();
   const params = useLocalSearchParams<{
     fromId: string;
     fromName: string;
@@ -33,23 +38,82 @@ export default function PaymentScreen() {
     passengerType: string;
     serviceType: string;
     fare: string;
+    receiverName?: string;
+    receiverContact?: string;
+    itemsJson?: string;
   }>();
 
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);
+  const serviceType = params.serviceType === 'cargo' ? 'cargo' : 'passenger';
 
-  function confirm() {
+  async function confirm() {
+    if (busy || !profile || profileLoading) return;
+    if (!params.fromId || !params.toId || !params.fromName || !params.toName) {
+      setError('Missing trip details. Go back and pick your ports again.');
+      return;
+    }
     setBusy(true);
-    router.push({
-      pathname: '/(passenger)/booking-confirmed',
-      params: {
-        ...params,
-        paymentMethod: method,
-      },
-    });
+    setError(null);
+    try {
+      const { bookingId, ref } = await createBooking({
+        passenger: profile,
+        fromPort: { portId: params.fromId, portName: params.fromName },
+        toPort: { portId: params.toId, portName: params.toName },
+        passengerCount: serviceType === 'cargo' ? 1 : paxCount,
+        serviceType,
+        totalFare: fare,
+      });
+
+      await createPayment(bookingId, fare, method);
+
+      if (serviceType === 'cargo' && params.receiverName) {
+        let items: { itemName: string; quantity: number; kilogram: number }[] = [];
+        if (params.itemsJson) {
+          try {
+            const parsed = JSON.parse(params.itemsJson) as {
+              itemName: string;
+              quantity: string | number;
+              kilogram: string | number;
+            }[];
+            items = parsed
+              .filter((i) => i.itemName?.trim())
+              .map((i) => ({
+                itemName: i.itemName.trim(),
+                quantity: Number(i.quantity) || 1,
+                kilogram: Number(i.kilogram) || 1,
+              }));
+          } catch {
+            items = [];
+          }
+        }
+        await createParcel({
+          receiverName: params.receiverName,
+          receiverContact: params.receiverContact || undefined,
+          totalPrice: fare,
+          userId: profile.uid,
+          bookingId,
+          items,
+        });
+      }
+
+      router.push({
+        pathname: '/(passenger)/booking-confirmed',
+        params: {
+          ...params,
+          paymentMethod: method,
+          bookingId,
+          ref,
+        },
+      });
+    } catch (e) {
+      setError(friendlyError(e));
+      setBusy(false);
+    }
   }
 
   return (
@@ -132,11 +196,18 @@ export default function PaymentScreen() {
             })}
           </View>
 
+          {!!error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
           <View style={styles.bottomPad}>
             <PrimaryButton
               label="Confirm Booking"
               onPress={confirm}
               loading={busy}
+              disabled={busy || profileLoading || !profile}
             />
           </View>
         </View>
@@ -202,4 +273,14 @@ const styles = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
 
   bottomPad: { marginTop: spacing.xl },
+
+  errorBanner: {
+    backgroundColor: 'rgba(224,82,82,0.12)',
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
 });

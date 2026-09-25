@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import { getWallet, getWalletTransactions, topUpWallet } from '../services/wallet.service';
 import type { WalletDoc, WalletTransactionDoc } from '../types/models';
 
@@ -16,6 +17,7 @@ export function useWallet(bangkeroId: string | null): Result {
   const [transactions, setTransactions] = useState<WalletTransactionDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bangkeroId) { setWallet(null); setTransactions([]); setLoading(false); return; }
@@ -42,13 +44,18 @@ export function useWallet(bangkeroId: string | null): Result {
 
     load();
 
-    const channel = supabase
-      .channel('wallet-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets', filter: `bangkero_id=eq.${bangkeroId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`wallet-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets', filter: `bangkero_id=eq.${bangkeroId}` }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bangkeroId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bangkeroId, channelId]);
 
   const topUp = async (amount: number) => {
     if (!wallet) return;

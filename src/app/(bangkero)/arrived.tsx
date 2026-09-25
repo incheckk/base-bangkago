@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -9,13 +9,28 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  getParcelsForBangkero, updateParcelStatus,
+} from '@/services/parcel.service';
+import { friendlyError } from '@/services/booking.service';
+import { createNotification } from '@/services/notification.service';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import type { ParcelDoc, ParcelStatus } from '@/types/models';
+
+const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelStatus }>> = {
+  pending: { label: 'Mark In Transit', next: 'in_transit' },
+  in_transit: { label: 'Mark Delivered', next: 'delivered' },
+};
 
 export default function ArrivedScreen() {
   const { user } = useAuth();
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
 
   const [completing, setCompleting] = useState(false);
+  const [parcels, setParcels] = useState<ParcelDoc[]>([]);
+  const [parcelBusy, setParcelBusy] = useState<string | null>(null);
+  const [parcelError, setParcelError] = useState<string | null>(null);
 
   const departureTime = manifest?.actualDepartureTime
     ? new Date(manifest.actualDepartureTime)
@@ -25,8 +40,56 @@ export default function ArrivedScreen() {
     ? Math.round((now.getTime() - departureTime.getTime()) / 60000)
     : null;
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getParcelsForBangkero(user.id);
+        if (!cancelled) setParcels(rows);
+      } catch {
+        if (!cancelled) setParcels([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  async function advanceParcel(parcel: ParcelDoc) {
+    const step = NEXT_STATUS[parcel.status];
+    if (!step || parcelBusy) return;
+    setParcelBusy(parcel.parcelId);
+    setParcelError(null);
+    try {
+      await updateParcelStatus(parcel.parcelId, step.next);
+      setParcels((prev) =>
+        prev.map((p) => (p.parcelId === parcel.parcelId ? { ...p, status: step.next } : p))
+      );
+    } catch (e) {
+      setParcelError(friendlyError(e));
+    }
+    setParcelBusy(null);
+  }
+
   async function handleComplete() {
     setCompleting(true);
+    if (user?.id) {
+      supabase
+        .from('bookings')
+        .select('id, ref, user_id')
+        .eq('operator_id', user.id)
+        .eq('trip_stat', 'accepted')
+        .then(({ data }) => {
+          (data ?? []).forEach((b) => {
+            if (b.user_id) {
+              createNotification(
+                b.user_id,
+                'Arrived at Destination',
+                `Boat for trip ${b.ref} has arrived. Please disembark.`
+              ).catch(() => {});
+            }
+          });
+        });
+    }
     setTimeout(() => {
       router.push('/(bangkero)/post-trip');
     }, 800);
@@ -67,9 +130,47 @@ export default function ArrivedScreen() {
               <View style={styles.divider} />
               <View style={styles.cardRow}>
                 <Text style={styles.cardLabel}>Parcels</Text>
-                <Text style={styles.cardValue}>{manifest?.totalParcelsOnBoard ?? 0} to unload</Text>
+                <Text style={styles.cardValue}>{parcels.length} to unload</Text>
               </View>
             </View>
+
+            {parcels.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>PARCEL DELIVERY</Text>
+                {parcelError && (
+                  <View style={styles.banner}>
+                    <Text style={styles.bannerText}>{parcelError}</Text>
+                  </View>
+                )}
+                {parcels.map((p) => {
+                  const step = NEXT_STATUS[p.status];
+                  return (
+                    <View key={p.parcelId} style={styles.parcelCard}>
+                      <View style={styles.parcelTop}>
+                        <Text style={styles.parcelName}>{p.receiverName}</Text>
+                        <Text style={[
+                          styles.parcelStatus,
+                          p.status === 'delivered' && styles.parcelStatusOk,
+                          p.status === 'returned' && styles.parcelStatusBad,
+                        ]}>
+                          {p.status.replace('_', ' ')}
+                        </Text>
+                      </View>
+                      <Text style={styles.parcelMeta}>₱{p.totalPrice}</Text>
+                      {step && (
+                        <PrimaryButton
+                          label={step.label}
+                          onPress={() => advanceParcel(p)}
+                          loading={parcelBusy === p.parcelId}
+                          disabled={!!parcelBusy}
+                          style={styles.parcelBtn}
+                        />
+                      )}
+                    </View>
+                  );
+                })}
+              </>
+            )}
 
             <View style={styles.footer}>
               <PrimaryButton
@@ -154,6 +255,42 @@ const styles = StyleSheet.create({
   cardValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
   statusPending: { color: colors.warning },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
+
+  banner: {
+    backgroundColor: 'rgba(224,82,82,0.12)',
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+
+  parcelCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  parcelTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  parcelName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  parcelStatus: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.warning,
+    textTransform: 'uppercase',
+  },
+  parcelStatusOk: { color: colors.primary },
+  parcelStatusBad: { color: colors.danger },
+  parcelMeta: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
+  parcelBtn: { marginTop: spacing.xs },
 
   footer: { marginTop: spacing.xxl },
 });

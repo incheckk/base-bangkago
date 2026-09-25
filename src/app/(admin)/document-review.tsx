@@ -1,11 +1,14 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { safeBack } from '@/utils/navigation';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { useAuth } from '@/hooks/useAuth';
 import { useOperators } from '@/hooks/useOperators';
+import { friendlyError } from '@/services/booking.service';
+import { verifyBangkero } from '@/services/admin.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const DOC_TYPES = [
@@ -17,8 +20,11 @@ const DOC_TYPES = [
 
 export default function DocumentReviewScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  const { user } = useAuth();
   const { data, loading, error } = useOperators();
   const [remarks, setRemarks] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [docs, setDocs] = useState<Record<string, 'uploaded' | 'pending' | 'missing'>>({
     govId: 'pending',
     boatReg: 'pending',
@@ -54,14 +60,6 @@ export default function DocumentReviewScreen() {
     );
   }
 
-  const toggleDocStatus = (key: string) => {
-    setDocs((prev) => {
-      const current = prev[key];
-      const next = current === 'uploaded' ? 'missing' : current === 'missing' ? 'pending' : 'uploaded';
-      return { ...prev, [key]: next };
-    });
-  };
-
   const approveDoc = (key: string) => {
     setDocs((prev) => ({ ...prev, [key]: 'uploaded' }));
   };
@@ -70,17 +68,28 @@ export default function DocumentReviewScreen() {
     setDocs((prev) => ({ ...prev, [key]: 'missing' }));
   };
 
-  const approveAll = () => {
-    const next: typeof docs = {};
-    for (const d of DOC_TYPES) next[d.key] = 'uploaded';
-    setDocs(next);
-  };
+  async function decide(status: 'approved' | 'rejected') {
+    if (!user || !operator || actionLoading) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await verifyBangkero(
+        operator.uid,
+        user.id,
+        status,
+        status === 'rejected' ? remarks.trim() || undefined : undefined
+      );
+      const next: typeof docs = {};
+      for (const d of DOC_TYPES) next[d.key] = status === 'approved' ? 'uploaded' : 'missing';
+      setDocs(next);
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setActionLoading(false);
+  }
 
-  const rejectAll = () => {
-    const next: typeof docs = {};
-    for (const d of DOC_TYPES) next[d.key] = 'missing';
-    setDocs(next);
-  };
+  const approveAll = () => decide('approved');
+  const rejectAll = () => decide('rejected');
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scroll}>
@@ -158,16 +167,26 @@ export default function DocumentReviewScreen() {
         />
       </View>
 
+      {!!actionError && (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>{actionError}</Text>
+        </View>
+      )}
+
       <View style={styles.bottomActions}>
         <PrimaryButton
           label="Approve All"
           onPress={approveAll}
+          loading={actionLoading}
+          disabled={actionLoading}
           style={styles.bottomBtn}
         />
         <PrimaryButton
           label="Reject All"
           onPress={rejectAll}
           variant="danger"
+          loading={actionLoading}
+          disabled={actionLoading}
           style={styles.bottomBtn}
         />
       </View>
@@ -242,6 +261,16 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     minHeight: 80,
   },
+
+  banner: {
+    backgroundColor: 'rgba(224,82,82,0.12)',
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   bottomActions: {
     flexDirection: 'row',

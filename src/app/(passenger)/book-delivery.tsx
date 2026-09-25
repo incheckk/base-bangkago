@@ -1,12 +1,16 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { usePorts } from '@/hooks/useSupabase';
+import { routeIdFor } from '@/services/booking.service';
+import { getAllRoutes } from '@/services/route.service';
+import type { RouteDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 interface ParcelItem {
@@ -23,13 +27,44 @@ export default function BookDelivery() {
   const [receiverContact, setReceiverContact] = useState('');
   const [items, setItems] = useState<ParcelItem[]>([{ itemName: '', quantity: '1', kilogram: '1' }]);
   const [date, setDate] = useState('');
+  const [routes, setRoutes] = useState<RouteDoc[] | null>(null);
+  const [routesError, setRoutesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getAllRoutes()
+      .then((r) => {
+        if (alive) setRoutes(r);
+      })
+      .catch((e: unknown) => {
+        if (alive) setRoutesError(e instanceof Error ? e.message : 'Could not load routes.');
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const activeRoutes = (routes ?? []).filter((r) => r.isActive);
+  const routeFor = (from: string | null, to: string | null): RouteDoc | null => {
+    if (!from || !to) return null;
+    const id = routeIdFor(from, to);
+    return activeRoutes.find((r) => r.routeId === id) ?? null;
+  };
+
+  useEffect(() => {
+    if (!routes || !fromId || !toId) return;
+    const id = routeIdFor(fromId, toId);
+    if (!routes.some((r) => r.isActive && r.routeId === id)) setToId(null);
+  }, [fromId, toId, routes]);
 
   const fromPort = ports.data.find((p) => p.portId === fromId);
   const toPort = ports.data.find((p) => p.portId === toId);
+  const route = routeFor(fromId, toId);
 
   const totalKg = items.reduce((sum, i) => sum + (parseFloat(i.kilogram) || 0), 0);
-  const baseFare = 85;
-  const cargoFare = Math.round(baseFare * 1.5 * Math.max(1, Math.ceil(totalKg / 10)));
+  const cargoFare = route
+    ? Math.round(route.baseFare * 1.5 * Math.max(1, Math.ceil(totalKg / 10)))
+    : null;
 
   function addItem() {
     setItems((prev) => [...prev, { itemName: '', quantity: '1', kilogram: '1' }]);
@@ -44,7 +79,20 @@ export default function BookDelivery() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  const ready = !!fromId && !!toId && fromId !== toId && receiverName.trim() && items.some((i) => i.itemName.trim());
+  const ready =
+    !!fromId &&
+    !!toId &&
+    fromId !== toId &&
+    cargoFare !== null &&
+    !!receiverName.trim() &&
+    items.some((i) => i.itemName.trim());
+
+  if (ports.loading || routes === null) {
+    return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
+  }
+  if (ports.error || routesError) {
+    return <ScreenContainer><ErrorState message={ports.error ?? routesError ?? 'Could not load routes.'} /></ScreenContainer>;
+  }
 
   return (
     <ScreenContainer padded={false}>
@@ -67,16 +115,20 @@ export default function BookDelivery() {
 
         <Text style={[styles.sectionLabel, styles.mt]}>TO PORT</Text>
         <View style={styles.chips}>
-          {ports.data.map((p) => (
-            <Pressable
-              key={p.portId}
-              onPress={() => setToId(p.portId)}
-              style={[styles.chip, toId === p.portId && styles.chipActive, fromId === p.portId && styles.chipDisabled]}
-              disabled={fromId === p.portId}
-            >
-              <Text style={[styles.chipText, toId === p.portId && styles.chipTextActive]}>{p.portName}</Text>
-            </Pressable>
-          ))}
+          {ports.data.map((p) => {
+            const blocked = !!fromId && p.portId !== fromId && !routeFor(fromId, p.portId);
+            const off = fromId === p.portId || blocked;
+            return (
+              <Pressable
+                key={p.portId}
+                onPress={() => setToId(p.portId)}
+                style={[styles.chip, toId === p.portId && styles.chipActive, off && styles.chipDisabled]}
+                disabled={off}
+              >
+                <Text style={[styles.chipText, toId === p.portId && styles.chipTextActive]}>{p.portName}</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
@@ -121,12 +173,12 @@ export default function BookDelivery() {
           </View>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Estimated Fare</Text>
-            <Text style={styles.fareValue}>₱{cargoFare}</Text>
+            <Text style={styles.fareValue}>{cargoFare !== null ? `₱${cargoFare}` : '—'}</Text>
           </View>
         </View>
 
         <PrimaryButton
-          label={`Confirm Delivery · ₱${cargoFare}`}
+          label={cargoFare !== null ? `Confirm Delivery · ₱${cargoFare}` : 'Confirm Delivery'}
           onPress={() => {
             router.push({
               pathname: '/(passenger)/payment',
@@ -137,6 +189,10 @@ export default function BookDelivery() {
                 toName: toPort?.portName,
                 serviceType: 'cargo',
                 fare: String(cargoFare),
+                date,
+                receiverName,
+                receiverContact,
+                itemsJson: JSON.stringify(items),
               },
             });
           }}

@@ -56,7 +56,7 @@ export default function PostTripScreen() {
 
         {allDone && (
           <View style={styles.completeBanner}>
-            <Text style={styles.completeBannerText}>All done! You're all set.</Text>
+            <Text style={styles.completeBannerText}>All done! You&apos;re all set.</Text>
           </View>
         )}
 

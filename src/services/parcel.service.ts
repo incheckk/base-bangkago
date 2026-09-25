@@ -20,7 +20,7 @@ export async function createParcel(parcel: {
   totalPrice: number;
   userId: string;
   bookingId: string;
-  items: Array<{ itemName: string; quantity: number; kilogram: number }>;
+  items: { itemName: string; quantity: number; kilogram: number }[];
 }): Promise<ParcelDoc> {
   const { data, error } = await supabase
     .from('parcels')
@@ -82,6 +82,27 @@ export async function getParcelsByUser(userId: string): Promise<ParcelDoc[]> {
     .from('parcels')
     .select('*')
     .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(mapRow);
+}
+
+/** Parcels on bookings assigned to this bangkero (RLS also scopes rows). */
+export async function getParcelsForBangkero(bangkeroUid: string): Promise<ParcelDoc[]> {
+  const { data: bookings, error: bErr } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('operator_id', bangkeroUid);
+
+  if (bErr) throw bErr;
+  const ids = (bookings ?? []).map((b) => b.id);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('parcels')
+    .select('*')
+    .in('booking_id', ids)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

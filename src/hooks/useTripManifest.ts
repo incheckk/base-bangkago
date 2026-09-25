@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import {
   getActiveManifest,
   getManifestPassengers,
@@ -23,6 +24,7 @@ export function useTripManifest(bangkeroId: string | null): Result {
   const [parcels, setParcels] = useState<ManifestParcelDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     if (!bangkeroId) { setManifest(null); setPassengers([]); setParcels([]); setLoading(false); return; }
@@ -53,13 +55,18 @@ export function useTripManifest(bangkeroId: string | null): Result {
 
     load();
 
-    const channel = supabase
-      .channel('manifest-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trip_manifest', filter: `bangkero_id=eq.${bangkeroId}` }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`manifest-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'trip_manifest', filter: `bangkero_id=eq.${bangkeroId}` }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [bangkeroId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [bangkeroId, channelId]);
 
   const doFinalizeManifest = async () => {
     if (!manifest) return;

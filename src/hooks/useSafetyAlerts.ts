@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { useChannelId } from './useChannelId';
 import { getAlerts, resolveAlert } from '../services/safety-alert.service';
 import type { SafetyAlertDoc } from '../types/models';
 
@@ -14,6 +15,7 @@ export function useSafetyAlerts(portId: string | null): Result {
   const [data, setData] = useState<SafetyAlertDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const channelId = useChannelId();
 
   useEffect(() => {
     let cancelled = false;
@@ -34,13 +36,18 @@ export function useSafetyAlerts(portId: string | null): Result {
 
     load();
 
-    const channel = supabase
-      .channel('safety-alerts-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_alerts' }, load)
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    try {
+      channel = supabase.channel(`safety-alerts-changes-${channelId}`);
+      channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_alerts' }, load)
+        .subscribe();
+    } catch {
+      // realtime unavailable — the screen keeps working without live updates
+    }
 
-    return () => { cancelled = true; supabase.removeChannel(channel); };
-  }, [portId]);
+    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
+  }, [portId, channelId]);
 
   const doResolveAlert = async (id: string) => {
     try {

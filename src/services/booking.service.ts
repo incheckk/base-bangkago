@@ -24,19 +24,28 @@ export async function fetchRoute(
   return data ? mapRouteRow(data) : null;
 }
 
+export interface CreateBookingResult {
+  bookingId: string;
+  ref: string;
+}
+
 interface CreateArgs {
   passenger: UserDoc;
-  fromPort: PortDoc;
-  toPort: PortDoc;
+  fromPort: Pick<PortDoc, 'portId' | 'portName'>;
+  toPort: Pick<PortDoc, 'portId' | 'portName'>;
   passengerCount: number;
+  serviceType?: 'passenger' | 'cargo';
+  totalFare?: number;
 }
 
 /**
  * Creates a booking. id and ref are filled by the set_booking_ref trigger.
+ * totalFare (screen-computed, includes discounts/cargo multiplier) is
+ * honored after the route is validated.
  */
 export async function createBooking({
-  passenger, fromPort, toPort, passengerCount,
-}: CreateArgs): Promise<string> {
+  passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare,
+}: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
   }
@@ -44,6 +53,8 @@ export async function createBooking({
   const route = await fetchRoute(fromPort.portId, toPort.portId);
   if (!route) throw new Error('No route runs between those two ports.');
   if (!route.isActive) throw new Error('That route is not running right now.');
+
+  const totalPrice = totalFare ?? route.baseFare * passengerCount;
 
   const { data, error } = await supabase
     .from('bookings')
@@ -54,16 +65,16 @@ export async function createBooking({
       from_port_name: fromPort.portName,
       to_port_name: toPort.portName,
       num_of_passenger: passengerCount,
-      total_price: route.baseFare * passengerCount,
+      total_price: totalPrice,
       route_id: route.routeId,
-      service_type: 'passenger',
+      service_type: serviceType,
       trip_stat: 'open',
     })
-    .select('id')
+    .select('id, ref')
     .single();
 
   if (error) throw error;
-  return data.id;
+  return { bookingId: data.id, ref: data.ref };
 }
 
 /** Passenger withdraws. */

@@ -5,8 +5,10 @@ import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
+import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
+import { friendlyError as profileFriendlyError, updateName } from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 import { useState } from 'react';
@@ -15,6 +17,38 @@ export default function PassengerProfile() {
   const { profile } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [editing, setEditing] = useState(false);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savedName, setSavedName] = useState<{ first: string; last: string } | null>(null);
+
+  function startEdit() {
+    setFirstName(profile?.firstName ?? '');
+    setLastName(profile?.lastName ?? '');
+    setError(null);
+    setEditing(true);
+  }
+
+  async function saveProfile() {
+    if (!profile) return;
+    setSavingProfile(true);
+    setError(null);
+    try {
+      await updateName({
+        uid: profile.uid,
+        firstName,
+        lastName,
+        isBangkero: false,
+      });
+      setSavedName({ first: firstName.trim(), last: lastName.trim() });
+      setEditing(false);
+    } catch (e) {
+      setError(profileFriendlyError(e));
+    }
+    setSavingProfile(false);
+  }
 
   async function handleSignOut() {
     setSigningOut(true);
@@ -35,7 +69,9 @@ export default function PassengerProfile() {
     );
   }
 
-  const initials = `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`.toUpperCase();
+  const displayFirst = savedName?.first ?? profile.firstName;
+  const displayLast = savedName?.last ?? profile.lastName;
+  const initials = `${displayFirst.charAt(0)}${displayLast.charAt(0)}`.toUpperCase();
 
   return (
     <ScreenContainer padded={false}>
@@ -51,20 +87,52 @@ export default function PassengerProfile() {
 
         {/* Info */}
         <View style={styles.info}>
-          <Text style={styles.name}>{profile.firstName} {profile.lastName}</Text>
+          <Text style={styles.name}>{displayFirst} {displayLast}</Text>
           <Text style={styles.email}>{profile.email ?? formatPhone(profile.phone)}</Text>
           <Text style={styles.phone}>{formatPhone(profile.phone)}</Text>
         </View>
 
-        {/* Edit button */}
-        <View style={styles.editRow}>
-          <PrimaryButton
-            label="Edit Profile"
-            variant="secondary"
-            onPress={() => {/* TODO: edit profile modal */}}
-            style={styles.editBtn}
-          />
-        </View>
+        {/* Edit form / button */}
+        {editing ? (
+          <View style={styles.editCard}>
+            <TextField
+              label="First Name"
+              value={firstName}
+              onChangeText={setFirstName}
+              autoCapitalize="words"
+            />
+            <TextField
+              label="Last Name"
+              value={lastName}
+              onChangeText={setLastName}
+              autoCapitalize="words"
+            />
+            <View style={styles.editActions}>
+              <PrimaryButton
+                label="Cancel"
+                variant="secondary"
+                onPress={() => setEditing(false)}
+                style={styles.editActionBtn}
+              />
+              <PrimaryButton
+                label="Save"
+                onPress={saveProfile}
+                loading={savingProfile}
+                disabled={savingProfile || !firstName.trim() || !lastName.trim()}
+                style={styles.editActionBtn}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.editRow}>
+            <PrimaryButton
+              label="Edit Profile"
+              variant="secondary"
+              onPress={startEdit}
+              style={styles.editBtn}
+            />
+          </View>
+        )}
 
         {/* Menu */}
         <View style={styles.menu}>
@@ -127,6 +195,16 @@ const styles = StyleSheet.create({
 
   editRow: { alignItems: 'center', marginBottom: spacing.xl },
   editBtn: { minWidth: 180 },
+  editCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  editActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
+  editActionBtn: { flex: 1 },
 
   menu: {
     backgroundColor: colors.surface,

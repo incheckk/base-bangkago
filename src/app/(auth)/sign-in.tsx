@@ -42,6 +42,7 @@ export default function SignIn() {
       // No navigation here — the (auth) guard redirects once the profile loads.
     } catch (e) {
       setFormError(friendlyAuthError(e));
+    } finally {
       setBusy(false);
     }
   }

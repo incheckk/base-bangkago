@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
-import { getAllRoutes, getAllPorts } from '@/services/route.service';
-import type { RouteDoc, PortDoc } from '@/types/models';
+import { useRoutes } from '@/hooks/useRoutes';
+import { useAllPorts } from '@/hooks/useAllPorts';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const INFO = [
@@ -16,16 +15,8 @@ const INFO = [
 ];
 
 export default function FaresInfo() {
-  const [routes, setRoutes] = useState<RouteDoc[]>([]);
-  const [ports, setPorts] = useState<PortDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([getAllRoutes(), getAllPorts()])
-      .then(([r, p]) => { setRoutes(r); setPorts(p); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: routes, loading } = useRoutes();
+  const { data: ports } = useAllPorts();
 
   function getPortName(id: string) {
     return ports.find((p) => p.portId === id)?.portName ?? id;

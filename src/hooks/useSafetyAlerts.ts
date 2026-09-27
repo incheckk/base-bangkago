@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { useChannelId } from './useChannelId';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRealtimeQuery } from './useRealtimeQuery';
 import { getAlerts, resolveAlert } from '../services/safety-alert.service';
 import type { SafetyAlertDoc } from '../types/models';
 
@@ -15,39 +14,25 @@ export function useSafetyAlerts(portId: string | null): Result {
   const [data, setData] = useState<SafetyAlertDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const rows = await getAlerts(portId ?? undefined, true);
-        if (cancelled) return;
-        setData(rows);
-        setLoading(false);
-        setError(null);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e.message ?? 'Failed to load alerts');
-        setLoading(false);
-      }
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+  const load = useCallback(async () => {
+    const id = ++seq.current;
     try {
-      channel = supabase.channel(`safety-alerts-changes-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_alerts' }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
+      const rows = await getAlerts(portId ?? undefined, true);
+      if (id !== seq.current) return;
+      setData(rows);
+      setLoading(false);
+      setError(null);
+    } catch (e: any) {
+      if (id !== seq.current) return;
+      setError(e.message ?? 'Failed to load alerts');
+      setLoading(false);
     }
+  }, [portId]);
 
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [portId, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'safety_alerts' }]);
 
   const doResolveAlert = async (id: string) => {
     try {

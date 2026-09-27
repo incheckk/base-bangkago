@@ -1,10 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
-import { useChannelId } from '@/hooks/useChannelId';
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -27,35 +27,34 @@ export default function TrackDelivery() {
   }>();
   const [currentStep, setCurrentStep] = useState(stepForStatus(params.status));
   const [liveStatus, setLiveStatus] = useState<string | undefined>(params.status);
-  const channelId = useChannelId();
+  const parcelId = params.parcelId ?? null;
+  const seq = useRef(0);
 
   useEffect(() => {
     setCurrentStep(stepForStatus(liveStatus ?? params.status));
   }, [liveStatus, params.status]);
 
-  useEffect(() => {
-    const parcelId = params.parcelId;
+  const load = useCallback(async () => {
     if (!parcelId) return;
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const id = ++seq.current;
     try {
-      channel = supabase.channel(`parcel-${parcelId}-${channelId}`);
-      channel
-        .on(
-          'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'parcels', filter: `id=eq.${parcelId}` },
-          (payload) => {
-            const next = (payload.new as { status?: string }).status;
-            if (next) setLiveStatus(next);
-          }
-        )
-        .subscribe();
+      const { data, error } = await supabase
+        .from('parcels')
+        .select('status')
+        .eq('id', parcelId)
+        .maybeSingle();
+      if (id !== seq.current) return;
+      if (!error && data?.status) setLiveStatus(data.status);
     } catch {
-      // realtime unavailable — the screen keeps working without live updates
+      // keep the last known status when the refresh fails
     }
+  }, [parcelId]);
 
-    return () => { if (channel) supabase.removeChannel(channel); };
-  }, [params.parcelId, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    parcelId ? [{ table: 'parcels', filter: `id=eq.${parcelId}` }] : [],
+  );
 
   const status = liveStatus ?? params.status;
 

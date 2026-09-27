@@ -1,23 +1,13 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
-import { getAdminStats } from '@/services/admin.service';
-import type { AdminStats } from '@/services/admin.service';
+import { useAdminStats } from '@/hooks/useAdminStats';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 export default function Reports() {
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getAdminStats()
-      .then(setStats)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: stats, loading } = useAdminStats();
 
   if (loading) return <LoadingState />;
 

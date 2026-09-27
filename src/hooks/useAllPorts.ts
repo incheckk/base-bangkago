@@ -1,35 +1,31 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRealtimeQuery } from './useRealtimeQuery';
-import { getStopsByRoute } from '../services/route.service';
-import type { RouteStopDoc } from '../types/models';
+import { getAllPorts } from '../services/route.service';
+import type { PortDoc } from '../types/models';
 
-export function useRouteStops(routeId: string | null) {
-  const [data, setData] = useState<RouteStopDoc[]>([]);
+export function useAllPorts() {
+  const [data, setData] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
 
   const load = useCallback(async () => {
-    if (!routeId) { setData([]); setLoading(false); return; }
     const id = ++seq.current;
     try {
-      const rows = await getStopsByRoute(routeId);
+      const rows = await getAllPorts();
       if (id !== seq.current) return;
       setData(rows);
       setLoading(false);
       setError(null);
     } catch (e: any) {
       if (id !== seq.current) return;
-      setError(e.message ?? 'Failed to load route stops');
+      setError(e.message ?? 'Failed to load ports');
       setLoading(false);
     }
-  }, [routeId]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
-  useRealtimeQuery(
-    load,
-    routeId ? [{ table: 'route_stops', filter: `route_id=eq.${routeId}` }] : [],
-  );
+  useRealtimeQuery(load, [{ table: 'ports' }]);
 
-  return { data, loading, error };
+  return { data, loading, error, refresh: load };
 }

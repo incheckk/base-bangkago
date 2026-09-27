@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
@@ -7,13 +7,14 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { LoadingState } from '@/components/States';
-import { getAllRoutes, createRoute, updateRoute, deleteRoute, getAllPorts } from '@/services/route.service';
-import type { RouteDoc, PortDoc } from '@/types/models';
+import { useRoutes } from '@/hooks/useRoutes';
+import { useAllPorts } from '@/hooks/useAllPorts';
+import { createRoute, updateRoute, deleteRoute } from '@/services/route.service';
+import type { RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 export default function ManageRoutes() {
-  const [routes, setRoutes] = useState<RouteDoc[]>([]);
-  const [ports, setPorts] = useState<PortDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: routes, loading, refresh } = useRoutes();
+  const { data: ports } = useAllPorts();
   const [showForm, setShowForm] = useState(false);
 
   const [editId, setEditId] = useState<string | null>(null);
@@ -22,22 +23,6 @@ export default function ManageRoutes() {
   const [baseFare, setBaseFare] = useState('');
   const [distanceKm, setDistanceKm] = useState('');
   const [estimatedMinutes, setEstimatedMinutes] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      const [r, p] = await Promise.all([getAllRoutes(), getAllPorts()]);
-      setRoutes(r);
-      setPorts(p);
-    } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function resetForm() {
     setEditId(null);
@@ -77,7 +62,7 @@ export default function ManageRoutes() {
         await createRoute(routeData);
       }
       resetForm();
-      loadData();
+      void refresh();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Failed to save route');
     }
@@ -92,7 +77,7 @@ export default function ManageRoutes() {
         onPress: async () => {
           try {
             await deleteRoute(routeId);
-            loadData();
+            void refresh();
           } catch (e: any) {
             Alert.alert('Error', e.message ?? 'Failed to delete');
           }

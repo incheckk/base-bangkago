@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { useChannelId } from './useChannelId';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRealtimeQuery } from './useRealtimeQuery';
 import { getWallet, getWalletTransactions, topUpWallet } from '../services/wallet.service';
 import type { WalletDoc, WalletTransactionDoc } from '../types/models';
 
@@ -17,45 +16,43 @@ export function useWallet(bangkeroId: string | null): Result {
   const [transactions, setTransactions] = useState<WalletTransactionDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bangkeroId) { setWallet(null); setTransactions([]); setLoading(false); return; }
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const w = await getWallet(bangkeroId);
-        if (cancelled) return;
-        setWallet(w);
-        if (w) {
-          const txs = await getWalletTransactions(w.walletId);
-          if (cancelled) return;
-          setTransactions(txs);
-        }
-        setLoading(false);
-        setError(null);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e.message ?? 'Failed to load wallet');
-        setLoading(false);
-      }
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const id = ++seq.current;
     try {
-      channel = supabase.channel(`wallet-changes-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets', filter: `bangkero_id=eq.${bangkeroId}` }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
+      const w = await getWallet(bangkeroId);
+      if (id !== seq.current) return;
+      setWallet(w);
+      if (w) {
+        const txs = await getWalletTransactions(w.walletId);
+        if (id !== seq.current) return;
+        setTransactions(txs);
+      } else {
+        setTransactions([]);
+      }
+      setLoading(false);
+      setError(null);
+    } catch (e: any) {
+      if (id !== seq.current) return;
+      setError(e.message ?? 'Failed to load wallet');
+      setLoading(false);
     }
+  }, [bangkeroId]);
 
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [bangkeroId, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  // wallet_transactions is subscribed as well — history stays live even when
+  // the balance row itself doesn't change (e.g. admin-side entries).
+  useRealtimeQuery(
+    load,
+    bangkeroId
+      ? [
+          { table: 'wallets', filter: `bangkero_id=eq.${bangkeroId}` },
+          { table: 'wallet_transactions' },
+        ]
+      : [],
+  );
 
   const topUp = async (amount: number) => {
     if (!wallet) return;

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
@@ -7,12 +7,12 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { LoadingState } from '@/components/States';
-import { getAllPorts, createPort, updatePort, deletePort } from '@/services/route.service';
+import { useAllPorts } from '@/hooks/useAllPorts';
+import { createPort, updatePort, deletePort } from '@/services/route.service';
 import type { PortDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 export default function ManagePorts() {
-  const [ports, setPorts] = useState<PortDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: ports, loading, refresh } = useAllPorts();
   const [showForm, setShowForm] = useState(false);
 
   const [editId, setEditId] = useState<string | null>(null);
@@ -20,21 +20,6 @@ export default function ManagePorts() {
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
-    try {
-      const p = await getAllPorts();
-      setPorts(p);
-    } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Failed to load');
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function resetForm() {
     setEditId(null);
@@ -72,7 +57,7 @@ export default function ManagePorts() {
         await createPort(portData);
       }
       resetForm();
-      loadData();
+      void refresh();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? 'Failed to save port');
     }
@@ -87,7 +72,7 @@ export default function ManagePorts() {
         onPress: async () => {
           try {
             await deletePort(portId);
-            loadData();
+            void refresh();
           } catch (e: any) {
             Alert.alert('Error', e.message ?? 'Failed to delete');
           }

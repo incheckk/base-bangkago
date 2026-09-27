@@ -1,13 +1,12 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
-import { getAllUsers } from '@/services/admin.service';
-import type { UserDoc } from '@/types/models';
+import { useAllUsers } from '@/hooks/useAllUsers';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -23,17 +22,9 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function AllUsersScreen() {
-  const [users, setUsers] = useState<UserDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: users, loading } = useAllUsers();
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    getAllUsers()
-      .then(setUsers)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
 
   const filtered = useMemo(() => {
     let list = users;

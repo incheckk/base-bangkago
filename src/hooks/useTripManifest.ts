@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { useChannelId } from './useChannelId';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRealtimeQuery } from './useRealtimeQuery';
 import {
   getActiveManifest,
   getManifestPassengers,
@@ -24,49 +23,49 @@ export function useTripManifest(bangkeroId: string | null): Result {
   const [parcels, setParcels] = useState<ManifestParcelDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bangkeroId) { setManifest(null); setPassengers([]); setParcels([]); setLoading(false); return; }
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const m = await getActiveManifest(bangkeroId);
-        if (cancelled) return;
-        setManifest(m);
-        if (m) {
-          const [pax, prc] = await Promise.all([
-            getManifestPassengers(m.manifestId),
-            getManifestParcels(m.manifestId),
-          ]);
-          if (cancelled) return;
-          setPassengers(pax);
-          setParcels(prc);
-        }
-        setLoading(false);
-        setError(null);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e.message ?? 'Failed to load manifest');
-        setLoading(false);
-      }
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const id = ++seq.current;
     try {
-      channel = supabase.channel(`manifest-changes-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'trip_manifest', filter: `bangkero_id=eq.${bangkeroId}` }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
+      const m = await getActiveManifest(bangkeroId);
+      if (id !== seq.current) return;
+      setManifest(m);
+      if (m) {
+        const [pax, prc] = await Promise.all([
+          getManifestPassengers(m.manifestId),
+          getManifestParcels(m.manifestId),
+        ]);
+        if (id !== seq.current) return;
+        setPassengers(pax);
+        setParcels(prc);
+      } else {
+        setPassengers([]);
+        setParcels([]);
+      }
+      setLoading(false);
+      setError(null);
+    } catch (e: any) {
+      if (id !== seq.current) return;
+      setError(e.message ?? 'Failed to load manifest');
+      setLoading(false);
     }
+  }, [bangkeroId]);
 
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [bangkeroId, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  // Children are subscribed too — boarding taps and parcel hand-offs mutate
+  // manifest_passengers / manifest_parcels, not just the parent row.
+  useRealtimeQuery(
+    load,
+    bangkeroId
+      ? [
+          { table: 'trip_manifest', filter: `bangkero_id=eq.${bangkeroId}` },
+          { table: 'manifest_passengers' },
+          { table: 'manifest_parcels' },
+        ]
+      : [],
+  );
 
   const doFinalizeManifest = async () => {
     if (!manifest) return;

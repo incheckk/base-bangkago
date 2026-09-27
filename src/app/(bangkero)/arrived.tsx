@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -8,10 +8,9 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useTripManifest } from '@/hooks/useTripManifest';
+import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  getParcelsForBangkero, updateParcelStatus,
-} from '@/services/parcel.service';
+import { updateParcelStatus } from '@/services/parcel.service';
 import { friendlyError } from '@/services/booking.service';
 import { createNotification } from '@/services/notification.service';
 import { supabase } from '@/services/supabase';
@@ -26,9 +25,9 @@ const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelSta
 export default function ArrivedScreen() {
   const { user } = useAuth();
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
+  const { data: parcels } = useBangkeroParcels(user?.id ?? null);
 
   const [completing, setCompleting] = useState(false);
-  const [parcels, setParcels] = useState<ParcelDoc[]>([]);
   const [parcelBusy, setParcelBusy] = useState<string | null>(null);
   const [parcelError, setParcelError] = useState<string | null>(null);
 
@@ -40,20 +39,6 @@ export default function ArrivedScreen() {
     ? Math.round((now.getTime() - departureTime.getTime()) / 60000)
     : null;
 
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await getParcelsForBangkero(user.id);
-        if (!cancelled) setParcels(rows);
-      } catch {
-        if (!cancelled) setParcels([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [user?.id]);
-
   async function advanceParcel(parcel: ParcelDoc) {
     const step = NEXT_STATUS[parcel.status];
     if (!step || parcelBusy) return;
@@ -61,9 +46,6 @@ export default function ArrivedScreen() {
     setParcelError(null);
     try {
       await updateParcelStatus(parcel.parcelId, step.next);
-      setParcels((prev) =>
-        prev.map((p) => (p.parcelId === parcel.parcelId ? { ...p, status: step.next } : p))
-      );
     } catch (e) {
       setParcelError(friendlyError(e));
     }

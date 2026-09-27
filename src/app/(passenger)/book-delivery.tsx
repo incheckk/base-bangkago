@@ -8,8 +8,8 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { usePorts } from '@/hooks/useSupabase';
+import { useRoutes } from '@/hooks/useRoutes';
 import { routeIdFor } from '@/services/booking.service';
-import { getAllRoutes } from '@/services/route.service';
 import type { RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -21,30 +21,15 @@ interface ParcelItem {
 
 export default function BookDelivery() {
   const ports = usePorts();
+  const { data: routes, loading: routesLoading, error: routesError } = useRoutes();
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
   const [receiverName, setReceiverName] = useState('');
   const [receiverContact, setReceiverContact] = useState('');
   const [items, setItems] = useState<ParcelItem[]>([{ itemName: '', quantity: '1', kilogram: '1' }]);
   const [date, setDate] = useState('');
-  const [routes, setRoutes] = useState<RouteDoc[] | null>(null);
-  const [routesError, setRoutesError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    getAllRoutes()
-      .then((r) => {
-        if (alive) setRoutes(r);
-      })
-      .catch((e: unknown) => {
-        if (alive) setRoutesError(e instanceof Error ? e.message : 'Could not load routes.');
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const activeRoutes = (routes ?? []).filter((r) => r.isActive);
+  const activeRoutes = routes.filter((r) => r.isActive);
   const routeFor = (from: string | null, to: string | null): RouteDoc | null => {
     if (!from || !to) return null;
     const id = routeIdFor(from, to);
@@ -52,7 +37,7 @@ export default function BookDelivery() {
   };
 
   useEffect(() => {
-    if (!routes || !fromId || !toId) return;
+    if (!fromId || !toId) return;
     const id = routeIdFor(fromId, toId);
     if (!routes.some((r) => r.isActive && r.routeId === id)) setToId(null);
   }, [fromId, toId, routes]);
@@ -87,7 +72,7 @@ export default function BookDelivery() {
     !!receiverName.trim() &&
     items.some((i) => i.itemName.trim());
 
-  if (ports.loading || routes === null) {
+  if (ports.loading || routesLoading) {
     return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
   }
   if (ports.error || routesError) {

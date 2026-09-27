@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -39,14 +39,27 @@ export default function BangkeroHome() {
   const markActed = (id: string) => setActed((prev) => new Set(prev).add(id));
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const available = bangkero.data?.isAvailable ?? false;
+  /**
+   * Availability flips locally the instant the switch moves; the server value
+   * catches up through realtime. The override is dropped as soon as the two
+   * agree (or the write fails, which reverts the switch immediately).
+   */
+  const [availOverride, setAvailOverride] = useState<boolean | null>(null);
+  const serverAvailable = bangkero.data?.isAvailable ?? false;
+  const available = availOverride ?? serverAvailable;
+
+  useEffect(() => {
+    if (availOverride !== null && availOverride === serverAvailable) setAvailOverride(null);
+  }, [availOverride, serverAvailable]);
 
   async function toggle(next: boolean) {
     if (!uid) return;
     setActionError(null);
+    setAvailOverride(next);
     try {
       await setAvailability(uid, next);
     } catch (e) {
+      setAvailOverride(null);
       setActionError(friendlyError(e));
     }
   }

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { friendlyError } from '@/services/booking.service';
@@ -42,34 +43,32 @@ export default function DepartureScreen() {
   const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.key]);
   const manifestFinalized = manifest?.status === 'finalized';
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bangkeroId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const [bangkaRes, bookingRes] = await Promise.all([
-          supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).maybeSingle(),
-          supabase
-            .from('bookings')
-            .select('route_id')
-            .eq('operator_id', bangkeroId)
-            .eq('trip_stat', 'accepted')
-            .order('accepted_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
-        ]);
-        if (cancelled) return;
-        setHasBangka(!!bangkaRes.data);
-        if (bookingRes.data?.route_id) {
-          const [from, to] = bookingRes.data.route_id.split('__');
-          if (from && to) setRouteContext({ from, to });
-        }
-      } catch {
-        if (!cancelled) setHasBangka(false);
+    try {
+      const [bangkaRes, bookingRes] = await Promise.all([
+        supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).maybeSingle(),
+        supabase
+          .from('bookings')
+          .select('route_id')
+          .eq('operator_id', bangkeroId)
+          .eq('trip_stat', 'accepted')
+          .order('accepted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      setHasBangka(!!bangkaRes.data);
+      if (bookingRes.data?.route_id) {
+        const [from, to] = bookingRes.data.route_id.split('__');
+        if (from && to) setRouteContext({ from, to });
       }
-    })();
-    return () => { cancelled = true; };
+    } catch {
+      setHasBangka(false);
+    }
   }, [bangkeroId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useRefetchOnFocus(load);
 
   function toggleCheck(key: string) {
     setChecked((prev) => ({ ...prev, [key]: !prev[key] }));

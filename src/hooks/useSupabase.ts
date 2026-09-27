@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useChannelId } from './useChannelId';
+import { useRealtimeQuery } from './useRealtimeQuery';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { supabase } from '../services/supabase';
 import type { BangkeroDoc, BookingDoc, PortDoc } from '../types/models';
@@ -18,8 +18,10 @@ const byNewest = (a: BookingDoc, b: BookingDoc) =>
   new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 
 /**
- * Every hook below follows the same shape: fetch once, then subscribe to a
- * Supabase Realtime channel that re-runs the same fetch on any change.
+ * Every hook below follows the same shape: fetch once on mount (and again on
+ * focus/foreground), then let useRealtimeQuery re-run the same fetch on any
+ * change to the tables it reads. `seq` drops out-of-order responses so a slow
+ * stale read can never overwrite a newer one.
  */
 
 /** All active ports, sorted client-side by sortOrder. */
@@ -27,39 +29,25 @@ export function usePorts(): Result<PortDoc[]> {
   const [data, setData] = useState<PortDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    const id = ++seq.current;
+    const { data: rows, error: err } = await supabase.from('ports').select('*');
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData(
+      (rows ?? [])
+        .map(mapPortRow)
+        .filter((p) => p.isActive)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+    );
+    setLoading(false);
+    setError(null);
+  }, []);
 
-    const load = async () => {
-      const { data: rows, error: err } = await supabase.from('ports').select('*');
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData(
-        (rows ?? [])
-          .map(mapPortRow)
-          .filter((p) => p.isActive)
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-      );
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`ports-changes-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'ports' }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'ports' }]);
 
   return { data, loading, error };
 }
@@ -69,37 +57,23 @@ export function useAvailableBangkeroCount(): Result<number> {
   const [data, setData] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
+    const id = ++seq.current;
+    const { count, error: err } = await supabase
+      .from('bangkeros')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_available', true);
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData(count ?? 0);
+    setLoading(false);
+    setError(null);
+  }, []);
 
-    const load = async () => {
-      const { count, error: err } = await supabase
-        .from('bangkeros')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_available', true);
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData(count ?? 0);
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`bangkeros-availability-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'bangkeros' }]);
 
   return { data, loading, error };
 }
@@ -109,43 +83,27 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!passengerId) { setData([]); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
+    const id = ++seq.current;
+    const { data: rows, error: err } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('user_id', passengerId);
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
+    setLoading(false);
+    setError(null);
+  }, [passengerId, max]);
 
-    const load = async () => {
-      const { data: rows, error: err } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('user_id', passengerId);
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`bookings-passenger-${passengerId}-${channelId}`);
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'bookings', filter: `user_id=eq.${passengerId}` },
-          load
-        )
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [passengerId, max, channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    passengerId ? [{ table: 'bookings', filter: `user_id=eq.${passengerId}` }] : [],
+  );
 
   return { data, loading, error };
 }
@@ -158,44 +116,29 @@ export function useOpenRequests(bangkeroUid: string | null): Result<BookingDoc[]
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
+    const id = ++seq.current;
+    const { data: rows, error: err } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('trip_stat', 'open');
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData(
+      (rows ?? [])
+        .map(mapBookingRow)
+        .filter((b) => !b.rejectedBy.includes(bangkeroUid))
+        .sort(byNewest)
+    );
+    setLoading(false);
+    setError(null);
+  }, [bangkeroUid]);
 
-    const load = async () => {
-      const { data: rows, error: err } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('trip_stat', 'open');
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData(
-        (rows ?? [])
-          .map(mapBookingRow)
-          .filter((b) => !b.rejectedBy.includes(bangkeroUid))
-          .sort(byNewest)
-      );
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`bookings-open-requests-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [bangkeroUid, channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(load, bangkeroUid ? [{ table: 'bookings' }] : []);
 
   return { data, loading, error };
 }
@@ -205,43 +148,27 @@ export function useMyTrips(bangkeroUid: string | null, max = 10): Result<Booking
   const [data, setData] = useState<BookingDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bangkeroUid) { setData([]); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
+    const id = ++seq.current;
+    const { data: rows, error: err } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('operator_id', bangkeroUid);
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
+    setLoading(false);
+    setError(null);
+  }, [bangkeroUid, max]);
 
-    const load = async () => {
-      const { data: rows, error: err } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('operator_id', bangkeroUid);
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`bookings-bangkero-${bangkeroUid}-${channelId}`);
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` },
-          load
-        )
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [bangkeroUid, max, channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    bangkeroUid ? [{ table: 'bookings', filter: `operator_id=eq.${bangkeroUid}` }] : [],
+  );
 
   return { data, loading, error };
 }
@@ -251,44 +178,25 @@ export function useBangkero(uid: string | null): Result<BangkeroDoc | null> {
   const [data, setData] = useState<BangkeroDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!uid) { setData(null); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
+    const id = ++seq.current;
+    const { data: row, error: err } = await supabase
+      .from('bangkeros')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData(row ? mapBangkeroRow(row) : null);
+    setLoading(false);
+    setError(null);
+  }, [uid]);
 
-    const load = async () => {
-      const { data: row, error: err } = await supabase
-        .from('bangkeros')
-        .select('*')
-        .eq('id', uid)
-        .maybeSingle();
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData(row ? mapBangkeroRow(row) : null);
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`bangkero-${uid}-${channelId}`);
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
-          load
-        )
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [uid, channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(load, uid ? [{ table: 'bangkeros', filter: `id=eq.${uid}` }] : []);
 
   return { data, loading, error };
 }
@@ -298,44 +206,28 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
   const [data, setData] = useState<BookingDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!bookingId) { setData(null); setLoading(false); return; }
-    let cancelled = false;
-    setLoading(true);
+    const id = ++seq.current;
+    const { data: row, error: err } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('id', bookingId)
+      .maybeSingle();
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); setLoading(false); return; }
+    setData(row ? mapBookingRow(row) : null);
+    setLoading(false);
+    setError(null);
+  }, [bookingId]);
 
-    const load = async () => {
-      const { data: row, error: err } = await supabase
-        .from('bookings')
-        .select('*')
-        .eq('id', bookingId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (err) { setError(err.message); setLoading(false); return; }
-      setData(row ? mapBookingRow(row) : null);
-      setLoading(false);
-      setError(null);
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    try {
-      channel = supabase.channel(`booking-${bookingId}-${channelId}`);
-      channel
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'bookings', filter: `id=eq.${bookingId}` },
-          load
-        )
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
-    }
-
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [bookingId, channelId]);
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    bookingId ? [{ table: 'bookings', filter: `id=eq.${bookingId}` }] : [],
+  );
 
   return { data, loading, error };
 }

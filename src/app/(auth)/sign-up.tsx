@@ -8,6 +8,7 @@ import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
+import { useAuth } from '@/hooks/useAuth';
 import { friendlyAuthError, signUp } from '@/services/auth.service';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { UserRole } from '@/types/models';
@@ -23,6 +24,7 @@ const ROLES: { value: UserRole; label: string; hint: string }[] = [
 type Errors = Partial<Record<'firstName' | 'lastName' | 'phone' | 'password', string>>;
 
 export default function SignUp() {
+  const { refreshProfile } = useAuth();
   const [role, setRole] = useState<UserRole>('passenger');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -48,9 +50,13 @@ export default function SignUp() {
     setBusy(true);
     try {
       await signUp({ phone: e164, password, firstName, lastName, role });
-      // No navigation here — the (auth) guard redirects once the profile doc lands.
+      // The session exists before the users/ row is inserted, so the first
+      // profile read can miss it — re-read now that the row has landed so the
+      // (auth) guard can redirect instead of sitting on a spinner.
+      await refreshProfile();
     } catch (e) {
       setFormError(friendlyAuthError(e));
+    } finally {
       setBusy(false);
     }
   }

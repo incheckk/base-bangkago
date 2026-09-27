@@ -154,6 +154,9 @@ export function friendlyAuthError(e: unknown): string {
   if (message.toLowerCase().includes('rate limit') || message.includes('Too many requests')) {
     return 'Too many attempts. Wait a moment and try again.';
   }
+  if (message.includes('timed out')) {
+    return 'The request took too long. Check your connection and try again.';
+  }
   if (message.includes('Network') || message.includes('fetch')) {
     return 'No connection to the server. Check your network and try again.';
   }

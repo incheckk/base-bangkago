@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { useChannelId } from './useChannelId';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+import { useRealtimeQuery } from './useRealtimeQuery';
 import { fetchNotifications, markNotificationRead } from '../services/notification.service';
 import type { NotificationDoc } from '../types/models';
 
@@ -16,44 +16,29 @@ export function useNotifications(userId: string | null): Result {
   const [data, setData] = useState<NotificationDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!userId) { setData([]); setLoading(false); return; }
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const rows = await fetchNotifications(userId);
-        if (cancelled) return;
-        setData(rows);
-        setLoading(false);
-        setError(null);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e.message ?? 'Failed to load notifications');
-        setLoading(false);
-      }
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+    const id = ++seq.current;
     try {
-      channel = supabase
-        .channel(`notifications-changes-${userId}-${channelId}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` }, load)
-        .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR') {
-            console.warn('[useNotifications] subscription failed, notifications disabled');
-          }
-        });
-    } catch {
-      // Table might not exist — degrade gracefully
+      const rows = await fetchNotifications(userId);
+      if (id !== seq.current) return;
+      setData(rows);
+      setLoading(false);
+      setError(null);
+    } catch (e: any) {
+      if (id !== seq.current) return;
+      setError(e.message ?? 'Failed to load notifications');
+      setLoading(false);
     }
+  }, [userId]);
 
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [userId, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    userId ? [{ table: 'notifications', filter: `user_id=eq.${userId}` }] : [],
+  );
 
   const markAsRead = async (id: string) => {
     try {

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
+import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import {
@@ -59,19 +60,22 @@ export default function BangkeroProfileScreen() {
   const op = bangkero.data;
   const uid = user?.id ?? null;
 
-  useEffect(() => {
+  const loadBangka = useCallback(async () => {
     if (!uid) return;
-    let cancelled = false;
-    (async () => {
+    try {
       const { data } = await supabase
         .from('bangkas')
         .select('capacity')
         .eq('bangkero_id', uid)
         .maybeSingle();
-      if (!cancelled && data) setBangkaCapacity(String(data.capacity ?? ''));
-    })();
-    return () => { cancelled = true; };
+      if (data) setBangkaCapacity(String(data.capacity ?? ''));
+    } catch {
+      // keep the last known capacity
+    }
   }, [uid]);
+
+  useEffect(() => { void loadBangka(); }, [loadBangka]);
+  useRefetchOnFocus(loadBangka);
 
   const initials = profile
     ? `${profile.firstName.charAt(0)}${profile.lastName.charAt(0)}`

@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
-import { useChannelId } from './useChannelId';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRealtimeQuery } from './useRealtimeQuery';
 import { getAllBangkeros, getBangkerosByStatus } from '../services/admin.service';
 import type { BangkeroDoc } from '../types/models';
 
@@ -8,39 +7,25 @@ export function useOperators(status?: string) {
   const [data, setData] = useState<BangkeroDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const channelId = useChannelId();
+  const seq = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        const rows = status ? await getBangkerosByStatus(status) : await getAllBangkeros();
-        if (cancelled) return;
-        setData(rows);
-        setLoading(false);
-        setError(null);
-      } catch (e: any) {
-        if (cancelled) return;
-        setError(e.message ?? 'Failed to load operators');
-        setLoading(false);
-      }
-    };
-
-    load();
-
-    let channel: ReturnType<typeof supabase.channel> | null = null;
+  const load = useCallback(async () => {
+    const id = ++seq.current;
     try {
-      channel = supabase.channel(`operators-changes-${channelId}`);
-      channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bangkeros' }, load)
-        .subscribe();
-    } catch {
-      // realtime unavailable — the screen keeps working without live updates
+      const rows = status ? await getBangkerosByStatus(status) : await getAllBangkeros();
+      if (id !== seq.current) return;
+      setData(rows);
+      setLoading(false);
+      setError(null);
+    } catch (e: any) {
+      if (id !== seq.current) return;
+      setError(e.message ?? 'Failed to load operators');
+      setLoading(false);
     }
+  }, [status]);
 
-    return () => { cancelled = true; if (channel) supabase.removeChannel(channel); };
-  }, [status, channelId]);
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'bangkeros' }]);
 
   return { data, loading, error };
 }

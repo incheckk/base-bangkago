@@ -27,6 +27,7 @@ function mapBangkeroRow(row: any): BangkeroDoc {
     permitNumber: row.permit_number,
     displayName: row.display_name,
     isAvailable: row.is_available,
+    ratingPenalty: row.rating_penalty ?? 0,
     updatedAt: row.updated_at,
   };
 }
@@ -122,14 +123,17 @@ export async function getAdminStats(): Promise<AdminStats> {
     supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending'),
     supabase.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
     supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', today),
-    supabase.from('payments').select('amount').eq('payment_status', 'completed'),
-    supabase.from('payments').select('amount').eq('payment_status', 'completed').gte('created_at', today),
+    // Revenue follows the money: the fare is collected when the trip
+    // completes, so only completed trips count — cancelled and no-show
+    // trips contribute 0, and cash / GCash behave identically.
+    supabase.from('bookings').select('total_price').eq('trip_stat', 'completed'),
+    supabase.from('bookings').select('total_price').eq('trip_stat', 'completed').gte('completed_at', today),
     supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo),
-    supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('trip_stat', 'completed').gte('created_at', today),
+    supabase.from('bookings').select('*', { count: 'exact', head: true }).eq('trip_stat', 'completed').gte('completed_at', today),
   ]);
 
-  const totalRevenue = (revenueAllResult.data ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
-  const revenueToday = (revenueTodayResult.data ?? []).reduce((sum, p) => sum + (p.amount ?? 0), 0);
+  const totalRevenue = (revenueAllResult.data ?? []).reduce((sum, b) => sum + (b.total_price ?? 0), 0);
+  const revenueToday = (revenueTodayResult.data ?? []).reduce((sum, b) => sum + (b.total_price ?? 0), 0);
 
   return {
     totalUsers: usersCount.count ?? 0,

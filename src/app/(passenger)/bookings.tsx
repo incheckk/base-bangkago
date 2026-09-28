@@ -68,7 +68,8 @@ export default function BookingsScreen() {
             {activeBookings.map((b) => (
               <Pressable
                 key={b.bookingId}
-                onPress={() => router.push(`/(passenger)/trip/${b.bookingId}`)}
+                // Booking Details owns the Cancel button; Trip Details doesn't.
+                onPress={() => router.push(`/(passenger)/booking/${b.bookingId}`)}
                 style={styles.card}
               >
                 <View style={styles.cardTop}>

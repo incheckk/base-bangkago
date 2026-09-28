@@ -64,6 +64,8 @@ export interface BangkeroDoc {
   permitNumber: string | null;
   displayName: string;
   isAvailable: boolean;
+  /** Deducted from the 5★ average by incident (missed pickup, false onboard). */
+  ratingPenalty: number;
   updatedAt: string; // ISO 8601
 }
 
@@ -86,6 +88,24 @@ export interface PortDoc {
   longitude: number | null;
   sortOrder: number;
   isActive: boolean;
+  /** GPS perimeter radius around the port, in meters (default 300, admin-tunable). */
+  geofenceRadiusM: number;
+}
+
+/**
+ * One boat's arrival at a port's perimeter (migration 008). leftAt null
+ * means it is on the list right now; enteredAt is the FCFS clock.
+ */
+export interface PortQueueDoc {
+  queueId: string;
+  portId: string;
+  bangkeroId: string;
+  enteredAt: string;
+  leftAt: string | null;
+  /** Joined from bangkeros when the caller asks for it. */
+  displayName?: string | null;
+  /** Joined from bangkeros — listed-but-offline boats still show on the list. */
+  isAvailable?: boolean | null;
 }
 
 export interface RouteDoc {
@@ -122,7 +142,13 @@ export interface BookingDoc {
   operatorName: string | null;
   operatorBoatName: string | null;
   rejectedBy: string[];
+  /** Whose offer this open request is held for (FCFS dispatch, 008). */
+  heldBy: string | null;
+  /** When the hold expires and cascades to the next boat in line. */
+  holdExpiresAt: string | null;
   acceptedAt: string | null;
+  /** Set when the bangkero confirms passengers are on board. */
+  onboardedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
 }

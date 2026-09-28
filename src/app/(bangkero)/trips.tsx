@@ -57,9 +57,21 @@ export default function TripsScreen() {
             <View key={trip.bookingId} style={styles.card}>
               <View style={styles.cardTop}>
                 <Text style={styles.cardRef}>{trip.ref}</Text>
-                <View style={[styles.statusBadge, trip.status === 'completed' ? styles.statusCompleted : styles.statusActive]}>
-                  <Text style={[styles.statusText, trip.status === 'completed' ? styles.statusTextCompleted : styles.statusTextActive]}>
-                    {trip.status === 'completed' ? 'Completed' : 'Active'}
+                <View style={[
+                  styles.statusBadge,
+                  trip.status === 'completed' ? styles.statusCompleted
+                    : trip.status === 'cancelled' ? styles.statusCancelled
+                      : styles.statusActive,
+                ]}>
+                  <Text style={[
+                    styles.statusText,
+                    trip.status === 'completed' ? styles.statusTextCompleted
+                      : trip.status === 'cancelled' ? styles.statusTextCancelled
+                        : styles.statusTextActive,
+                  ]}>
+                    {trip.status === 'completed' ? 'Completed'
+                      : trip.status === 'cancelled' ? 'Cancelled'
+                        : 'Active'}
                   </Text>
                 </View>
               </View>
@@ -117,9 +129,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
   },
   statusCompleted: { backgroundColor: colors.primaryTint },
+  statusCancelled: { backgroundColor: colors.dangerTint },
   statusActive: { backgroundColor: colors.warningTint },
   statusText: { flexShrink: 1, fontSize: 11, fontWeight: '700' },
   statusTextCompleted: { color: colors.primary },
+  statusTextCancelled: { color: colors.danger },
   statusTextActive: { color: colors.warning },
 
   route: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },

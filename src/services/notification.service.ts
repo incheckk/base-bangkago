@@ -1,3 +1,5 @@
+import * as Notifications from 'expo-notifications';
+
 import { supabase } from './supabase';
 import type { NotificationDoc } from '../types/models';
 
@@ -42,4 +44,25 @@ export async function createNotification(
     .insert({ user_id: userId, title, message });
 
   if (error) throw error;
+}
+
+/**
+ * Fires a notification on THIS device only (no push, no DB row) — for moments
+ * where the event matters only to whoever is holding the phone right now.
+ * Silently gives up when permission is unavailable.
+ */
+export async function scheduleLocalNotification(title: string, body: string): Promise<void> {
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      const req = await Notifications.requestPermissionsAsync();
+      if (req.status !== 'granted') return;
+    }
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body },
+      trigger: null,
+    });
+  } catch {
+    // notifications unavailable — the in-app surfaces still carry the message
+  }
 }

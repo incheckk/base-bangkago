@@ -12,13 +12,13 @@ export default function BookingConfirmed() {
   const params = useLocalSearchParams<{
     fromName: string;
     toName: string;
-    date: string;
-    time: string;
     count: string;
-    passengerType: string;
+    serviceType?: string;
     fare: string;
     ref?: string;
     bookingId?: string;
+    parcelId?: string;
+    receiverName?: string;
   }>();
 
   const bookingRef = params.ref ?? params.bookingId ?? '—';
@@ -43,10 +43,11 @@ export default function BookingConfirmed() {
 
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);
+  const isCargo = params.serviceType === 'cargo' && !!params.parcelId;
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Booking Confirmed" showDrawer={false} />
+      <PassengerScreenHeader title="Booking Requested" showDrawer={false} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -57,7 +58,7 @@ export default function BookingConfirmed() {
           </Animated.View>
 
           <Animated.View style={{ opacity: fadeAnim }}>
-            <Text style={styles.title}>Booking Confirmed!</Text>
+            <Text style={styles.title}>Booking Requested!</Text>
             <Text style={styles.refLabel}>Booking Reference</Text>
             <Text style={styles.refValue}>{bookingRef}</Text>
           </Animated.View>
@@ -77,32 +78,48 @@ export default function BookingConfirmed() {
           <View style={styles.divider} />
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Date</Text>
-            <Text style={styles.detailValue}>{params.date ?? '—'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Time</Text>
-            <Text style={styles.detailValue}>{params.time ?? '—'}</Text>
+            <Text style={styles.detailLabel}>Trip date</Text>
+            <Text style={styles.detailValue}>
+              Today · {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+            </Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Passengers</Text>
-            <Text style={styles.detailValue} numberOfLines={1}>
-              {paxCount} · {(params.passengerType ?? 'Regular').charAt(0).toUpperCase() +
-                (params.passengerType ?? 'Regular').slice(1)}
-            </Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{paxCount}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total Paid</Text>
+            <Text style={styles.totalLabel}>Total to be paid</Text>
             <Text style={styles.totalValue}>₱{fare}</Text>
           </View>
         </Animated.View>
 
         <Animated.View style={[styles.actions, { opacity: fadeAnim }]}>
-          <PrimaryButton
-            label="Track Boat"
-            onPress={() => router.replace('/(passenger)/find-bangkero')}
-          />
+          {isCargo ? (
+            <PrimaryButton
+              label="Track Delivery"
+              onPress={() => router.replace({
+                pathname: '/(passenger)/track-delivery',
+                params: {
+                  parcelId: params.parcelId,
+                  status: 'pending',
+                  receiverName: params.receiverName ?? '',
+                  toPort: params.toName ?? '',
+                },
+              })}
+            />
+          ) : (
+            <PrimaryButton
+              label="View Booking"
+              onPress={() =>
+                router.replace(
+                  params.bookingId
+                    ? `/(passenger)/booking/${params.bookingId}`
+                    : '/(passenger)/home',
+                )
+              }
+            />
+          )}
           <PrimaryButton
             label="Back to Home"
             variant="secondary"

@@ -7,19 +7,19 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 /**
- * Shortcuts, not the booking form — tapping one opens Book a Ride with the
- * departure port already filled in.
+ * Shortcuts, not the booking form — tapping one opens Book a Ride with both
+ * ports already filled in, so the route you tapped is the route you book.
  *
  * Fares and durations mirror the seeded `routes` rows so this screen agrees
  * with the database instead of quoting numbers from a different region.
  */
 const QUICK_ROUTES: {
-  fromId: string; from: string; to: string; fare: number; minutes: number;
+  fromId: string; from: string; toId: string; to: string; fare: number; minutes: number;
 }[] = [
-  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', to: 'Olango Island Port', fare: 150, minutes: 15 },
-  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', to: 'Olango Island Port', fare: 180, minutes: 20 },
-  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', to: 'Caohagan Island', fare: 280, minutes: 35 },
-  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', to: 'Nalusuan Island', fare: 400, minutes: 55 },
+  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', toId: 'olango-port', to: 'Olango Island Port', fare: 150, minutes: 15 },
+  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', toId: 'olango-port', to: 'Olango Island Port', fare: 180, minutes: 20 },
+  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', toId: 'caohagan', to: 'Caohagan Island', fare: 280, minutes: 35 },
+  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', toId: 'nalusuan', to: 'Nalusuan Island', fare: 400, minutes: 55 },
 ];
 
 export default function QuickRide() {
@@ -44,10 +44,10 @@ export default function QuickRide() {
           {QUICK_ROUTES.map((r, i) => (
             <Pressable
               key={`${r.fromId}-${r.to}-${i}`}
-              // Carries the departure port through, so the form opens part-filled.
+              // Carries both ports through, so the form opens fully part-filled.
               onPress={() => router.push({
                 pathname: '/(passenger)/book-ride',
-                params: { fromId: r.fromId, from: r.from },
+                params: { fromId: r.fromId, from: r.from, toId: r.toId, to: r.to },
               })}
               accessibilityRole="button"
               accessibilityLabel={`${r.from} to ${r.to}, ${r.fare} pesos, ${r.minutes} minutes`}

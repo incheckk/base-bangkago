@@ -78,3 +78,48 @@ export async function getAverageRating(bangkeroId: string): Promise<number> {
   if (!data || data.length === 0) return 0;
   return data.reduce((sum, r) => sum + r.score, 0) / data.length;
 }
+
+/** Star deductions applied by incident (mirrors 007_accepted_trip_rules.sql). */
+export const PENALTY_MISSED_PICKUP = 0.5;
+export const PENALTY_FALSE_ONBOARD = 1.0;
+/** At or below this effective rating a bangkero can no longer accept bookings. */
+export const MIN_ACCEPT_RATING = 3.0;
+
+/**
+ * What the accept gate sees: the passenger average — an unrated bangkero gets
+ * the benefit of the doubt as 5.0 — minus accumulated penalties.
+ *
+ * Fails open on any lookup error (including the rating_penalty column missing
+ * before migration 007): a transient failure must never block accepting work.
+ */
+export async function getEffectiveRating(bangkeroId: string): Promise<number> {
+  try {
+    const [ratingsRes, bangkeroRes] = await Promise.all([
+      supabase.from('ratings').select('score').eq('bangkero_id', bangkeroId),
+      supabase.from('bangkeros').select('*').eq('id', bangkeroId).maybeSingle(),
+    ]);
+    if (ratingsRes.error) throw ratingsRes.error;
+    if (bangkeroRes.error) throw bangkeroRes.error;
+
+    const rows = ratingsRes.data ?? [];
+    const avg = rows.length === 0
+      ? 5
+      : rows.reduce((sum, r) => sum + r.score, 0) / rows.length;
+    const penalty = Number(bangkeroRes.data?.rating_penalty ?? 0) || 0;
+    return Math.max(0, avg - penalty);
+  } catch {
+    return 5;
+  }
+}
+
+/**
+ * Deducts stars via the SECURITY DEFINER RPC (RLS stops passengers writing
+ * bangkeros directly). Accepts only the fixed incident increments.
+ */
+export async function applyRatingPenalty(bangkeroId: string, stars: number): Promise<void> {
+  const { error } = await supabase.rpc('apply_bangkero_penalty', {
+    p_bangkero: bangkeroId,
+    p_stars: stars,
+  });
+  if (error) throw error;
+}

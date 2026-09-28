@@ -3,6 +3,7 @@ import type {
   BangkeroDoc,
   BookingDoc,
   PortDoc,
+  PortQueueDoc,
   RouteDoc,
   UserDoc,
 } from '../types/models';
@@ -33,6 +34,8 @@ export function mapBangkeroRow(row: any): BangkeroDoc {
     permitNumber: row.permit_number,
     displayName: row.display_name,
     isAvailable: row.is_available,
+    // ?? 0 keeps this working before migration 007 adds the column
+    ratingPenalty: row.rating_penalty ?? 0,
     updatedAt: row.updated_at,
   };
 }
@@ -59,6 +62,21 @@ export function mapPortRow(row: any): PortDoc {
     longitude: row.longitude,
     sortOrder: row.sort_order,
     isActive: row.is_active,
+    // ?? 300 keeps this working before migration 008 adds the column
+    geofenceRadiusM: row.geofence_radius_m ?? 300,
+  };
+}
+
+export function mapPortQueueRow(row: any): PortQueueDoc {
+  return {
+    queueId: row.id,
+    portId: row.port_id,
+    bangkeroId: row.bangkero_id,
+    enteredAt: row.entered_at,
+    leftAt: row.left_at ?? null,
+    // Present only when the query joined bangkeros(*)
+    displayName: row.bangkeros?.display_name ?? null,
+    isAvailable: row.bangkeros?.is_available ?? null,
   };
 }
 
@@ -98,7 +116,11 @@ export function mapBookingRow(row: any): BookingDoc {
     operatorName: row.operator_name,
     operatorBoatName: row.operator_boat_name,
     rejectedBy: row.rejected_by ?? [],
+    // ?? null keeps this working before migration 008 adds the columns
+    heldBy: row.held_by ?? null,
+    holdExpiresAt: row.hold_expires_at ?? null,
     acceptedAt: row.accepted_at,
+    onboardedAt: row.onboarded_at ?? null,
     completedAt: row.completed_at,
     cancelledAt: row.cancelled_at,
   };

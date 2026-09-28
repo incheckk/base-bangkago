@@ -68,6 +68,7 @@ export async function signUp({
       permitNumber: null,
       displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
       isAvailable: false,
+      ratingPenalty: 0,
       updatedAt: new Date().toISOString(),
     };
 
@@ -160,11 +161,67 @@ export function friendlyAuthError(e: unknown): string {
   if (message.includes('Network') || message.includes('fetch')) {
     return 'No connection to the server. Check your network and try again.';
   }
+  // No-show ban: keep the sentence verbatim — it carries the minutes left.
+  if (message.includes('marked as a no-show')) {
+    return message;
+  }
   if (message.includes('disabled') || message.includes('banned')) {
     return 'This account has been disabled.';
   }
   if (message.toLowerCase().includes('permission') || message.toLowerCase().includes('policy')) {
     return 'You do not have permission to do that.';
+  }
+  if (message.includes('already have a pending booking')) {
+    return 'You already have a pending booking. Only one active booking at a time.';
+  }
+  if (message.includes('rating is too low')) {
+    return 'Your rating is 3.0★ or below — you can no longer accept bookings until it improves.';
+  }
+  if (message.includes('taken by another bangkero')) {
+    return 'Another bangkero already took that trip.';
+  }
+  if (message.includes('confirm passengers on board')) {
+    return 'Confirm everyone is on board before completing this trip.';
+  }
+  if (message.includes('already cancelled or has changed')) {
+    return 'This booking was already cancelled or has changed.';
+  }
+  if (message.includes('staying online')) {
+    return message;
+  }
+  if (message.includes('this trip changed')) {
+    return 'This trip changed — pull to refresh.';
+  }
+  if (message.includes('not your wallet')) {
+    return 'You can only top up your own wallet.';
+  }
+  if (message.includes('no booking with this bangkero')) {
+    return 'You have no trip with that bangkero.';
+  }
+  // ---- Port-queue dispatch (008) — RPC sentences pass through ----
+  if (message.includes('not queued at this port')) {
+    return 'Park inside the port queue first — your boat is not listed at this port.';
+  }
+  if (message.includes('still entering the port queue')) {
+    return 'Your boat is still entering the port queue — wait out the 5-minute dwell.';
+  }
+  if (message.includes('offered to another boat')) {
+    return 'This request is being offered to another boat right now.';
+  }
+  if (message.includes('already passed on this request')) {
+    return 'You already passed on this request.';
+  }
+  if (message.includes('accepted trips to another destination')) {
+    return 'You have accepted trips to another destination — finish them before accepting this one.';
+  }
+  if (message.includes('not enough space on your boat')) {
+    return 'Not enough space on your boat for this trip.';
+  }
+  if (message.includes('no recent GPS position')) {
+    return 'Your boat has no recent GPS position — keep the app open at the port.';
+  }
+  if (message.includes('turn on availability')) {
+    return 'You are offline — turn on availability to accept.';
   }
   if (message) return `Something went wrong (${message}).`;
   return 'Something went wrong. Please try again.';

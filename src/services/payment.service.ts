@@ -43,15 +43,3 @@ export async function getPaymentByBooking(bookingId: string): Promise<PaymentDoc
   if (error) throw error;
   return data ? mapPaymentRow(data) : null;
 }
-
-export async function updatePaymentStatus(
-  paymentId: string,
-  status: 'completed' | 'failed' | 'refunded'
-): Promise<void> {
-  const { error } = await supabase
-    .from('payments')
-    .update({ payment_status: status })
-    .eq('id', paymentId);
-
-  if (error) throw error;
-}

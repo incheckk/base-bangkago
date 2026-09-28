@@ -8,10 +8,11 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { createBooking, friendlyError } from '@/services/booking.service';
 import { createParcel } from '@/services/parcel.service';
+import { createPassengerDetail } from '@/services/passenger-detail.service';
 import { createPayment } from '@/services/payment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
-type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'bank_transfer';
+type PaymentMethod = 'cash' | 'gcash';
 
 const PAYMENT_METHODS: {
   key: PaymentMethod;
@@ -20,10 +21,12 @@ const PAYMENT_METHODS: {
   description: string;
 }[] = [
   { key: 'cash', label: 'Cash', icon: '💵', description: 'Pay onboard to the bangkero' },
-  { key: 'gcash', label: 'GCash', icon: '📱', description: 'Send payment via GCash' },
-  { key: 'maya', label: 'Maya', icon: '💳', description: 'Pay through Maya wallet' },
-  { key: 'bank_transfer', label: 'Bank Transfer', icon: '🏦', description: 'Transfer via your bank app' },
+  { key: 'gcash', label: 'GCash', icon: '📱', description: 'Pay via GCash on board' },
 ];
+
+/** Rides happen the day you book them — there is no date to pick. */
+const todayLabel = () =>
+  `Today · ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}`;
 
 export default function PaymentScreen() {
   const { profile, profileLoading } = useAuth();
@@ -32,12 +35,10 @@ export default function PaymentScreen() {
     fromName: string;
     toId: string;
     toName: string;
-    date: string;
-    time: string;
     count: string;
-    passengerType: string;
     serviceType: string;
     fare: string;
+    companionsJson?: string;
     receiverName?: string;
     receiverContact?: string;
     itemsJson?: string;
@@ -69,8 +70,34 @@ export default function PaymentScreen() {
         totalFare: fare,
       });
 
+      // Companions ride under this booking. A failed insert must never block
+      // the confirmation screen — the booking itself already exists.
+      if (serviceType === 'passenger' && params.companionsJson) {
+        try {
+          const companions = JSON.parse(params.companionsJson) as {
+            firstName: string; lastName: string; age?: number; sex?: string; contact?: string;
+          }[];
+          await Promise.all(
+            companions.map((c) =>
+              createPassengerDetail({
+                firstName: c.firstName,
+                lastName: c.lastName,
+                age: c.age,
+                sex: c.sex,
+                contactNumber: c.contact,
+                passengerType: 'regular',
+                bookingId,
+              }).catch(() => null),
+            ),
+          );
+        } catch {
+          if (__DEV__) console.warn('[payment] companions json malformed');
+        }
+      }
+
       await createPayment(bookingId, fare, method);
 
+      let parcelId: string | undefined;
       if (serviceType === 'cargo' && params.receiverName) {
         let items: { itemName: string; quantity: number; kilogram: number }[] = [];
         if (params.itemsJson) {
@@ -91,7 +118,7 @@ export default function PaymentScreen() {
             items = [];
           }
         }
-        await createParcel({
+        const parcel = await createParcel({
           receiverName: params.receiverName,
           receiverContact: params.receiverContact || undefined,
           totalPrice: fare,
@@ -99,6 +126,7 @@ export default function PaymentScreen() {
           bookingId,
           items,
         });
+        parcelId = parcel.parcelId;
       }
 
       router.push({
@@ -108,6 +136,7 @@ export default function PaymentScreen() {
           paymentMethod: method,
           bookingId,
           ref,
+          ...(parcelId ? { parcelId } : {}),
         },
       });
     } catch (e) {
@@ -135,34 +164,16 @@ export default function PaymentScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryRowLabel}>Date</Text>
-              <Text style={styles.summaryRowValue}>{params.date ?? '—'}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryRowLabel}>Time</Text>
-              <Text style={styles.summaryRowValue}>{params.time ?? '—'}</Text>
+              <Text style={styles.summaryRowLabel}>Trip date</Text>
+              <Text style={styles.summaryRowValue}>{todayLabel()}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryRowLabel}>Passengers</Text>
               <Text style={styles.summaryRowValue}>{paxCount}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryRowLabel}>Type</Text>
-              <Text style={styles.summaryRowValue}>
-                {(params.passengerType ?? 'Regular').charAt(0).toUpperCase() +
-                  (params.passengerType ?? 'Regular').slice(1)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryRowLabel}>Service</Text>
-              <Text style={styles.summaryRowValue}>
-                {(params.serviceType ?? 'passenger').charAt(0).toUpperCase() +
-                  (params.serviceType ?? 'passenger').slice(1)}
-              </Text>
-            </View>
             <View style={styles.summaryDivider} />
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>Total to be paid</Text>
               <Text style={styles.totalValue}>₱{fare}</Text>
             </View>
           </View>

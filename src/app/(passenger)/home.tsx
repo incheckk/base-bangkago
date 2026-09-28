@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
+import { Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming,
@@ -9,14 +10,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useAvailableBangkeroCount, usePorts, useRecentBookings } from '@/hooks/useSupabase';
+import { useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings } from '@/hooks/useSupabase';
+import { scheduleLocalNotification } from '@/services/notification.service';
+import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { PortDoc } from '@/types/models';
+import type { BookingDoc, PortDoc } from '@/types/models';
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -34,6 +38,9 @@ const SHEET_EXPANDED = Math.round(SCREEN_H * 0.72);
 const SHEET_COLLAPSED = 232;
 const DRAG_RANGE = SHEET_EXPANDED - SHEET_COLLAPSED;
 
+/** Fixed height of the floating active-booking banner; the port callout stacks over it. */
+const ACTIVE_BANNER_H = 64;
+
 const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; route?: string }[] = [
   { key: 'ride', icon: 'boat', label: 'Boat Ride', enabled: true },
   { key: 'island', icon: 'island', label: 'Island Hop', enabled: true },
@@ -46,11 +53,108 @@ export default function PassengerHome() {
   const { user, profile } = useAuth();
   const ports = usePorts();
   const bangkeros = useAvailableBangkeroCount();
-  const bookings = useRecentBookings(user?.id ?? null, 3);
+  const bookings = useRecentBookings(user?.id ?? null, 10);
   const notifications = useNotifications(user?.id ?? null);
+
+  // ---------- nearest port waiting line (Phase 2, 008) ----------
+  // One soft foreground GPS ask on mount. Denied or no fix → the card
+  // simply never renders; no nagging, no re-prompt loop.
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (alive) setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      } catch {
+        // no fix — the waiting card stays hidden
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const nearPort = ((): PortDoc | null => {
+    if (!myPos) return null;
+    let best: PortDoc | null = null;
+    let bestD = Infinity;
+    for (const p of ports.data) {
+      if (p.latitude == null || p.longitude == null) continue;
+      const d = haversineM(myPos.lat, myPos.lng, p.latitude, p.longitude);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best;
+  })();
+  const nearPortId = nearPort?.portId ?? null;
+  const nearQueue = usePortQueue(nearPortId);
+
+  // How far the nearest *queued* boat is from the passenger — re-read
+  // whenever the queue itself changes (boats join / drop out).
+  const [nearestBoatDistance, setNearestBoatDistance] = useState<number | null>(null);
+  useEffect(() => {
+    setNearestBoatDistance(null);
+    if (!nearPortId || !myPos) return;
+    const portId = nearPortId;
+    const { lat, lng } = myPos;
+    let alive = true;
+    getNearestQueuedBoatDistance(portId, lat, lng)
+      .then((d) => {
+        if (alive) setNearestBoatDistance(d);
+      })
+      .catch(() => {
+        // distance is a nice-to-have; the count still shows
+      });
+    return () => {
+      alive = false;
+    };
+  }, [nearPortId, myPos, nearQueue.data.length]);
+
+  // Newest first. The banner must surface a live booking even when newer
+  // finished trips would push it out of the top-3 recent list.
+  const activeBookings = bookings.data.filter(
+    (b) => b.status === 'open' || b.status === 'accepted'
+  );
+  const bannerBooking = activeBookings[0] ?? null;
+  const recentTrips = bookings.data.slice(0, 3);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedPort, setSelectedPort] = useState<PortDoc | null>(null);
+
+  /**
+   * "Your trip was accepted!" pops once per accept, and never for bookings
+   * that were already accepted when this screen loaded — the first data pass
+   * seeds them as known, so only accepts observed live interrupt.
+   */
+  const [acceptedNotice, setAcceptedNotice] = useState<BookingDoc | null>(null);
+  const dismissedRef = useRef<Set<string>>(new Set());
+  const seededRef = useRef(false);
+
+  useEffect(() => {
+    if (bookings.loading) return;
+    if (!seededRef.current) {
+      seededRef.current = true;
+      bookings.data.forEach((b) => {
+        if (b.status === 'accepted' && !b.onboardedAt) dismissedRef.current.add(b.bookingId);
+      });
+      return;
+    }
+    const fresh = bookings.data.find(
+      (b) => b.status === 'accepted' && !b.onboardedAt && !dismissedRef.current.has(b.bookingId)
+    );
+    if (!fresh) return;
+    dismissedRef.current.add(fresh.bookingId);
+    setAcceptedNotice(fresh);
+    scheduleLocalNotification(
+      'Your trip was accepted',
+      `${fresh.operatorName ?? 'A bangkero'} accepted ${fresh.ref}. Head to ${fresh.fromPortName}.`
+    ).catch(() => {});
+  }, [bookings.loading, bookings.data]);
 
   // Starts collapsed so the map reads as the main surface on first open.
   const translateY = useSharedValue(DRAG_RANGE);
@@ -189,9 +293,60 @@ export default function PassengerHome() {
         </Text>
       </View>
 
+      {/* ---------- nearest port queue pill (008) ----------
+          Only with a GPS fix — shows how many boats are actually lined
+          up at the closest port, and how far away the nearest one is. */}
+      {nearPort && !nearQueue.loading && (
+        <View style={[styles.statusPill, { top: insets.top + 114 }]}>
+          <View style={[styles.dot, nearQueue.data.length === 0 && styles.dotOff]} />
+          <Text style={styles.statusText} numberOfLines={1}>
+            {nearQueue.data.length === 0
+              ? `No boats waiting at ${nearPort.portName}`
+              : `${nearQueue.data.length} waiting at ${nearPort.portName}${
+                  nearestBoatDistance != null ? ` · ${formatDistance(nearestBoatDistance)}` : ''
+                }`}
+          </Text>
+        </View>
+      )}
+
+      {/* ---------- active booking banner ----------
+          Sits just above the collapsed sheet and rides the same translateY as
+          the port callout, so expanding the sheet slides it underneath —
+          where RECENT TRIPS is already showing the same bookings. */}
+      {bannerBooking && (
+        <Animated.View style={[styles.bannerWrap, calloutStyle]}>
+          <Pressable
+            onPress={() => router.push(`/(passenger)/booking/${bannerBooking.bookingId}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open booking for ${bannerBooking.fromPortName} to ${bannerBooking.toPortName}`}
+            style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+          >
+            <View style={styles.bannerDot} />
+            <View style={styles.bannerBody}>
+              <Text style={styles.bannerRoute} numberOfLines={1}>
+                {bannerBooking.fromPortName} → {bannerBooking.toPortName}
+              </Text>
+              <Text style={styles.bannerMeta} numberOfLines={1}>
+                {bannerBooking.status === 'open' ? 'Waiting for a bangkero' : 'Accepted'}
+                {' · '}{bannerBooking.numOfPassenger} pax · ₱{bannerBooking.totalPrice}
+                {activeBookings.length > 1 ? ` · +${activeBookings.length - 1} more` : ''}
+              </Text>
+            </View>
+            <Icon name="forward" size={18} color={colors.primary} />
+          </Pressable>
+        </Animated.View>
+      )}
+
       {/* ---------- tapped-port callout ---------- */}
       {selectedPort && (
-        <Animated.View style={[styles.callout, calloutStyle]}>
+        <Animated.View
+          style={[
+            styles.callout,
+            // Stack above the banner when both are on screen.
+            bannerBooking && { bottom: SHEET_COLLAPSED + spacing.md + ACTIVE_BANNER_H + spacing.md },
+            calloutStyle,
+          ]}
+        >
           <View style={styles.calloutBody}>
             <Text style={styles.calloutLabel}>PORT</Text>
             <Text style={styles.calloutName} numberOfLines={1}>{selectedPort.portName}</Text>
@@ -291,7 +446,7 @@ export default function PassengerHome() {
             </View>
           ) : (
             <View style={styles.tripList}>
-              {bookings.data.map((b) => (
+              {recentTrips.map((b) => (
                 <Pressable
                   key={b.bookingId}
                   onPress={() => router.push(`/(passenger)/booking/${b.bookingId}`)}
@@ -314,6 +469,52 @@ export default function PassengerHome() {
           )}
         </ScrollView>
       </Animated.View>
+
+      {/* ---------- accepted-trip notice ---------- */}
+      <Modal
+        visible={!!acceptedNotice}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAcceptedNotice(null)}
+      >
+        <View style={styles.noticeBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setAcceptedNotice(null)}
+            accessibilityLabel="Close"
+          />
+          <View style={styles.noticeCard}>
+            <View style={styles.noticeIconRing}>
+              <Icon name="check" size={24} color={colors.primary} />
+            </View>
+            <Text style={styles.noticeTitle}>Your trip was accepted</Text>
+            <Text style={styles.noticeBody}>
+              {acceptedNotice?.operatorName ?? 'A bangkero'} accepted booking{' '}
+              {acceptedNotice?.ref}. Meet at {acceptedNotice?.fromPortName} — the boat
+              is waiting for you.
+            </Text>
+            <View style={styles.noticeActions}>
+              <View style={styles.noticeActionBtn}>
+                <PrimaryButton
+                  label="Later"
+                  variant="secondary"
+                  onPress={() => setAcceptedNotice(null)}
+                />
+              </View>
+              <View style={styles.noticeActionBtn}>
+                <PrimaryButton
+                  label="View trip"
+                  onPress={() => {
+                    const target = acceptedNotice;
+                    setAcceptedNotice(null);
+                    if (target) router.push(`/(passenger)/booking/${target.bookingId}`);
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -380,6 +581,28 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: radii.pill, backgroundColor: colors.primary },
   dotOff: { backgroundColor: colors.textMuted },
   statusText: { flexShrink: 1, ...typography.caption, color: colors.text, fontWeight: '600' },
+
+  // ---------- active booking banner ----------
+  bannerWrap: {
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
+    bottom: SHEET_COLLAPSED + spacing.md,
+    height: ACTIVE_BANNER_H,
+  },
+  banner: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    ...elevation.e3,
+  },
+  bannerPressed: { backgroundColor: colors.surfaceAlt },
+  bannerDot: { width: 8, height: 8, borderRadius: radii.pill, backgroundColor: colors.primary },
+  bannerBody: { flex: 1, minWidth: 0 },
+  bannerRoute: { flexShrink: 1, ...typography.bodyStrong },
+  bannerMeta: {
+    flexShrink: 1, ...typography.caption, color: colors.textMuted,
+    fontSize: 11, marginTop: 2,
+  },
 
   // ---------- port callout ----------
   callout: {
@@ -498,4 +721,42 @@ const styles = StyleSheet.create({
   tripRoute: { ...typography.caption, color: colors.text, fontWeight: '600', flex: 1 },
   tripFare: { flexShrink: 1, ...typography.caption, color: colors.primary, fontWeight: '700' },
   tripDate: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.xxs },
+
+  // ---------- accepted-trip notice ----------
+  noticeBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  noticeCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    padding: spacing.xl,
+    alignItems: 'center',
+    ...elevation.e3,
+  },
+  noticeIconRing: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryTint,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  noticeTitle: { ...typography.title, textAlign: 'center', marginBottom: spacing.xs },
+  noticeBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: spacing.xl,
+  },
+  noticeActions: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch' },
+  noticeActionBtn: { flex: 1 },
 });

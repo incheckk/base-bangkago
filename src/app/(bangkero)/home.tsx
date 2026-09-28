@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -11,14 +11,27 @@ import { Icon } from '@/components/Icon';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useMyTrips, useOpenRequests, useBangkero } from '@/hooks/useSupabase';
+import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import {
+  useAcceptedBookings, useBangkero, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
+} from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
-import { createNotification } from '@/services/notification.service';
+import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
+import {
+  DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
+} from '@/services/queue.service';
+import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
+
+/** 45000 → "0:45" — the hold and dwell countdowns. */
+const clock = (ms: number) => {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
 
 export default function BangkeroHome() {
   const { user, profile } = useAuth();
@@ -27,6 +40,9 @@ export default function BangkeroHome() {
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
   const trips = useMyTrips(uid);
+  // The working set (accepted only, no 10-row cap) drives active trips and
+  // the offline gate; `trips` stays for earnings history.
+  const accepted = useAcceptedBookings(uid);
 
   const [pending, setPending] = useState<string | null>(null);
   /**
@@ -52,8 +68,140 @@ export default function BangkeroHome() {
     if (availOverride !== null && availOverride === serverAvailable) setAvailOverride(null);
   }, [availOverride, serverAvailable]);
 
+  const activeTrips = accepted.data;
+  const hasActiveTrip = activeTrips.length > 0;
+
+  // Port-queue presence + the clocks the chips tick against. `now`
+  // advances every second; the boat's own fix is re-read every 15s so
+  // the distance badge tracks the boat as it moves.
+  const ports = usePorts();
+  const myQueue = useMyPortQueue(uid);
+  const [now, setNow] = useState(() => Date.now());
+  const [myFix, setMyFix] = useState<{ latitude: number; longitude: number } | null>(null);
+  const lastFixFetchRef = useRef(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNow(Date.now());
+      if (uid && Date.now() - lastFixFetchRef.current > 15_000) {
+        lastFixFetchRef.current = Date.now();
+        getMyLastFix(uid)
+          .then((f) => setMyFix(f ? { latitude: f.latitude, longitude: f.longitude } : null))
+          .catch(() => {});
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [uid]);
+
+  // Client-side fit-check chip: this boat's capacity vs. everything
+  // already accepted (mirrors fits_booking in 008).
+  const [myCapacity, setMyCapacity] = useState<number | null>(null);
+  useEffect(() => {
+    if (!uid) return;
+    getMyBangkaCapacity(uid).then(setMyCapacity).catch(() => {});
+  }, [uid]);
+  const acceptedLoad = activeTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
+  // Destinations of trips already accepted — the route lock (008).
+  const activeDests = [...new Set(activeTrips.map((t) => endPortOf(t.routeId)))];
+
+  // Effective rating = passenger average minus penalties; the accept gate in
+  // acceptBooking enforces the same floor server-side. Re-read on focus so a
+  // fresh penalty never lingers on screen after navigating back.
+  const [effectiveRating, setEffectiveRating] = useState<number | null>(null);
+  const loadRating = useCallback(() => {
+    if (!uid) return;
+    getEffectiveRating(uid)
+      .then(setEffectiveRating)
+      .catch(() => {});
+  }, [uid]);
+  useEffect(() => { loadRating(); }, [loadRating]);
+  useRefetchOnFocus(loadRating);
+  const ratingBlocked =
+    effectiveRating !== null && effectiveRating <= MIN_ACCEPT_RATING;
+
+  /**
+   * One request card's dispatch state — a client mirror of the gates
+   * accept_booking_hold enforces (008). The server is authoritative;
+   * this only decides what the chip says and whether Accept is armed.
+   */
+  function chipFor(b: BookingDoc): {
+    text: string; tone: 'live' | 'wait' | 'block'; canAccept: boolean; distance: string | null;
+  } {
+    const depPort = startPortOf(b.routeId);
+    const destPort = endPortOf(b.routeId);
+    const dep = ports.data.find((p) => p.portId === depPort);
+    const distance =
+      myFix && dep?.latitude != null && dep.longitude != null
+        ? formatDistance(haversineM(myFix.latitude, myFix.longitude, dep.latitude, dep.longitude))
+        : null;
+
+    // Route lock: one destination at a time (and a mixed legacy set
+    // locks the boat out entirely until those trips clear).
+    if (activeDests.length > 1 || (activeDests.length === 1 && activeDests[0] !== destPort)) {
+      return {
+        text: 'Locked to your current destination — finish those trips first',
+        tone: 'block', canAccept: false, distance,
+      };
+    }
+
+    const entry = myQueue.data.entry;
+    if (entry?.portId !== depPort) {
+      return {
+        text: `Not queued at ${b.fromPortName ?? 'this port'}`,
+        tone: 'block', canAccept: false, distance,
+      };
+    }
+    const dwellLeft = DWELL_MS - (now - new Date(entry.enteredAt).getTime());
+    if (dwellLeft > 0) {
+      return { text: `Entering queue… ${clock(dwellLeft)}`, tone: 'wait', canAccept: false, distance };
+    }
+    if (!available) {
+      return { text: 'Offline — turn on to accept', tone: 'block', canAccept: false, distance };
+    }
+    if (
+      b.serviceType !== 'rental' &&
+      myCapacity !== null &&
+      b.numOfPassenger + acceptedLoad > myCapacity
+    ) {
+      return {
+        text: `Boat full — ${acceptedLoad + b.numOfPassenger}/${myCapacity} pax`,
+        tone: 'block', canAccept: false, distance,
+      };
+    }
+
+    const holdLeft = b.holdExpiresAt ? new Date(b.holdExpiresAt).getTime() - now : null;
+    if (b.heldBy === uid) {
+      if (holdLeft !== null && holdLeft > 0) {
+        return { text: `Offered to you · ${clock(holdLeft)} left`, tone: 'live', canAccept: true, distance };
+      }
+      return { text: 'Offer expired — waiting for the next boat', tone: 'wait', canAccept: false, distance };
+    }
+    if (b.heldBy) {
+      return { text: 'Offered to another boat', tone: 'wait', canAccept: false, distance };
+    }
+    return { text: 'Waiting for your offer…', tone: 'wait', canAccept: true, distance };
+  }
+
+  /** The queue line under the availability switch. */
+  const qEntry = myQueue.data.entry;
+  const qPortName = qEntry
+    ? ports.data.find((p) => p.portId === qEntry.portId)?.portName ?? 'the port'
+    : null;
+  const queueLabel = !qEntry
+    ? 'Not in any port queue — park inside a port perimeter to line up for requests.'
+    : (() => {
+        const dwellLeft = DWELL_MS - (now - new Date(qEntry.enteredAt).getTime());
+        const rank = myQueue.data.rank ? `#${myQueue.data.rank}` : '';
+        if (dwellLeft > 0) return `${rank} at ${qPortName} — joining the list in ${clock(dwellLeft)}`;
+        return `${rank} of ${myQueue.data.total} at ${qPortName}${available ? '' : ' · listed but offline'}`;
+      })();
+
   async function toggle(next: boolean) {
     if (!uid) return;
+    // Blocked while a trip is accepted — the server-side guard repeats this.
+    if (!next && hasActiveTrip) {
+      setActionError('You have an active trip. You cannot go offline until it completes.');
+      return;
+    }
     setActionError(null);
     setAvailOverride(next);
     try {
@@ -73,7 +221,16 @@ export default function BangkeroHome() {
         uid,
         displayName: bangkero.data.displayName,
       });
+      // Accepted work requires the operator reachable — force online in the
+      // same flow so a stale switch can never leave passengers hanging.
+      if (!available) await setAvailability(uid, true).catch(() => {});
       markActed(b.bookingId);
+      // The phone may be face-down in a pocket — a local ping is the fastest
+      // way to say "people are standing at the pier right now".
+      scheduleLocalNotification(
+        'Passengers are waiting',
+        `Your passengers are waiting at ${b.fromPortName}. Stay online to reach them.`
+      ).catch(() => {});
       createNotification(
         b.userId,
         'Booking Accepted',
@@ -94,11 +251,11 @@ export default function BangkeroHome() {
   }
 
   async function decline(b: BookingDoc) {
-    if (!uid) return;
     setPending(b.bookingId);
     setActionError(null);
     try {
-      await rejectBooking(b.bookingId, uid);
+      // One RPC: append me + hand the offer to the next boat in line.
+      await rejectBooking(b.bookingId);
       markActed(b.bookingId);
     } catch (e) {
       setActionError(friendlyError(e));
@@ -123,9 +280,17 @@ export default function BangkeroHome() {
     setPending(null);
   }
 
-  const activeTrips = trips.data.filter((t) => t.status === 'accepted');
-  const todayEarnings = trips.data
-    .filter((t) => t.status === 'completed')
+  // Earnings count only trips that actually completed, bucketed by when
+  // they completed — TODAY and THIS WEEK are real windows, not a guess.
+  const completedTrips = trips.data.filter((t) => t.status === 'completed' && t.completedAt);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const weekAgoMs = Date.now() - 7 * 86400000;
+  const todayEarnings = completedTrips
+    .filter((t) => new Date(t.completedAt as string).getTime() >= todayStart.getTime())
+    .reduce((sum, t) => sum + t.totalPrice, 0);
+  const weekEarnings = completedTrips
+    .filter((t) => new Date(t.completedAt as string).getTime() >= weekAgoMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   return (
@@ -161,17 +326,31 @@ export default function BangkeroHome() {
             <Switch
               value={available}
               onValueChange={toggle}
-              disabled={bangkero.loading || !bangkero.data}
+              disabled={bangkero.loading || !bangkero.data || hasActiveTrip}
               trackColor={{ false: colors.border, true: colors.primaryDark }}
               thumbColor={available ? colors.primary : colors.textMuted}
             />
           </View>
 
           <Text style={styles.statusHint}>
-            {available
-              ? 'You are receiving booking requests.'
-              : 'Turn on to start receiving booking requests.'}
+            {hasActiveTrip
+              ? 'You have an active trip — stay online until it is completed.'
+              : available
+                ? 'You are receiving booking requests.'
+                : 'Turn on to start receiving booking requests.'}
           </Text>
+
+          {/* FCFS place in line (008) — the whole dispatch model in one row. */}
+          <View style={styles.queueWrap}>
+            <Text style={[styles.queueText, qEntry && styles.queueTextOn]} numberOfLines={2}>
+              {myQueue.loading ? 'Checking the port queue…' : queueLabel}
+            </Text>
+            {!myFix && !myQueue.loading && (
+              <Text style={styles.queueGps}>
+                No GPS fix yet — keep location on so your boat can join a port queue.
+              </Text>
+            )}
+          </View>
 
           <View style={styles.boatRow}>
             <Icon name="boat" size={18} color={colors.textSecondary} />
@@ -197,6 +376,15 @@ export default function BangkeroHome() {
           </View>
         )}
 
+        {ratingBlocked && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              Your rating is {effectiveRating?.toFixed(1)}★ — 3.0 or below. You cannot
+              accept new bookings until passengers rate your trips back up.
+            </Text>
+          </View>
+        )}
+
         <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
         <View style={styles.demandRow}>
           <DemandBadge level="high" predictedPassengers={32} />
@@ -214,7 +402,7 @@ export default function BangkeroHome() {
           <View style={styles.earningsItem}>
             <Icon name="receipt" size={16} color={colors.textSecondary} />
             <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
-              ₱{todayEarnings * 5}
+              ₱{weekEarnings}
             </Text>
             <Text style={styles.earningsLabel}>THIS WEEK</Text>
           </View>
@@ -238,9 +426,28 @@ export default function BangkeroHome() {
                 style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
               >
                 <RequestBody booking={b} />
+                {/* Completing requires everyone aboard (complete_trip raises
+                    otherwise) — until then the button routes to the boarding
+                    card instead of pretending the trip can close. */}
                 <PrimaryButton
-                  label={acted.has(b.bookingId) ? 'Completed' : 'Mark completed'}
-                  onPress={() => complete(b)}
+                  label={
+                    acted.has(b.bookingId)
+                      ? 'Completed'
+                      : b.onboardedAt
+                        ? 'Mark completed'
+                        : 'Open trip to confirm boarding'
+                  }
+                  onPress={() => {
+                    if (acted.has(b.bookingId)) return;
+                    if (b.onboardedAt) {
+                      void complete(b);
+                    } else {
+                      router.push({
+                        pathname: '/(bangkero)/booking-status',
+                        params: { bookingId: b.bookingId },
+                      });
+                    }
+                  }}
                   loading={pending === b.bookingId}
                   disabled={acted.has(b.bookingId)}
                   style={{ marginTop: spacing.md }}
@@ -282,29 +489,55 @@ export default function BangkeroHome() {
             />
           </View>
         ) : (
-          requests.data.map((b) => (
-            <View key={b.bookingId} style={styles.request}>
-              <RequestBody booking={b} />
-              {/* Accept is the intended action and carries twice the width;
-                  giving a decline equal weight makes operators hesitate. */}
-              <View style={styles.actions}>
-                <PrimaryButton
-                  label="Decline"
-                  variant="secondary"
-                  onPress={() => decline(b)}
-                  disabled={pending === b.bookingId || acted.has(b.bookingId)}
-                  style={styles.declineBtn}
-                />
-                <PrimaryButton
-                  label="Accept"
-                  onPress={() => accept(b)}
-                  loading={pending === b.bookingId}
-                  disabled={acted.has(b.bookingId)}
-                  style={styles.acceptBtn}
-                />
+          requests.data.map((b) => {
+            const chip = chipFor(b);
+            return (
+              <View key={b.bookingId} style={styles.request}>
+                <RequestBody booking={b} />
+                {/* Dispatch state (008): whose offer it is, why Accept
+                    may be locked, and how far the boat still is. */}
+                <View style={styles.chipRow}>
+                  <View
+                    style={[
+                      styles.holdChip,
+                      chip.tone === 'live' && styles.holdChipLive,
+                      chip.tone === 'block' && styles.holdChipBlock,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.holdChipText,
+                        chip.tone === 'live' && styles.holdChipTextLive,
+                        chip.tone === 'block' && styles.holdChipTextBlock,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {chip.text}
+                    </Text>
+                  </View>
+                  {chip.distance && <Text style={styles.chipDistance}>{chip.distance}</Text>}
+                </View>
+                {/* Accept is the intended action and carries twice the width;
+                    giving a decline equal weight makes operators hesitate. */}
+                <View style={styles.actions}>
+                  <PrimaryButton
+                    label="Decline"
+                    variant="secondary"
+                    onPress={() => decline(b)}
+                    disabled={pending === b.bookingId || acted.has(b.bookingId)}
+                    style={styles.declineBtn}
+                  />
+                  <PrimaryButton
+                    label="Accept"
+                    onPress={() => accept(b)}
+                    loading={pending === b.bookingId}
+                    disabled={acted.has(b.bookingId) || ratingBlocked || !chip.canAccept}
+                    style={styles.acceptBtn}
+                  />
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
     </ScreenContainer>
@@ -377,6 +610,16 @@ const styles = StyleSheet.create({
   statusWordOn: { color: colors.primary },
   statusSpacer: { flex: 1 },
   statusHint: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
+
+  // ---------- port-queue chip (008) ----------
+  queueWrap: {
+    marginTop: spacing.md, paddingTop: spacing.md,
+    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+    gap: spacing.xxs,
+  },
+  queueText: { flexShrink: 1, ...typography.caption, color: colors.textMuted, lineHeight: 18 },
+  queueTextOn: { color: colors.primary, fontWeight: '600' },
+  queueGps: { flexShrink: 1, ...typography.micro, color: colors.warning, lineHeight: 16 },
 
   boatRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -495,6 +738,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
   },
   passenger: { ...typography.caption, color: colors.textMuted, flex: 1 },
+
+  // ---------- dispatch chips (008) ----------
+  chipRow: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap',
+  },
+  holdChip: {
+    flexShrink: 1,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.pill,
+    borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xxs,
+  },
+  holdChipLive: { backgroundColor: colors.successTint, borderColor: colors.success },
+  holdChipBlock: { backgroundColor: colors.dangerTint, borderColor: colors.danger },
+  holdChipText: { flexShrink: 1, ...typography.label, color: colors.textSecondary, letterSpacing: 0 },
+  holdChipTextLive: { color: colors.success },
+  holdChipTextBlock: { color: colors.danger },
+  chipDistance: { flexShrink: 1, ...typography.label, color: colors.textMuted, letterSpacing: 0 },
 
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   declineBtn: { flex: 1 },

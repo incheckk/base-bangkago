@@ -59,16 +59,33 @@ export default function TripDetailScreen() {
           </View>
         </View>
 
-        {/* Schedule */}
+        {/* Schedule — rides are same-day, so a booking always has a date and
+            the departure/arrival rows fill in live as the bangkero moves. */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SCHEDULE</Text>
-          <InfoRow label="Created" value={formatDate(booking.createdAt)} />
-          {booking.departTime && (
-            <InfoRow label="Departure" value={formatDate(booking.departTime)} />
-          )}
-          {booking.arrivalTime && (
-            <InfoRow label="Arrival" value={formatDate(booking.arrivalTime)} />
-          )}
+          <InfoRow label="Trip date" value={formatDate(booking.createdAt)} />
+          <InfoRow
+            label="Departure"
+            value={
+              booking.departTime
+                ? formatDate(booking.departTime)
+                : booking.status === 'open' || booking.status === 'accepted'
+                  ? 'Not departed yet'
+                  : '—'
+            }
+          />
+          <InfoRow
+            label="Arrival"
+            value={
+              booking.arrivalTime
+                ? formatDate(booking.arrivalTime)
+                : booking.status === 'completed'
+                  ? 'Today (same day)'
+                  : booking.status === 'open' || booking.status === 'accepted'
+                    ? 'Expected today'
+                    : '—'
+            }
+          />
         </View>
 
         {/* Passenger */}

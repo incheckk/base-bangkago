@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ScrollView, StyleSheet, Text, View,
+  Alert, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -12,11 +12,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
-import { friendlyError } from '@/services/booking.service';
+import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
+import { friendlyError, noShowPassenger } from '@/services/booking.service';
 import { createManifest } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import type { BookingDoc } from '@/types/models';
 
 const CHECKLIST_ITEMS = [
   { key: 'lifeJackets', label: 'Life jackets accounted for', icon: '🦺' },
@@ -31,6 +33,9 @@ export default function DepartureScreen() {
   const bangkeroId = user?.id ?? null;
   const { manifest, passengers, parcels, loading, finalizeManifest } = useTripManifest(bangkeroId);
   const { data: weather, loading: weatherLoading } = useWeatherData('p1');
+  // Live working set: accepted only, no 10-row cap — older-created accepted
+  // bookings used to fall outside the slice and split silently.
+  const accepted = useAcceptedBookings(bangkeroId);
 
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [finalizing, setFinalizing] = useState(false);
@@ -39,6 +44,30 @@ export default function DepartureScreen() {
   const [genError, setGenError] = useState<string | null>(null);
   const [routeContext, setRouteContext] = useState<{ from: string; to: string } | null>(null);
   const [hasBangka, setHasBangka] = useState<boolean | null>(null);
+
+  // Boarding split: who is confirmed aboard, and who is still on the pier.
+  const acceptedTrips = accepted.data;
+  const boardedTrips = acceptedTrips.filter((t) => t.onboardedAt);
+  const waitingTrips = acceptedTrips.filter((t) => !t.onboardedAt);
+  // Vacuous-true with no accepted trips — the empty-departure guard below
+  // is what actually decides whether the boat may leave.
+  const allBoarded = waitingTrips.length === 0;
+  const anyoneAboard = boardedTrips.length > 0;
+  const [noShowId, setNoShowId] = useState<string | null>(null);
+  const [actedNoShow, setActedNoShow] = useState<Set<string>>(new Set());
+
+  // No-shows scoped to this trip: everything since the draft manifest was
+  // generated (start of today before that) so yesterday's no-shows never
+  // bleed into this departure.
+  const noShowSince = manifest?.generatedAt
+    ?? new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+  const noShows = useNoShowTrips(bangkeroId, noShowSince);
+  const noShowedTrips = noShows.data;
+  const freedSeats = noShowedTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
+
+  const paxLabel = (t: BookingDoc) =>
+    t.serviceType === 'cargo' ? 'cargo' : `${t.numOfPassenger} pax`;
+  const allCargo = acceptedTrips.length > 0 && acceptedTrips.every((t) => t.serviceType === 'cargo');
 
   const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.key]);
   const manifestFinalized = manifest?.status === 'finalized';
@@ -72,6 +101,30 @@ export default function DepartureScreen() {
 
   function toggleCheck(key: string) {
     setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function confirmNoShow(t: BookingDoc) {
+    if (actedNoShow.has(t.bookingId)) return;
+    Alert.alert(
+      'Passenger didn’t board',
+      `Mark ${t.ref} as a no-show? The boat leaves with everyone who boarded, and the passenger is banned from booking for a while.`,
+      [
+        { text: 'Go back', style: 'cancel' },
+        { text: 'Mark no-show', style: 'destructive', onPress: () => void doNoShow(t) },
+      ]
+    );
+  }
+
+  async function doNoShow(t: BookingDoc) {
+    if (actedNoShow.has(t.bookingId)) return;
+    setNoShowId(t.bookingId);
+    try {
+      await noShowPassenger(t);
+      setActedNoShow((prev) => new Set(prev).add(t.bookingId));
+    } catch (e) {
+      setGenError(friendlyError(e));
+    }
+    setNoShowId(null);
   }
 
   async function handleGenerate() {
@@ -132,7 +185,9 @@ export default function DepartureScreen() {
   }
 
   const steps = ['Manifest', 'Checklist', 'Weather', 'Ready'];
-  const currentStep = manifestFinalized ? (allChecked ? 3 : 2) : 0;
+  const currentStep = manifestFinalized
+    ? allChecked && allBoarded && anyoneAboard ? 3 : 2
+    : 0;
 
   return (
     <ScreenContainer padded={false}>
@@ -140,6 +195,91 @@ export default function DepartureScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <ProgressBar steps={steps} current={currentStep} />
+
+        {/* ---------- boarding split ---------- */}
+        {acceptedTrips.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>{allCargo ? 'CARGO' : 'PASSENGERS'}</Text>
+            <View style={styles.boardCard}>
+              {boardedTrips.map((t) => (
+                <View key={t.bookingId} style={styles.boardRow}>
+                  <Text style={styles.boardCheck}>✓</Text>
+                  <View style={styles.boardBody}>
+                    <Text style={styles.boardName} numberOfLines={1}>
+                      {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                    </Text>
+                    <Text style={styles.boardSub} numberOfLines={1}>
+                      {t.ref} · aboard
+                    </Text>
+                  </View>
+                </View>
+              ))}
+
+              {waitingTrips.length > 0 && (
+                <>
+                  <View style={styles.boardDivider} />
+                  <Text style={styles.boardGroupLabel}>NOT BOARDED</Text>
+                  {waitingTrips.map((t) => (
+                    <View key={t.bookingId} style={styles.boardRow}>
+                      <Text style={styles.boardWait}>○</Text>
+                      <View style={styles.boardBody}>
+                        <Text style={styles.boardName} numberOfLines={1}>
+                          {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                        </Text>
+                        <Text style={styles.boardSub} numberOfLines={1}>
+                          {t.ref} · still on the pier
+                        </Text>
+                      </View>
+                      <View style={styles.boardAction}>
+                        <PrimaryButton
+                          label="Didn’t board"
+                          variant="danger"
+                          onPress={() => confirmNoShow(t)}
+                          loading={noShowId === t.bookingId}
+                          disabled={actedNoShow.has(t.bookingId)}
+                          style={styles.noShowBtn}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
+
+              {/* Left behind — kept visible so the story survives the cancel,
+                  plus the seat count the bangkero can now backfill. */}
+              {noShowedTrips.length > 0 && (
+                <>
+                  <View style={styles.boardDivider} />
+                  <Text style={styles.boardGroupLabel}>
+                    NO-SHOWED · {noShowedTrips.length}
+                  </Text>
+                  {noShowedTrips.map((t) => (
+                    <View key={t.bookingId} style={styles.boardRow}>
+                      <Text style={styles.boardMiss}>✕</Text>
+                      <View style={styles.boardBody}>
+                        <Text style={[styles.boardName, styles.boardNameMiss]} numberOfLines={1}>
+                          {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                        </Text>
+                        <Text style={styles.boardSub} numberOfLines={1}>
+                          {t.ref} · left behind
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={styles.cue}>
+                    {freedSeats} seat{freedSeats === 1 ? '' : 's'} freed by no-shows —
+                    accept new bookings from Home to fill them.
+                  </Text>
+                </>
+              )}
+            </View>
+            {!!genError && !!manifest && (
+              <View style={styles.banner}>
+                <Text style={styles.bannerText}>{genError}</Text>
+              </View>
+            )}
+          </>
+        )}
 
         {loading ? (
           <View style={styles.placeholder}>
@@ -234,8 +374,21 @@ export default function DepartureScreen() {
                 label="Ready to Depart"
                 onPress={handleDepart}
                 loading={departing}
-                disabled={!manifestFinalized || !allChecked || departing}
+                disabled={
+                  !manifestFinalized || !allChecked || departing || !allBoarded || !anyoneAboard
+                }
               />
+              {!anyoneAboard && allBoarded && (
+                <Text style={styles.readyHint}>
+                  No passengers aboard — confirm someone as boarded, or accept a new
+                  booking from Home to fill seats.
+                </Text>
+              )}
+              {anyoneAboard && !allBoarded && (
+                <Text style={styles.readyHint}>
+                  Confirm everyone aboard — or mark them as didn’t board — before departing.
+                </Text>
+              )}
             </View>
           </>
         ) : (
@@ -361,4 +514,43 @@ const styles = StyleSheet.create({
   checkIcon: { flexShrink: 1, fontSize: 14 },
 
   footer: { marginTop: spacing.xxl },
+  readyHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
+  },
+
+  // ---------- boarding split ----------
+  boardCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
+  },
+  boardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  boardCheck: { color: colors.primary, fontSize: 14, fontWeight: '800', width: 16 },
+  boardWait: { color: colors.textMuted, fontSize: 14, fontWeight: '800', width: 16 },
+  boardMiss: { color: colors.danger, fontSize: 14, fontWeight: '800', width: 16 },
+  boardNameMiss: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  cue: {
+    ...typography.caption,
+    color: colors.primary,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
+  boardBody: { flex: 1, minWidth: 0 },
+  boardName: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  boardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 1 },
+  boardDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.sm },
+  boardGroupLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.xs },
+  boardAction: { width: 120 },
+  noShowBtn: { minHeight: 36 },
 });

@@ -1,0 +1,92 @@
+================================================================================
+BANGKAGO — DEFERRED FEATURES & DECISIONS
+Review this list when the system is PUBLISHED TO THE PUBLIC / GOES LIVE.
+Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build.
+================================================================================
+
+[A] PRODUCT RULES TO REVISIT AT LAUNCH
+--------------------------------------------------------------------------------
+1. STRICT QUEUE-ONLY CAN STALL REQUESTS
+   Rule: a booking departing a port can ONLY be accepted by boats currently
+   queued (inside the 300m perimeter, 5-min dwell) at that port. If no boat
+   is inside the perimeter, the request waits indefinitely.
+   HOLD: accepted for now (demo). At launch, decide whether to add a
+   fallback (e.g., open the request to all online boats after X minutes,
+   or auto-alert the nearest boats).
+   Decision date: deferred by user request.
+
+2. DISPATCH HOLD TIMEOUT = 3 MIN, DWELL = 5 MIN, POSITION FRESHNESS = 3 MIN
+   Tunable numbers chosen for demo pacing. Revisit with real-world boat
+   turnaround data at launch.
+
+3. OFFLINE/STALE BOAT RULES
+   Listed-but-offline boats appear on port lists but never receive holds.
+   Phone asleep / app killed = boat drops from dispatch after 3 min (no
+   GPS fix). Only correct once background tracking ships (item B1).
+
+[B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
+--------------------------------------------------------------------------------
+B1. BACKGROUND GPS TRACKING
+    Currently foreground-only (Expo Go limitation). Needs a dev build /
+    production build with expo-location background permission so port
+    queues and dispatch work with the screen off.
+
+B2. PUSH NOTIFICATIONS
+    Offer/hold-cascade alerts are realtime chips only. Dedicated
+    "notifications" phase = push (expo-notifications) for:
+    - "You are #1 — offer held for you"
+    - hold cascaded to you
+    - booking accepted / boarding / no-show / trip updates
+
+B3. BANGKERO GATES (roadmap item 4)
+B4. DEPARTURE FLOW POLISH (roadmap item 5)
+B5. GPS EN-ROUTE TRACKING FOR PASSENGERS (roadmap item 6)
+    Live boat position on the passenger trip screen (trip-en-route.tsx
+    placeholder exists).
+B6. VERIFY FLOW (roadmap item 7)
+B7. DISPUTE COUNTER-REPORT — bangkero side deliberately not built.
+B8. PASSENGER-HOME BAN BANNER — deliberately not built (ban blocks at
+    booking time only).
+B9. REAL GCASH PAYMENT INTEGRATION
+    Today: "Pay via GCash on board" is a manual reference only; cash/
+    onboard is the real flow. Wire a real GCash/API gateway at launch.
+B10. DEMAND PREDICTION (ML)
+    DemandBadge on bangkero home shows placeholder numbers. Per the
+    knowledge base: Phase 1 = collect >1000 bookings; Phase 2 = train
+    model + deploy FastAPI; Phase 3 = integrate predictions; Phase 4 =
+    admin fleet optimization.
+B11. NATIVE MAPS (dev build): react-native-maps + OSM tiles instead of
+    WebView-based map (KB "Future" item).
+
+[C] CODE TODOs LEFT IN THE APP
+--------------------------------------------------------------------------------
+C1. passenger/profile.tsx:143-144 — "Settings" and "About" menu items are
+    no-ops (placeholder onPress).
+C2. passenger/trip-en-route.tsx:81 — "call bangkero" button is a no-op
+    (phone call integration, e.g. Linking.openURL('tel:...')).
+C3. migrations/007_accepted_trip_rules.sql:332 —
+    CREATE UNIQUE INDEX bookings_one_active_per_passenger is COMMENTED
+    OUT. Enable after verifying no legacy rows violate it (would block a
+    passenger from having 2 open/accepted bookings at once).
+C4. profile.service.ts:62 — assumes ONE bangka per bangkero (upsert).
+    Multi-boat operators need schema + UI work.
+C5. sign-in.tsx:15 — demo accounts come from the "Phase 3.10" seed
+    script; real auth hardening (rate limits, email verification) before
+    public launch.
+C6. PaymentStatus still includes 'refunded' in the DB CHECK for
+    backward compat although refunds were removed — optionally drop the
+    value in a future migration.
+
+[D] ENVIRONMENT / INFRA
+--------------------------------------------------------------------------------
+D1. EXPO SDK PINNED TO 54 — do NOT upgrade until the demo device /
+    Expo Go constraint is gone (AGENTS.md). Revisit at launch.
+D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 then 008 (when it
+    exists) via SQL editor. Set up migration automation (supabase CLI /
+    CI) before public deployment.
+D3. SECURITY DEFINER RPCs are the write path for trip rules — review all
+    RLS policies + function grants with a security pass before launch.
+
+================================================================================
+END — keep this file updated whenever a feature is consciously deferred.
+================================================================================

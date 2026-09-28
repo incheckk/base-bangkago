@@ -16,6 +16,7 @@ import {
   friendlyError as profileFriendlyError, updateBoat, updateName,
 } from '@/services/profile.service';
 import { supabase } from '@/services/supabase';
+import { getAverageRating, getEffectiveRating } from '@/services/rating.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 
@@ -59,6 +60,28 @@ export default function BangkeroProfileScreen() {
 
   const op = bangkero.data;
   const uid = user?.id ?? null;
+
+  // Passenger average, accumulated penalty, and the effective number the
+  // accept gate actually uses.
+  const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [effectiveRating, setEffectiveRating] = useState<number | null>(null);
+
+  const loadRatings = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const [avg, effective] = await Promise.all([
+        getAverageRating(uid),
+        getEffectiveRating(uid),
+      ]);
+      setAvgRating(avg);
+      setEffectiveRating(effective);
+    } catch {
+      // keep the last known numbers
+    }
+  }, [uid]);
+
+  useEffect(() => { void loadRatings(); }, [loadRatings]);
+  useRefetchOnFocus(loadRatings);
 
   const loadBangka = useCallback(async () => {
     if (!uid) return;
@@ -242,6 +265,24 @@ export default function BangkeroProfileScreen() {
                 {op.isAvailable ? 'Online' : 'Offline'}
               </Text>
             </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Rating</Text>
+              <View style={styles.ratingWrap}>
+                <Text style={styles.infoValue}>
+                  {avgRating === null
+                    ? '…'
+                    : avgRating === 0
+                      ? 'No ratings yet'
+                      : `${avgRating.toFixed(1)} ★`}
+                </Text>
+                {op.ratingPenalty > 0 && (
+                  <Text style={styles.penaltyNote}>
+                    −{op.ratingPenalty}★ penalty · effective {effectiveRating?.toFixed(1)} ★
+                  </Text>
+                )}
+              </View>
+            </View>
           </View>
         )}
 
@@ -349,6 +390,8 @@ const styles = StyleSheet.create({
   infoValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   statusOnline: { color: colors.primary },
   statusOffline: { color: colors.textMuted },
+  ratingWrap: { flexShrink: 1, alignItems: 'flex-end' },
+  penaltyNote: { color: colors.warning, fontSize: 11, marginTop: 2, textAlign: 'right' },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },

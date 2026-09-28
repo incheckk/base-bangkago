@@ -1,15 +1,16 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
+import { useAuth } from '@/hooks/useAuth';
 import { usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
-import { routeIdFor } from '@/services/booking.service';
+import { getActiveBooking, getBookingBan, routeIdFor } from '@/services/booking.service';
 import type { RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -20,6 +21,7 @@ interface ParcelItem {
 }
 
 export default function BookDelivery() {
+  const { user } = useAuth();
   const ports = usePorts();
   const { data: routes, loading: routesLoading, error: routesError } = useRoutes();
   const [fromId, setFromId] = useState<string | null>(null);
@@ -27,7 +29,9 @@ export default function BookDelivery() {
   const [receiverName, setReceiverName] = useState('');
   const [receiverContact, setReceiverContact] = useState('');
   const [items, setItems] = useState<ParcelItem[]>([{ itemName: '', quantity: '1', kilogram: '1' }]);
-  const [date, setDate] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [blocked, setBlocked] = useState<{ bookingId: string; ref: string } | null>(null);
+  const [ban, setBan] = useState<number | null>(null);
 
   const activeRoutes = routes.filter((r) => r.isActive);
   const routeFor = (from: string | null, to: string | null): RouteDoc | null => {
@@ -77,6 +81,48 @@ export default function BookDelivery() {
   }
   if (ports.error || routesError) {
     return <ScreenContainer><ErrorState message={ports.error ?? routesError ?? 'Could not load routes.'} /></ScreenContainer>;
+  }
+
+  async function confirmDelivery() {
+    if (!ready || checking || !fromPort || !toPort || cargoFare === null) return;
+    // No-show ban first, then one active booking at a time — createBooking
+    // re-checks both at the pay step.
+    if (user) {
+      setChecking(true);
+      try {
+        const [active, banInfo] = await Promise.all([
+          getActiveBooking(user.id),
+          getBookingBan(user.id),
+        ]);
+        if (banInfo) {
+          setBan(banInfo.minutesLeft);
+          setChecking(false);
+          return;
+        }
+        if (active) {
+          setBlocked(active);
+          setChecking(false);
+          return;
+        }
+      } catch {
+        // network hiccup — the payment step's createBooking is the backstop
+      }
+      setChecking(false);
+    }
+    router.push({
+      pathname: '/(passenger)/payment',
+      params: {
+        fromId: fromPort.portId,
+        fromName: fromPort.portName,
+        toId: toPort.portId,
+        toName: toPort.portName,
+        serviceType: 'cargo',
+        fare: String(cargoFare),
+        receiverName,
+        receiverContact,
+        itemsJson: JSON.stringify(items),
+      },
+    });
   }
 
   return (
@@ -148,9 +194,6 @@ export default function BookDelivery() {
           <Text style={styles.addItemText}>+ Add Another Item</Text>
         </Pressable>
 
-        <Text style={[styles.sectionLabel, styles.mt]}>PREFERRED DATE</Text>
-        <TextField label="Delivery Date" value={date} onChangeText={setDate} placeholder="MM/DD/YYYY" />
-
         <View style={styles.fareCard}>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Total Weight</Text>
@@ -164,26 +207,81 @@ export default function BookDelivery() {
 
         <PrimaryButton
           label={cargoFare !== null ? `Confirm Delivery · ₱${cargoFare}` : 'Confirm Delivery'}
-          onPress={() => {
-            router.push({
-              pathname: '/(passenger)/payment',
-              params: {
-                fromId: fromPort?.portId,
-                fromName: fromPort?.portName,
-                toId: toPort?.portId,
-                toName: toPort?.portName,
-                serviceType: 'cargo',
-                fare: String(cargoFare),
-                date,
-                receiverName,
-                receiverContact,
-                itemsJson: JSON.stringify(items),
-              },
-            });
-          }}
+          onPress={confirmDelivery}
           disabled={!ready}
+          loading={checking}
         />
       </ScrollView>
+
+      {/* One active trip at a time — the pending booking is offered directly. */}
+      <Modal
+        visible={!!blocked}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBlocked(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setBlocked(null)}
+            accessibilityLabel="Close"
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>You already have a pending booking</Text>
+            <Text style={styles.modalHint}>
+              Only one active booking at a time. View it to track or cancel it.
+            </Text>
+            <View style={styles.blockedRef}>
+              <Text style={styles.blockedRefLabel}>PENDING BOOKING</Text>
+              <Text style={styles.blockedRefValue}>{blocked?.ref}</Text>
+            </View>
+            <View style={styles.modalActions}>
+              <View style={styles.modalActionBtn}>
+                <PrimaryButton label="Close" variant="secondary" onPress={() => setBlocked(null)} />
+              </View>
+              <View style={styles.modalActionBtn}>
+                <PrimaryButton
+                  label="View booking"
+                  onPress={() => {
+                    const target = blocked;
+                    setBlocked(null);
+                    if (target) router.push(`/(passenger)/booking/${target.bookingId}`);
+                  }}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* No-show ban: booking is refused until the timer runs out. */}
+      <Modal
+        visible={ban !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBan(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setBan(null)}
+            accessibilityLabel="Close"
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>You were marked as a no-show</Text>
+            <Text style={styles.modalHint}>
+              You were told to board and the boat left without you. You can&apos;t
+              book again for {ban} minute{ban === 1 ? '' : 's'} — the ban lifts on
+              its own.
+            </Text>
+            <View style={styles.modalActions}>
+              <View style={styles.modalActionBtn}>
+                <PrimaryButton label="Close" variant="secondary" onPress={() => setBan(null)} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -245,4 +343,34 @@ const styles = StyleSheet.create({
   fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fareLabel: { ...typography.caption },
   fareValue: { flexShrink: 1, color: colors.primary, fontSize: 16, fontWeight: '700' },
+
+  // ---------- blocked modal (same pattern as book-ride) ----------
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.xl,
+  },
+  modalTitle: { ...typography.title, marginBottom: spacing.xs },
+  modalHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.lg },
+  blockedRef: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+  },
+  blockedRefLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.xxs },
+  blockedRefValue: { color: colors.text, fontSize: 16, fontWeight: '700', letterSpacing: 1 },
+  modalActions: { flexDirection: 'row', gap: spacing.md },
+  modalActionBtn: { flex: 1 },
 });

@@ -57,6 +57,15 @@ B10. DEMAND PREDICTION (ML)
     admin fleet optimization.
 B11. NATIVE MAPS (dev build): react-native-maps + OSM tiles instead of
     WebView-based map (KB "Future" item).
+B12. COASTGUARD / LGU — FOURTH MOBILE ROLE (view-only)
+     Papers/design treat the system as FOUR mobile roles: Admin,
+     Bangkero, Passenger, and Coastguard/LGU — a view-only tier with
+     lower permissions than admin. Current build has only the first
+     three (UserRole in types/models.ts). Intended scope: read-only
+     screens only — View Live Port Queues and View Routes & Fares
+     (reuse admin views); NO route/port editing. To build later:
+     extend UserRole, sign-in role routing, menu.ts, and the
+     role-guard redirects in the _layout files.
 
 [C] CODE TODOs LEFT IN THE APP
 --------------------------------------------------------------------------------

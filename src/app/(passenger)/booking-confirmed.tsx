@@ -19,6 +19,11 @@ export default function BookingConfirmed() {
     bookingId?: string;
     parcelId?: string;
     receiverName?: string;
+    packageName?: string;
+    downAmount?: string;
+    downStatus?: string;
+    downWarning?: string;
+    remainder?: string;
   }>();
 
   const bookingRef = params.ref ?? params.bookingId ?? '—';
@@ -44,6 +49,9 @@ export default function BookingConfirmed() {
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);
   const isCargo = params.serviceType === 'cargo' && !!params.parcelId;
+  const isPackage = !!params.downAmount;
+  const downAmount = parseInt(params.downAmount ?? '0', 10) || 0;
+  const remainder = parseInt(params.remainder ?? '0', 10) || 0;
 
   return (
     <ScreenContainer padded={false}>
@@ -87,12 +95,44 @@ export default function BookingConfirmed() {
             <Text style={styles.detailLabel}>Passengers</Text>
             <Text style={styles.detailValue} numberOfLines={1}>{paxCount}</Text>
           </View>
+          {!!params.packageName && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Package</Text>
+              <Text style={styles.detailValue} numberOfLines={2}>{params.packageName}</Text>
+            </View>
+          )}
+          {isPackage && (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>GCash downpayment (50%)</Text>
+                <Text style={styles.detailValue} numberOfLines={2}>
+                  ₱{downAmount}
+                  {params.downStatus === 'pending' ? ' · awaiting admin confirmation' : ''}
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Collected onboard</Text>
+                <Text style={styles.detailValue}>₱{remainder}</Text>
+              </View>
+            </>
+          )}
           <View style={styles.divider} />
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total to be paid</Text>
+            <Text style={styles.totalLabel}>
+              {isPackage ? 'Total trip price' : 'Total to be paid'}
+            </Text>
             <Text style={styles.totalValue}>₱{fare}</Text>
           </View>
         </Animated.View>
+
+        {params.downWarning === '1' && (
+          <Animated.View style={[styles.warnBanner, { opacity: fadeAnim }]}>
+            <Text style={styles.warnText}>
+              Your downpayment record did not save. Keep your GCash reference and screenshot,
+              then contact support with booking ref {bookingRef}.
+            </Text>
+          </Animated.View>
+        )}
 
         <Animated.View style={[styles.actions, { opacity: fadeAnim }]}>
           {isCargo ? (
@@ -218,4 +258,15 @@ const styles = StyleSheet.create({
   secondaryBtn: {
     marginTop: 0,
   },
+
+  warnBanner: {
+    width: '100%',
+    backgroundColor: colors.dangerTint,
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  warnText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
 });

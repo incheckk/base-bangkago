@@ -69,6 +69,7 @@ export async function signUp({
       displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
       isAvailable: false,
       ratingPenalty: 0,
+      gcashQrUrl: null,
       updatedAt: new Date().toISOString(),
     };
 
@@ -177,6 +178,10 @@ export function friendlyAuthError(e: unknown): string {
   if (message.includes('rating is too low')) {
     return 'Your rating is 3.0★ or below — you can no longer accept bookings until it improves.';
   }
+  // Ratings unique index (013): a second submit from a lost race.
+  if (message.includes('duplicate key') && message.includes('ratings')) {
+    return 'You already rated this trip.';
+  }
   if (message.includes('taken by another bangkero')) {
     return 'Another bangkero already took that trip.';
   }
@@ -222,6 +227,23 @@ export function friendlyAuthError(e: unknown): string {
   }
   if (message.includes('turn on availability')) {
     return 'You are offline — turn on availability to accept.';
+  }
+  // ---- Bangkero gates (010) — verification + boat + rating floor ----
+  if (message.includes('documents are not approved')) {
+    return 'Your documents are not approved yet — submit them for review in your profile.';
+  }
+  if (message.includes('register your boat')) {
+    return 'Register your boat first — open Profile, tap Edit Profile and save your boat details.';
+  }
+  // ---- Island hopping (014) — package itinerary vs seeded routes ----
+  if (message.includes('No route runs between those two ports')) {
+    return 'That hopping route is not running right now — pick another package.';
+  }
+  if (message.includes('That route is not running right now')) {
+    return 'That route is not running right now.';
+  }
+  if (message.includes('Pick two different ports')) {
+    return 'Pick two different ports.';
   }
   if (message) return `Something went wrong (${message}).`;
   return 'Something went wrong. Please try again.';

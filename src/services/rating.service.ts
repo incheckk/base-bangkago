@@ -79,6 +79,30 @@ export async function getAverageRating(bangkeroId: string): Promise<number> {
   return data.reduce((sum, r) => sum + r.score, 0) / data.length;
 }
 
+/**
+ * Every bangkero's average + count in ONE query — the admin operators
+ * list renders ★ per row without an N+1. Unrated bangkeros simply have
+ * no entry (callers show "New" / "—").
+ */
+export async function getAverageRatingsMap(): Promise<Record<string, { avg: number; count: number }>> {
+  const { data, error } = await supabase
+    .from('ratings')
+    .select('bangkero_id, score');
+
+  if (error) throw error;
+  const map: Record<string, { avg: number; count: number }> = {};
+  for (const row of data ?? []) {
+    const key = row.bangkero_id as string;
+    if (!map[key]) map[key] = { avg: 0, count: 0 };
+    map[key].avg += row.score;
+    map[key].count += 1;
+  }
+  for (const key of Object.keys(map)) {
+    map[key].avg = map[key].avg / map[key].count;
+  }
+  return map;
+}
+
 /** Star deductions applied by incident (mirrors 007_accepted_trip_rules.sql). */
 export const PENALTY_MISSED_PICKUP = 0.5;
 export const PENALTY_FALSE_ONBOARD = 1.0;

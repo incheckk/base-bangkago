@@ -9,14 +9,15 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useBangkero, useBooking } from '@/hooks/useSupabase';
+import { useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
 import {
   acceptBooking, rejectBooking, friendlyError, noShowPassenger, setOnboarded,
 } from '@/services/booking.service';
+import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { PassengerDetailDoc } from '@/types/models';
+import type { IslandPackageDoc, PassengerDetailDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { safeBack } from '@/utils/navigation';
 
@@ -29,6 +30,18 @@ export default function BookingStatus() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const uid = user?.id ?? null;
+  const ports = usePorts();
+
+  // Island-hop bookings: show every stop so the crew knows the full run.
+  const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
+  useEffect(() => {
+    if (!booking?.packageId) return;
+    let alive = true;
+    getIslandPackage(booking.packageId)
+      .then((p) => { if (alive) setPkg(p); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [booking?.packageId]);
 
   // Companions ride under the booker as one boarding group.
   const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
@@ -183,6 +196,17 @@ export default function BookingStatus() {
                 <Text style={styles.refPort} numberOfLines={1}>{booking.toPortName}</Text>
               </View>
             </View>
+
+            {!!pkg && pkg.stops.length > 1 && (
+              <View style={styles.card}>
+                <Text style={styles.cardLabel}>ITINERARY · {pkg.packageName.toUpperCase()}</Text>
+                {pkg.stops.map((stopId, i) => (
+                  <Text key={`${stopId}-${i}`} style={styles.itineraryStop} numberOfLines={1}>
+                    {i + 1}. {ports.data.find((p) => p.portId === stopId)?.portName ?? stopId}
+                  </Text>
+                ))}
+              </View>
+            )}
 
             <View style={styles.card}>
               <Text style={styles.cardLabel}>PASSENGER INFO</Text>
@@ -345,6 +369,7 @@ const styles = StyleSheet.create({
   cardLabel: { ...typography.label, marginBottom: spacing.sm },
   cardValue: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   cardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  itineraryStop: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 22 },
 
   banner: {
     backgroundColor: colors.dangerTint,

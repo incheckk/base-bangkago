@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useRealtimeQuery } from './useRealtimeQuery';
+import { getDispatchBypass, getGatesBypass } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import {
   getAllActiveQueues, getMyQueue, getPortQueue, refreshHolds, type MyQueueState,
@@ -379,9 +380,49 @@ export function useMyPortQueue(bangkeroUid: string | null): Result<MyQueueState>
   }, [bangkeroUid]);
 
   useEffect(() => { setLoading(true); void load(); }, [load]);
-  useRealtimeQuery(load, bangkeroUid ? [{ table: 'port_queue' }] : []);
+  useRealtimeQuery(load, [{ table: 'port_queue' }]);
 
   return { data, loading, error };
+}
+
+export interface DevFlags {
+  /** Admin demo switch: true lifts the FCFS dispatch rules (009). */
+  dispatchBypass: boolean;
+  /** Admin demo switch: true lifts the verification + rating gates (010). */
+  gatesBypass: boolean;
+}
+
+/**
+ * The admin's demo switch, live. Pre-009 (no dev_flags table) it reads
+ * as OFF instead of erroring, so the app behaves exactly as before.
+ * `refresh` exists because the toggle writes through an RPC — the
+ * screen re-reads immediately instead of waiting for the realtime echo.
+ */
+export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
+  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  const load = useCallback(async () => {
+    const id = ++seq.current;
+    // Each flag tolerates its own migration being unrun: pre-009 reads
+    // OFF, and a 009-only database still shows the dispatch switch for
+    // real while gates read OFF.
+    const [dispatch, gates] = await Promise.all([
+      getDispatchBypass().catch(() => false),
+      getGatesBypass().catch(() => false),
+    ]);
+    if (id !== seq.current) return;
+    setData({ dispatchBypass: dispatch, gatesBypass: gates });
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'dev_flags' }]);
+
+  return { data, loading, error, refresh: load };
 }
 
 /** Every port's active queue at once — the admin's per-port lists. */

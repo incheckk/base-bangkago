@@ -13,6 +13,12 @@ function mapPaymentRow(row: any): PaymentDoc {
   };
 }
 
+/**
+ * Recorded at booking time — ALWAYS 'pending' now, for cash and GCash
+ * alike: the fare is collected on board, where the bangkero marks it
+ * paid (mark_paid RPC, migration 012). A 'completed' here would have
+ * claimed payment before anyone boarded.
+ */
 export async function createPayment(
   bookingId: string,
   amount: number,
@@ -24,7 +30,7 @@ export async function createPayment(
       booking_id: bookingId,
       amount,
       payment_method: method,
-      payment_status: method === 'cash' ? 'completed' : 'pending',
+      payment_status: 'pending',
     })
     .select()
     .single();
@@ -42,4 +48,36 @@ export async function getPaymentByBooking(bookingId: string): Promise<PaymentDoc
 
   if (error) throw error;
   return data ? mapPaymentRow(data) : null;
+}
+
+/**
+ * Every payment for a set of bookings at once — the departure and
+ * manifest payment checklists. RLS: readable as the trip's operator
+ * (policy added in 012) or as the booking's passenger.
+ */
+export async function getPaymentsForBookings(bookingIds: string[]): Promise<PaymentDoc[]> {
+  if (bookingIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .in('booking_id', bookingIds);
+
+  if (error) throw error;
+  return (data ?? []).map(mapPaymentRow);
+}
+
+/**
+ * Bangkero side of pay-on-board: flips the row to 'completed' with an
+ * optional reference (GCash ref / receipt no). Enforced inside the
+ * RPC — only the trip's operator may call it.
+ */
+export async function markBookingPaid(
+  bookingId: string,
+  reference?: string
+): Promise<void> {
+  const { error } = await supabase.rpc('mark_paid', {
+    p_booking_id: bookingId,
+    p_reference: reference ?? null,
+  });
+  if (error) throw error;
 }

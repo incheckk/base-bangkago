@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
@@ -10,13 +10,26 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOperators } from '@/hooks/useOperators';
 import { friendlyError } from '@/services/booking.service';
 import { verifyBangkero } from '@/services/admin.service';
+import { docPublicUrl } from '@/services/documents.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
-const DOC_TYPES = [
-  { key: 'govId', label: "Gov't ID", icon: '🪪' },
-  { key: 'boatReg', label: 'Boat Registration', icon: '📜' },
-  { key: 'coastalPermit', label: 'Coastal Permit', icon: '🌊' },
-  { key: 'brgyClearance', label: 'Brgy Clearance', icon: '🏢' },
+/**
+ * The four documents as the bangkero actually uploaded them — real
+ * thumbnails, tap for a full-screen look. Status comes from the path
+ * on the bangkeros row (nothing else writes those columns); the
+ * decision is one Approve / Reject All pair because verification is
+ * granted per bangkero, never per photo (verifyBangkero, admin.service).
+ */
+const DOC_TYPES: {
+  key: string;
+  label: string;
+  icon: string;
+  field: 'govIssuedId' | 'boatRegistrationCert' | 'coastalPermit' | 'brgyClearance';
+}[] = [
+  { key: 'govId', label: "Gov't ID", icon: '🪪', field: 'govIssuedId' },
+  { key: 'boatReg', label: 'Boat Registration', icon: '📜', field: 'boatRegistrationCert' },
+  { key: 'coastal', label: 'Coastal Permit', icon: '🌊', field: 'coastalPermit' },
+  { key: 'brgy', label: 'Brgy Clearance', icon: '🏢', field: 'brgyClearance' },
 ];
 
 export default function DocumentReviewScreen() {
@@ -26,12 +39,8 @@ export default function DocumentReviewScreen() {
   const [remarks, setRemarks] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [docs, setDocs] = useState<Record<string, 'uploaded' | 'pending' | 'missing'>>({
-    govId: 'pending',
-    boatReg: 'pending',
-    coastalPermit: 'pending',
-    brgyClearance: 'pending',
-  });
+  const [decided, setDecided] = useState<'approved' | 'rejected' | null>(null);
+  const [preview, setPreview] = useState<{ label: string; url: string } | null>(null);
 
   if (loading) {
     return (
@@ -61,14 +70,6 @@ export default function DocumentReviewScreen() {
     );
   }
 
-  const approveDoc = (key: string) => {
-    setDocs((prev) => ({ ...prev, [key]: 'uploaded' }));
-  };
-
-  const rejectDoc = (key: string) => {
-    setDocs((prev) => ({ ...prev, [key]: 'missing' }));
-  };
-
   async function decide(status: 'approved' | 'rejected') {
     if (!user || !operator || actionLoading) return;
     setActionLoading(true);
@@ -80,17 +81,12 @@ export default function DocumentReviewScreen() {
         status,
         status === 'rejected' ? remarks.trim() || undefined : undefined
       );
-      const next: typeof docs = {};
-      for (const d of DOC_TYPES) next[d.key] = status === 'approved' ? 'uploaded' : 'missing';
-      setDocs(next);
+      setDecided(status);
     } catch (e) {
       setActionError(friendlyError(e));
     }
     setActionLoading(false);
   }
-
-  const approveAll = () => decide('approved');
-  const rejectAll = () => decide('rejected');
 
   return (
     <ScreenContainer padded={false}>
@@ -106,50 +102,50 @@ export default function DocumentReviewScreen() {
         <View style={styles.opInfo}>
           <Text style={styles.opName} numberOfLines={1}>{operator.displayName}</Text>
           <Text style={styles.opPermit}>
-            {operator.permitNumber ?? 'No permit number'}
+            {operator.permitNumber ?? 'No permit number'} ·{' '}
+            <Text style={[
+              styles.opStat,
+              { color: operator.verificationStat === 'verified' ? colors.success : colors.warning },
+            ]}>
+              {operator.verificationStat}
+            </Text>
           </Text>
         </View>
       </View>
 
       <Text style={styles.sectionLabel}>DOCUMENTS</Text>
       {DOC_TYPES.map((doc) => {
-        const status = docs[doc.key];
-        const isUploaded = status === 'uploaded';
-        const isMissing = status === 'missing';
+        const path = operator[doc.field];
+        const url = docPublicUrl(path);
+        const uploaded = !!path;
         return (
-          <View
+          <Pressable
             key={doc.key}
-            style={[
+            disabled={!url}
+            onPress={() => url && setPreview({ label: doc.label, url })}
+            style={({ pressed }) => [
               styles.docCard,
-              isUploaded && styles.docCardOk,
-              isMissing && styles.docCardMissing,
+              uploaded ? styles.docCardOk : styles.docCardMissing,
+              pressed && url && styles.docCardPressed,
             ]}
           >
             <View style={styles.docTop}>
-              <Text style={styles.docIcon}>{doc.icon}</Text>
-              <Text style={styles.docLabel}>{doc.label}</Text>
-              <Text style={[
-                styles.docStatus,
-                { color: isUploaded ? colors.primary : isMissing ? colors.danger : colors.warning },
-              ]}>
-                {isUploaded ? 'Uploaded' : isMissing ? 'Missing' : 'Pending'}
-              </Text>
+              {url ? (
+                <Image source={{ uri: url }} style={styles.docThumb} />
+              ) : (
+                <View style={styles.docThumbEmpty}>
+                  <Text style={styles.docThumbIcon}>{doc.icon}</Text>
+                </View>
+              )}
+              <View style={styles.docBody}>
+                <Text style={styles.docLabel}>{doc.label}</Text>
+                <Text style={[styles.docStatus, { color: uploaded ? colors.success : colors.danger }]}>
+                  {uploaded ? 'Uploaded — tap to view' : 'Missing — nothing was uploaded'}
+                </Text>
+              </View>
+              {uploaded && <Text style={styles.docView}>⤢</Text>}
             </View>
-            <View style={styles.docActions}>
-              <PrimaryButton
-                label="Approve"
-                onPress={() => approveDoc(doc.key)}
-                variant="primary"
-                style={styles.docBtn}
-              />
-              <PrimaryButton
-                label="Reject"
-                onPress={() => rejectDoc(doc.key)}
-                variant="danger"
-                style={styles.docBtn}
-              />
-            </View>
-          </View>
+          </Pressable>
         );
       })}
 
@@ -173,24 +169,59 @@ export default function DocumentReviewScreen() {
         </View>
       )}
 
+      {decided && (
+        <View style={[styles.banner, decided === 'approved' ? styles.bannerOk : styles.bannerBad]}>
+          <Text style={[styles.bannerText, { color: decided === 'approved' ? colors.success : colors.danger }]}>
+            {decided === 'approved'
+              ? 'Approved — the bangkero’s phone now shows Verified and they can go online.'
+              : 'Rejected — the bangkero sees your remarks and can re-upload their documents.'}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.bottomActions}>
         <PrimaryButton
           label="Approve All"
-          onPress={approveAll}
+          onPress={() => void decide('approved')}
           loading={actionLoading}
           disabled={actionLoading}
           style={styles.bottomBtn}
         />
         <PrimaryButton
           label="Reject All"
-          onPress={rejectAll}
+          onPress={() => void decide('rejected')}
           variant="danger"
           loading={actionLoading}
           disabled={actionLoading}
           style={styles.bottomBtn}
         />
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Full-screen document preview */}
+      <Modal
+        visible={!!preview}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreview(null)}
+      >
+        <View style={styles.modalBg}>
+          <Pressable
+            style={styles.modalClose}
+            onPress={() => setPreview(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Close preview"
+          >
+            <Text style={styles.modalCloseText}>✕</Text>
+          </Pressable>
+          {preview && (
+            <>
+              <Image source={{ uri: preview.url }} style={styles.modalImg} resizeMode="contain" />
+              <Text style={styles.modalLabel}>{preview.label}</Text>
+            </>
+          )}
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -208,6 +239,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing.lg,
+    marginTop: spacing.lg,
     marginBottom: spacing.xl,
   },
   opAvatar: {
@@ -222,6 +254,7 @@ const styles = StyleSheet.create({
   opInfo: { flex: 1 },
   opName: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
   opPermit: { flexShrink: 1, color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  opStat: { fontWeight: '700', textTransform: 'capitalize' },
 
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
 
@@ -233,19 +266,20 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
-  docCardOk: { borderColor: colors.primaryBorder },
+  docCardOk: { borderColor: colors.success },
   docCardMissing: { borderColor: colors.dangerBorder },
-  docTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+  docCardPressed: { opacity: 0.8 },
+  docTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  docThumb: { width: 56, height: 56, borderRadius: radii.sm, backgroundColor: colors.bgElevated },
+  docThumbEmpty: {
+    width: 56, height: 56, borderRadius: radii.sm,
+    backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center',
   },
-  docIcon: { flexShrink: 1, fontSize: 24 },
-  docLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
-  docStatus: { fontSize: 13, fontWeight: '600' },
-  docActions: { flexDirection: 'row', gap: spacing.sm },
-  docBtn: { flex: 1, height: 40 },
+  docThumbIcon: { fontSize: 22 },
+  docBody: { flex: 1, minWidth: 0 },
+  docLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  docStatus: { fontSize: 12, fontWeight: '600', marginTop: 3 },
+  docView: { color: colors.textMuted, fontSize: 20 },
 
   remarksWrap: { marginBottom: spacing.xl },
   remarksInput: {
@@ -267,6 +301,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
+  bannerOk: { backgroundColor: colors.successTint, borderColor: colors.success },
+  bannerBad: { backgroundColor: colors.dangerTint, borderColor: colors.danger },
   bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   bottomActions: {
@@ -275,4 +311,28 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   bottomBtn: { flex: 1 },
+
+  // ---------- full-screen preview ----------
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: spacing.xxl + 24,
+    right: spacing.xl,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  modalCloseText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  modalImg: { width: '100%', height: '75%' },
+  modalLabel: { ...typography.label, color: '#fff', marginTop: spacing.lg },
 });

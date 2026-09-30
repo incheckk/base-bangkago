@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
+import { documentsRoute } from '@/services/documents.service';
 import {
   friendlyError as profileFriendlyError, updateBoat, updateName,
 } from '@/services/profile.service';
@@ -23,22 +24,27 @@ import { formatPhone } from '@/utils/phone';
 const MENU_ITEMS = [
   { key: 'earnings', label: 'Earnings', icon: '💰' },
   { key: 'trips', label: 'Trip History', icon: '🚤' },
+  { key: 'ratings', label: 'My Ratings', icon: '⭐' },
   { key: 'documents', label: 'Documents', icon: '📄' },
-  { key: 'passengers', label: 'Passenger List', icon: '👥' },
+  { key: 'passengers', label: 'Manifest', icon: '📋' },
   { key: 'weather', label: 'Weather', icon: '🌊' },
-  { key: 'qr', label: 'My QR Code', icon: '📱' },
+  { key: 'qr', label: 'GCash QR', icon: '📱' },
   { key: 'guide', label: 'Quick Guide', icon: '📖' },
+  // The header burger is gone (3D) — SOS still has to be one tap away.
+  { key: 'sos', label: 'SOS Alert', icon: '🚨' },
   { key: 'settings', label: 'Settings', icon: '⚙️' },
 ] as const;
 
 const ROUTE_MAP: Record<string, string> = {
   earnings: '/(bangkero)/earnings',
   trips: '/(bangkero)/trips',
+  ratings: '/(bangkero)/ratings',
   documents: '/(bangkero)/verify-boat',
-  passengers: '/(bangkero)/passenger-list',
+  passengers: '/(bangkero)/manifest',
   weather: '/(bangkero)/weather',
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
+  sos: '/(bangkero)/sos-alert',
   settings: '/(bangkero)/profile',
 };
 
@@ -173,16 +179,34 @@ export default function BangkeroProfileScreen() {
           {op && (
             <Text style={styles.boatName}>{displayBoat}</Text>
           )}
-          <View style={[
-            styles.badge,
-            op?.verificationStat === 'verified' ? styles.badgeVerified : styles.badgePending,
-          ]}>
-            <Text style={[
-              styles.badgeText,
-              op?.verificationStat === 'verified' ? styles.badgeTextVerified : styles.badgeTextPending,
+          {/* Verification state and the number the accept gate uses — the
+              breakdown stays down in the info card. */}
+          <View style={styles.badgeRow}>
+            <View style={[
+              styles.badge,
+              op?.verificationStat === 'verified' ? styles.badgeVerified : styles.badgePending,
             ]}>
-              {op?.verificationStat === 'verified' ? '✓ Verified' : 'Pending Verification'}
-            </Text>
+              <Text style={[
+                styles.badgeText,
+                op?.verificationStat === 'verified' ? styles.badgeTextVerified : styles.badgeTextPending,
+              ]}>
+                {op?.verificationStat === 'verified' ? '✓ Verified' : 'Pending Verification'}
+              </Text>
+            </View>
+            {/* Always beside the verified badge — falls back to a
+                "No ratings yet" chip until the first rating lands. */}
+            {avgRating !== null && (
+              <View style={[styles.badge, styles.badgeRating]}>
+                <Text
+                  style={[
+                    styles.badgeRatingText,
+                    avgRating === 0 && { color: colors.textMuted },
+                  ]}
+                >
+                  {avgRating > 0 ? `${avgRating.toFixed(1)} ★` : 'No ratings yet'}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -288,21 +312,29 @@ export default function BangkeroProfileScreen() {
 
         <Text style={styles.sectionLabel}>MENU</Text>
         <View style={styles.menuCard}>
-          {MENU_ITEMS.map((item, i) => (
-            <Pressable
-              key={item.key}
-              onPress={() => router.push(ROUTE_MAP[item.key] as any)}
-              style={({ pressed }) => [
-                styles.menuItem,
-                i < MENU_ITEMS.length - 1 && styles.menuBorder,
-                pressed && styles.menuPressed,
-              ]}
-            >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Text style={styles.menuArrow}>›</Text>
-            </Pressable>
-          ))}
+          {MENU_ITEMS.map((item, i) => {
+            // Documents land on the screen matching the CURRENT state:
+            // editable upload while pending, locked view when verified,
+            // remarks + re-upload when rejected.
+            const route = item.key === 'documents'
+              ? documentsRoute(op?.verificationStat)
+              : ROUTE_MAP[item.key];
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => router.push(route as any)}
+                style={({ pressed }) => [
+                  styles.menuItem,
+                  i < MENU_ITEMS.length - 1 && styles.menuBorder,
+                  pressed && styles.menuPressed,
+                ]}
+              >
+                <Text style={styles.menuIcon}>{item.icon}</Text>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Text style={styles.menuArrow}>›</Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         {!!error && (
@@ -361,6 +393,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginBottom: spacing.sm,
   },
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   badge: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
@@ -368,6 +401,8 @@ const styles = StyleSheet.create({
   },
   badgeVerified: { backgroundColor: colors.primaryTint },
   badgePending: { backgroundColor: colors.warningTint },
+  badgeRating: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderSubtle },
+  badgeRatingText: { fontSize: 12, fontWeight: '700', color: colors.warning },
   badgeText: { fontSize: 12, fontWeight: '700' },
   badgeTextVerified: { color: colors.primary },
   badgeTextPending: { color: colors.warning },

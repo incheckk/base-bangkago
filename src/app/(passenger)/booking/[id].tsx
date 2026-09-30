@@ -7,17 +7,22 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
-import { useBooking, usePortQueue } from '@/hooks/useSupabase';
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
+import { useAuth } from '@/hooks/useAuth';
+import { useBooking, usePortQueue, usePorts } from '@/hooks/useSupabase';
 import { cancelBooking, friendlyError } from '@/services/booking.service';
+import { getDownpaymentByBooking } from '@/services/downpayment.service';
+import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
 import { getPaymentByBooking } from '@/services/payment.service';
 import { startPortOf } from '@/services/queue.service';
 import {
-  PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty,
+  PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
 } from '@/services/rating.service';
 import { createAlert } from '@/services/safety-alert.service';
 import { getLatestPositionForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import type { DownpaymentDoc, IslandPackageDoc, PaymentDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -30,6 +35,7 @@ const ESCAPE_WAIT_MS = 10 * 60 * 1000;
 
 export default function BookingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const { data: booking, loading, error } = useBooking(id ?? null);
 
   // While the request is open, how many boats are already queued at the
@@ -46,14 +52,61 @@ export default function BookingDetail() {
    */
   const [acted, setActed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [paymentLabel, setPaymentLabel] = useState('—');
+  const [payment, setPayment] = useState<PaymentDoc | null>(null);
+  const ports = usePorts();
+
+  // GCash escrow row (015) — pending → approved flips live when the
+  // admin reviews it in Admin → Downpayments.
+  const [downpayment, setDownpayment] = useState<DownpaymentDoc | null>(null);
+  const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    getDownpaymentByBooking(id)
+      .then((dp) => {
+        if (alive) setDownpayment(dp);
+      })
+      .catch(() => {
+        // rows without escrow simply show nothing
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  useRealtimeQuery(async () => {
+    if (!id) return;
+    try {
+      const dp = await getDownpaymentByBooking(id);
+      setDownpayment(dp);
+    } catch {
+      // keep whatever we have; focus/realtime retries
+    }
+  }, [{ table: 'downpayments', filter: id ? `booking_id=eq.${id}` : undefined }]);
+
+  // Package bookings render their full itinerary under the route card.
+  useEffect(() => {
+    if (!booking?.packageId) return;
+    let alive = true;
+    getIslandPackage(booking.packageId)
+      .then((p) => {
+        if (alive) setPkg(p);
+      })
+      .catch(() => {
+        // route card alone still shows first → last
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking?.packageId]);
 
   useEffect(() => {
     if (!id) return;
     let alive = true;
     getPaymentByBooking(id)
       .then((p) => {
-        if (alive) setPaymentLabel(p ? PAYMENT_LABELS[p.paymentMethod] ?? p.paymentMethod : '—');
+        if (alive) setPayment(p);
       })
       .catch(() => {
         // the fare row still shows without the method
@@ -62,6 +115,41 @@ export default function BookingDetail() {
       alive = false;
     };
   }, [id]);
+
+  // Live Paid/Pending: flips on its own when the bangkero taps
+  // "Mark as paid" on the departure screen (payments realtime, 012).
+  useRealtimeQuery(async () => {
+    if (!id) return;
+    try {
+      const p = await getPaymentByBooking(id);
+      setPayment(p);
+    } catch {
+      // keep whatever we have; focus/realtime retries
+    }
+  }, [{ table: 'payments', filter: id ? `booking_id=eq.${id}` : undefined }]);
+
+  const paymentLabel = payment
+    ? `${PAYMENT_LABELS[payment.paymentMethod] ?? payment.paymentMethod} · ${
+        payment.paymentStatus === 'completed' ? 'Paid' : 'Pending'
+      }`
+    : '—';
+
+  // Completed trips can be rated once (013 makes a second row impossible).
+  const [ratedScore, setRatedScore] = useState<number | null>(null);
+  useEffect(() => {
+    if (!id || !user?.id || booking?.status !== 'completed') return;
+    let alive = true;
+    getRatingsByBooking(id)
+      .then((rows) => {
+        if (!alive) return;
+        const mine = rows.find((r) => r.userId === user.id);
+        setRatedScore(mine ? mine.score : null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, user?.id, booking?.status]);
 
   async function cancel() {
     if (!id || acted || busy) return;
@@ -252,6 +340,18 @@ export default function BookingDetail() {
           <Text style={styles.route} numberOfLines={1}>{booking.toPortName}</Text>
         </View>
 
+        {!!pkg && pkg.stops.length > 1 && (
+          <View style={styles.itinerary}>
+            <Text style={styles.itineraryLabel}>ITINERARY</Text>
+            {pkg.stops.map((stopId, i) => (
+              <Text key={`${stopId}-${i}`} style={styles.itineraryStop} numberOfLines={1}>
+                {i + 1}. {ports.data.find((p) => p.portId === stopId)?.portName ?? stopId}
+                {i < pkg.stops.length - 1 ? '  ↓' : ''}
+              </Text>
+            ))}
+          </View>
+        )}
+
         {booking.status === 'accepted' && (
           <View style={styles.operator}>
             <Text style={styles.operatorLabel}>YOUR BANGKERO</Text>
@@ -266,6 +366,26 @@ export default function BookingDetail() {
           <Row label="Passengers" value={String(booking.numOfPassenger)} />
           <Row label="Fare" value={`₱${booking.totalPrice}`} strong />
           <Row label="Payment" value={paymentLabel} />
+          {downpayment ? (
+            <Row
+              label="Downpayment (50%)"
+              value={`₱${downpayment.amount} · ${
+                downpayment.status === 'approved'
+                  ? 'confirmed by admin'
+                  : downpayment.status === 'refunded'
+                    ? 'refunded'
+                    : 'awaiting admin confirmation'
+              }`}
+            />
+          ) : (
+            booking.packageId && (
+              <Row
+                label="Downpayment (50%)"
+                value="Not recorded — keep your GCash reference and contact support."
+              />
+            )
+          )}
+          {!!pkg && <Row label="Package" value={pkg.packageName} />}
           <Row label="Booked by" value={booking.passengerName ?? ''} />
           <Row label="Contact" value={booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''} />
         </View>
@@ -332,6 +452,30 @@ export default function BookingDetail() {
             </>
           )}
 
+          {booking.status === 'completed' && (
+            ratedScore !== null ? (
+              <Text style={styles.waiting}>
+                You rated this trip {ratedScore}★ — thanks for helping other passengers.
+              </Text>
+            ) : (
+              <PrimaryButton
+                label="Rate this trip"
+                variant="secondary"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(passenger)/rate-trip',
+                    params: {
+                      bookingId: booking.bookingId,
+                      bangkeroName: booking.operatorName ?? '',
+                      boatName: booking.operatorBoatName ?? '',
+                    },
+                  })
+                }
+                style={{ marginTop: spacing.md }}
+              />
+            )
+          )}
+
           <PrimaryButton
             label="Back to home"
             variant="secondary"
@@ -371,6 +515,17 @@ const styles = StyleSheet.create({
   },
   route: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
   arrow: { color: colors.primary, fontSize: 18, marginVertical: spacing.sm },
+
+  itinerary: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+  },
+  itineraryLabel: { ...typography.label, marginBottom: spacing.sm },
+  itineraryStop: { ...typography.caption, color: colors.text, fontWeight: '600', lineHeight: 20 },
 
   operator: {
     marginTop: spacing.lg,

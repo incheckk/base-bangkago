@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -7,6 +7,7 @@ import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useOperators } from '@/hooks/useOperators';
+import { getAverageRatingsMap } from '@/services/rating.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { VerificationStatus } from '@/types/models';
 
@@ -27,6 +28,22 @@ export default function OperatorsScreen() {
   const [filter, setFilter] = useState('all');
   const statusParam = filter === 'all' ? undefined : (filter as VerificationStatus);
   const { data, loading, error } = useOperators(statusParam);
+
+  // One ratings query for the whole list (no per-row average).
+  const [ratingMap, setRatingMap] = useState<Record<string, { avg: number; count: number }>>({});
+  useEffect(() => {
+    let alive = true;
+    getAverageRatingsMap()
+      .then((m) => {
+        if (alive) setRatingMap(m);
+      })
+      .catch(() => {
+        // cards still render — they just show "New"
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -65,6 +82,7 @@ export default function OperatorsScreen() {
         <View style={styles.list}>
           {data.map((op) => {
             const st = STATUS_STYLE[op.verificationStat];
+            const rating = ratingMap[op.uid];
             return (
               <Pressable
                 key={op.uid}
@@ -94,6 +112,11 @@ export default function OperatorsScreen() {
                   <Text style={styles.statusLabel}>
                     {op.isAvailable ? 'Available' : 'Offline'}
                   </Text>
+                  <View style={styles.ratingChip}>
+                    <Text style={styles.ratingChipText}>
+                      {rating ? `${rating.avg.toFixed(1)} ★` : 'New'}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
             );
@@ -153,4 +176,14 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 12 },
+  ratingChip: {
+    marginLeft: 'auto',
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+  },
+  ratingChipText: { fontSize: 12, fontWeight: '700', color: colors.warning },
 });

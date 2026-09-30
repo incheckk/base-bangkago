@@ -1,19 +1,116 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing, touchTarget } from '@/theme/tokens';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
 import { StarRating } from '@/components/StarRating';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
-import { usePorts } from '@/hooks/useSupabase';
+import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { useAuth } from '@/hooks/useAuth';
+import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import { usePorts, useBooking } from '@/hooks/useSupabase';
+import { getActiveBooking } from '@/services/booking.service';
+import { getAverageRating } from '@/services/rating.service';
+import { colors, radii, spacing, touchTarget } from '@/theme/tokens';
 
 const STEPS = ['Boarded', 'En Route', 'Arriving', 'Arrived'];
 
+/**
+ * The live trip screen. The map and step animations are still the
+ * GPS-deferred placeholders (LAUNCH B5), but everything shown about
+ * the bangkero — name, boat, rating, status, route — now comes from
+ * the passenger's real active booking instead of hardcoded mock data.
+ */
 export default function TripEnRoute() {
-  const [currentStep, setCurrentStep] = useState(1);
+  const { user } = useAuth();
   const ports = usePorts();
+
+  // Resolve the one open/accepted booking first, then load it fully.
+  const [activeId, setActiveId] = useState<string | null | undefined>(undefined);
+  const loadActive = useCallback(async () => {
+    if (!user?.id) {
+      setActiveId(null);
+      return;
+    }
+    try {
+      const active = await getActiveBooking(user.id);
+      setActiveId(active?.bookingId ?? null);
+    } catch {
+      setActiveId(null);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void loadActive();
+  }, [loadActive]);
+  useRefetchOnFocus(loadActive);
+
+  const { data: booking, loading, error } = useBooking(activeId ?? null);
+  const [avgRating, setAvgRating] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (!booking?.operatorId) {
+      setAvgRating(null);
+      return;
+    }
+    getAverageRating(booking.operatorId)
+      .then((avg) => {
+        if (alive) setAvgRating(avg);
+      })
+      .catch(() => {
+        if (alive) setAvgRating(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking?.operatorId]);
+
+  if (activeId === undefined || (activeId !== null && loading)) {
+    return (
+      <ScreenContainer>
+        <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
+        <LoadingState label="Loading your trip…" />
+      </ScreenContainer>
+    );
+  }
+
+  if (error && activeId) {
+    return (
+      <ScreenContainer>
+        <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
+        <ErrorState message={error} />
+      </ScreenContainer>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <ScreenContainer>
+        <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
+        <EmptyState
+          icon="⛵"
+          title="No trip in progress"
+          message="You have no active booking right now. Book a ride and it will show up here."
+        />
+        <Pressable
+          style={styles.sosButton}
+          onPress={() => router.replace('/(passenger)/home')}
+        >
+          <Text style={styles.sosText}>Back to Home</Text>
+        </Pressable>
+      </ScreenContainer>
+    );
+  }
+
+  // Real progress from the booking row — boarding, then underway.
+  const currentStep = booking.completedAt
+    ? 3
+    : booking.onboardedAt
+      ? 1
+      : 0;
+  const initials = initialsOf(booking.operatorName ?? '');
 
   return (
     <ScreenContainer>
@@ -27,20 +124,28 @@ export default function TripEnRoute() {
         <View style={styles.content}>
           {/* Status pill */}
           <View style={styles.statusRow}>
-            <StatusPill status="accepted" />
-            <Text style={styles.eta}>ETA: 12 min</Text>
+            <StatusPill status={booking.status} />
+            <Text style={styles.eta}>
+              {booking.completedAt
+                ? 'Trip completed'
+                : booking.onboardedAt
+                  ? 'On the way'
+                  : `Meet at ${booking.fromPortName}`}
+            </Text>
           </View>
 
           {/* Bangkero info card */}
           <View style={styles.card}>
             <View style={styles.bangkeroRow}>
               <View style={styles.avatar}>
-                <Text style={styles.avatarText}>MC</Text>
+                <Text style={styles.avatarText}>{initials}</Text>
               </View>
               <View style={styles.bangkeroInfo}>
-                <Text style={styles.bangkeroName}>Mang Carlo</Text>
-                <Text style={styles.boatName}>Boat: Star Ferry II</Text>
-                <StarRating rating={4.8} />
+                <Text style={styles.bangkeroName}>{booking.operatorName ?? 'Unassigned bangkero'}</Text>
+                {!!booking.operatorBoatName && (
+                  <Text style={styles.boatName}>Boat: {booking.operatorBoatName}</Text>
+                )}
+                {avgRating !== null && <StarRating rating={avgRating} />}
               </View>
             </View>
           </View>
@@ -89,6 +194,13 @@ export default function TripEnRoute() {
   );
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'BG';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 const styles = StyleSheet.create({
   scroll: { paddingBottom: spacing.xxl },
   mapArea: {
@@ -99,17 +211,18 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: radii.lg,
     borderBottomRightRadius: radii.lg,
   },
-  mapPlaceholder: { color: colors.textMuted, fontSize: 13 },
   content: { padding: spacing.lg, gap: spacing.lg },
   statusRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   eta: {
     color: colors.primary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
+    flexShrink: 1,
+    textAlign: 'right',
   },
   card: {
     backgroundColor: colors.bgElevated,
@@ -216,10 +329,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
   },
   contactText: {
-    color: colors.text,
+    color: colors.textSecondary,
     fontSize: 15,
     fontWeight: '600',
   },

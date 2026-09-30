@@ -1,13 +1,45 @@
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { LoadingState } from '@/components/States';
+import { useAuth } from '@/hooks/useAuth';
+import { useBangkero } from '@/hooks/useSupabase';
+import { documentsRoute, getLatestVerification } from '@/services/documents.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
+/**
+ * Rejection with the admin's REAL remarks — the sentence typed on
+ * the review screen, not a placeholder. Documents unlock again: the
+ * Re-upload button lands on the editable verify screen.
+ */
 export default function DocumentsRejected() {
+  const { user } = useAuth();
+  const uid = user?.id ?? null;
+  const bangkero = useBangkero(uid);
+  const [remarks, setRemarks] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const stat = bangkero.data?.verificationStat;
+  useEffect(() => {
+    if (!stat || stat === 'rejected') return;
+    router.replace(documentsRoute(stat));
+  }, [stat]);
+
+  useEffect(() => {
+    if (!uid) return;
+    let alive = true;
+    getLatestVerification(uid)
+      .then((v) => { if (alive) setRemarks(v?.remarks ?? null); })
+      .catch(() => { /* fall back to the generic line */ })
+      .finally(() => { if (alive) setLoaded(true); });
+    return () => { alive = false; };
+  }, [uid]);
+
   return (
     <ScreenContainer padded={false}>
       <BangkeroScreenHeader title="Verification Result" showBack={false} />
@@ -23,7 +55,13 @@ export default function DocumentsRejected() {
 
         <View style={styles.reasonBox}>
           <Text style={styles.reasonLabel}>REASON</Text>
-          <Text style={styles.reasonText}>Photo of ID is blurry</Text>
+          {!loaded ? (
+            <LoadingState label="Loading remarks…" />
+          ) : (
+            <Text style={styles.reasonText}>
+              {remarks?.trim() || 'No reason given — re-upload clearer photos of your documents.'}
+            </Text>
+          )}
         </View>
 
         <PrimaryButton
@@ -45,9 +83,10 @@ export default function DocumentsRejected() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
   iconWrap: {
     width: 80,
@@ -58,7 +97,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.xl,
   },
-  icon: { color: colors.danger, fontSize: 36, fontWeight: '700' },
   title: { ...typography.h2, textAlign: 'center', marginBottom: spacing.md },
   desc: {
     ...typography.body,
@@ -74,7 +112,8 @@ const styles = StyleSheet.create({
     borderColor: colors.dangerBorder,
     padding: spacing.lg,
     marginTop: spacing.xl,
+    minHeight: 72,
   },
   reasonLabel: { ...typography.label, marginBottom: spacing.xs },
-  reasonText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
+  reasonText: { color: colors.danger, fontSize: 14, fontWeight: '600', lineHeight: 20 },
 });

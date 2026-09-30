@@ -1,59 +1,63 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
-import { useAuth } from '@/hooks/useAuth';
-import { useBangkero } from '@/hooks/useSupabase';
+import { clearAdminGcashQr, getAdminGcashQr, saveAdminGcashQr } from '@/services/app-settings.service';
 import { friendlyError } from '@/services/booking.service';
-import {
-  docPublicUrl, pickImage, removeGcashQr, saveGcashQr,
-} from '@/services/documents.service';
+import { pickImage } from '@/services/documents.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 /**
- * The bangkero's GCash QR — how passengers pay on board. Upload,
- * change or remove it anytime; the image lives in the public `docs`
- * bucket and its path sits on bangkeros.gcash_qr_url (011).
- * Bangkero-side only; passengers do not get a QR screen.
+ * The ADMIN's escrow QR — every island-hopping and boat-rental
+ * downpayment is paid to this code. Stored in app_settings (015),
+ * displayed on the passenger payment screen. Bangkero GCash QRs
+ * (their own per-operator codes) are unaffected.
  */
-export default function GcashQrScreen() {
-  const { user } = useAuth();
-  const uid = user?.id ?? null;
-  const bangkero = useBangkero(uid);
-
+export default function AdminGcashQrScreen() {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Local write wins over the hook's row until realtime echoes it back.
-  const [override, setOverride] = useState<string | null | undefined>(undefined);
 
-  const path = override !== undefined
-    ? override
-    : bangkero.data?.gcashQrUrl ?? null;
-  const url = docPublicUrl(path);
+  useEffect(() => {
+    let alive = true;
+    getAdminGcashQr()
+      .then((v) => {
+        if (alive) setUrl(v);
+      })
+      .catch((e) => {
+        if (alive) setError(friendlyError(e));
+      })
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function chooseImage() {
     const options: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [
       { text: 'Take photo', onPress: () => void doUpload('camera') },
       { text: 'Choose from gallery', onPress: () => void doUpload('gallery') },
     ];
-    if (path) {
+    if (url) {
       options.push({ text: 'Remove', style: 'destructive', onPress: () => void doRemove() });
     }
     options.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('GCash QR', path ? 'Change or remove your QR code' : 'Add your GCash QR code', options);
+    Alert.alert('Escrow GCash QR', url ? 'Change or remove the QR code' : 'Add the escrow QR code', options);
   }
 
   async function doUpload(source: 'camera' | 'gallery') {
-    if (!uid) return;
     try {
       setError(null);
       const uri = await pickImage(source);
       if (!uri) return;
       setBusy(true);
-      setOverride(await saveGcashQr(uid, uri));
+      setUrl(await saveAdminGcashQr(uri));
     } catch (e) {
       setError(friendlyError(e));
     }
@@ -61,12 +65,11 @@ export default function GcashQrScreen() {
   }
 
   async function doRemove() {
-    if (!uid) return;
     try {
       setError(null);
       setBusy(true);
-      await removeGcashQr(uid);
-      setOverride(null);
+      await clearAdminGcashQr();
+      setUrl(null);
     } catch (e) {
       setError(friendlyError(e));
     }
@@ -75,12 +78,12 @@ export default function GcashQrScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader eyebrow="PAYMENTS" title="GCash QR" />
+      <AdminScreenHeader eyebrow="PAYMENTS" title="GCash QR" />
       <View style={styles.scroll}>
-
         <Text style={styles.hint}>
-          Passengers scan this QR code to send your fare via GCash on board.
-          Upload a clear screenshot of your GCash QR — you can change it anytime.
+          Passengers pay their 50% downpayment for island hops and boat rentals to this QR.
+          Upload a clear screenshot of the GCash account that should hold the escrow —
+          you can change it anytime.
         </Text>
 
         <View style={styles.qrBox}>
@@ -88,8 +91,8 @@ export default function GcashQrScreen() {
             <Image source={{ uri: url }} style={styles.qrImage} resizeMode="contain" />
           ) : (
             <View style={styles.qrPlaceholder}>
-              <Text style={styles.qrText}>NO QR YET</Text>
-              <Text style={styles.qrSub}>Upload your GCash QR code</Text>
+              <Text style={styles.qrText}>{loaded ? 'NO QR YET' : 'LOADING…'}</Text>
+              <Text style={styles.qrSub}>Upload the escrow GCash QR code</Text>
             </View>
           )}
         </View>
@@ -113,7 +116,8 @@ export default function GcashQrScreen() {
         <View style={styles.footer}>
           <PrimaryButton
             label="Back to Home"
-            onPress={() => router.replace('/(bangkero)/home')}
+            variant="secondary"
+            onPress={() => router.replace('/(admin)/home')}
           />
         </View>
       </View>
@@ -123,9 +127,7 @@ export default function GcashQrScreen() {
 
 const styles = StyleSheet.create({
   scroll: {
-    flex: 1,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
     paddingBottom: spacing.xxl,
     alignItems: 'center',
   },

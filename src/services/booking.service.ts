@@ -2,7 +2,6 @@ import type { BangkeroDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
 import { friendlyAuthError } from './auth.service';
 import { mapRouteRow } from './mappers';
 import { createNotification } from './notification.service';
-import { MIN_ACCEPT_RATING, getEffectiveRating } from './rating.service';
 import { supabase } from './supabase';
 
 /** Supabase speaks in error objects; screens need sentences. */
@@ -103,6 +102,8 @@ interface CreateArgs {
   passengerCount: number;
   serviceType?: 'passenger' | 'cargo';
   totalFare?: number;
+  /** Island-hopping package the booking belongs to (stored for itinerary display). */
+  packageId?: string;
 }
 
 /**
@@ -111,7 +112,7 @@ interface CreateArgs {
  * honored after the route is validated.
  */
 export async function createBooking({
-  passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare,
+  passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare, packageId,
 }: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
@@ -146,6 +147,7 @@ export async function createBooking({
       route_id: route.routeId,
       service_type: serviceType,
       trip_stat: 'open',
+      ...(packageId ? { package_id: packageId } : {}),
     })
     .select('id, ref')
     .single();
@@ -176,21 +178,18 @@ export async function cancelBooking(bookingId: string, reason?: string): Promise
 
 /**
  * First eligible boat in the port queue wins — the hold check, queue
- * membership, route lock and fit-check all live in the
- * accept_booking_hold RPC (008); the rating gate stays here as the
- * one check that predates it. A row that lost any of those races
- * raises a sentence the screen can show instead of a 0-row silence.
+ * membership, route lock, fit-check and the bangkero gates (documents
+ * + rating, 010) all live in the accept_booking_hold RPC. A row that
+ * lost any of those races raises a sentence the screen can show
+ * instead of a 0-row silence.
  */
 export async function acceptBooking(
   bookingId: string,
   bangkero: Pick<BangkeroDoc, 'uid' | 'displayName'>
 ): Promise<void> {
-  const effective = await getEffectiveRating(bangkero.uid);
-  if (effective <= MIN_ACCEPT_RATING) {
-    throw new Error(
-      `Your rating is too low (${effective.toFixed(1)}★) — you can no longer accept bookings until it improves.`
-    );
-  }
+  // Documents + rating are enforced inside the RPC (010) so the admin
+  // gates-bypass switch applies; the sentence arrives mapped through
+  // friendlyError ("rating is too low", "documents are not approved").
   const { error } = await supabase.rpc('accept_booking_hold', {
     p_booking_id: bookingId,
     p_operator_name: bangkero.displayName,

@@ -43,9 +43,9 @@ const ACTIVE_BANNER_H = 64;
 
 const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; route?: string }[] = [
   { key: 'ride', icon: 'boat', label: 'Boat Ride', enabled: true },
-  { key: 'island', icon: 'island', label: 'Island Hop', enabled: true },
+  { key: 'island', icon: 'island', label: 'Island Hop', enabled: true, route: '/(passenger)/island-packages' },
   { key: 'padala', icon: 'parcel', label: 'Padala', enabled: true, route: '/(passenger)/book-delivery' },
-  { key: 'rental', icon: 'rental', label: 'Boat Rental', enabled: false },
+  { key: 'rental', icon: 'rental', label: 'Boat Rental', enabled: true, route: '/(passenger)/boat-rental' },
 ];
 
 export default function PassengerHome() {

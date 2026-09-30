@@ -1,7 +1,8 @@
 ================================================================================
 BANGKAGO — DEFERRED FEATURES & DECISIONS
 Review this list when the system is PUBLISHED TO THE PUBLIC / GOES LIVE.
-Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build.
+Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build,
+updated through Phase 4C (ratings, island hopping, boat rental).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -24,6 +25,18 @@ Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build.
    Phone asleep / app killed = boat drops from dispatch after 3 min (no
    GPS fix). Only correct once background tracking ships (item B1).
 
+4. ISLAND-HOP BOOKINGS HAVE NO COMPANION LIST (Phase 4B)
+   Package bookings take a PASSENGER COUNT only — no per-companion
+   names/IDs, so the sailings manifest for packages shows the head
+   count. If coastguard passenger manifests must name every rider,
+   add a companion form before launch.
+
+5. BOAT RENTAL HOURLY RATE DEFAULT (Phase 4C)
+   bangkas.hourly_rate defaults to ₱500 (migration 016) when a
+   operator never set one; rates are editable per boat in
+   (bangkero)/rentals. Confirm real per-boat pricing with operators
+   before launch.
+
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
 B1. BACKGROUND GPS TRACKING
@@ -38,18 +51,32 @@ B2. PUSH NOTIFICATIONS
     - hold cascaded to you
     - booking accepted / boarding / no-show / trip updates
 
-B3. BANGKERO GATES (roadmap item 4)
+B3. (shipped — Phase 3A: bangkero gates, migrations/010_bangkero_gates.sql)
 B4. DEPARTURE FLOW POLISH (roadmap item 5)
 B5. GPS EN-ROUTE TRACKING FOR PASSENGERS (roadmap item 6)
     Live boat position on the passenger trip screen (trip-en-route.tsx
     placeholder exists).
-B6. VERIFY FLOW (roadmap item 7)
+B6. (shipped — Phase 3B: documents verify flow + GCash QR, migrations
+    011_documents_storage.sql / 012_mark_paid.sql)
 B7. DISPUTE COUNTER-REPORT — bangkero side deliberately not built.
 B8. PASSENGER-HOME BAN BANNER — deliberately not built (ban blocks at
     booking time only).
 B9. REAL GCASH PAYMENT INTEGRATION
-    Today: "Pay via GCash on board" is a manual reference only; cash/
-    onboard is the real flow. Wire a real GCash/API gateway at launch.
+    Today: booking creates a 'pending' payment (cash and GCash alike);
+    the bangkero marks it paid ON BOARD (mark_paid RPC, migration 012)
+    with an OPTIONAL manual reference number. There is NO scan-to-pay
+    step yet — a passenger camera reading the bangkero's GCash QR and
+    auto-confirming payment is deliberately deferred. Wire a real
+    GCash/API gateway (and the scan flow) at launch.
+    Escrow (Phases 4B/4C): island-hop packages and boat rentals file
+    their 50% downpayment against the ADMIN's GCash QR (app_settings
+    row 'gcash_qr_url', Admin → GCash QR) as a reference number +
+    screenshot upload into the downpayments table (migration 015).
+    Everything is settled OUT OF BAND: approve/refund is a manual
+    Admin → Downpayments button, nothing moves automatically. Rental
+    remainders are collected CASH IN PERSON when the charter
+    completes; package remainders are a 'cash' payment row collected
+    onboard. No real gateway in any of these paths yet.
 B10. DEMAND PREDICTION (ML)
     DemandBadge on bangkero home shows placeholder numbers. Per the
     knowledge base: Phase 1 = collect >1000 bookings; Phase 2 = train
@@ -85,14 +112,33 @@ C5. sign-in.tsx:15 — demo accounts come from the "Phase 3.10" seed
 C6. PaymentStatus still includes 'refunded' in the DB CHECK for
     backward compat although refunds were removed — optionally drop the
     value in a future migration.
+C7. ADMIN DEV OPTIONS (new) — src/app/(admin)/developer-options.tsx,
+    menu/quick-action entries, dev.service.ts, useDevFlags(), and
+    migrations/009_dev_dispatch_bypass.sql + 010_bangkero_gates.sql
+    exist ONLY for the classroom demo. Switch 1 (dispatch_bypass)
+    lifts FCFS queue/dwell/GPS/route/capacity rules; switch 2
+    (gates_bypass) lifts the bangkero gates — document verification +
+    registered boat to go online, and documents + rating floor to
+    receive/accept offers (bangkero_online_gate trigger, gates_ok(),
+    accept_booking_hold / assign_next_hold checks in 010).
+    Before public launch: remove the screen + nav entries, drop the
+    dev_flags table and both set_*_bypass RPCs, drop the
+    trg_bangkero_online_gate trigger, and revert the
+    dev_dispatch_bypass()/dev_gates_bypass()/gates_ok() checks in the
+    009/010-patched functions.
 
 [D] ENVIRONMENT / INFRA
 --------------------------------------------------------------------------------
 D1. EXPO SDK PINNED TO 54 — do NOT upgrade until the demo device /
     Expo Go constraint is gone (AGENTS.md). Revisit at launch.
-D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 then 008 (when it
-    exists) via SQL editor. Set up migration automation (supabase CLI /
-    CI) before public deployment.
+D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 → 008 → 009 → 010
+    → 011 → 012 → 013 → 014 → 015 → 016 via SQL editor, in order.
+    013 ratings guard, 014 island hopping, 015 downpayments,
+    016 boat rental (hourly_rate + rentals). Set up migration
+    automation (supabase CLI / CI) before public deployment.
+    NOTE: the `docs` storage bucket (011) is PUBLIC — fine for the
+    classroom demo, but switch to private buckets + signed URLs at
+    launch (document photos and GCash QRs are world-readable by URL).
 D3. SECURITY DEFINER RPCs are the write path for trip rules — review all
     RLS policies + function grants with a security pass before launch.
 

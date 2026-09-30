@@ -1,49 +1,115 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StarRating } from '@/components/StarRating';
+import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
-import { useRatings } from '@/hooks/useRatings';
+import { useBooking } from '@/hooks/useSupabase';
+import { friendlyError } from '@/services/booking.service';
+import { getRatingsByBooking, submitRating } from '@/services/rating.service';
+import type { RatingDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
+/**
+ * Rate a COMPLETED trip. The booking id is the source of truth: the
+ * bangkero UUID comes from booking.operator_id (013's unique index
+ * makes a second submit fail loudly instead of double-writing).
+ */
 export default function RateTripScreen() {
   const { bookingId, bangkeroName, boatName } = useLocalSearchParams<{
     bookingId: string;
-    bangkeroName: string;
-    boatName: string;
+    bangkeroName?: string;
+    boatName?: string;
   }>();
 
   const { user } = useAuth();
-  const { submitRating } = useRatings(user?.id ?? null);
+  const { data: booking, loading, error } = useBooking(bookingId ?? null);
 
+  const [existing, setExisting] = useState<RatingDoc | null>(null);
+  const [existingChecked, setExistingChecked] = useState(false);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Already rated? Load once the booking is known.
+  useEffect(() => {
+    if (!bookingId || !user?.id) return;
+    let alive = true;
+    getRatingsByBooking(bookingId)
+      .then((rows) => {
+        if (!alive) return;
+        setExisting(rows.find((r) => r.userId === user.id) ?? null);
+        setExistingChecked(true);
+      })
+      .catch(() => {
+        // A missed check only costs the guard — submit still enforces
+        // the unique index (013).
+        if (alive) setExistingChecked(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [bookingId, user?.id]);
 
   async function handleSubmit() {
-    if (!user || !bookingId || rating === 0) return;
+    if (!user || !bookingId || !booking) return;
+    if (booking.status !== 'completed') {
+      setActionError('Only completed trips can be rated.');
+      return;
+    }
+    if (!booking.operatorId) {
+      setActionError('This trip has no bangkero to rate.');
+      return;
+    }
+    if (existing) {
+      setActionError('You already rated this trip.');
+      return;
+    }
+    if (rating === 0) {
+      setActionError('Pick a star rating first.');
+      return;
+    }
     setSubmitting(true);
-    setError(null);
+    setActionError(null);
     try {
       await submitRating({
         score: rating,
-        comment: comment.trim() || null,
+        comment: comment.trim() || undefined,
         bookingId,
         userId: user.id,
-        bangkeroId: bangkeroName ?? '',
+        bangkeroId: booking.operatorId,
       });
       setSubmitted(true);
     } catch (e) {
-      setError((e as Error).message || 'Failed to submit rating.');
+      const msg = friendlyError(e);
+      // The unique index (013) or a lost race lands here.
+      if (/already rated|duplicate key/i.test(msg) || /duplicate key/i.test((e as Error).message ?? '')) {
+        setActionError('You already rated this trip.');
+      } else {
+        setActionError(msg);
+      }
     }
     setSubmitting(false);
   }
+
+  if (loading) {
+    return <ScreenContainer><LoadingState label="Loading trip…" /></ScreenContainer>;
+  }
+  if (error) {
+    return <ScreenContainer><ErrorState message={error} /></ScreenContainer>;
+  }
+  if (!booking) {
+    return <ScreenContainer><ErrorState message="Booking not found." /></ScreenContainer>;
+  }
+
+  const infoName = booking.operatorName ?? bangkeroName ?? 'Unknown';
+  const infoBoat = booking.operatorBoatName ?? boatName;
 
   if (submitted) {
     return (
@@ -64,21 +130,46 @@ export default function RateTripScreen() {
     );
   }
 
+  if (existing) {
+    return (
+      <ScreenContainer padded={false}>
+        <PassengerScreenHeader title="Rate Trip" subtitle="RATE TRIP" />
+        <View style={styles.center}>
+          <Text style={styles.thanksIcon}>⭐</Text>
+          <Text style={styles.thanksTitle}>Already rated</Text>
+          <View style={styles.existingStars}>
+            <StarRating rating={existing.score} size={28} />
+          </View>
+          {!!existing.comment && <Text style={styles.thanksMsg}>{existing.comment}</Text>}
+          <PrimaryButton
+            label="Back to home"
+            variant="secondary"
+            onPress={() => router.replace('/(passenger)/home')}
+            style={styles.thanksBtn}
+          />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer padded={false}>
       <PassengerScreenHeader title="Rate Trip" subtitle="RATE TRIP" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Bangkero info */}
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>BANGKERO</Text>
-          <Text style={styles.infoValue}>{bangkeroName ?? 'Unknown'}</Text>
-          {boatName && (
+          <Text style={styles.infoValue}>{infoName}</Text>
+          {!!infoBoat && (
             <>
               <Text style={[styles.infoLabel, { marginTop: spacing.md }]}>BOAT</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>{boatName}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>{infoBoat}</Text>
             </>
           )}
+          <Text style={styles.infoTrip} numberOfLines={1}>
+            {booking.fromPortName} → {booking.toPortName} · {booking.ref}
+          </Text>
         </View>
 
         {/* Star rating */}
@@ -109,19 +200,22 @@ export default function RateTripScreen() {
         </View>
 
         {/* Error */}
-        {!!error && (
+        {!!actionError && (
           <View style={styles.banner}>
-            <Text style={styles.bannerText}>{error}</Text>
+            <Text style={styles.bannerText}>{actionError}</Text>
           </View>
         )}
 
         {/* Submit */}
         <PrimaryButton
-          label="Submit Rating"
+          label={submitting ? 'Submitting…' : 'Submit Rating'}
           onPress={handleSubmit}
           loading={submitting}
-          disabled={rating === 0}
+          disabled={rating === 0 || submitting}
         />
+        {!existingChecked && (
+          <Text style={styles.checkNote}>Checking your past ratings…</Text>
+        )}
       </ScrollView>
     </ScreenContainer>
   );
@@ -129,7 +223,7 @@ export default function RateTripScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl },
 
   infoCard: {
     backgroundColor: colors.surface,
@@ -137,10 +231,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
     padding: spacing.lg,
+    marginTop: spacing.lg,
     marginBottom: spacing.xl,
   },
   infoLabel: { ...typography.label, marginBottom: spacing.xs },
   infoValue: { flexShrink: 1, color: colors.text, fontSize: 16, fontWeight: '700' },
+  infoTrip: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md },
 
   ratingSection: {
     backgroundColor: colors.surface,
@@ -181,4 +277,6 @@ const styles = StyleSheet.create({
   thanksTitle: { ...typography.h1, textAlign: 'center', marginBottom: spacing.md },
   thanksMsg: { ...typography.caption, textAlign: 'center', marginBottom: spacing.xxl },
   thanksBtn: { minWidth: 200 },
+  existingStars: { marginBottom: spacing.lg },
+  checkNote: { color: colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: spacing.md },
 });

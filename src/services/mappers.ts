@@ -36,6 +36,8 @@ export function mapBangkeroRow(row: any): BangkeroDoc {
     isAvailable: row.is_available,
     // ?? 0 keeps this working before migration 007 adds the column
     ratingPenalty: row.rating_penalty ?? 0,
+    // ?? null keeps this working before migration 011 adds the column
+    gcashQrUrl: row.gcash_qr_url ?? null,
     updatedAt: row.updated_at,
   };
 }
@@ -50,6 +52,8 @@ export function mapBangkaRow(row: any): BangkaDoc {
     capacity: row.capacity,
     maxLoadKg: row.max_load_kg,
     bangkeroId: row.bangkero_id,
+    // Pre-016 rows have no column at all — the demo default until set.
+    hourlyRate: Number(row.hourly_rate ?? 500),
   };
 }
 

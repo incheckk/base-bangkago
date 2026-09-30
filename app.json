@@ -33,7 +33,14 @@
           "imageWidth": 76
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BangkaGo needs access to your photos so you can upload your verification documents and GCash QR code.",
+          "cameraPermission": "BangkaGo needs your camera so you can take photos of your verification documents and GCash QR code."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

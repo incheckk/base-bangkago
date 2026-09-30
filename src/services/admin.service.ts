@@ -28,6 +28,7 @@ function mapBangkeroRow(row: any): BangkeroDoc {
     displayName: row.display_name,
     isAvailable: row.is_available,
     ratingPenalty: row.rating_penalty ?? 0,
+    gcashQrUrl: row.gcash_qr_url ?? null,
     updatedAt: row.updated_at,
   };
 }

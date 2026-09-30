@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, ScrollView, StyleSheet, Text, View,
+  Alert, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -9,16 +9,19 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
-import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
 import { friendlyError, noShowPassenger } from '@/services/booking.service';
 import { createManifest } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
+import {
+  getPaymentsForBookings, markBookingPaid,
+} from '@/services/payment.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { BookingDoc } from '@/types/models';
+import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
 
 const CHECKLIST_ITEMS = [
   { key: 'lifeJackets', label: 'Life jackets accounted for', icon: '🦺' },
@@ -27,6 +30,13 @@ const CHECKLIST_ITEMS = [
   { key: 'radio', label: 'Radio / communication device', icon: '📻' },
   { key: 'manifest', label: 'Passenger manifest verified', icon: '📋' },
 ];
+
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  gcash: 'GCash',
+  maya: 'Maya',
+  bank_transfer: 'Bank transfer',
+};
 
 export default function DepartureScreen() {
   const { user } = useAuth();
@@ -64,6 +74,41 @@ export default function DepartureScreen() {
   const noShows = useNoShowTrips(bangkeroId, noShowSince);
   const noShowedTrips = noShows.data;
   const freedSeats = noShowedTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
+
+  // Pay-on-board checklist: one read for every accepted booking, kept
+  // fresh through focus + payments realtime (012). The bangkero taps
+  // "Mark as paid" per trip once everyone is aboard.
+  const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
+  const [payingId, setPayingId] = useState<string | null>(null);
+  const [payReference, setPayReference] = useState('');
+  const [payError, setPayError] = useState<string | null>(null);
+  const loadPayments = useCallback(async () => {
+    const ids = accepted.data.map((t) => t.bookingId);
+    if (ids.length === 0) {
+      setPayments({});
+      return;
+    }
+    try {
+      const rows = await getPaymentsForBookings(ids);
+      setPayments(Object.fromEntries(rows.map((r) => [r.bookingId, r])));
+    } catch {
+      // status chips stay as they were; focus/realtime will retry
+    }
+  }, [accepted.data]);
+  useEffect(() => { void loadPayments(); }, [loadPayments]);
+  useRealtimeQuery(loadPayments, [{ table: 'payments' }]);
+
+  async function markPaid(t: BookingDoc) {
+    setPayingId(t.bookingId);
+    setPayError(null);
+    try {
+      await markBookingPaid(t.bookingId, payReference.trim() || undefined);
+      await loadPayments();
+    } catch (e) {
+      setPayError(friendlyError(e));
+    }
+    setPayingId(null);
+  }
 
   const paxLabel = (t: BookingDoc) =>
     t.serviceType === 'cargo' ? 'cargo' : `${t.numOfPassenger} pax`;
@@ -324,9 +369,9 @@ export default function DepartureScreen() {
 
             {manifestFinalized && (
               <PrimaryButton
-                label="View Passenger List"
+                label="View Manifest"
                 variant="secondary"
-                onPress={() => router.push('/(bangkero)/passenger-list')}
+                onPress={() => router.push('/(bangkero)/manifest')}
                 style={styles.mt}
               />
             )}
@@ -368,6 +413,73 @@ export default function DepartureScreen() {
                 );
               })}
             </View>
+
+            {/* ---------- payment (pay-on-board, 012) ---------- */}
+            {acceptedTrips.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>
+                  {allBoarded && anyoneAboard ? 'MARK AS PAID' : 'PAYMENT'}
+                </Text>
+                <View style={styles.payCard}>
+                  {acceptedTrips.map((t) => {
+                    const p = payments[t.bookingId];
+                    const paid = p?.paymentStatus === 'completed';
+                    const canMark = allBoarded && anyoneAboard && !paid;
+                    return (
+                      <View key={t.bookingId} style={styles.payItem}>
+                        <View style={styles.payRow}>
+                          <View style={styles.payBody}>
+                            <Text style={styles.payName} numberOfLines={1}>
+                              {t.ref} · {t.passengerName ?? 'Passengers'}
+                            </Text>
+                            <Text style={styles.payMeta} numberOfLines={1}>
+                              ₱{t.totalPrice}
+                              {p ? ` · ${METHOD_LABELS[p.paymentMethod] ?? p.paymentMethod}` : ''}
+                            </Text>
+                          </View>
+                          <Text style={paid ? styles.payStatusDone : styles.payStatusPending}>
+                            {paid ? '✓ Paid' : 'Pending'}
+                          </Text>
+                        </View>
+                        {canMark && (
+                          <PrimaryButton
+                            label="Mark as paid"
+                            onPress={() => void markPaid(t)}
+                            loading={payingId === t.bookingId}
+                            disabled={payingId !== null}
+                            style={styles.payBtn}
+                          />
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {allBoarded && anyoneAboard &&
+                    acceptedTrips.some((t) => payments[t.bookingId]?.paymentStatus !== 'completed') && (
+                      <TextInput
+                        style={styles.payRefInput}
+                        placeholder="GCash / receipt reference (optional)"
+                        placeholderTextColor={colors.textMuted}
+                        value={payReference}
+                        onChangeText={setPayReference}
+                        autoCapitalize="characters"
+                      />
+                  )}
+
+                  {!allBoarded && (
+                    <Text style={styles.payHint}>
+                      Confirm everyone aboard — payment status becomes actionable once the
+                      boarding checklist is complete.
+                    </Text>
+                  )}
+                  {!!payError && (
+                    <View style={styles.payError}>
+                      <Text style={styles.payErrorText}>{payError}</Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
 
             <View style={styles.footer}>
               <PrimaryButton
@@ -512,6 +624,44 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   checkIcon: { flexShrink: 1, fontSize: 14 },
+
+  // ---------- payment (pay-on-board) ----------
+  payCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
+  },
+  payItem: { paddingVertical: spacing.sm },
+  payRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  payBody: { flex: 1, minWidth: 0 },
+  payName: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  payMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 1 },
+  payStatusDone: { ...typography.label, color: colors.success, letterSpacing: 0 },
+  payStatusPending: { ...typography.label, color: colors.warning, letterSpacing: 0 },
+  payBtn: { marginTop: spacing.sm, minHeight: 40 },
+  payRefInput: {
+    marginTop: spacing.md,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    color: colors.text,
+    fontSize: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  payHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 18 },
+  payError: {
+    marginTop: spacing.sm,
+    backgroundColor: colors.dangerTint,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    padding: spacing.sm,
+  },
+  payErrorText: { flexShrink: 1, color: colors.danger, fontSize: 12, lineHeight: 16 },
 
   footer: { marginTop: spacing.xxl },
   readyHint: {

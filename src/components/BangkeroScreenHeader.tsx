@@ -1,11 +1,7 @@
 import React from 'react';
-import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from './Icon';
-import { SideDrawer } from './SideDrawer';
-import { MENU_TITLE, menuFor } from '@/config/menu';
 import { safeBack } from '@/utils/navigation';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -15,55 +11,38 @@ interface Props {
   eyebrow?: string;
   subtitle?: string;
   showBack?: boolean;
+  /**
+   * Kept so existing call sites keep compiling — the bangkero burger is
+   * gone (Phase 3D): navigation lives in the profile menu instead, and
+   * SideDrawer is no longer rendered here.
+   */
   showDrawer?: boolean;
-  /** Optional trailing control rendered before the menu button. */
+  /** Optional trailing control rendered before where the menu button was. */
   right?: React.ReactNode;
 }
 
-export function BangkeroScreenHeader({ title, eyebrow, subtitle, showBack = true, showDrawer = true, right }: Props) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-
+export function BangkeroScreenHeader({ title, eyebrow, subtitle, showBack = true, right }: Props) {
   return (
-    <>
-      <SideDrawer
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        title={MENU_TITLE.bangkero}
-        items={menuFor('bangkero')}
-      />
+    <View style={styles.header}>
+      {showBack && (
+        <Pressable
+          onPress={() => safeBack('/(bangkero)/home')}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+        >
+          <Icon name="back" size={20} color={colors.text} />
+        </Pressable>
+      )}
 
-      <View style={styles.header}>
-        {showBack && (
-          <Pressable
-            onPress={() => safeBack('/(bangkero)/home')}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="back" size={20} color={colors.text} />
-          </Pressable>
-        )}
-
-        <View style={styles.titleWrap}>
-          {!!eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
-          {!!title && <Text style={styles.title} numberOfLines={1}>{title}</Text>}
-          {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
-        </View>
-
-        {right}
-
-        {showDrawer && (
-          <Pressable
-            onPress={() => setDrawerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Open menu"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="menu" size={20} color={colors.text} />
-          </Pressable>
-        )}
+      <View style={styles.titleWrap}>
+        {!!eyebrow && <Text style={styles.eyebrow}>{eyebrow}</Text>}
+        {!!title && <Text style={styles.title} numberOfLines={1}>{title}</Text>}
+        {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
       </View>
-    </>
+
+      {right}
+    </View>
   );
 }
 

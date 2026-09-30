@@ -13,7 +13,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
-  useAcceptedBookings, useBangkero, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
+  useAcceptedBookings, useBangkero, useDevFlags, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
 } from '@/hooks/useSupabase';
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
@@ -76,6 +76,11 @@ export default function BangkeroHome() {
   // the distance badge tracks the boat as it moves.
   const ports = usePorts();
   const myQueue = useMyPortQueue(uid);
+  // Admin demo switches: 009 lifts the queue/dwell/route/capacity
+  // rules; 010 lifts the verification + rating gates. Independent.
+  const devFlags = useDevFlags();
+  const bypass = devFlags.data.dispatchBypass;
+  const gatesBypass = devFlags.data.gatesBypass;
   const [now, setNow] = useState(() => Date.now());
   const [myFix, setMyFix] = useState<{ latitude: number; longitude: number } | null>(null);
   const lastFixFetchRef = useRef(0);
@@ -93,11 +98,17 @@ export default function BangkeroHome() {
   }, [uid]);
 
   // Client-side fit-check chip: this boat's capacity vs. everything
-  // already accepted (mirrors fits_booking in 008).
+  // already accepted (mirrors fits_booking in 008). `boatChecked`
+  // separates "no boat yet" from "not fetched yet" so the gate row and
+  // the switch don't flash red while the lookup is in flight.
   const [myCapacity, setMyCapacity] = useState<number | null>(null);
+  const [boatChecked, setBoatChecked] = useState(false);
   useEffect(() => {
     if (!uid) return;
-    getMyBangkaCapacity(uid).then(setMyCapacity).catch(() => {});
+    getMyBangkaCapacity(uid)
+      .then(setMyCapacity)
+      .catch(() => {})
+      .finally(() => setBoatChecked(true));
   }, [uid]);
   const acceptedLoad = activeTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
   // Destinations of trips already accepted — the route lock (008).
@@ -116,7 +127,16 @@ export default function BangkeroHome() {
   useEffect(() => { loadRating(); }, [loadRating]);
   useRefetchOnFocus(loadRating);
   const ratingBlocked =
-    effectiveRating !== null && effectiveRating <= MIN_ACCEPT_RATING;
+    !gatesBypass && effectiveRating !== null && effectiveRating <= MIN_ACCEPT_RATING;
+
+  // The bangkero gates (010): verified documents + a registered boat to
+  // go online; documents + rating to receive or accept offers. All
+  // lifted while the admin gates-bypass switch is ON.
+  const verified = bangkero.data?.verificationStat === 'verified';
+  const docsBlocked =
+    !gatesBypass && !bangkero.loading && !!bangkero.data && !verified;
+  const boatBlocked = !gatesBypass && boatChecked && myCapacity === null;
+  const gatesLocked = docsBlocked || boatBlocked;
 
   /**
    * One request card's dispatch state — a client mirror of the gates
@@ -136,7 +156,10 @@ export default function BangkeroHome() {
 
     // Route lock: one destination at a time (and a mixed legacy set
     // locks the boat out entirely until those trips clear).
-    if (activeDests.length > 1 || (activeDests.length === 1 && activeDests[0] !== destPort)) {
+    if (
+      !bypass &&
+      (activeDests.length > 1 || (activeDests.length === 1 && activeDests[0] !== destPort))
+    ) {
       return {
         text: 'Locked to your current destination — finish those trips first',
         tone: 'block', canAccept: false, distance,
@@ -144,20 +167,35 @@ export default function BangkeroHome() {
     }
 
     const entry = myQueue.data.entry;
-    if (entry?.portId !== depPort) {
+    if (!bypass && entry?.portId !== depPort) {
       return {
         text: `Not queued at ${b.fromPortName ?? 'this port'}`,
         tone: 'block', canAccept: false, distance,
       };
     }
-    const dwellLeft = DWELL_MS - (now - new Date(entry.enteredAt).getTime());
-    if (dwellLeft > 0) {
-      return { text: `Entering queue… ${clock(dwellLeft)}`, tone: 'wait', canAccept: false, distance };
+    if (!bypass && entry) {
+      const dwellLeft = DWELL_MS - (now - new Date(entry.enteredAt).getTime());
+      if (dwellLeft > 0) {
+        return { text: `Entering queue… ${clock(dwellLeft)}`, tone: 'wait', canAccept: false, distance };
+      }
     }
     if (!available) {
       return { text: 'Offline — turn on to accept', tone: 'block', canAccept: false, distance };
     }
+    if (docsBlocked) {
+      return {
+        text: 'Documents not approved — finish verification to accept',
+        tone: 'block', canAccept: false, distance,
+      };
+    }
+    if (ratingBlocked) {
+      return {
+        text: 'Rating too low — must be above 3.0★',
+        tone: 'block', canAccept: false, distance,
+      };
+    }
     if (
+      !bypass &&
       b.serviceType !== 'rental' &&
       myCapacity !== null &&
       b.numOfPassenger + acceptedLoad > myCapacity
@@ -186,14 +224,16 @@ export default function BangkeroHome() {
   const qPortName = qEntry
     ? ports.data.find((p) => p.portId === qEntry.portId)?.portName ?? 'the port'
     : null;
-  const queueLabel = !qEntry
-    ? 'Not in any port queue — park inside a port perimeter to line up for requests.'
-    : (() => {
-        const dwellLeft = DWELL_MS - (now - new Date(qEntry.enteredAt).getTime());
-        const rank = myQueue.data.rank ? `#${myQueue.data.rank}` : '';
-        if (dwellLeft > 0) return `${rank} at ${qPortName} — joining the list in ${clock(dwellLeft)}`;
-        return `${rank} of ${myQueue.data.total} at ${qPortName}${available ? '' : ' · listed but offline'}`;
-      })();
+  const queueLabel = bypass
+    ? 'DEMO: dispatch bypass active — port queue rules are lifted.'
+    : !qEntry
+      ? 'Not in any port queue — park inside a port perimeter to line up for requests.'
+      : (() => {
+          const dwellLeft = DWELL_MS - (now - new Date(qEntry.enteredAt).getTime());
+          const rank = myQueue.data.rank ? `#${myQueue.data.rank}` : '';
+          if (dwellLeft > 0) return `${rank} at ${qPortName} — joining the list in ${clock(dwellLeft)}`;
+          return `${rank} of ${myQueue.data.total} at ${qPortName}${available ? '' : ' · listed but offline'}`;
+        })();
 
   async function toggle(next: boolean) {
     if (!uid) return;
@@ -326,7 +366,7 @@ export default function BangkeroHome() {
             <Switch
               value={available}
               onValueChange={toggle}
-              disabled={bangkero.loading || !bangkero.data || hasActiveTrip}
+              disabled={bangkero.loading || !bangkero.data || hasActiveTrip || gatesLocked}
               trackColor={{ false: colors.border, true: colors.primaryDark }}
               thumbColor={available ? colors.primary : colors.textMuted}
             />
@@ -335,17 +375,21 @@ export default function BangkeroHome() {
           <Text style={styles.statusHint}>
             {hasActiveTrip
               ? 'You have an active trip — stay online until it is completed.'
-              : available
-                ? 'You are receiving booking requests.'
-                : 'Turn on to start receiving booking requests.'}
+              : docsBlocked
+                ? 'Your documents must be verified by the admin before you can go online.'
+                : boatBlocked
+                  ? 'Register your boat (Profile → Edit Profile) before going online.'
+                  : available
+                    ? 'You are receiving booking requests.'
+                    : 'Turn on to start receiving booking requests.'}
           </Text>
 
           {/* FCFS place in line (008) — the whole dispatch model in one row. */}
           <View style={styles.queueWrap}>
-            <Text style={[styles.queueText, qEntry && styles.queueTextOn]} numberOfLines={2}>
-              {myQueue.loading ? 'Checking the port queue…' : queueLabel}
+            <Text style={[styles.queueText, (qEntry || bypass) && styles.queueTextOn]} numberOfLines={2}>
+              {myQueue.loading && !bypass ? 'Checking the port queue…' : queueLabel}
             </Text>
-            {!myFix && !myQueue.loading && (
+            {!myFix && !myQueue.loading && !bypass && (
               <Text style={styles.queueGps}>
                 No GPS fix yet — keep location on so your boat can join a port queue.
               </Text>
@@ -368,6 +412,35 @@ export default function BangkeroHome() {
               </View>
             )}
           </View>
+
+          {/* The four gates the server enforces (010): documents + boat
+              decide whether the switch can move, documents + rating
+              decide whether offers and Accept unlock. Rows always show
+              the real state — bypass changes behaviour, not the truth. */}
+          <View style={styles.gateWrap}>
+            <Text style={styles.gateTitle}>READINESS</Text>
+            <GateRow
+              ok={gatesBypass || verified}
+              label="Documents"
+              detail={verified ? 'verified' : gatesBypass ? 'bypass' : 'not approved'}
+            />
+            <GateRow
+              ok={gatesBypass || !ratingBlocked}
+              label="Rating"
+              detail={effectiveRating === null ? '…' : `${effectiveRating.toFixed(1)}★`}
+            />
+            <GateRow
+              ok={gatesBypass || !boatBlocked}
+              label="Boat"
+              detail={!boatChecked ? '…' : myCapacity !== null ? `${myCapacity} pax` : 'missing'}
+            />
+            <GateRow ok={!!myFix} label="GPS" detail={myFix ? 'live fix' : 'no fix yet'} />
+            {gatesBypass && (
+              <Text style={styles.gateNote}>
+                Demo mode: verification and rating gates are lifted.
+              </Text>
+            )}
+          </View>
         </View>
 
         {!!actionError && (
@@ -385,78 +458,30 @@ export default function BangkeroHome() {
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
-        <View style={styles.demandRow}>
-          <DemandBadge level="high" predictedPassengers={32} />
-          <DemandBadge level="medium" predictedPassengers={18} />
-          <DemandBadge level="low" predictedPassengers={8} />
-        </View>
-
-        <Text style={styles.sectionLabel}>EARNINGS</Text>
-        <View style={styles.earningsRow}>
-          <View style={styles.earningsItem}>
-            <Icon name="cash" size={16} color={colors.primary} />
-            <Text style={styles.earningsValue}>₱{todayEarnings}</Text>
-            <Text style={styles.earningsLabel}>TODAY</Text>
-          </View>
-          <View style={styles.earningsItem}>
-            <Icon name="receipt" size={16} color={colors.textSecondary} />
-            <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
-              ₱{weekEarnings}
+        {/* Document state banners — the practical face of the gates. */}
+        {!gatesBypass && bangkero.data?.verificationStat === 'pending' && (
+          <View style={styles.bannerInfo}>
+            <Text style={styles.bannerInfoText}>
+              Your documents are under review. You can go online once the admin approves them.
             </Text>
-            <Text style={styles.earningsLabel}>THIS WEEK</Text>
           </View>
-        </View>
-
-        {activeTrips.length > 0 && (
-          <>
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionLabelInline}>ACTIVE TRIPS</Text>
-              <View style={styles.countPill}>
-                <Text style={styles.countPillText}>{activeTrips.length}</Text>
-              </View>
-            </View>
-            {activeTrips.map((b) => (
-              <Pressable
-                key={b.bookingId}
-                onPress={() => router.push({
-                  pathname: '/(bangkero)/booking-status',
-                  params: { bookingId: b.bookingId },
-                })}
-                style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
-              >
-                <RequestBody booking={b} />
-                {/* Completing requires everyone aboard (complete_trip raises
-                    otherwise) — until then the button routes to the boarding
-                    card instead of pretending the trip can close. */}
-                <PrimaryButton
-                  label={
-                    acted.has(b.bookingId)
-                      ? 'Completed'
-                      : b.onboardedAt
-                        ? 'Mark completed'
-                        : 'Open trip to confirm boarding'
-                  }
-                  onPress={() => {
-                    if (acted.has(b.bookingId)) return;
-                    if (b.onboardedAt) {
-                      void complete(b);
-                    } else {
-                      router.push({
-                        pathname: '/(bangkero)/booking-status',
-                        params: { bookingId: b.bookingId },
-                      });
-                    }
-                  }}
-                  loading={pending === b.bookingId}
-                  disabled={acted.has(b.bookingId)}
-                  style={{ marginTop: spacing.md }}
-                />
-              </Pressable>
-            ))}
-          </>
+        )}
+        {!gatesBypass && bangkero.data?.verificationStat === 'rejected' && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              The admin rejected your documents — upload them again to continue.
+            </Text>
+            <PrimaryButton
+              label="Re-upload documents"
+              variant="secondary"
+              onPress={() => router.push('/(bangkero)/verify-boat')}
+              style={styles.bannerBtn}
+            />
+          </View>
         )}
 
+        {/* Work first: requests hold for only 3 minutes, so they sit
+            directly under the status card — demand/earnings can wait. */}
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabelInline}>INCOMING REQUESTS</Text>
           {available && requests.data.length > 0 && (
@@ -531,7 +556,7 @@ export default function BangkeroHome() {
                     label="Accept"
                     onPress={() => accept(b)}
                     loading={pending === b.bookingId}
-                    disabled={acted.has(b.bookingId) || ratingBlocked || !chip.canAccept}
+                    disabled={acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
                     style={styles.acceptBtn}
                   />
                 </View>
@@ -539,8 +564,93 @@ export default function BangkeroHome() {
             );
           })
         )}
+
+        {activeTrips.length > 0 && (
+          <>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabelInline}>ACTIVE TRIPS</Text>
+              <View style={styles.countPill}>
+                <Text style={styles.countPillText}>{activeTrips.length}</Text>
+              </View>
+            </View>
+            {activeTrips.map((b) => (
+              <Pressable
+                key={b.bookingId}
+                onPress={() => router.push({
+                  pathname: '/(bangkero)/booking-status',
+                  params: { bookingId: b.bookingId },
+                })}
+                style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
+              >
+                <RequestBody booking={b} />
+                {/* Completing requires everyone aboard (complete_trip raises
+                    otherwise) — until then the button routes to the boarding
+                    card instead of pretending the trip can close. */}
+                <PrimaryButton
+                  label={
+                    acted.has(b.bookingId)
+                      ? 'Completed'
+                      : b.onboardedAt
+                        ? 'Mark completed'
+                        : 'Open trip to confirm boarding'
+                  }
+                  onPress={() => {
+                    if (acted.has(b.bookingId)) return;
+                    if (b.onboardedAt) {
+                      void complete(b);
+                    } else {
+                      router.push({
+                        pathname: '/(bangkero)/booking-status',
+                        params: { bookingId: b.bookingId },
+                      });
+                    }
+                  }}
+                  loading={pending === b.bookingId}
+                  disabled={acted.has(b.bookingId)}
+                  style={{ marginTop: spacing.md }}
+                />
+              </Pressable>
+            ))}
+          </>
+        )}
+
+        <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
+        <View style={styles.demandRow}>
+          <DemandBadge level="high" predictedPassengers={32} />
+          <DemandBadge level="medium" predictedPassengers={18} />
+          <DemandBadge level="low" predictedPassengers={8} />
+        </View>
+
+        <Text style={styles.sectionLabel}>EARNINGS</Text>
+        <View style={styles.earningsRow}>
+          <View style={styles.earningsItem}>
+            <Icon name="cash" size={16} color={colors.primary} />
+            <Text style={styles.earningsValue}>₱{todayEarnings}</Text>
+            <Text style={styles.earningsLabel}>TODAY</Text>
+          </View>
+          <View style={styles.earningsItem}>
+            <Icon name="receipt" size={16} color={colors.textSecondary} />
+            <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
+              ₱{weekEarnings}
+            </Text>
+            <Text style={styles.earningsLabel}>THIS WEEK</Text>
+          </View>
+        </View>
       </ScrollView>
     </ScreenContainer>
+  );
+}
+
+/** One readiness row: icon + label + the concrete value behind it. */
+function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
+  return (
+    <View style={styles.gateRow}>
+      <Icon name={ok ? 'check' : 'close'} size={14} color={ok ? colors.success : colors.danger} />
+      <Text style={styles.gateLabel}>{label}</Text>
+      <Text style={[styles.gateDetail, { color: ok ? colors.success : colors.danger }]}>
+        {detail}
+      </Text>
+    </View>
   );
 }
 
@@ -639,6 +749,18 @@ const styles = StyleSheet.create({
   },
   pendingText: { ...typography.label, color: colors.warning, letterSpacing: 0 },
 
+  // ---------- readiness gates (010) ----------
+  gateWrap: {
+    marginTop: spacing.lg, paddingTop: spacing.lg,
+    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+    gap: spacing.sm,
+  },
+  gateTitle: { ...typography.label },
+  gateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  gateLabel: { ...typography.caption, color: colors.textSecondary, flex: 1 },
+  gateDetail: { ...typography.label, letterSpacing: 0 },
+  gateNote: { ...typography.micro, color: colors.warning, lineHeight: 16 },
+
   // ---------- error banner ----------
   banner: {
     marginTop: spacing.lg,
@@ -649,6 +771,18 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   bannerText: { flexShrink: 1, ...typography.caption, color: colors.danger, lineHeight: 18 },
+  bannerInfo: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  bannerInfoText: {
+    flexShrink: 1, ...typography.caption, color: colors.textSecondary, lineHeight: 18,
+  },
+  bannerBtn: { marginTop: spacing.md, alignSelf: 'flex-start' },
 
   // ---------- sections ----------
   sectionLabel: { ...typography.label, marginTop: spacing.huge, marginBottom: spacing.md },

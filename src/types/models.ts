@@ -66,6 +66,8 @@ export interface BangkeroDoc {
   isAvailable: boolean;
   /** Deducted from the 5★ average by incident (missed pickup, false onboard). */
   ratingPenalty: number;
+  /** Object path of the bangkero's GCash QR image in the public `docs` bucket. */
+  gcashQrUrl: string | null;
   updatedAt: string; // ISO 8601
 }
 
@@ -78,6 +80,8 @@ export interface BangkaDoc {
   capacity: number;
   maxLoadKg: number | null;
   bangkeroId: string;
+  /** Charter price per hour for boat rentals (016, default 500). */
+  hourlyRate: number;
 }
 
 export interface PortDoc {
@@ -182,6 +186,23 @@ export interface IslandPackageDoc {
   price: number;
   maxCapacity: number;
   durationHours: number;
+  /** Ordered port IDs the hop visits; booking resolves stops[0] → stops[last]. */
+  stops: string[];
+}
+
+export type DownpaymentStatus = 'pending' | 'approved' | 'refunded';
+
+export interface DownpaymentDoc {
+  downpaymentId: string;
+  amount: number;
+  referenceNum: string;
+  /** Storage path in the `docs` bucket — render with docPublicUrl(). */
+  proofUrl: string;
+  status: DownpaymentStatus;
+  bookingId: string | null;
+  boatRentalId: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
 }
 
 export interface ParcelDoc {

@@ -1,12 +1,15 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { getAdminGcashQr } from '@/services/app-settings.service';
 import { createBooking, friendlyError } from '@/services/booking.service';
+import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
+import { pickImage } from '@/services/documents.service';
 import { createParcel } from '@/services/parcel.service';
 import { createPassengerDetail } from '@/services/passenger-detail.service';
 import { createPayment } from '@/services/payment.service';
@@ -42,11 +45,53 @@ export default function PaymentScreen() {
     receiverName?: string;
     receiverContact?: string;
     itemsJson?: string;
+    packageId?: string;
+    packageName?: string;
+    downAmount?: string;
+    remainder?: string;
   }>();
 
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Package mode: 50% GCash escrow to the ADMIN's QR, proof filed here.
+  const isPackage = !!params.packageId;
+  const downAmount = Math.round((parseInt(params.downAmount ?? '0', 10) || 0));
+  const remainderAmount = parseInt(params.remainder ?? params.fare ?? '0', 10) || 0;
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrLoaded, setQrLoaded] = useState(false);
+  const [reference, setReference] = useState('');
+  const [proofUri, setProofUri] = useState<string | null>(null);
+  const [proofUploading, setProofUploading] = useState(false);
+
+  useEffect(() => {
+    if (!isPackage) return;
+    let alive = true;
+    (async () => {
+      try {
+        const url = await getAdminGcashQr();
+        if (alive) setQrUrl(url);
+      } catch {
+        // QR unavailable — the placeholder explains what to do
+      } finally {
+        if (alive) setQrLoaded(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [isPackage]);
+
+  async function chooseProof(source: 'camera' | 'gallery') {
+    if (proofUploading) return;
+    try {
+      const uri = await pickImage(source);
+      if (uri) setProofUri(uri);
+    } catch (e) {
+      setError(friendlyError(e));
+    }
+  }
 
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);
@@ -61,6 +106,20 @@ export default function PaymentScreen() {
     setBusy(true);
     setError(null);
     try {
+      // Package mode files the escrow proof FIRST — a booking must never
+      // exist without the screenshot that documents its downpayment.
+      let proofPath: string | null = null;
+      if (isPackage) {
+        if (!reference.trim()) throw new Error('Enter your GCash reference number.');
+        if (!proofUri) throw new Error('Attach your payment screenshot.');
+        setProofUploading(true);
+        try {
+          proofPath = await uploadDownpaymentProof(proofUri);
+        } finally {
+          setProofUploading(false);
+        }
+      }
+
       const { bookingId, ref } = await createBooking({
         passenger: profile,
         fromPort: { portId: params.fromId, portName: params.fromName },
@@ -68,6 +127,7 @@ export default function PaymentScreen() {
         passengerCount: serviceType === 'cargo' ? 1 : paxCount,
         serviceType,
         totalFare: fare,
+        ...(isPackage && params.packageId ? { packageId: params.packageId } : {}),
       });
 
       // Companions ride under this booking. A failed insert must never block
@@ -95,7 +155,14 @@ export default function PaymentScreen() {
         }
       }
 
-      await createPayment(bookingId, fare, method);
+      // One payments row per booking, always (012 mark_paid semantics):
+      // packages record only the ONBOARD remainder — the 50% already
+      // "paid" lives in downpayments, not here.
+      if (isPackage) {
+        await createPayment(bookingId, remainderAmount, 'cash');
+      } else {
+        await createPayment(bookingId, fare, method);
+      }
 
       let parcelId: string | undefined;
       if (serviceType === 'cargo' && params.receiverName) {
@@ -129,14 +196,33 @@ export default function PaymentScreen() {
         parcelId = parcel.parcelId;
       }
 
+      // Escrow row — the booking already exists, so a failed insert must
+      // never block the confirmation screen: flag it and move on.
+      let downWarning = false;
+      if (isPackage && proofPath) {
+        try {
+          await createDownpayment({
+            amount: downAmount,
+            referenceNum: reference,
+            proofUrl: proofPath,
+            bookingId,
+          });
+        } catch {
+          downWarning = true;
+        }
+      }
+
       router.push({
         pathname: '/(passenger)/booking-confirmed',
         params: {
           ...params,
-          paymentMethod: method,
+          paymentMethod: isPackage ? 'cash' : method,
           bookingId,
           ref,
           ...(parcelId ? { parcelId } : {}),
+          ...(isPackage
+            ? { downStatus: 'pending', ...(downWarning ? { downWarning: '1' } : {}) }
+            : {}),
         },
       });
     } catch (e) {
@@ -162,11 +248,20 @@ export default function PaymentScreen() {
                 {params.toName ?? '—'}
               </Text>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryRowLabel}>Trip date</Text>
-              <Text style={styles.summaryRowValue}>{todayLabel()}</Text>
-            </View>
+          {!!params.packageName && (
+            <>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryRowLabel}>Package</Text>
+                <Text style={styles.summaryRowValue} numberOfLines={1}>{params.packageName}</Text>
+              </View>
+            </>
+          )}
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryRowLabel}>Trip date</Text>
+            <Text style={styles.summaryRowValue}>{todayLabel()}</Text>
+          </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryRowLabel}>Passengers</Text>
               <Text style={styles.summaryRowValue}>{paxCount}</Text>
@@ -178,34 +273,102 @@ export default function PaymentScreen() {
             </View>
           </View>
 
-          <Text style={[styles.sectionLabel, styles.mtLg]}>PAYMENT METHOD</Text>
-          <View style={styles.methodList}>
-            {PAYMENT_METHODS.map((m) => {
-              const active = m.key === method;
-              return (
+          {isPackage ? (
+            <View>
+              <Text style={[styles.sectionLabel, styles.mtLg]}>GCASH DOWNPAYMENT (50%)</Text>
+              <View style={styles.escrowCard}>
+                <View style={styles.escrowAmountRow}>
+                  <Text style={styles.escrowLabel}>Pay now to the admin&apos;s GCash</Text>
+                  <Text style={styles.escrowAmount}>₱{downAmount}</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.escrowAmountRow}>
+                  <Text style={styles.escrowLabel}>Collected onboard</Text>
+                  <Text style={styles.escrowRemainder}>₱{remainderAmount}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.inputLabel}>SCAN &amp; PAY VIA GCASH</Text>
+              {qrUrl ? (
+                <Image source={{ uri: qrUrl }} style={styles.qrImage} resizeMode="contain" />
+              ) : (
+                <View style={styles.qrPlaceholder}>
+                  <Text style={styles.qrPlaceholderText}>
+                    {qrLoaded
+                      ? 'The admin has not uploaded their GCash QR yet. Ask them to set it up in Admin → GCash QR.'
+                      : 'Loading QR…'}
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>GCASH REFERENCE NUMBER</Text>
+              <TextInput
+                value={reference}
+                onChangeText={setReference}
+                placeholder="e.g. 123456789012"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="characters"
+                style={styles.input}
+              />
+
+              <Text style={styles.inputLabel}>PAYMENT SCREENSHOT</Text>
+              <View style={styles.proofRow}>
                 <Pressable
-                  key={m.key}
-                  onPress={() => setMethod(m.key)}
-                  style={({ pressed }) => [
-                    styles.methodCard,
-                    active && styles.methodCardActive,
-                    pressed && !active && styles.methodPressed,
-                  ]}
+                  onPress={() => void chooseProof('gallery')}
+                  disabled={proofUploading}
+                  style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
                 >
-                  <Text style={styles.methodIcon}>{m.icon}</Text>
-                  <View style={styles.methodInfo}>
-                    <Text style={[styles.methodName, active && styles.methodNameActive]}>
-                      {m.label}
-                    </Text>
-                    <Text style={styles.methodDesc}>{m.description}</Text>
-                  </View>
-                  <View style={[styles.radio, active && styles.radioActive]}>
-                    {active && <View style={styles.radioDot} />}
-                  </View>
+                  <Text style={styles.proofBtnText}>🖼 Gallery</Text>
                 </Pressable>
-              );
-            })}
-          </View>
+                <Pressable
+                  onPress={() => void chooseProof('camera')}
+                  disabled={proofUploading}
+                  style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
+                >
+                  <Text style={styles.proofBtnText}>📷 Camera</Text>
+                </Pressable>
+              </View>
+              {proofUri && (
+                <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />
+              )}
+
+              <Text style={styles.escrowHint}>
+                The admin confirms your payment from their side. Booking goes ahead either way —
+                this downpayment is held in escrow until your trip.
+              </Text>
+            </View>
+          ) : (
+            <View>
+              <Text style={[styles.sectionLabel, styles.mtLg]}>PAYMENT METHOD</Text>
+              <View style={styles.methodList}>
+                {PAYMENT_METHODS.map((m) => {
+                  const active = m.key === method;
+                  return (
+                    <Pressable
+                      key={m.key}
+                      onPress={() => setMethod(m.key)}
+                      style={({ pressed }) => [
+                        styles.methodCard,
+                        active && styles.methodCardActive,
+                        pressed && !active && styles.methodPressed,
+                      ]}
+                    >
+                      <Text style={styles.methodIcon}>{m.icon}</Text>
+                      <View style={styles.methodInfo}>
+                        <Text style={[styles.methodName, active && styles.methodNameActive]}>
+                          {m.label}
+                        </Text>
+                        <Text style={styles.methodDesc}>{m.description}</Text>
+                      </View>
+                      <View style={[styles.radio, active && styles.radioActive]}>
+                        {active && <View style={styles.radioDot} />}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {!!error && (
             <View style={styles.errorBanner}>
@@ -215,10 +378,16 @@ export default function PaymentScreen() {
 
           <View style={styles.bottomPad}>
             <PrimaryButton
-              label="Confirm Booking"
+              label={isPackage ? `Pay ₱${downAmount} & Book` : 'Confirm Booking'}
               onPress={confirm}
-              loading={busy}
-              disabled={busy || profileLoading || !profile}
+              loading={busy || proofUploading}
+              disabled={
+                busy ||
+                proofUploading ||
+                profileLoading ||
+                !profile ||
+                (isPackage && (!reference.trim() || !proofUri))
+              }
             />
           </View>
         </View>
@@ -254,6 +423,83 @@ const styles = StyleSheet.create({
   mtLg: { marginTop: spacing.xl },
 
   methodList: { gap: spacing.md },
+
+  escrowCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+  },
+  escrowAmountRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  escrowLabel: { ...typography.caption, flexShrink: 1 },
+  escrowAmount: { color: colors.primary, fontSize: 20, fontWeight: '700' },
+  escrowRemainder: { color: colors.text, fontSize: 16, fontWeight: '700' },
+
+  inputLabel: { ...typography.label, marginTop: spacing.lg, marginBottom: spacing.sm },
+  input: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    minHeight: 46,
+    color: colors.text,
+    fontSize: 15,
+  },
+  qrImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  qrPlaceholder: {
+    minHeight: 120,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  qrPlaceholderText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
+
+  proofRow: { flexDirection: 'row', gap: spacing.md },
+  proofBtn: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proofBtnPressed: { borderColor: colors.primary },
+  proofBtnText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  proofPreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: radii.md,
+    marginTop: spacing.md,
+  },
+  escrowHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: spacing.md,
+  },
   methodCard: {
     flexDirection: 'row',
     alignItems: 'center',

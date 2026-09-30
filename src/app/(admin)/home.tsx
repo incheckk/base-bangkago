@@ -15,6 +15,7 @@ const QUICK_ACTIONS: { key: string; icon: IconName; label: string; route: string
   { key: 'trips', icon: 'bookings', label: 'View Trips', route: '/(admin)/active-trips' },
   { key: 'fleet', icon: 'route', label: 'Fleet Overview', route: '/(admin)/fleet-overview' },
   { key: 'alerts', icon: 'alert', label: 'System Alerts', route: '/(admin)/alerts' },
+  { key: 'dev', icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options' },
 ];
 
 export default function AdminHome() {

@@ -29,12 +29,15 @@ const ROLE_ITEMS: Record<UserRole | 'admin', MenuItem[]> = {
   passenger: [
     { icon: 'home', label: 'Home', onPress: () => router.replace('/(passenger)/home') },
     { icon: 'bookings', label: 'My Bookings', onPress: () => router.replace('/(passenger)/bookings') },
+    { icon: 'rental', label: 'My Rentals', onPress: () => router.replace('/(passenger)/my-rentals') },
     { icon: 'history', label: 'Trip History', onPress: () => router.replace('/(passenger)/trips') },
     { icon: 'wallet', label: 'My Wallet', onPress: () => router.replace('/(passenger)/wallet') },
   ],
   bangkero: [
     { icon: 'home', label: 'Home', onPress: () => router.replace('/(bangkero)/home') },
     { icon: 'history', label: 'My Trips', onPress: () => router.replace('/(bangkero)/trips') },
+    { icon: 'rental', label: 'Boat Rentals', onPress: () => router.replace('/(bangkero)/rentals') },
+    { icon: 'star', label: 'My Ratings', onPress: () => router.replace('/(bangkero)/ratings') },
     { icon: 'cash', label: 'Earnings', onPress: () => router.replace('/(bangkero)/earnings') },
     { icon: 'weather', label: 'Weather', onPress: () => router.replace('/(bangkero)/weather') },
     { icon: 'sos', label: 'SOS Alert', onPress: () => router.replace('/(bangkero)/sos-alert'), danger: true },
@@ -45,7 +48,10 @@ const ROLE_ITEMS: Record<UserRole | 'admin', MenuItem[]> = {
     { icon: 'profile', label: 'All Users', onPress: () => router.replace('/(admin)/all-users') },
     { icon: 'boat', label: 'Active Trips', onPress: () => router.replace('/(admin)/active-trips') },
     { icon: 'route', label: 'Fleet Overview', onPress: () => router.replace('/(admin)/fleet-overview') },
+    { icon: 'cash', label: 'Downpayments', onPress: () => router.replace('/(admin)/downpayments') },
+    { icon: 'card', label: 'GCash QR', onPress: () => router.replace('/(admin)/gcash-qr') },
     { icon: 'alert', label: 'System Alerts', onPress: () => router.replace('/(admin)/system-alerts') },
+    { icon: 'settings', label: 'Developer Options', onPress: () => router.replace('/(admin)/developer-options') },
   ],
 };
 

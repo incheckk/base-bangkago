@@ -1,16 +1,58 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { StarRating } from '@/components/StarRating';
 import { StatusPill } from '@/components/StatusPill';
 import { LoadingState, ErrorState } from '@/components/States';
-import { useBooking } from '@/hooks/useSupabase';
+import { useAuth } from '@/hooks/useAuth';
+import { useBooking, usePorts } from '@/hooks/useSupabase';
+import { getIslandPackage } from '@/services/island-package.service';
+import { getRatingsByBooking } from '@/services/rating.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import type { IslandPackageDoc } from '@/types/models';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const { data: booking, loading, error } = useBooking(id ?? null);
+  const [ratedScore, setRatedScore] = useState<number | null>(null);
+  const ports = usePorts();
+  const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
+
+  // Package bookings show every stop of the hop, not just first → last.
+  useEffect(() => {
+    if (!booking?.packageId) return;
+    let alive = true;
+    getIslandPackage(booking.packageId)
+      .then((p) => {
+        if (alive) setPkg(p);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [booking?.packageId]);
+
+  // Completed trips offer a rate action until one exists (013 guards
+  // the race on the server).
+  useEffect(() => {
+    if (!id || !user?.id || booking?.status !== 'completed') return;
+    let alive = true;
+    getRatingsByBooking(id)
+      .then((rows) => {
+        if (!alive) return;
+        const mine = rows.find((r) => r.userId === user.id);
+        setRatedScore(mine ? mine.score : null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, user?.id, booking?.status]);
 
   if (loading) {
     return (
@@ -58,6 +100,19 @@ export default function TripDetailScreen() {
             </View>
           </View>
         </View>
+
+        {/* Island-hop itinerary — every stop, in order. */}
+        {!!pkg && pkg.stops.length > 1 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>ITINERARY · {pkg.packageName.toUpperCase()}</Text>
+            {pkg.stops.map((stopId, i) => (
+              <Text key={`${stopId}-${i}`} style={styles.itineraryStop} numberOfLines={1}>
+                {i + 1}. {ports.data.find((p) => p.portId === stopId)?.portName ?? stopId}
+                {i < pkg.stops.length - 1 ? '  ↓' : ''}
+              </Text>
+            ))}
+          </View>
+        )}
 
         {/* Schedule — rides are same-day, so a booking always has a date and
             the departure/arrival rows fill in live as the bangkero moves. */}
@@ -111,6 +166,39 @@ export default function TripDetailScreen() {
           <Text style={styles.sectionLabel}>FARE BREAKDOWN</Text>
           <InfoRow label="Total fare" value={`₱${booking.totalPrice}`} highlight />
         </View>
+
+        {/* Rating — completed trips only, until one exists (013). */}
+        {booking.status === 'completed' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>RATING</Text>
+            {ratedScore !== null ? (
+              <View style={styles.ratedRow}>
+                <StarRating rating={ratedScore} size={18} />
+                <Text style={styles.ratedText}>You rated this trip</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.rateHint}>
+                  How was your ride with {booking.operatorName ?? 'your bangkero'}?
+                </Text>
+                <PrimaryButton
+                  label="Rate this trip"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(passenger)/rate-trip',
+                      params: {
+                        bookingId: booking.bookingId,
+                        bangkeroName: booking.operatorName ?? '',
+                        boatName: booking.operatorBoatName ?? '',
+                      },
+                    })
+                  }
+                  style={styles.rateBtn}
+                />
+              </>
+            )}
+          </View>
+        )}
 
         {/* Cancel reason */}
         {booking.cancelReason && (
@@ -174,7 +262,12 @@ const styles = StyleSheet.create({
   },
   port: { color: colors.text, fontSize: 18, fontWeight: '700', flexShrink: 1, minWidth: 0 },
   arrow: { color: colors.primary, fontSize: 18, fontWeight: '700' },
+  itineraryStop: { color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 22 },
   cancelReason: { flexShrink: 1, color: colors.danger, fontSize: 14, lineHeight: 20 },
+  ratedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  ratedText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  rateHint: { color: colors.textSecondary, fontSize: 14, marginBottom: spacing.md },
+  rateBtn: { marginTop: spacing.xs },
 });
 
 const infoStyles = StyleSheet.create({

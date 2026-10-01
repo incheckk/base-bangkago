@@ -14,7 +14,7 @@ import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
 import { friendlyError, noShowPassenger } from '@/services/booking.service';
-import { createManifest } from '@/services/manifest.service';
+import { cancelActiveManifests, createManifest, populateManifestDeparture } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import {
   getPaymentsForBookings, markBookingPaid,
@@ -42,7 +42,7 @@ export default function DepartureScreen() {
   const { user } = useAuth();
   const bangkeroId = user?.id ?? null;
   const { manifest, passengers, parcels, loading, finalizeManifest } = useTripManifest(bangkeroId);
-  const { data: weather, loading: weatherLoading } = useWeatherData('p1');
+  const { data: weather, loading: weatherLoading } = useWeatherData(manifest?.departurePortId ?? 'p1');
   // Live working set: accepted only, no 10-row cap — older-created accepted
   // bookings used to fall outside the slice and split silently.
   const accepted = useAcceptedBookings(bangkeroId);
@@ -183,14 +183,19 @@ export default function DepartureScreen() {
         .eq('bangkero_id', bangkeroId)
         .maybeSingle();
       if (!bangka) throw new Error('Set up your boat in Profile first.');
-      if (!routeContext) {
+      // No accepted trip on the pier anymore (fresh sailing window) —
+      // regenerate on the previous manifest's route.
+      const route = routeContext
+        ?? (manifest ? { from: manifest.departurePortId, to: manifest.arrivalPortId } : null);
+      if (!route) {
         throw new Error('No active accepted trip found for this route.');
       }
+      await cancelActiveManifests(bangkeroId);
       await createManifest({
         bangkaId: bangka.id,
         bangkeroId,
-        departurePortId: routeContext.from,
-        arrivalPortId: routeContext.to,
+        departurePortId: route.from,
+        arrivalPortId: route.to,
       });
     } catch (e) {
       setGenError(friendlyError(e));
@@ -204,8 +209,18 @@ export default function DepartureScreen() {
     setFinalizing(false);
   }
 
-  function handleDepart() {
+  async function handleDepart() {
+    if (departing) return;
     setDeparting(true);
+    // Best effort: the manifest must record who sailed for Trip Summary to
+    // report real numbers — but never block the departure over it.
+    if (manifest) {
+      try {
+        await populateManifestDeparture(manifest, boardedTrips);
+      } catch (e) {
+        setGenError(`Could not record everyone aboard: ${friendlyError(e)}`);
+      }
+    }
     if (bangkeroId) {
       supabase
         .from('bookings')
@@ -372,6 +387,18 @@ export default function DepartureScreen() {
                 label="View Manifest"
                 variant="secondary"
                 onPress={() => router.push('/(bangkero)/manifest')}
+                style={styles.mt}
+              />
+            )}
+
+            {/* Finished manifest, nobody booked yet — open the next sailing. */}
+            {manifestFinalized && acceptedTrips.length === 0 && (
+              <PrimaryButton
+                label="Generate New Manifest"
+                variant="secondary"
+                onPress={() => void handleGenerate()}
+                loading={generating}
+                disabled={generating}
                 style={styles.mt}
               />
             )}

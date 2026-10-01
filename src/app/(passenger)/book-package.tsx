@@ -41,7 +41,7 @@ export default function BookPackage() {
         if (!alive) return;
         if (!row) throw new Error('That package no longer exists.');
         setPkg(row);
-        setPax(Math.min(2, row.maxCapacity));
+        setPax(1);
         setLoadError(null);
       } catch (e) {
         if (alive) setLoadError(friendlyError(e));

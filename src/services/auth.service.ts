@@ -84,7 +84,19 @@ export async function signUp({
       display_name: bangkeroDoc.displayName,
       is_available: false,
     });
-    if (bangkeroError) throw bangkeroError;
+    if (bangkeroError) {
+      // Never leave a half-made bangkero: the auth account and users row
+      // already exist, and a bangkero role with no bangkeros/ row lands on
+      // a broken home screen. Downgrade the own users row (users_update_own)
+      // and say plainly what happened.
+      await supabase
+        .from('users')
+        .update({ user_role: 'passenger' })
+        .eq('id', uid);
+      throw new Error(
+        'Your account was created as a passenger because bangkero setup failed. Sign in and choose Passenger.'
+      );
+    }
   }
 
   return userDoc;
@@ -244,6 +256,9 @@ export function friendlyAuthError(e: unknown): string {
   }
   if (message.includes('Pick two different ports')) {
     return 'Pick two different ports.';
+  }
+  if (message.includes('created as a passenger')) {
+    return message;
   }
   if (message) return `Something went wrong (${message}).`;
   return 'Something went wrong. Please try again.';

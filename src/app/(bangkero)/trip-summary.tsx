@@ -6,6 +6,7 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { usePorts } from '@/hooks/useSupabase';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -13,27 +14,44 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 export default function TripSummary() {
   const { user } = useAuth();
   const { manifest, passengers, parcels } = useTripManifest(user?.id ?? null);
-  const [baseFare, setBaseFare] = useState(70);
+  const { data: ports } = usePorts();
+  const [passengerFare, setPassengerFare] = useState(0);
+  const [parcelFare, setParcelFare] = useState(0);
 
+  // Real money for THIS sailing: the bookings that were written into the
+  // manifest's passenger rows at departure (passenger fares + cargo freight).
   useEffect(() => {
     let cancelled = false;
     async function loadFare() {
-      if (!manifest?.departurePortId || !manifest?.arrivalPortId) return;
-      const routeId = `${manifest.departurePortId}__${manifest.arrivalPortId}`;
-      const { data } = await supabase
-        .from('routes')
-        .select('base_fare')
-        .eq('id', routeId)
-        .maybeSingle();
-      if (!cancelled && data?.base_fare != null) {
-        setBaseFare(Number(data.base_fare));
-      }
+      if (!manifest?.manifestId) return;
+      const { data: seatRows, error: seatErr } = await supabase
+        .from('manifest_passengers')
+        .select('booking_id')
+        .eq('manifest_id', manifest.manifestId);
+      if (seatErr || cancelled) return;
+      const ids = [...new Set((seatRows ?? []).map((r) => r.booking_id))];
+      if (ids.length === 0) return;
+      const { data: bookings, error: bkErr } = await supabase
+        .from('bookings')
+        .select('service_type, total_price')
+        .in('id', ids);
+      if (bkErr || cancelled || !bookings) return;
+      setPassengerFare(
+        bookings
+          .filter((b) => b.service_type !== 'cargo')
+          .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
+      );
+      setParcelFare(
+        bookings
+          .filter((b) => b.service_type === 'cargo')
+          .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
+      );
     }
     void loadFare();
     return () => {
       cancelled = true;
     };
-  }, [manifest?.departurePortId, manifest?.arrivalPortId]);
+  }, [manifest?.manifestId]);
 
   const departure = manifest?.actualDepartureTime
     ? new Date(manifest.actualDepartureTime)
@@ -41,6 +59,10 @@ export default function TripSummary() {
   const arrival = manifest?.actualArrivalTime
     ? new Date(manifest.actualArrivalTime)
     : null;
+
+  const totalFare = passengerFare + parcelFare;
+  const fromPortName = ports.find((p) => p.portId === manifest?.departurePortId)?.portName;
+  const toPortName = ports.find((p) => p.portId === manifest?.arrivalPortId)?.portName;
 
   let durationText = '—';
   if (departure && arrival) {
@@ -63,12 +85,12 @@ export default function TripSummary() {
         <View style={styles.routeCard}>
           <View style={styles.routeRow}>
             <Text style={styles.routeLabel}>From</Text>
-            <Text style={styles.routePort}>Departure Port</Text>
+            <Text style={styles.routePort}>{fromPortName ?? '—'}</Text>
           </View>
           <View style={styles.routeDivider} />
           <View style={styles.routeRow}>
             <Text style={styles.routeLabel}>To</Text>
-            <Text style={styles.routePort}>Arrival Port</Text>
+            <Text style={styles.routePort}>{toPortName ?? '—'}</Text>
           </View>
         </View>
 
@@ -91,22 +113,16 @@ export default function TripSummary() {
           <Text style={styles.fareTitle}>Fare Breakdown</Text>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Passengers ({passengers.length})</Text>
-            <Text style={styles.fareValue}>
-              ₱{passengers.length > 0 ? (passengers.length * baseFare).toFixed(2) : '0.00'}
-            </Text>
+            <Text style={styles.fareValue}>₱{passengerFare.toFixed(2)}</Text>
           </View>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Parcels ({parcels.length})</Text>
-            <Text style={styles.fareValue}>
-              ₱{parcels.length > 0 ? (parcels.length * 50).toFixed(2) : '0.00'}
-            </Text>
+            <Text style={styles.fareValue}>₱{parcelFare.toFixed(2)}</Text>
           </View>
           <View style={styles.fareDivider} />
           <View style={styles.fareRow}>
             <Text style={styles.fareTotal}>Total</Text>
-            <Text style={styles.fareTotalValue}>
-              ₱{((passengers.length * baseFare) + (parcels.length * 50)).toFixed(2)}
-            </Text>
+            <Text style={styles.fareTotalValue}>₱{totalFare.toFixed(2)}</Text>
           </View>
         </View>
 

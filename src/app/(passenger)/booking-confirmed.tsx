@@ -23,6 +23,8 @@ export default function BookingConfirmed() {
     downAmount?: string;
     downStatus?: string;
     downWarning?: string;
+    payWarning?: string;
+    parcelWarning?: string;
     remainder?: string;
   }>();
 
@@ -130,6 +132,22 @@ export default function BookingConfirmed() {
             <Text style={styles.warnText}>
               Your downpayment record did not save. Keep your GCash reference and screenshot,
               then contact support with booking ref {bookingRef}.
+            </Text>
+          </Animated.View>
+        )}
+        {params.payWarning === '1' && (
+          <Animated.View style={[styles.warnBanner, { opacity: fadeAnim }]}>
+            <Text style={styles.warnText}>
+              Your payment choice did not save. The fare will still be collected onboard —
+              booking ref {bookingRef} is confirmed.
+            </Text>
+          </Animated.View>
+        )}
+        {params.parcelWarning === '1' && (
+          <Animated.View style={[styles.warnBanner, { opacity: fadeAnim }]}>
+            <Text style={styles.warnText}>
+              Your parcel record did not save. Your booking exists — give the bangkero your
+              cargo details at the pier (booking ref {bookingRef}).
             </Text>
           </Animated.View>
         )}

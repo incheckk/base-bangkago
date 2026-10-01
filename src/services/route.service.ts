@@ -88,7 +88,7 @@ export async function createRoute(route: RouteDoc) {
   const { data, error } = await supabase
     .from('routes')
     .insert({
-      id: route.routeId,
+      id: route.routeId || `${route.startPortId}__${route.endPortId}`,
       distance_km: route.distanceKm,
       base_fare: route.baseFare,
       estimated_minutes: route.estimatedMinutes,

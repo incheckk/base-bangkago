@@ -14,10 +14,13 @@ import { normalizePhone } from '@/utils/phone';
 
 // Matches the accounts created by the Phase 3.10 seed script.
 const DEMO_PASSWORD = 'demo1234';
-const DEMO_ACCOUNTS = [
+const DEMO_ACCOUNTS: { label: string; phone: string; password?: string }[] = [
   { label: 'Passenger', phone: '0917 123 4567' },
   { label: 'Bangkero 1', phone: '0918 123 4567' },
   { label: 'Bangkero 2', phone: '0919 123 4567' },
+  // Admin was created by hand in Supabase, not by the seed script, so it
+  // keeps its own password.
+  { label: 'Admin', phone: '0930 913 2995', password: 'qqqwww' },
 ];
 
 export default function SignIn() {
@@ -47,10 +50,10 @@ export default function SignIn() {
     }
   }
 
-  function quickLogin(demoPhone: string) {
+  function quickLogin(demoPhone: string, demoPassword: string) {
     setPhone(demoPhone);
-    setPassword(DEMO_PASSWORD);
-    void submit(demoPhone, DEMO_PASSWORD);
+    setPassword(demoPassword);
+    void submit(demoPhone, demoPassword);
   }
 
   return (
@@ -125,7 +128,7 @@ export default function SignIn() {
                 {DEMO_ACCOUNTS.map((a) => (
                   <Pressable
                     key={a.phone}
-                    onPress={() => quickLogin(a.phone)}
+                    onPress={() => quickLogin(a.phone, a.password ?? DEMO_PASSWORD)}
                     disabled={busy}
                     style={({ pressed }) => [styles.devChip, pressed && styles.devChipPressed]}
                   >

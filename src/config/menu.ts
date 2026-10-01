@@ -31,7 +31,6 @@ const ROLE_ITEMS: Record<UserRole | 'admin', MenuItem[]> = {
     { icon: 'bookings', label: 'My Bookings', onPress: () => router.replace('/(passenger)/bookings') },
     { icon: 'rental', label: 'My Rentals', onPress: () => router.replace('/(passenger)/my-rentals') },
     { icon: 'history', label: 'Trip History', onPress: () => router.replace('/(passenger)/trips') },
-    { icon: 'wallet', label: 'My Wallet', onPress: () => router.replace('/(passenger)/wallet') },
   ],
   bangkero: [
     { icon: 'home', label: 'Home', onPress: () => router.replace('/(bangkero)/home') },

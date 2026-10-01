@@ -6,6 +6,7 @@ import { FilterChips } from '@/components/FilterChips';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
 import { docPublicUrl } from '@/services/documents.service';
 import {
@@ -70,6 +71,9 @@ export default function AdminDownpaymentsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+  // Escrow rows arrive while this screen is open (015 put downpayments
+  // into the realtime publication) — no pull-to-refresh needed.
+  useRealtimeQuery(load, [{ table: 'downpayments' }]);
 
   const visible = rows.filter((r) => filter === 'all' || r.status === filter);
   const pendingCount = rows.filter((r) => r.status === 'pending').length;

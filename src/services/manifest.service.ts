@@ -98,7 +98,7 @@ export async function getActiveManifest(bangkeroId: string): Promise<TripManifes
     .from('trip_manifest')
     .select('*')
     .eq('bangkero_id', bangkeroId)
-    .eq('status', 'draft')
+    .in('status', ['draft', 'finalized'])
     .order('generated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -113,6 +113,108 @@ export async function finalizeManifest(manifestId: string): Promise<void> {
     .update({ status: 'finalized' })
     .eq('id', manifestId);
 
+  if (error) throw error;
+}
+
+/** Archive every live draft/finalized manifest so the next insert is the
+ *  only one getActiveManifest will surface. */
+export async function cancelActiveManifests(bangkeroId: string): Promise<void> {
+  const { error } = await supabase
+    .from('trip_manifest')
+    .update({ status: 'cancelled' })
+    .eq('bangkero_id', bangkeroId)
+    .in('status', ['draft', 'finalized']);
+
+  if (error) throw error;
+}
+
+export interface BoardedBooking {
+  bookingId: string;
+  passengerName: string | null;
+  numOfPassenger: number;
+  serviceType: string;
+}
+
+/**
+ * Writes the boarded passengers and parcels into the manifest children and
+ * stamps departure — the data Trip Summary reports from. Insert-only and
+ * idempotent: a rerun tops up missing seats instead of duplicating them.
+ */
+export async function populateManifestDeparture(
+  manifest: TripManifest,
+  boarded: BoardedBooking[],
+): Promise<void> {
+  const [existingPax, existingParcels] = await Promise.all([
+    getManifestPassengers(manifest.manifestId),
+    getManifestParcels(manifest.manifestId),
+  ]);
+
+  const now = new Date().toISOString();
+  const uniqueBoarding = [...new Map(boarded.map((b) => [b.bookingId, b])).values()];
+  const seatedByBooking = new Map<string, number>();
+  for (const p of existingPax) {
+    seatedByBooking.set(p.bookingId, (seatedByBooking.get(p.bookingId) ?? 0) + 1);
+  }
+  const paxRows: Record<string, unknown>[] = [];
+  for (const b of uniqueBoarding) {
+    if (b.serviceType === 'cargo') continue;
+    const missing = b.numOfPassenger - (seatedByBooking.get(b.bookingId) ?? 0);
+    for (let i = 0; i < missing; i++) {
+      paxRows.push({
+        passenger_name: b.passengerName?.trim() || 'Passengers',
+        manifest_id: manifest.manifestId,
+        booking_id: b.bookingId,
+        boarded_at: now,
+      });
+    }
+  }
+
+  const loadedParcelIds = new Set(existingParcels.map((p) => p.parcelId));
+  const bookingIds = uniqueBoarding.map((b) => b.bookingId);
+  const { data: parcelRows, error: parcelErr } = bookingIds.length
+    ? await supabase.from('parcels').select('id, receiver_name').in('booking_id', bookingIds)
+    : { data: [] as { id: string; receiver_name: string }[], error: null };
+  if (parcelErr) throw parcelErr;
+  const parcelInserts = (parcelRows ?? [])
+    .filter((r) => !loadedParcelIds.has(r.id))
+    .map((r) => ({
+      parcel_description: r.receiver_name,
+      manifest_id: manifest.manifestId,
+      parcel_id: r.id,
+      loaded_at: now,
+    }));
+
+  if (paxRows.length) {
+    const { error } = await supabase.from('manifest_passengers').insert(paxRows);
+    if (error) throw error;
+  }
+  if (parcelInserts.length) {
+    const { error } = await supabase.from('manifest_parcels').insert(parcelInserts);
+    if (error) throw error;
+  }
+
+  const patch: Record<string, unknown> = {
+    total_passengers_on_board: existingPax.length + paxRows.length,
+    total_parcels_on_board: existingParcels.length + parcelInserts.length,
+  };
+  if (!manifest.actualDepartureTime) patch.actual_departure_time = now;
+  const { error: updErr } = await supabase
+    .from('trip_manifest')
+    .update(patch)
+    .eq('id', manifest.manifestId)
+    .eq('bangkero_id', manifest.bangkeroId);
+  if (updErr) throw updErr;
+}
+
+/** Stamp arrival once; the realtime subscription on trip_manifest refreshes
+ *  every screen listening to this manifest. */
+export async function stampManifestArrival(manifest: TripManifest): Promise<void> {
+  if (manifest.actualArrivalTime) return;
+  const { error } = await supabase
+    .from('trip_manifest')
+    .update({ actual_arrival_time: new Date().toISOString() })
+    .eq('id', manifest.manifestId)
+    .eq('bangkero_id', manifest.bangkeroId);
   if (error) throw error;
 }
 

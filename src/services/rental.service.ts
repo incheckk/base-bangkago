@@ -77,6 +77,21 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
   if (args.hours < 1) throw new Error('Pick at least one hour.');
   if (!args.rentalDate) throw new Error('Pick a rental date.');
 
+  // Same boat, same day, still live. The passenger only sees their own
+  // rows (RLS), so this catches double-submits early; the partial UNIQUE
+  // index in 019 is what blocks a second renter racing in.
+  const { data: clash, error: clashError } = await supabase
+    .from('boat_rentals')
+    .select('id')
+    .eq('bangka_id', args.bangkaId)
+    .eq('rental_date', args.rentalDate)
+    .in('status', ['pending', 'confirmed'])
+    .limit(1);
+  if (clashError) throw clashError;
+  if (clash?.length) {
+    throw new Error('This boat is already booked on that date. Pick another day or another boat.');
+  }
+
   const { data: bangka, error: bangkaError } = await supabase
     .from('bangkas')
     .select('hourly_rate')
@@ -101,7 +116,12 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('This boat is already booked on that date. Pick another day or another boat.');
+    }
+    throw error;
+  }
   return mapRentalRow(data);
 }
 

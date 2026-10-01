@@ -157,14 +157,26 @@ export default function PaymentScreen() {
 
       // One payments row per booking, always (012 mark_paid semantics):
       // packages record only the ONBOARD remainder — the 50% already
-      // "paid" lives in downpayments, not here.
+      // "paid" lives in downpayments, not here. Post-booking writes never
+      // block the confirmation screen: the booking already exists, and
+      // mark_paid upserts a missing row when the bangkero collects fare.
+      let payWarning = false;
       if (isPackage) {
-        await createPayment(bookingId, remainderAmount, 'cash');
+        try {
+          await createPayment(bookingId, remainderAmount, 'cash');
+        } catch {
+          payWarning = true;
+        }
       } else {
-        await createPayment(bookingId, fare, method);
+        try {
+          await createPayment(bookingId, fare, method);
+        } catch {
+          payWarning = true;
+        }
       }
 
       let parcelId: string | undefined;
+      let parcelWarning = false;
       if (serviceType === 'cargo' && params.receiverName) {
         let items: { itemName: string; quantity: number; kilogram: number }[] = [];
         if (params.itemsJson) {
@@ -185,15 +197,19 @@ export default function PaymentScreen() {
             items = [];
           }
         }
-        const parcel = await createParcel({
-          receiverName: params.receiverName,
-          receiverContact: params.receiverContact || undefined,
-          totalPrice: fare,
-          userId: profile.uid,
-          bookingId,
-          items,
-        });
-        parcelId = parcel.parcelId;
+        try {
+          const parcel = await createParcel({
+            receiverName: params.receiverName,
+            receiverContact: params.receiverContact || undefined,
+            totalPrice: fare,
+            userId: profile.uid,
+            bookingId,
+            items,
+          });
+          parcelId = parcel.parcelId;
+        } catch {
+          parcelWarning = true;
+        }
       }
 
       // Escrow row — the booking already exists, so a failed insert must
@@ -220,6 +236,8 @@ export default function PaymentScreen() {
           bookingId,
           ref,
           ...(parcelId ? { parcelId } : {}),
+          ...(payWarning ? { payWarning: '1' } : {}),
+          ...(parcelWarning ? { parcelWarning: '1' } : {}),
           ...(isPackage
             ? { downStatus: 'pending', ...(downWarning ? { downWarning: '1' } : {}) }
             : {}),

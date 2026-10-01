@@ -2,7 +2,9 @@
 BANGKAGO — DEFERRED FEATURES & DECISIONS
 Review this list when the system is PUBLISHED TO THE PUBLIC / GOES LIVE.
 Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build,
-updated through Phase 4C (ratings, island hopping, boat rental).
+updated through Phase 4C (ratings, island hopping, boat rental) and the
+post-4C fix pass (P0 login recursion + P1 chain fixes; see migrations
+018/019). Section [E] carries the P2 security debt moved out of that pass.
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -98,7 +100,7 @@ B12. COASTGUARD / LGU — FOURTH MOBILE ROLE (view-only)
 --------------------------------------------------------------------------------
 C1. passenger/profile.tsx:143-144 — "Settings" and "About" menu items are
     no-ops (placeholder onPress).
-C2. passenger/trip-en-route.tsx:81 — "call bangkero" button is a no-op
+C2. passenger/trip-en-route.tsx:186 — "call bangkero" button is a no-op
     (phone call integration, e.g. Linking.openURL('tel:...')).
 C3. migrations/007_accepted_trip_rules.sql:332 —
     CREATE UNIQUE INDEX bookings_one_active_per_passenger is COMMENTED
@@ -126,21 +128,124 @@ C7. ADMIN DEV OPTIONS (new) — src/app/(admin)/developer-options.tsx,
     trg_bangkero_online_gate trigger, and revert the
     dev_dispatch_bypass()/dev_gates_bypass()/gates_ok() checks in the
     009/010-patched functions.
+C8. bookings.depart_time / arrival_time are NEVER STAMPED — 004's
+    bookings_bangkero_complete policy lets the operator update an
+    accepted booking ONLY when the new row says trip_stat='completed'
+    (WITH CHECK), so any partial update (depart time) on an accepted
+    row is rejected. Sailing times live on trip_manifest instead
+    (actual_departure_time / actual_arrival_time, stamped by
+    populateManifestDeparture and stampManifestArrival). If per-booking
+    times are wanted, relax/extend the policy (or move stamping into a
+    SECURITY DEFINER RPC) before launch.
+
+[E] P2 SECURITY DEBT — deferred out of the post-4C fix pass
+--------------------------------------------------------------------------------
+The fix pass took P0 (login recursion, 018) + P1 (manifest/payment/seed
+chain) + P3 (polish). The items below were audited, verified, and are
+DELIBERATELY NOT FIXED yet. Fix all of this before public launch.
+
+E1. bookings UPDATE STATE-MACHINE BYPASS
+    004 constrains the bangkero's transitions (open→accepted,
+    accepted→completed), but the passenger-side bookings_update_own
+    policy (002) is column-unrestricted: a passenger can UPDATE their
+    own booking row — including trip_stat, operator_id, held_by,
+    total_price — directly from the client. Move every state transition
+    into guarded SECURITY DEFINER RPCs (the accept/complete/no-show
+    paths already exist) and revoke broad UPDATE, or add a trigger that
+    validates transitions.
+
+E2. CLIENT-WRITABLE WALLET
+    wallets / wallet top-ups are written from the client (RLS allows
+    the owner to insert their own wallet_transactions with arbitrary
+    amounts). Balance mutations must become SECURITY DEFINER RPCs with
+    server-side validation before real money exists.
+
+E3. USING (TRUE) PII SELECT POLICIES
+    trip_manifest, manifest_passengers and manifest_parcels ship with
+    *_select_all policies created WITHOUT a USING clause (defaults to
+    true): every authenticated user can read every sailing's passenger
+    names, boarding times and parcel recipients. Tighten to
+    owner-bangkero / admin before launch; re-audit ALL SELECT policies
+    for the same shape (ports/routes/weather are public by design, PII
+    tables are not).
+
+E4. SECURITY DEFINER PATTERN + ANON-EXECUTABLE FUNCTIONS
+    Most RPCs from 002-010 are SECURITY DEFINER SET search_path =
+    public (should be search_path = '') and rely on Postgres' default
+    EXECUTE grant to PUBLIC — i.e. callable by anon over PostgREST
+    unless an auth.uid() guard stops them. assign_next_hold had NEITHER
+    and was patched in 019 (guard + REVOKE FROM PUBLIC/anon). Remaining
+    suspects to audit the same way: append_rejected_by (called out by
+    the audit as missing a guard), and every 002-007-era function.
+    mark_paid (012), refresh_holds/accept_booking_hold (008/010) already
+    carry guards — keep them as the pattern.
+
+E5. MIGRATION 017 IS A BLANKET UPDATE
+    017_flat_fare_70.sql runs `UPDATE routes SET base_fare = 70` with
+    no condition. Re-running it (or running it after an admin edits
+    fares) silently resets EVERY route's fare. Fares are admin data
+    (manage-routes), not migration constants — make the seed
+    idempotent-by-default instead of unconditional before automating
+    migrations (D2).
+
+E6. SIGN-UP ORPHANS (email-confirm + profile failures)
+    signUp creates the auth user FIRST; if the subsequent users insert
+    fails, the auth account remains with no users row — retry answers
+    "already registered" and sign-in lands on a profile-less session.
+    The bangkeros-insert variant is now handled in code (downgrade to
+    passenger, see auth.service.ts), but the users-insert and
+    email-confirmation paths are not. Before launch: verify Supabase
+    email-confirmation settings, and clean up / roll back orphaned auth
+    users on partial failure.
+
+E7. passenger_details HAS NO DELETE (or UPDATE) POLICY
+    Companion rows are INSERT-only from the passenger's side — a
+    booking's companion list can never be corrected or removed.
+    Add passenger-owned UPDATE/DELETE (or an RPC) before launch.
+
+E8. bookings_one_active_per_passenger INDEX STILL OFF — see C3.
 
 [D] ENVIRONMENT / INFRA
 --------------------------------------------------------------------------------
 D1. EXPO SDK PINNED TO 54 — do NOT upgrade until the demo device /
     Expo Go constraint is gone (AGENTS.md). Revisit at launch.
 D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 → 008 → 009 → 010
-    → 011 → 012 → 013 → 014 → 015 → 016 via SQL editor, in order.
+    → 011 → 012 → 013 → 014 → 015 → 016 → 017 → 018 → 019 via SQL
+    editor, in order.
     013 ratings guard, 014 island hopping, 015 downpayments,
-    016 boat rental (hourly_rate + rentals). Set up migration
-    automation (supabase CLI / CI) before public deployment.
+    016 boat rental (hourly_rate + rentals), 017 flat fare ₱70,
+    018 login fix (users-select recursion — run FIRST when testing the
+    fix-pass build), 019 phase-4 fixes (companion policy, assign_next_hold
+    guard, downpayments/rentals unique indexes, package-3 stops).
+    Set up migration automation (supabase CLI / CI) before public
+    deployment — and fix 017's blanket UPDATE (E5) first.
     NOTE: the `docs` storage bucket (011) is PUBLIC — fine for the
     classroom demo, but switch to private buckets + signed URLs at
     launch (document photos and GCash QRs are world-readable by URL).
 D3. SECURITY DEFINER RPCs are the write path for trip rules — review all
-    RLS policies + function grants with a security pass before launch.
+    RLS policies + function grants with a security pass before launch
+    (concrete list: section [E]).
+D4. DEMO ACCOUNTS (as of the fix pass)
+    Seeded by scripts/seed.js, password demo1234:
+      0917 123 4567  Juan Dela Cruz   passenger
+      0918 123 4567  Mang Lito        bangkero · MBCA Sto. Niño
+      0919 123 4567  Pedro V.         bangkero · MBCA Bantay Dagat
+    Admin (created by hand in Supabase, NOT the seed):
+      0930 913 2995  Admin (Jan Villa) · password qqqwww
+    — also wired as a 4th quick-login chip on sign-in.
+D5. GCASH QR IS STILL EMPTY — app_settings.gcash_qr_url = '' (the
+    package/rental escrow screens show the "admin has not uploaded
+    their GCash QR yet" placeholder). Upload a real QR in Admin → GCash
+    QR before any presentation that exercises the downpayment flow.
+
+[F] SCREENS BUILT BUT NOT REACHABLE (no menu/nav entry)
+--------------------------------------------------------------------------------
+Deliberately left unwired in the fix pass — they exist and compile, but
+nothing links to them. Either wire them before launch or delete them:
+  (admin)    manage-ports, manage-routes, pending-operators, reports
+  (passenger) booked, find-bangkero, parcel-details
+Note: manage-routes' route-id derivation was still fixed (route.service
+createRoute) so the screen is safe to wire as-is.
 
 ================================================================================
 END — keep this file updated whenever a feature is consciously deferred.

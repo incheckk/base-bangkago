@@ -124,12 +124,41 @@ const SEED_BOOKINGS = [
   { daysAgo: 2,  from: 'mactan-pier-2', to: 'nalusuan', passengerCount: 3, status: 'completed', operator: '+639191234567' },
 ];
 
-/** Deletes every booking. */
+/**
+ * Deletes every booking plus the dependents that block the delete.
+ * Order matters: several FKs carry no ON DELETE rule (ratings.booking_id,
+ * wallet_transactions.booking_id, manifest_passengers.booking_id,
+ * manifest_parcels.parcel_id, parcels.booking_id), while passenger_details /
+ * payments / downpayments cascade on their own. Every statement is
+ * error-checked — a silent failure used to leave a half-wiped demo.
+ */
+const BOOKING_CHILDREN = [
+  'ratings',
+  'wallet_transactions',
+  'manifest_parcels',
+  'manifest_passengers',
+  'parcels',
+  'trip_manifest',
+  'downpayments',
+  'passenger_details',
+  'payments',
+];
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000';
+
 async function wipeBookings(db) {
-  const { count } = await db.from('bookings').select('*', { count: 'exact', head: true });
-  if (!count) return 0;
-  await db.from('bookings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-  return count;
+  const { count, error: countErr } = await db
+    .from('bookings')
+    .select('*', { count: 'exact', head: true });
+  if (countErr) throw new Error(`wipe bookings (count): ${countErr.message}`);
+
+  for (const table of BOOKING_CHILDREN) {
+    const { error } = await db.from(table).delete().neq('id', ZERO_UUID);
+    if (error) throw new Error(`wipe ${table}: ${error.message}`);
+  }
+  const { error } = await db.from('bookings').delete().neq('id', ZERO_UUID);
+  if (error) throw new Error(`wipe bookings: ${error.message}`);
+
+  return count ?? 0;
 }
 
 /** Re-creates the historical bookings. */

@@ -22,9 +22,15 @@ async function seedPorts() {
 
 async function seedRoutes() {
   const routes = buildRoutes();
-  await supabase.from('routes').delete().neq('id', '');
-  const { error } = await supabase.from('routes').insert(routes);
+  // Upsert, never delete-first: bookings.route_id references routes with no
+  // ON DELETE rule, so a blind delete failed with an FK error on re-runs.
+  const { error } = await supabase.from('routes').upsert(routes, { onConflict: 'id' });
   if (error) throw error;
+  const { error: pruneError } = await supabase
+    .from('routes')
+    .delete()
+    .notIn('id', routes.map((r) => r.id));
+  if (pruneError) throw pruneError;
   return routes.length;
 }
 
@@ -124,6 +130,7 @@ Done. Sign in with any of:
   0917 123 4567   Juan Dela Cruz      passenger
   0918 123 4567   Mang Lito           bangkero · MBCA Sto. Niño · 8 pax
   0919 123 4567   Pedro V.            bangkero · MBCA Bantay Dagat · 10 pax
+  0930 913 2995   Admin               admin · password: qqqwww
 
   password: ${DEMO_PASSWORD}
 

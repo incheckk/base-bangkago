@@ -48,7 +48,7 @@ export default function RentalFormScreen() {
     capacity: string;
   }>();
 
-  const rate = parseInt(params.rate ?? '500', 10) || 500;
+  const rate = Number(params.rate) || 500;
   const days = nextDays(7);
 
   const [date, setDate] = useState(() => days[0]?.iso ?? '');

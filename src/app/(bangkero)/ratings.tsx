@@ -10,6 +10,7 @@ import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
   getAverageRating, getEffectiveRating, getRatingsByBangkero,
 } from '@/services/rating.service';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { RatingDoc } from '@/types/models';
 
@@ -25,6 +26,7 @@ export default function BangkeroRatingsScreen() {
   const [rows, setRows] = useState<RatingDoc[]>([]);
   const [avg, setAvg] = useState<number | null>(null);
   const [effective, setEffective] = useState<number | null>(null);
+  const [penalty, setPenalty] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,14 +36,16 @@ export default function BangkeroRatingsScreen() {
       return;
     }
     try {
-      const [list, average, eff] = await Promise.all([
+      const [list, average, eff, bangkeroRow] = await Promise.all([
         getRatingsByBangkero(uid),
         getAverageRating(uid),
         getEffectiveRating(uid),
+        supabase.from('bangkeros').select('rating_penalty').eq('id', uid).maybeSingle(),
       ]);
       setRows(list);
       setAvg(average);
       setEffective(eff);
+      setPenalty(Number(bangkeroRow.data?.rating_penalty ?? 0) || 0);
       setLoading(false);
       setError(null);
     } catch (e) {
@@ -88,7 +92,7 @@ export default function BangkeroRatingsScreen() {
               ? 'No ratings yet'
               : `${rows.length} rating${rows.length === 1 ? '' : 's'} from passengers`}
           </Text>
-          {effective !== null && avg !== null && avg !== effective && (
+          {penalty > 0 && effective !== null && avg !== null && avg !== effective && (
             <Text style={styles.effectiveNote}>
               Effective rating {effective.toFixed(1)} ★ after penalties — this is what the accept gate uses.
             </Text>

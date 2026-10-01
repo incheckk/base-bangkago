@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -12,6 +12,7 @@ import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useAuth } from '@/hooks/useAuth';
 import { updateParcelStatus } from '@/services/parcel.service';
 import { friendlyError } from '@/services/booking.service';
+import { stampManifestArrival } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -31,12 +32,23 @@ export default function ArrivedScreen() {
   const [parcelBusy, setParcelBusy] = useState<string | null>(null);
   const [parcelError, setParcelError] = useState<string | null>(null);
 
+  // Opening this screen IS the arrival — stamp it once (idempotent) so the
+  // trip duration and Trip Summary get real times.
+  useEffect(() => {
+    if (!manifest || manifest.actualArrivalTime) return;
+    void stampManifestArrival(manifest).catch(() => {
+      // best effort — duration falls back to "now" without it
+    });
+  }, [manifest]);
+
   const departureTime = manifest?.actualDepartureTime
     ? new Date(manifest.actualDepartureTime)
     : null;
-  const now = new Date();
+  const endTime = manifest?.actualArrivalTime
+    ? new Date(manifest.actualArrivalTime)
+    : new Date();
   const durationMin = departureTime
-    ? Math.round((now.getTime() - departureTime.getTime()) / 60000)
+    ? Math.round((endTime.getTime() - departureTime.getTime()) / 60000)
     : null;
 
   async function advanceParcel(parcel: ParcelDoc) {

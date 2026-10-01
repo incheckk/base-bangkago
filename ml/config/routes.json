@@ -1,0 +1,16 @@
+{
+  "routes": [
+    {"id": "mactan-pier-2__olango-port", "start_port_id": "mactan-pier-2", "end_port_id": "olango-port", "base_fare": 70, "distance_km": 5.2, "estimated_minutes": 15, "is_active": true, "popularity_weight": 3},
+    {"id": "olango-port__mactan-pier-2", "start_port_id": "olango-port", "end_port_id": "mactan-pier-2", "base_fare": 70, "distance_km": 5.2, "estimated_minutes": 15, "is_active": true, "popularity_weight": 3},
+    {"id": "mactan-pier-1__olango-port", "start_port_id": "mactan-pier-1", "end_port_id": "olango-port", "base_fare": 70, "distance_km": 6.8, "estimated_minutes": 20, "is_active": true, "popularity_weight": 3},
+    {"id": "olango-port__mactan-pier-1", "start_port_id": "olango-port", "end_port_id": "mactan-pier-1", "base_fare": 70, "distance_km": 6.8, "estimated_minutes": 20, "is_active": true, "popularity_weight": 3},
+    {"id": "mactan-pier-2__caohagan", "start_port_id": "mactan-pier-2", "end_port_id": "caohagan", "base_fare": 70, "distance_km": 8.5, "estimated_minutes": 35, "is_active": true, "popularity_weight": 3},
+    {"id": "caohagan__mactan-pier-2", "start_port_id": "caohagan", "end_port_id": "mactan-pier-2", "base_fare": 70, "distance_km": 8.5, "estimated_minutes": 35, "is_active": true, "popularity_weight": 3},
+    {"id": "mactan-pier-1__caohagan", "start_port_id": "mactan-pier-1", "end_port_id": "caohagan", "base_fare": 70, "distance_km": 9.2, "estimated_minutes": 40, "is_active": true, "popularity_weight": 3},
+    {"id": "caohagan__mactan-pier-1", "start_port_id": "caohagan", "end_port_id": "mactan-pier-1", "base_fare": 70, "distance_km": 9.2, "estimated_minutes": 40, "is_active": true, "popularity_weight": 3},
+    {"id": "mactan-pier-2__nalusuan", "start_port_id": "mactan-pier-2", "end_port_id": "nalusuan", "base_fare": 70, "distance_km": 7.8, "estimated_minutes": 45, "is_active": true, "popularity_weight": 3},
+    {"id": "nalusuan__mactan-pier-2", "start_port_id": "nalusuan", "end_port_id": "mactan-pier-2", "base_fare": 70, "distance_km": 7.8, "estimated_minutes": 45, "is_active": true, "popularity_weight": 3},
+    {"id": "mactan-pier-1__nalusuan", "start_port_id": "mactan-pier-1", "end_port_id": "nalusuan", "base_fare": 70, "distance_km": 8.9, "estimated_minutes": 55, "is_active": true, "popularity_weight": 3},
+    {"id": "nalusuan__mactan-pier-1", "start_port_id": "nalusuan", "end_port_id": "mactan-pier-1", "base_fare": 70, "distance_km": 8.9, "estimated_minutes": 55, "is_active": true, "popularity_weight": 3}
+  ]
+}

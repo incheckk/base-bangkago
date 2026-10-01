@@ -1449,7 +1449,7 @@ export const typography = {
 | Type | Count | Details |
 |---|---|---|
 | Piers | 5 | Mactan Pier 1, Mactan Pier 2, Olango Port, Caohagan, Nalusuan |
-| Routes | 12 | 6 pairs, both directions, ₱150–₱400, 15–55 min |
+| Routes | 12 | 6 pairs, both directions, ₱70 flat, 15–55 min |
 | Accounts | 3 | 1 passenger, 2 bangkeros (all password: `demo1234`) |
 | Bookings | 4 | 2 completed, 2 cancelled (historical) |
 

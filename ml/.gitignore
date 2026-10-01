@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+
+# Environment
+.env
+
+# Data (large, regenerable)
+data/raw/*.csv
+data/processed/*.csv
+data/predictions/*.csv
+
+# Models
+models/*.pkl
+
+# Plots
+output/plots/*.png
+
+# Notebooks
+.ipynb_checkpoints/

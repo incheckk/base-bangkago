@@ -673,18 +673,18 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Routes (6 pairs, both directions)
 INSERT INTO routes (id, distance_km, base_fare, estimated_minutes, is_active, start_port_id, end_port_id) VALUES
-  ('mactan-pier-2__olango-port', 5.2, 150, 15, true, 'mactan-pier-2', 'olango-port'),
-  ('olango-port__mactan-pier-2', 5.2, 150, 15, true, 'olango-port', 'mactan-pier-2'),
-  ('mactan-pier-1__olango-port', 6.8, 180, 20, true, 'mactan-pier-1', 'olango-port'),
-  ('olango-port__mactan-pier-1', 6.8, 180, 20, true, 'olango-port', 'mactan-pier-1'),
-  ('mactan-pier-2__caohagan', 8.5, 280, 35, true, 'mactan-pier-2', 'caohagan'),
-  ('caohagan__mactan-pier-2', 8.5, 280, 35, true, 'caohagan', 'mactan-pier-2'),
-  ('mactan-pier-1__caohagan', 9.2, 320, 40, true, 'mactan-pier-1', 'caohagan'),
-  ('caohagan__mactan-pier-1', 9.2, 320, 40, true, 'caohagan', 'mactan-pier-1'),
-  ('mactan-pier-2__nalusuan', 7.8, 360, 45, true, 'mactan-pier-2', 'nalusuan'),
-  ('nalusuan__mactan-pier-2', 7.8, 360, 45, true, 'nalusuan', 'mactan-pier-2'),
-  ('mactan-pier-1__nalusuan', 8.9, 400, 55, true, 'mactan-pier-1', 'nalusuan'),
-  ('nalusuan__mactan-pier-1', 8.9, 400, 55, true, 'nalusuan', 'mactan-pier-1')
+  ('mactan-pier-2__olango-port', 5.2, 70, 15, true, 'mactan-pier-2', 'olango-port'),
+  ('olango-port__mactan-pier-2', 5.2, 70, 15, true, 'olango-port', 'mactan-pier-2'),
+  ('mactan-pier-1__olango-port', 6.8, 70, 20, true, 'mactan-pier-1', 'olango-port'),
+  ('olango-port__mactan-pier-1', 6.8, 70, 20, true, 'olango-port', 'mactan-pier-1'),
+  ('mactan-pier-2__caohagan', 8.5, 70, 35, true, 'mactan-pier-2', 'caohagan'),
+  ('caohagan__mactan-pier-2', 8.5, 70, 35, true, 'caohagan', 'mactan-pier-2'),
+  ('mactan-pier-1__caohagan', 9.2, 70, 40, true, 'mactan-pier-1', 'caohagan'),
+  ('caohagan__mactan-pier-1', 9.2, 70, 40, true, 'caohagan', 'mactan-pier-1'),
+  ('mactan-pier-2__nalusuan', 7.8, 70, 45, true, 'mactan-pier-2', 'nalusuan'),
+  ('nalusuan__mactan-pier-2', 7.8, 70, 45, true, 'nalusuan', 'mactan-pier-2'),
+  ('mactan-pier-1__nalusuan', 8.9, 70, 55, true, 'mactan-pier-1', 'nalusuan'),
+  ('nalusuan__mactan-pier-1', 8.9, 70, 55, true, 'nalusuan', 'mactan-pier-1')
 ON CONFLICT (id) DO NOTHING;
 
 -- =============================================================

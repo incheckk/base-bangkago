@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -6,11 +7,33 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { useTripManifest } from '@/hooks/useTripManifest';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function TripSummary() {
   const { user } = useAuth();
   const { manifest, passengers, parcels } = useTripManifest(user?.id ?? null);
+  const [baseFare, setBaseFare] = useState(70);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadFare() {
+      if (!manifest?.departurePortId || !manifest?.arrivalPortId) return;
+      const routeId = `${manifest.departurePortId}__${manifest.arrivalPortId}`;
+      const { data } = await supabase
+        .from('routes')
+        .select('base_fare')
+        .eq('id', routeId)
+        .maybeSingle();
+      if (!cancelled && data?.base_fare != null) {
+        setBaseFare(Number(data.base_fare));
+      }
+    }
+    void loadFare();
+    return () => {
+      cancelled = true;
+    };
+  }, [manifest?.departurePortId, manifest?.arrivalPortId]);
 
   const departure = manifest?.actualDepartureTime
     ? new Date(manifest.actualDepartureTime)
@@ -69,7 +92,7 @@ export default function TripSummary() {
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Passengers ({passengers.length})</Text>
             <Text style={styles.fareValue}>
-              ₱{passengers.length > 0 ? (passengers.length * 150).toFixed(2) : '0.00'}
+              ₱{passengers.length > 0 ? (passengers.length * baseFare).toFixed(2) : '0.00'}
             </Text>
           </View>
           <View style={styles.fareRow}>
@@ -82,7 +105,7 @@ export default function TripSummary() {
           <View style={styles.fareRow}>
             <Text style={styles.fareTotal}>Total</Text>
             <Text style={styles.fareTotalValue}>
-              ₱{((passengers.length * 150) + (parcels.length * 50)).toFixed(2)}
+              ₱{((passengers.length * baseFare) + (parcels.length * 50)).toFixed(2)}
             </Text>
           </View>
         </View>

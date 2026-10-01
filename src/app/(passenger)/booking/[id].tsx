@@ -4,6 +4,7 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { slotLabel } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
@@ -330,9 +331,22 @@ export default function BookingDetail() {
       <PassengerScreenHeader title="Booking Details" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.ref}>{booking.ref}</Text>
+          {/* The ref is the bangkero-facing code — it stays under wraps
+              until the admin clears the escrow (020). */}
+          <Text style={styles.ref}>
+            {booking.status === 'pending' ? 'Advance booking' : booking.ref}
+          </Text>
           <StatusPill status={booking.status} />
         </View>
+
+        {booking.status === 'pending' && (
+          <View style={styles.pendingBanner}>
+            <Text style={styles.pendingText}>
+              Awaiting admin confirmation of your GCash downpayment. Bangkeros cannot see
+              this booking yet — you&apos;ll get a notification the moment it&apos;s confirmed.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.route} numberOfLines={1}>{booking.fromPortName}</Text>
@@ -363,6 +377,15 @@ export default function BookingDetail() {
         )}
 
         <View style={styles.details}>
+          {booking.scheduledDate && (
+            <Row
+              label="Sailing schedule"
+              value={`${new Date(`${booking.scheduledDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}${
+                booking.scheduledTime ? ` · ${slotLabel(booking.scheduledTime)}` : ''
+              }`}
+              strong
+            />
+          )}
           <Row label="Passengers" value={String(booking.numOfPassenger)} />
           <Row label="Fare" value={`₱${booking.totalPrice}`} strong />
           <Row label="Payment" value={paymentLabel} />
@@ -378,7 +401,7 @@ export default function BookingDetail() {
               }`}
             />
           ) : (
-            booking.packageId && (
+            (booking.packageId || booking.scheduledDate) && (
               <Row
                 label="Downpayment (50%)"
                 value="Not recorded — keep your GCash reference and contact support."
@@ -397,6 +420,21 @@ export default function BookingDetail() {
         )}
 
         <View style={styles.actions}>
+          {booking.status === 'pending' && (
+            <>
+              <Text style={styles.waiting}>
+                Waiting for the admin to confirm your downpayment. This updates on its own.
+              </Text>
+              <PrimaryButton
+                label="Cancel booking"
+                variant="danger"
+                onPress={cancel}
+                loading={busy}
+                disabled={acted}
+              />
+            </>
+          )}
+
           {booking.status === 'open' && (
             <>
               <Text style={styles.waiting}>
@@ -418,6 +456,19 @@ export default function BookingDetail() {
               <PrimaryButton
                 label="View trip details"
                 onPress={() => router.push(`/(passenger)/trip/${id}`)}
+              />
+
+              {/* One QR per rider — the bangkero scans them at boarding. */}
+              <PrimaryButton
+                label="Show boarding QR codes"
+                variant="secondary"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(passenger)/boarding-pass',
+                    params: { bookingId: booking.bookingId },
+                  })
+                }
+                style={styles.secondaryAction}
               />
 
               {/* Escape valve: opens 10 minutes after accept, closes for good
@@ -504,6 +555,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl, gap: spacing.md,
   },
   ref: { flexShrink: 1, ...typography.h2, letterSpacing: 1 },
+
+  pendingBanner: {
+    backgroundColor: colors.warningTint,
+    borderColor: colors.warning,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  pendingText: { color: colors.text, fontSize: 13, lineHeight: 19 },
 
   card: {
     backgroundColor: colors.surface,

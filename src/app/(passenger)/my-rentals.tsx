@@ -16,6 +16,7 @@ import type { DownpaymentDoc, RentalStatus } from '@/types/models';
 
 const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: 'Pending', fg: colors.warning, bg: colors.warningTint },
+  awaiting_payment: { label: 'Awaiting payment', fg: colors.textSecondary, bg: colors.neutralTint },
   confirmed: { label: 'Confirmed', fg: colors.primary, bg: colors.primaryTint },
   completed: { label: 'Completed', fg: colors.success, bg: colors.neutralTint },
   cancelled: { label: 'Cancelled', fg: colors.textSecondary, bg: colors.neutralTint },

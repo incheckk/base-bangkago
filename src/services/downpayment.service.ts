@@ -207,9 +207,10 @@ export async function listDownpayments(
 }
 
 /**
- * Admin approves the escrow row and tells the payer. One update + one
- * notification — the notification is best-effort (the approval itself
- * must not roll back over a notification hiccup).
+ * Admin approves the escrow row: the booking flips pending → open (it
+ * appears on bangkero desks) and the payer is told. One update + one
+ * RPC + one notification — the notification is best-effort (the approval
+ * itself must not roll back over a notification hiccup).
  */
 export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void> {
   const { error } = await supabase
@@ -218,22 +219,47 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
     .eq('id', row.downpaymentId);
   if (error) throw error;
 
-  if (row.notifyUserId) {
+  // Opens the gate (020). FALSE = row was already reviewed/cancelled —
+  // don't announce a release that never happened.
+  const { data: flipped, error: gateError } = await supabase.rpc(
+    'review_advance_escrow',
+    {
+      p_booking_id: row.bookingId ?? null,
+      p_rental_id: row.boatRentalId ?? null,
+      p_approve: true,
+    }
+  );
+  if (gateError) throw gateError;
+
+  if (flipped && row.notifyUserId) {
     await createNotification(
       row.notifyUserId,
       'Downpayment confirmed',
-      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been confirmed.`
+      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been confirmed. It is now visible to bangkeros.`
     ).catch(() => {});
   }
 }
 
-/** Admin returns the escrow row as refunded (e.g. cancelled trip). */
+/**
+ * Admin returns the escrow row as refunded (e.g. cancelled trip, or the
+ * advance booking is still sitting in review and the passenger backed
+ * out). A row that never passed review cancels with it.
+ */
 export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void> {
   const { error } = await supabase
     .from('downpayments')
     .update({ status: 'refunded', reviewed_at: new Date().toISOString() })
     .eq('id', row.downpaymentId);
   if (error) throw error;
+
+  // Cancels the still-unopened booking/rental alongside (020); FALSE
+  // when it was already open or already gone — nothing to close.
+  const { error: gateError } = await supabase.rpc('review_advance_escrow', {
+    p_booking_id: row.bookingId ?? null,
+    p_rental_id: row.boatRentalId ?? null,
+    p_approve: false,
+  });
+  if (gateError) throw gateError;
 
   if (row.notifyUserId) {
     await createNotification(

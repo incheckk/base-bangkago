@@ -8,6 +8,7 @@ import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Icon } from '@/components/Icon';
+import { slotLabel, todayIso } from '@/components/SchedulePicker';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,6 +19,7 @@ import {
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
+import { getIslandPackages } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import {
   DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
@@ -33,12 +35,40 @@ const clock = (ms: number) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
+/** Future-dated trip → escrow + admin gate; today stays the fast same-day flow. */
+const isAdvance = (b: BookingDoc) => !!b.scheduledDate && b.scheduledDate > todayIso();
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Oct 5" from a YYYY-MM-DD string, local day. */
+function shortDate(iso: string): string {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${MONTHS_SHORT[(m ?? 1) - 1]} ${d}`;
+}
+
+/** Category chip: island package name, else advance slot, else same-day. */
+function categoryLabel(b: BookingDoc, pkgName?: string): string | null {
+  if (b.packageId) return `ISLAND HOPPING · ${pkgName ?? 'package'}`;
+  if (isAdvance(b)) {
+    return `ADVANCE · ${shortDate(b.scheduledDate as string)}${b.scheduledTime ? ` · ${slotLabel(b.scheduledTime)}` : ''}`;
+  }
+  return null;
+}
+
+
 export default function BangkeroHome() {
   const { user, profile } = useAuth();
   const uid = user?.id ?? null;
 
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
+  // Island-package catalogue (static) — just the names behind the chips.
+  const [pkgNames, setPkgNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    getIslandPackages()
+      .then((rows) => setPkgNames(Object.fromEntries(rows.map((r) => [r.packageId, r.packageName]))))
+      .catch(() => {});
+  }, []);
   const trips = useMyTrips(uid);
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
@@ -154,9 +184,15 @@ export default function BangkeroHome() {
         ? formatDistance(haversineM(myFix.latitude, myFix.longitude, dep.latitude, dep.longitude))
         : null;
 
+    // ponytail: advance trips are accepted free — no queue, dwell, route
+    // lock or offer hold (accept_booking_hold skips them too via v_advance).
+    // The gates below (online, docs, rating, capacity) still apply.
+    const advance = isAdvance(b);
+
     // Route lock: one destination at a time (and a mixed legacy set
     // locks the boat out entirely until those trips clear).
     if (
+      !advance &&
       !bypass &&
       (activeDests.length > 1 || (activeDests.length === 1 && activeDests[0] !== destPort))
     ) {
@@ -167,13 +203,13 @@ export default function BangkeroHome() {
     }
 
     const entry = myQueue.data.entry;
-    if (!bypass && entry?.portId !== depPort) {
+    if (!advance && !bypass && entry?.portId !== depPort) {
       return {
         text: `Not queued at ${b.fromPortName ?? 'this port'}`,
         tone: 'block', canAccept: false, distance,
       };
     }
-    if (!bypass && entry) {
+    if (!advance && !bypass && entry) {
       const dwellLeft = DWELL_MS - (now - new Date(entry.enteredAt).getTime());
       if (dwellLeft > 0) {
         return { text: `Entering queue… ${clock(dwellLeft)}`, tone: 'wait', canAccept: false, distance };
@@ -203,6 +239,13 @@ export default function BangkeroHome() {
       return {
         text: `Boat full — ${acceptedLoad + b.numOfPassenger}/${myCapacity} pax`,
         tone: 'block', canAccept: false, distance,
+      };
+    }
+
+    if (advance) {
+      return {
+        text: `Advance · ${shortDate(b.scheduledDate as string)}${b.scheduledTime ? ` · ${slotLabel(b.scheduledTime)}` : ''}`,
+        tone: 'live', canAccept: true, distance,
       };
     }
 
@@ -332,6 +375,62 @@ export default function BangkeroHome() {
   const weekEarnings = completedTrips
     .filter((t) => new Date(t.completedAt as string).getTime() >= weekAgoMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
+
+  // Two groups so an operator can tell tomorrow's commitments from
+  // people standing at the pier right now.
+  const advanceReqs = requests.data.filter(isAdvance);
+  const todayReqs = requests.data.filter((b) => !isAdvance(b));
+
+  const renderRequest = (b: BookingDoc) => {
+    const chip = chipFor(b);
+    const category = categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined);
+    return (
+      <View key={b.bookingId} style={styles.request}>
+        <RequestBody booking={b} category={category} />
+        {/* Dispatch state (008): whose offer it is, why Accept
+            may be locked, and how far the boat still is. */}
+        <View style={styles.chipRow}>
+          <View
+            style={[
+              styles.holdChip,
+              chip.tone === 'live' && styles.holdChipLive,
+              chip.tone === 'block' && styles.holdChipBlock,
+            ]}
+          >
+            <Text
+              style={[
+                styles.holdChipText,
+                chip.tone === 'live' && styles.holdChipTextLive,
+                chip.tone === 'block' && styles.holdChipTextBlock,
+              ]}
+              numberOfLines={2}
+            >
+              {chip.text}
+            </Text>
+          </View>
+          {chip.distance && <Text style={styles.chipDistance}>{chip.distance}</Text>}
+        </View>
+        {/* Accept is the intended action and carries twice the width;
+            giving a decline equal weight makes operators hesitate. */}
+        <View style={styles.actions}>
+          <PrimaryButton
+            label="Decline"
+            variant="secondary"
+            onPress={() => decline(b)}
+            disabled={pending === b.bookingId || acted.has(b.bookingId)}
+            style={styles.declineBtn}
+          />
+          <PrimaryButton
+            label="Accept"
+            onPress={() => accept(b)}
+            loading={pending === b.bookingId}
+            disabled={acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
+            style={styles.acceptBtn}
+          />
+        </View>
+      </View>
+    );
+  };
 
   return (
     <ScreenContainer padded={false}>
@@ -514,55 +613,30 @@ export default function BangkeroHome() {
             />
           </View>
         ) : (
-          requests.data.map((b) => {
-            const chip = chipFor(b);
-            return (
-              <View key={b.bookingId} style={styles.request}>
-                <RequestBody booking={b} />
-                {/* Dispatch state (008): whose offer it is, why Accept
-                    may be locked, and how far the boat still is. */}
-                <View style={styles.chipRow}>
-                  <View
-                    style={[
-                      styles.holdChip,
-                      chip.tone === 'live' && styles.holdChipLive,
-                      chip.tone === 'block' && styles.holdChipBlock,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.holdChipText,
-                        chip.tone === 'live' && styles.holdChipTextLive,
-                        chip.tone === 'block' && styles.holdChipTextBlock,
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {chip.text}
-                    </Text>
+          <>
+            {advanceReqs.length > 0 && (
+              <>
+                <View style={styles.groupHead}>
+                  <Text style={styles.groupLabel}>ADVANCE BOOKINGS</Text>
+                  <View style={styles.countPill}>
+                    <Text style={styles.countPillText}>{advanceReqs.length}</Text>
                   </View>
-                  {chip.distance && <Text style={styles.chipDistance}>{chip.distance}</Text>}
                 </View>
-                {/* Accept is the intended action and carries twice the width;
-                    giving a decline equal weight makes operators hesitate. */}
-                <View style={styles.actions}>
-                  <PrimaryButton
-                    label="Decline"
-                    variant="secondary"
-                    onPress={() => decline(b)}
-                    disabled={pending === b.bookingId || acted.has(b.bookingId)}
-                    style={styles.declineBtn}
-                  />
-                  <PrimaryButton
-                    label="Accept"
-                    onPress={() => accept(b)}
-                    loading={pending === b.bookingId}
-                    disabled={acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
-                    style={styles.acceptBtn}
-                  />
+                {advanceReqs.map(renderRequest)}
+              </>
+            )}
+            {todayReqs.length > 0 && (
+              <>
+                <View style={styles.groupHead}>
+                  <Text style={styles.groupLabel}>TODAY&apos;S BOOKINGS</Text>
+                  <View style={styles.countPill}>
+                    <Text style={styles.countPillText}>{todayReqs.length}</Text>
+                  </View>
                 </View>
-              </View>
-            );
-          })
+                {todayReqs.map(renderRequest)}
+              </>
+            )}
+          </>
         )}
 
         {activeTrips.length > 0 && (
@@ -582,7 +656,10 @@ export default function BangkeroHome() {
                 })}
                 style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
               >
-                <RequestBody booking={b} />
+                <RequestBody
+                  booking={b}
+                  category={categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined)}
+                />
                 {/* Completing requires everyone aboard (complete_trip raises
                     otherwise) — until then the button routes to the boarding
                     card instead of pretending the trip can close. */}
@@ -654,13 +731,21 @@ function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: st
   );
 }
 
-function RequestBody({ booking }: { booking: BookingDoc }) {
+function RequestBody({ booking, category }: { booking: BookingDoc; category?: string | null }) {
   return (
     <>
       <View style={styles.requestTop}>
         <Text style={styles.requestRef}>{booking.ref}</Text>
         <StatusPill status={booking.status} />
       </View>
+
+      {/* Which of the three desks this row came from — island package,
+          advance slot, or a walk-up same-day ride. */}
+      {!!category && (
+        <View style={styles.catChip}>
+          <Text style={styles.catChipText}>{category}</Text>
+        </View>
+      )}
 
       {/* Same origin/destination rail the passenger sees, so both sides of the
           demo describe a trip the same way. */}
@@ -791,6 +876,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.huge, marginBottom: spacing.md,
   },
   sectionLabelInline: { ...typography.label },
+  groupHead: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    marginTop: spacing.lg, marginBottom: spacing.sm,
+  },
+  groupLabel: { ...typography.label, color: colors.textMuted },
   countPill: {
     minWidth: 20, height: 20, borderRadius: radii.pill,
     backgroundColor: colors.surfaceAlt,
@@ -853,6 +943,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: spacing.md, gap: spacing.sm,
   },
   requestRef: { flexShrink: 1, ...typography.label, color: colors.textMuted, letterSpacing: 0.5 },
+  catChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryTint,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs,
+    marginBottom: spacing.md,
+  },
+  catChipText: { flexShrink: 1, ...typography.label, color: colors.primary, letterSpacing: 0.5 },
 
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rail: { alignItems: 'center' },

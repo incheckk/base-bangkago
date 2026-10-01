@@ -85,7 +85,7 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
     .select('id')
     .eq('bangka_id', args.bangkaId)
     .eq('rental_date', args.rentalDate)
-    .in('status', ['pending', 'confirmed'])
+    .in('status', ['awaiting_payment', 'pending', 'confirmed'])
     .limit(1);
   if (clashError) throw clashError;
   if (clash?.length) {
@@ -111,7 +111,9 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
       rental_date: args.rentalDate,
       hours: args.hours,
       total_price: total,
-      status: 'pending',
+      // Rental dates start tomorrow (020), so every charter is advance:
+      // escrow first, admin flips it to 'pending', then it hits the desk.
+      status: 'awaiting_payment',
     })
     .select()
     .single();

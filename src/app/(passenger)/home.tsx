@@ -118,7 +118,7 @@ export default function PassengerHome() {
   // Newest first. The banner must surface a live booking even when newer
   // finished trips would push it out of the top-3 recent list.
   const activeBookings = bookings.data.filter(
-    (b) => b.status === 'open' || b.status === 'accepted'
+    (b) => b.status === 'open' || b.status === 'accepted' || b.status === 'pending'
   );
   const bannerBooking = activeBookings[0] ?? null;
   const recentTrips = bookings.data.slice(0, 3);
@@ -327,7 +327,11 @@ export default function PassengerHome() {
                 {bannerBooking.fromPortName} → {bannerBooking.toPortName}
               </Text>
               <Text style={styles.bannerMeta} numberOfLines={1}>
-                {bannerBooking.status === 'open' ? 'Waiting for a bangkero' : 'Accepted'}
+                {bannerBooking.status === 'pending'
+                  ? 'Awaiting confirmation'
+                  : bannerBooking.status === 'open'
+                    ? 'Waiting for a bangkero'
+                    : 'Accepted'}
                 {' · '}{bannerBooking.numOfPassenger} pax · ₱{bannerBooking.totalPrice}
                 {activeBookings.length > 1 ? ` · +${activeBookings.length - 1} more` : ''}
               </Text>

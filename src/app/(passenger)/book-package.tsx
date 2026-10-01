@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { SchedulePicker, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
@@ -28,6 +29,8 @@ export default function BookPackage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pax, setPax] = useState(1);
+  const [scheduledDate, setScheduledDate] = useState(todayIso());
+  const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -60,6 +63,9 @@ export default function BookPackage() {
   const total = pkg ? pkg.price * pax : 0;
   const down = Math.round(total * 0.5);
   const remainder = total - down;
+  // Escrow follows the date (020): same-day hop = pay onboard like any
+  // ride; future hop = 50% GCash to the admin, gated until they clear it.
+  const advance = scheduledDate > todayIso();
 
   async function proceed() {
     if (!pkg || checking) return;
@@ -67,6 +73,10 @@ export default function BookPackage() {
     const last = pkg.stops[pkg.stops.length - 1];
     if (pkg.stops.length < 2 || !first || !last || first === last) {
       setNotice('This package has no route yet. Go back and pick another.');
+      return;
+    }
+    if (advance && !scheduledTime) {
+      setNotice('Pick a departure time for your sailing date.');
       return;
     }
 
@@ -110,8 +120,9 @@ export default function BookPackage() {
         fare: String(total),
         packageId: pkg.packageId,
         packageName: pkg.packageName,
-        downAmount: String(down),
-        remainder: String(remainder),
+        scheduledDate,
+        scheduledTime: scheduledTime ?? '',
+        ...(advance ? { downAmount: String(down), remainder: String(remainder) } : {}),
       },
     });
   }
@@ -171,6 +182,14 @@ export default function BookPackage() {
           ))}
         </View>
 
+        <Text style={styles.sectionLabel}>SAILING DATE</Text>
+        <SchedulePicker
+          date={scheduledDate}
+          time={scheduledTime}
+          onDate={setScheduledDate}
+          onTime={setScheduledTime}
+        />
+
         <Text style={styles.sectionLabel}>PASSENGERS</Text>
         <View style={styles.paxCard}>
           <Text style={styles.paxLabel}>Seats</Text>
@@ -214,18 +233,29 @@ export default function BookPackage() {
             <Text style={styles.sumLabel}>Total ({pax} × ₱{pkg.price})</Text>
             <Text style={styles.sumValue}>₱{total}</Text>
           </View>
-          <View style={styles.sumDivider} />
-          <View style={styles.sumRow}>
-            <View style={styles.sumLabelWrap}>
-              <Text style={styles.sumLabelStrong}>GCash downpayment (50%)</Text>
-              <Text style={styles.sumHint}>Paid now to the admin&apos;s QR · held in escrow</Text>
+          {advance ? (
+            <>
+              <View style={styles.sumDivider} />
+              <View style={styles.sumRow}>
+                <View style={styles.sumLabelWrap}>
+                  <Text style={styles.sumLabelStrong}>GCash downpayment (50%)</Text>
+                  <Text style={styles.sumHint}>Paid now to the admin&apos;s QR · held in escrow</Text>
+                </View>
+                <Text style={styles.sumDown}>₱{down}</Text>
+              </View>
+              <View style={styles.sumRow}>
+                <Text style={styles.sumLabelStrong}>Remaining, collected onboard</Text>
+                <Text style={styles.sumValue}>₱{remainder}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.sumRow}>
+              <View style={styles.sumLabelWrap}>
+                <Text style={styles.sumLabelStrong}>Collected onboard</Text>
+                <Text style={styles.sumHint}>Same-day hop — no downpayment needed</Text>
+              </View>
             </View>
-            <Text style={styles.sumDown}>₱{down}</Text>
-          </View>
-          <View style={styles.sumRow}>
-            <Text style={styles.sumLabelStrong}>Remaining, collected onboard</Text>
-            <Text style={styles.sumValue}>₱{remainder}</Text>
-          </View>
+          )}
         </View>
 
         {!!notice && (
@@ -236,10 +266,10 @@ export default function BookPackage() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label="Proceed to Downpayment"
+            label={advance ? 'Proceed to Downpayment' : 'Proceed to Payment'}
             onPress={proceed}
             loading={checking}
-            disabled={checking || !profile}
+            disabled={checking || !profile || (advance && !scheduledTime)}
           />
         </View>
       </ScrollView>

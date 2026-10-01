@@ -9,6 +9,7 @@ import { useAllTrips } from '@/hooks/useAllTrips';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 const FILTERS = [
   { key: 'all', label: 'All' },
+  { key: 'pending', label: 'Awaiting' },
   { key: 'open', label: 'Open' },
   { key: 'accepted', label: 'Accepted' },
   { key: 'completed', label: 'Completed' },

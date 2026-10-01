@@ -33,7 +33,7 @@ export default function BookingsScreen() {
   const { data, loading, error } = useRecentBookings(user?.id ?? null, 50);
 
   const activeBookings = data.filter(
-    (b) => b.status === 'open' || b.status === 'accepted'
+    (b) => b.status === 'open' || b.status === 'accepted' || b.status === 'pending'
   );
 
   if (loading) {

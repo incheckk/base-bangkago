@@ -5,6 +5,7 @@ import type { BookingStatus } from '../types/models';
 
 const MAP: Record<BookingStatus, { text: string; fg: string; bg: string }> = {
   open:      { text: 'Waiting for bangkero', fg: colors.warning,       bg: colors.warningTint },
+  pending:   { text: 'Awaiting confirmation', fg: colors.textSecondary, bg: colors.neutralTint },
   accepted:  { text: 'Bangkero accepted',    fg: colors.primary,       bg: colors.primaryTint },
   completed: { text: 'Completed',            fg: colors.textSecondary, bg: colors.neutralTint },
   cancelled: { text: 'Cancelled',            fg: colors.danger,        bg: colors.dangerTint },

@@ -5,6 +5,7 @@ import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { slotLabel } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -26,9 +27,14 @@ export default function BookingConfirmed() {
     payWarning?: string;
     parcelWarning?: string;
     remainder?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
   }>();
 
   const bookingRef = params.ref ?? params.bookingId ?? '—';
+  // Escrow bookings (020) are 'pending' until the admin clears them —
+  // the reference and QR cards wait on booking/[id] for that moment.
+  const awaitingAdmin = params.downStatus === 'pending';
   const scaleAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -69,8 +75,14 @@ export default function BookingConfirmed() {
 
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={styles.title}>Booking Requested!</Text>
-            <Text style={styles.refLabel}>Booking Reference</Text>
-            <Text style={styles.refValue}>{bookingRef}</Text>
+            <Text style={styles.refLabel}>
+              {awaitingAdmin ? 'Status' : 'Booking Reference'}
+            </Text>
+            {awaitingAdmin ? (
+              <Text style={styles.awaitValue}>Awaiting admin confirmation</Text>
+            ) : (
+              <Text style={styles.refValue}>{bookingRef}</Text>
+            )}
           </Animated.View>
         </View>
 
@@ -90,7 +102,11 @@ export default function BookingConfirmed() {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Trip date</Text>
             <Text style={styles.detailValue}>
-              Today · {new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+              {params.scheduledDate
+                ? new Date(`${params.scheduledDate}T00:00:00`).toLocaleDateString('en-PH', {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                  }) + (params.scheduledTime ? ` · ${slotLabel(params.scheduledTime)}` : '')
+                : `Today · ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}`}
             </Text>
           </View>
           <View style={styles.detailRow}>
@@ -231,6 +247,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     textAlign: 'center',
     letterSpacing: 2,
+    marginTop: spacing.sm,
+  },
+  awaitValue: {
+    ...typography.bodyStrong,
+    color: colors.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
 

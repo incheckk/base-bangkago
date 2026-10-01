@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { Icon } from '@/components/Icon';
@@ -12,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
 import {
   acceptBooking, rejectBooking, friendlyError, noShowPassenger, setOnboarded,
+  setPassengerBoarded, verifyBoardingQr,
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
@@ -61,6 +63,82 @@ export default function BookingStatus() {
   useEffect(() => { setBoardOverride(null); }, [booking?.onboardedAt]);
   const boarded = boardOverride ?? !!booking?.onboardedAt;
   const [boardPending, setBoardPending] = useState(false);
+
+  /** Everyone resolved = booker confirmed + every companion boarded or no-showed. */
+  const companionsResolved = companions.every((c) => c.boardedAt || c.noShowAt);
+  const canStart = boarded && companionsResolved;
+
+  // QR scanner: one scan at a time — `busy` latches so a frame burst
+  // can't fire the RPC four times before the modal closes.
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [scanMessage, setScanMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const scanLatch = useRef(false);
+
+  /** Manual tick for one companion row (undo with a second tap). */
+  async function toggleCompanion(c: PassengerDetailDoc) {
+    const next = !c.boardedAt;
+    const prevIso = c.boardedAt;
+    setCompanions((rows) =>
+      rows.map((x) =>
+        x.passengerId === c.passengerId
+          ? { ...x, boardedAt: next ? new Date().toISOString() : null }
+          : x
+      )
+    );
+    try {
+      await setPassengerBoarded(c.passengerId, next ? 'boarded' : 'pending');
+    } catch (e) {
+      setCompanions((rows) =>
+        rows.map((x) =>
+          x.passengerId === c.passengerId ? { ...x, boardedAt: prevIso } : x
+        )
+      );
+      setActionError(friendlyError(e));
+    }
+  }
+
+  async function handleScan(result: { data: string }) {
+    if (scanLatch.current) return;
+    scanLatch.current = true;
+    setScanBusy(true);
+    try {
+      const name = await verifyBoardingQr(result.data);
+      const hit = companions.find((c) => `PAX${c.qrToken}` === result.data);
+      if (hit) {
+        setCompanions((rows) =>
+          rows.map((x) =>
+            x.passengerId === hit.passengerId
+              ? { ...x, boardedAt: new Date().toISOString() }
+              : x
+          )
+        );
+      } else {
+        // The booker's ticket — the RPC stamped bookings.onboarded_at.
+        setBoardOverride(true);
+      }
+      setScanMessage({ ok: true, text: `${name} checked in` });
+      setScanOpen(false);
+    } catch (e) {
+      setScanMessage({ ok: false, text: friendlyError(e) });
+    }
+    scanLatch.current = false;
+    setScanBusy(false);
+  }
+
+  async function openScanner() {
+    setScanMessage(null);
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        setScanMessage({ ok: false, text: 'Camera access is needed to scan boarding passes.' });
+        return;
+      }
+    }
+    setScanOpen(true);
+  }
+
   /**
    * Latched the moment a no-show lands. The row flips to cancelled a beat
    * later through realtime — without this, a second tap re-runs the RPC.
@@ -226,8 +304,8 @@ export default function BookingStatus() {
             {booking.status === 'accepted' && (
               <View style={styles.card}>
                 <Text style={styles.cardLabel}>{isCargo ? 'CARGO READY' : 'PASSENGERS ON BOARD'}</Text>
-                {/* One checkbox for the whole party — the booker speaks for
-                    everyone, companions are just names on the same ticket. */}
+                {/* The booker speaks for the party; every companion gets its
+                    own tick so the crew can see exactly who is aboard. */}
                 <Pressable
                   onPress={() => toggleBoarded(!boarded)}
                   disabled={boardPending}
@@ -246,16 +324,51 @@ export default function BookingStatus() {
                     <Text style={styles.boardSub}>
                       {isCargo
                         ? `Cargo trip · ${boarded ? 'loaded' : 'not loaded yet'}`
-                        : `${booking.numOfPassenger} pax · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
+                        : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
                     </Text>
                   </View>
                 </Pressable>
                 {companions.map((c) => (
-                  <Text key={c.passengerId} style={styles.companion} numberOfLines={1}>
-                    {c.firstName} {c.lastName}
-                    {c.passengerType !== 'regular' ? ` (${c.passengerType})` : ''}
-                  </Text>
+                  <Pressable
+                    key={c.passengerId}
+                    onPress={() => void toggleCompanion(c)}
+                    style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: !!c.boardedAt }}
+                    accessibilityLabel={`${c.firstName} ${c.lastName} on board`}
+                  >
+                    <View style={[styles.checkbox, c.boardedAt && styles.checkboxOn]}>
+                      {c.boardedAt && <Icon name="check" size={14} color={colors.primaryText} />}
+                    </View>
+                    <View style={styles.boardText}>
+                      <Text style={styles.boardName} numberOfLines={1}>
+                        {c.firstName} {c.lastName}
+                        {c.passengerType !== 'regular' ? ` (${c.passengerType})` : ''}
+                      </Text>
+                      <Text style={styles.boardSub}>
+                        {c.noShowAt
+                          ? 'Marked no-show'
+                          : c.boardedAt
+                            ? 'Boarded'
+                            : 'Not boarded yet'}
+                      </Text>
+                    </View>
+                  </Pressable>
                 ))}
+                <PrimaryButton
+                  label="Scan boarding QR"
+                  variant="secondary"
+                  onPress={() => void openScanner()}
+                  style={styles.scanBtn}
+                />
+              </View>
+            )}
+
+            {!!scanMessage && (
+              <View style={[styles.banner, scanMessage.ok && styles.bannerOk]}>
+                <Text style={[styles.bannerText, scanMessage.ok && styles.bannerOkText]}>
+                  {scanMessage.text}
+                </Text>
               </View>
             )}
 
@@ -290,7 +403,7 @@ export default function BookingStatus() {
                     label="Start Trip"
                     onPress={handleStartTrip}
                     loading={pending}
-                    disabled={!boarded}
+                    disabled={!canStart}
                     style={styles.actionBtn}
                   />
                 </>
@@ -304,12 +417,14 @@ export default function BookingStatus() {
               )}
             </View>
 
-            {booking.status === 'accepted' && !boarded && (
+            {booking.status === 'accepted' && !canStart && (
               <>
                 <Text style={styles.gateHint}>
                   {isCargo
                     ? 'Confirm the cargo is loaded to start the trip.'
-                    : 'Confirm everyone is on board to start the trip.'}
+                    : boarded && !companionsResolved
+                      ? 'Tick every passenger who is aboard to start the trip.'
+                      : 'Confirm everyone is on board to start the trip.'}
                 </Text>
                 <PrimaryButton
                   label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
@@ -324,6 +439,35 @@ export default function BookingStatus() {
           </>
         )}
       </ScrollView>
+
+      {/* One scanner for the whole party — the bangkero reopens it per
+          passenger so a frame burst can never double-fire the RPC. */}
+      <Modal visible={scanOpen} animationType="fade" onRequestClose={() => setScanOpen(false)}>
+        <View style={styles.scanWrap}>
+          {permission?.granted ? (
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={scanBusy ? undefined : handleScan}
+            />
+          ) : (
+            <LoadingState label="Requesting camera…" />
+          )}
+          <View style={styles.scanOverlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scanHint}>
+              Point at the passenger&apos;s boarding QR code
+            </Text>
+            <PrimaryButton
+              label="Close"
+              variant="secondary"
+              onPress={() => setScanOpen(false)}
+              style={styles.scanClose}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -380,6 +524,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerOk: { backgroundColor: colors.successTint, borderColor: colors.success },
+  bannerOkText: { color: colors.success },
 
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
   actionBtn: { flex: 1 },
@@ -405,12 +551,27 @@ const styles = StyleSheet.create({
   boardText: { flex: 1, minWidth: 0 },
   boardName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   boardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 2 },
-  companion: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginLeft: spacing.xl + 24 + spacing.md,
-    marginTop: spacing.xxs,
+  scanBtn: { marginTop: spacing.md },
+
+  // ---------- QR scanner ----------
+  scanWrap: { flex: 1, backgroundColor: '#000' },
+  scanOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.lg,
   },
+  scanFrame: {
+    width: 220,
+    height: 220,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: 'transparent',
+  },
+  scanHint: { ...typography.caption, color: '#fff', textAlign: 'center' },
+  scanClose: { marginTop: spacing.lg, alignSelf: 'stretch' },
 
   gateHint: {
     ...typography.caption,

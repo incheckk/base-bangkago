@@ -127,5 +127,7 @@ export function mapBookingRow(row: any): BookingDoc {
     onboardedAt: row.onboarded_at ?? null,
     completedAt: row.completed_at,
     cancelledAt: row.cancelled_at,
+    scheduledDate: row.scheduled_date ?? null,
+    scheduledTime: row.scheduled_time ?? null,
   };
 }

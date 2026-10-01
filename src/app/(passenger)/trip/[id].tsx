@@ -114,17 +114,24 @@ export default function TripDetailScreen() {
           </View>
         )}
 
-        {/* Schedule — rides are same-day, so a booking always has a date and
-            the departure/arrival rows fill in live as the bangkero moves. */}
+        {/* Schedule — same-day rides are dated at booking; advance trips
+            show the sailing date and slot the passenger picked. */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SCHEDULE</Text>
-          <InfoRow label="Trip date" value={formatDate(booking.createdAt)} />
+          <InfoRow
+            label="Trip date"
+            value={formatDate(
+              booking.scheduledDate
+                ? `${booking.scheduledDate}T${booking.scheduledTime ?? '00:00'}:00`
+                : booking.createdAt
+            )}
+          />
           <InfoRow
             label="Departure"
             value={
               booking.departTime
                 ? formatDate(booking.departTime)
-                : booking.status === 'open' || booking.status === 'accepted'
+                : booking.status === 'open' || booking.status === 'accepted' || booking.status === 'pending'
                   ? 'Not departed yet'
                   : '—'
             }
@@ -136,8 +143,10 @@ export default function TripDetailScreen() {
                 ? formatDate(booking.arrivalTime)
                 : booking.status === 'completed'
                   ? 'Today (same day)'
-                  : booking.status === 'open' || booking.status === 'accepted'
-                    ? 'Expected today'
+                  : booking.status === 'open' || booking.status === 'accepted' || booking.status === 'pending'
+                    ? booking.scheduledDate
+                      ? 'Expected on the sailing date'
+                      : 'Expected today'
                     : '—'
             }
           />

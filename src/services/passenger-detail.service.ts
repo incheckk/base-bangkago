@@ -12,6 +12,10 @@ function mapRow(row: any): PassengerDetailDoc {
     passengerType: row.passenger_type,
     declaredWeightKg: row.declared_weight_kg,
     bookingId: row.booking_id,
+    // ?? '' keeps this working before migration 020 adds the columns
+    qrToken: row.qr_token ?? '',
+    boardedAt: row.boarded_at ?? null,
+    noShowAt: row.no_show_at ?? null,
   };
 }
 

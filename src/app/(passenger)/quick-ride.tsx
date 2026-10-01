@@ -30,7 +30,7 @@ export default function QuickRide() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <Pressable
-          onPress={() => router.push('/(passenger)/search-boat')}
+          onPress={() => router.push('/(passenger)/book-ride')}
           accessibilityRole="search"
           style={({ pressed }) => [styles.searchBar, pressed && styles.searchBarPressed]}
         >

@@ -42,7 +42,7 @@ export async function getActiveBooking(
     .from('bookings')
     .select('id, ref')
     .eq('user_id', passengerUid)
-    .in('trip_stat', ['open', 'accepted'])
+    .in('trip_stat', ['pending', 'open', 'accepted'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -104,15 +104,27 @@ interface CreateArgs {
   totalFare?: number;
   /** Island-hopping package the booking belongs to (stored for itinerary display). */
   packageId?: string;
+  /** Sailing date (YYYY-MM-DD) and slot; future dates escrow first (020). */
+  scheduledDate?: string;
+  scheduledTime?: string;
+}
+
+/** Advance = sailing date after today (Manila). Needs the 50% escrow. */
+export function isAdvanceDate(scheduledDate?: string | null): boolean {
+  if (!scheduledDate) return false;
+  const manilaToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  return scheduledDate > manilaToday;
 }
 
 /**
  * Creates a booking. id and ref are filled by the set_booking_ref trigger.
  * totalFare (screen-computed, includes discounts/cargo multiplier) is
- * honored after the route is validated.
+ * honored after the route is validated. A future sailing date lands the
+ * row in 'pending' until the admin clears the escrow (020).
  */
 export async function createBooking({
   passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare, packageId,
+  scheduledDate, scheduledTime,
 }: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
@@ -133,6 +145,10 @@ export async function createBooking({
   }
 
   const totalPrice = totalFare ?? route.baseFare * passengerCount;
+  const advance = isAdvanceDate(scheduledDate);
+  if (advance && !scheduledTime) {
+    throw new Error('Pick a departure time for your sailing date.');
+  }
 
   const { data, error } = await supabase
     .from('bookings')
@@ -146,7 +162,9 @@ export async function createBooking({
       total_price: totalPrice,
       route_id: route.routeId,
       service_type: serviceType,
-      trip_stat: 'open',
+      trip_stat: advance ? 'pending' : 'open',
+      scheduled_date: scheduledDate ?? null,
+      scheduled_time: advance ? scheduledTime : (scheduledTime ?? null),
       ...(packageId ? { package_id: packageId } : {}),
     })
     .select('id, ref')
@@ -155,9 +173,12 @@ export async function createBooking({
   if (error) throw error;
 
   // FCFS dispatch: hand the request its first 3-minute hold (008).
-  // Result ignored on purpose — pre-migration the RPC is simply missing
-  // and the booking itself must still be created.
-  await supabase.rpc('assign_next_hold', { p_booking_id: data.id });
+  // Skipped for advance rows — no hold exists until the admin flips
+  // them open. Result ignored on purpose — pre-migration the RPC is
+  // simply missing and the booking itself must still be created.
+  if (!advance) {
+    await supabase.rpc('assign_next_hold', { p_booking_id: data.id });
+  }
 
   return { bookingId: data.id, ref: data.ref };
 }
@@ -226,6 +247,31 @@ export async function setOnboarded(bookingId: string, boarded: boolean): Promise
   const { error } = await supabase.rpc('set_booking_boarded', {
     p_booking_id: bookingId,
     p_boarded: boarded,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Bangkero scans a boarding QR ('PAX'+token for a companion, the ref for
+ * the booker). The RPC resolves the row, stamps the checklist and returns
+ * the passenger's name for the toast; a code from another trip raises.
+ */
+export async function verifyBoardingQr(token: string): Promise<string> {
+  const { data, error } = await supabase.rpc('verify_boarding_qr', {
+    p_token: token,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Manual checklist tick for one companion row (or undo with 'pending'). */
+export async function setPassengerBoarded(
+  detailId: string,
+  state: 'boarded' | 'not_boarded' | 'pending'
+): Promise<void> {
+  const { error } = await supabase.rpc('set_passenger_boarded', {
+    p_detail_id: detailId,
+    p_state: state,
   });
   if (error) throw error;
 }

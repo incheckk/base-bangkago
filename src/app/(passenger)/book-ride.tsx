@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { SchedulePicker, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
@@ -48,7 +49,12 @@ export default function BookRide() {
 
   const [fromId, setFromId] = useState<string | null>(params.fromId ?? null);
   const [toId, setToId] = useState<string | null>(params.toId ?? null);
+  // Arriving with BOTH ports = a popular route from quick-ride: the pickers
+  // lock to that route and the chip grids step out of the way.
+  const [routeLocked] = useState(!!(params.fromId && params.toId));
   const [companions, setCompanions] = useState<Companion[]>([]);
+  const [scheduledDate, setScheduledDate] = useState(todayIso());
+  const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [maxPax, setMaxPax] = useState(FALLBACK_MAX_PAX);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -196,6 +202,8 @@ export default function BookRide() {
         serviceType: 'passenger',
         fare: String(fare),
         companionsJson: JSON.stringify(companions),
+        scheduledDate,
+        scheduledTime: scheduledTime ?? '',
       },
     });
   }
@@ -207,7 +215,8 @@ export default function BookRide() {
     return <ScreenContainer><ErrorState message={ports.error ?? routesError ?? 'Could not load routes.'} /></ScreenContainer>;
   }
 
-  const ready = !!fromId && !!toId && fromId !== toId && fare !== null;
+  const advance = scheduledDate > todayIso();
+  const ready = !!fromId && !!toId && fromId !== toId && fare !== null && (!advance || !!scheduledTime);
   const bookerName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'You';
 
   return (
@@ -249,12 +258,12 @@ export default function BookRide() {
 
             <Pressable
               onPress={swap}
-              disabled={!fromId && !toId}
+              disabled={routeLocked || (!fromId && !toId)}
               accessibilityRole="button"
               accessibilityLabel="Swap departure and destination"
               style={({ pressed }) => [
                 styles.swapBtn,
-                (!fromId && !toId) && styles.swapBtnOff,
+                (routeLocked || (!fromId && !toId)) && styles.swapBtnOff,
                 pressed && styles.swapBtnPressed,
               ]}
             >
@@ -264,16 +273,32 @@ export default function BookRide() {
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.sectionLabel}>DEPARTURE PORT</Text>
-          <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
+          {/* Locked route from quick-ride — the summary above already shows
+              both ports; the chip grids would only offer ways to break it. */}
+          {!routeLocked && (
+            <>
+              <Text style={styles.sectionLabel}>DEPARTURE PORT</Text>
+              <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
 
-          <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
-          <PortChips
-            ports={ports.data}
-            selected={toId}
-            disabled={fromId}
-            isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
-            onSelect={setToId}
+              <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
+              <PortChips
+                ports={ports.data}
+                selected={toId}
+                disabled={fromId}
+                isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
+                onSelect={setToId}
+              />
+            </>
+          )}
+
+          {/* Same-day rides leave whenever a boat is ready; a future date
+              takes one of the four fixed slots and pays 50% up front (020). */}
+          <Text style={[styles.sectionLabel, styles.mtLg]}>SAILING DATE</Text>
+          <SchedulePicker
+            date={scheduledDate}
+            time={scheduledTime}
+            onDate={setScheduledDate}
+            onTime={setScheduledTime}
           />
 
           {/* You are passenger #1; companions ride under your booking. */}
@@ -355,7 +380,9 @@ export default function BookRide() {
             <Text style={styles.fareNote} numberOfLines={1}>
               {fare === null
                 ? 'Pick both ports'
-                : `${count} ${count === 1 ? 'passenger' : 'passengers'} · discounts on board`}
+                : advance
+                  ? `${count} ${count === 1 ? 'passenger' : 'passengers'} · 50% GCash downpayment to confirm`
+                  : `${count} ${count === 1 ? 'passenger' : 'passengers'} · discounts on board`}
             </Text>
           </View>
           <Text style={[styles.fareValue, fare === null && styles.fareValueEmpty]} numberOfLines={1}>

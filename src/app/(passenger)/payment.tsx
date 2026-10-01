@@ -5,9 +5,10 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { slotLabel } from '@/components/SchedulePicker';
 import { useAuth } from '@/hooks/useAuth';
 import { getAdminGcashQr } from '@/services/app-settings.service';
-import { createBooking, friendlyError } from '@/services/booking.service';
+import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
 import { createParcel } from '@/services/parcel.service';
@@ -31,6 +32,14 @@ const PAYMENT_METHODS: {
 const todayLabel = () =>
   `Today · ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}`;
 
+function scheduleLabel(dateIso: string, time: string | null): string {
+  const d = new Date(`${dateIso}T00:00:00`);
+  const day = Number.isNaN(d.getTime())
+    ? dateIso
+    : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+  return time ? `${day} · ${slotLabel(time)}` : day;
+}
+
 export default function PaymentScreen() {
   const { profile, profileLoading } = useAuth();
   const params = useLocalSearchParams<{
@@ -49,16 +58,31 @@ export default function PaymentScreen() {
     packageName?: string;
     downAmount?: string;
     remainder?: string;
+    scheduledDate?: string;
+    scheduledTime?: string;
   }>();
 
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Package mode: 50% GCash escrow to the ADMIN's QR, proof filed here.
+  const paxCount = parseInt(params.count ?? '1', 10);
+  const fare = parseInt(params.fare ?? '0', 10);
+  const serviceType = params.serviceType === 'cargo' ? 'cargo' : 'passenger';
+
+  // Package mode passes its 50% down/remainder split along.
   const isPackage = !!params.packageId;
-  const downAmount = Math.round((parseInt(params.downAmount ?? '0', 10) || 0));
-  const remainderAmount = parseInt(params.remainder ?? params.fare ?? '0', 10) || 0;
+  // Escrow follows the DATE, not the product (020): a future sailing
+  // (package or plain ride) pays 50% to the admin's QR and stays hidden
+  // from bangkeros until the admin clears it. Same-day = pay onboard.
+  const isAdvance = isAdvanceDate(params.scheduledDate);
+  const isEscrow = isAdvance;
+  const downAmount = isPackage
+    ? Math.round(parseInt(params.downAmount ?? '0', 10) || 0)
+    : Math.round(fare / 2);
+  const onboardRemainder = isPackage
+    ? parseInt(params.remainder ?? params.fare ?? '0', 10) || 0
+    : Math.max(0, fare - downAmount);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoaded, setQrLoaded] = useState(false);
   const [reference, setReference] = useState('');
@@ -66,7 +90,7 @@ export default function PaymentScreen() {
   const [proofUploading, setProofUploading] = useState(false);
 
   useEffect(() => {
-    if (!isPackage) return;
+    if (!isEscrow) return;
     let alive = true;
     (async () => {
       try {
@@ -81,7 +105,7 @@ export default function PaymentScreen() {
     return () => {
       alive = false;
     };
-  }, [isPackage]);
+  }, [isEscrow]);
 
   async function chooseProof(source: 'camera' | 'gallery') {
     if (proofUploading) return;
@@ -93,10 +117,6 @@ export default function PaymentScreen() {
     }
   }
 
-  const paxCount = parseInt(params.count ?? '1', 10);
-  const fare = parseInt(params.fare ?? '0', 10);
-  const serviceType = params.serviceType === 'cargo' ? 'cargo' : 'passenger';
-
   async function confirm() {
     if (busy || !profile || profileLoading) return;
     if (!params.fromId || !params.toId || !params.fromName || !params.toName) {
@@ -106,10 +126,10 @@ export default function PaymentScreen() {
     setBusy(true);
     setError(null);
     try {
-      // Package mode files the escrow proof FIRST — a booking must never
-      // exist without the screenshot that documents its downpayment.
+      // Escrow mode files the proof FIRST — a booking must never exist
+      // without the screenshot that documents its downpayment.
       let proofPath: string | null = null;
-      if (isPackage) {
+      if (isEscrow) {
         if (!reference.trim()) throw new Error('Enter your GCash reference number.');
         if (!proofUri) throw new Error('Attach your payment screenshot.');
         setProofUploading(true);
@@ -128,6 +148,9 @@ export default function PaymentScreen() {
         serviceType,
         totalFare: fare,
         ...(isPackage && params.packageId ? { packageId: params.packageId } : {}),
+        ...(params.scheduledDate
+          ? { scheduledDate: params.scheduledDate, scheduledTime: params.scheduledTime || undefined }
+          : {}),
       });
 
       // Companions ride under this booking. A failed insert must never block
@@ -156,14 +179,15 @@ export default function PaymentScreen() {
       }
 
       // One payments row per booking, always (012 mark_paid semantics):
-      // packages record only the ONBOARD remainder — the 50% already
-      // "paid" lives in downpayments, not here. Post-booking writes never
-      // block the confirmation screen: the booking already exists, and
-      // mark_paid upserts a missing row when the bangkero collects fare.
+      // escrow bookings record only the ONBOARD remainder — the 50%
+      // already "paid" lives in downpayments, not here. Post-booking
+      // writes never block the confirmation screen: the booking already
+      // exists, and mark_paid upserts a missing row when the bangkero
+      // collects fare.
       let payWarning = false;
-      if (isPackage) {
+      if (isEscrow) {
         try {
-          await createPayment(bookingId, remainderAmount, 'cash');
+          await createPayment(bookingId, onboardRemainder, 'cash');
         } catch {
           payWarning = true;
         }
@@ -215,7 +239,7 @@ export default function PaymentScreen() {
       // Escrow row — the booking already exists, so a failed insert must
       // never block the confirmation screen: flag it and move on.
       let downWarning = false;
-      if (isPackage && proofPath) {
+      if (isEscrow && proofPath) {
         try {
           await createDownpayment({
             amount: downAmount,
@@ -232,14 +256,19 @@ export default function PaymentScreen() {
         pathname: '/(passenger)/booking-confirmed',
         params: {
           ...params,
-          paymentMethod: isPackage ? 'cash' : method,
+          paymentMethod: isEscrow ? 'cash' : method,
           bookingId,
           ref,
           ...(parcelId ? { parcelId } : {}),
           ...(payWarning ? { payWarning: '1' } : {}),
           ...(parcelWarning ? { parcelWarning: '1' } : {}),
-          ...(isPackage
-            ? { downStatus: 'pending', ...(downWarning ? { downWarning: '1' } : {}) }
+          ...(isEscrow
+            ? {
+                downStatus: 'pending',
+                downAmount: String(downAmount),
+                remainder: String(onboardRemainder),
+                ...(downWarning ? { downWarning: '1' } : {}),
+              }
             : {}),
         },
       });
@@ -278,7 +307,11 @@ export default function PaymentScreen() {
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryRowLabel}>Trip date</Text>
-            <Text style={styles.summaryRowValue}>{todayLabel()}</Text>
+            <Text style={styles.summaryRowValue}>
+              {params.scheduledDate
+                ? scheduleLabel(params.scheduledDate, params.scheduledTime || null)
+                : todayLabel()}
+            </Text>
           </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryRowLabel}>Passengers</Text>
@@ -291,7 +324,7 @@ export default function PaymentScreen() {
             </View>
           </View>
 
-          {isPackage ? (
+          {isEscrow ? (
             <View>
               <Text style={[styles.sectionLabel, styles.mtLg]}>GCASH DOWNPAYMENT (50%)</Text>
               <View style={styles.escrowCard}>
@@ -302,7 +335,7 @@ export default function PaymentScreen() {
                 <View style={styles.summaryDivider} />
                 <View style={styles.escrowAmountRow}>
                   <Text style={styles.escrowLabel}>Collected onboard</Text>
-                  <Text style={styles.escrowRemainder}>₱{remainderAmount}</Text>
+                  <Text style={styles.escrowRemainder}>₱{onboardRemainder}</Text>
                 </View>
               </View>
 
@@ -351,8 +384,9 @@ export default function PaymentScreen() {
               )}
 
               <Text style={styles.escrowHint}>
-                The admin confirms your payment from their side. Booking goes ahead either way —
-                this downpayment is held in escrow until your trip.
+                {isAdvance
+                  ? 'The admin reviews your payment first — your sailing is confirmed and offered to bangkeros only after that. This downpayment is held in escrow until your trip.'
+                  : 'The admin confirms your payment from their side. Booking goes ahead either way — this downpayment is held in escrow until your trip.'}
               </Text>
             </View>
           ) : (
@@ -396,7 +430,7 @@ export default function PaymentScreen() {
 
           <View style={styles.bottomPad}>
             <PrimaryButton
-              label={isPackage ? `Pay ₱${downAmount} & Book` : 'Confirm Booking'}
+              label={isEscrow ? `Pay ₱${downAmount} & Book` : 'Confirm Booking'}
               onPress={confirm}
               loading={busy || proofUploading}
               disabled={
@@ -404,7 +438,7 @@ export default function PaymentScreen() {
                 proofUploading ||
                 profileLoading ||
                 !profile ||
-                (isPackage && (!reference.trim() || !proofUri))
+                (isEscrow && (!reference.trim() || !proofUri))
               }
             />
           </View>

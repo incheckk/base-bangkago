@@ -15,18 +15,16 @@ import { createNotification } from '@/services/notification.service';
 import { createRental } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
-/** Next 7 days as manual YYYY-MM-DD chips — rentals are not same-day. */
+/** The next 7 days starting TOMORROW — rentals are always advance, so they always escrow. */
 function nextDays(count: number): { iso: string; label: string }[] {
   return Array.from({ length: count }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() + i);
+    d.setDate(d.getDate() + i + 1);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const label =
       i === 0
-        ? 'Today'
-        : i === 1
-          ? 'Tomorrow'
-          : d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' });
+        ? 'Tomorrow'
+        : d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' });
     return { iso, label };
   });
 }

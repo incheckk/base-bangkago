@@ -9,11 +9,12 @@ export type UserRole = 'passenger' | 'bangkero' | 'admin';
 /**
  * Booking/trip statuses:
  * open      — requested, visible to every available bangkero
+ * pending   — advance booking, waiting on the admin's escrow review
  * accepted  — one bangkero took it; first accept wins
  * completed — trip finished, set by the assigned bangkero
  * cancelled — passenger withdrew while still open
  */
-export type BookingStatus = 'open' | 'accepted' | 'completed' | 'cancelled';
+export type BookingStatus = 'open' | 'pending' | 'accepted' | 'completed' | 'cancelled';
 
 export type ServiceType = 'passenger' | 'cargo' | 'rental';
 
@@ -31,7 +32,12 @@ export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type WalletTransactionType = 'credit' | 'debit' | 'withdrawal' | 'top_up';
 
-export type RentalStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+export type RentalStatus =
+  | 'pending'
+  | 'awaiting_payment'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled';
 
 export type ParcelStatus = 'pending' | 'in_transit' | 'delivered' | 'returned';
 
@@ -155,6 +161,9 @@ export interface BookingDoc {
   onboardedAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
+  /** Sailing schedule; slot required too when the date is in the future. */
+  scheduledDate: string | null; // YYYY-MM-DD
+  scheduledTime: string | null; // HH:MM (07:00 | 10:00 | 13:00 | 17:00)
 }
 
 export interface PassengerDetailDoc {
@@ -167,6 +176,10 @@ export interface PassengerDetailDoc {
   passengerType: PassengerType;
   declaredWeightKg: number | null;
   bookingId: string;
+  /** QR payload token (companion payload = 'PAX' + this). */
+  qrToken: string;
+  boardedAt: string | null;
+  noShowAt: string | null;
 }
 
 export interface PaymentDoc {

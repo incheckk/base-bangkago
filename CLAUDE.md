@@ -269,7 +269,7 @@ written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
 - **Seed script** (Supabase service role key, in .env):
   - 5 ports: Mactan Pier 1 (Punta Engaño), Mactan Pier 2 (Maribago),
     Olango Island Port (Sta. Rosa), Caohagan Island, Nalusuan Island
-  - 12 routes, both directions, ₱150–₱400, 15–55 min
+  - 12 routes, both directions, ₱70 flat, 15–55 min
   - 3 accounts, all password `demo1234`:
     - `0917 123 4567` passenger — Juan Dela Cruz
     - `0918 123 4567` bangkero — Mang Lito · MBCA Sto. Niño · 8 pax

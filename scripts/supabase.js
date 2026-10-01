@@ -62,12 +62,12 @@ const PORTS = [
 // ---------------------------------------------------------------- routes
 
 const ROUTE_PAIRS = [
-  { a: 'mactan-pier-2', b: 'olango-port', base_fare: 150, estimated_minutes: 15, distance_km: 5.2 },
-  { a: 'mactan-pier-1', b: 'olango-port', base_fare: 180, estimated_minutes: 20, distance_km: 6.8 },
-  { a: 'mactan-pier-2', b: 'caohagan', base_fare: 280, estimated_minutes: 35, distance_km: 8.5 },
-  { a: 'mactan-pier-1', b: 'caohagan', base_fare: 320, estimated_minutes: 40, distance_km: 9.2 },
-  { a: 'mactan-pier-2', b: 'nalusuan', base_fare: 360, estimated_minutes: 45, distance_km: 7.8 },
-  { a: 'mactan-pier-1', b: 'nalusuan', base_fare: 400, estimated_minutes: 55, distance_km: 8.9 },
+  { a: 'mactan-pier-2', b: 'olango-port', base_fare: 70, estimated_minutes: 15, distance_km: 5.2 },
+  { a: 'mactan-pier-1', b: 'olango-port', base_fare: 70, estimated_minutes: 20, distance_km: 6.8 },
+  { a: 'mactan-pier-2', b: 'caohagan', base_fare: 70, estimated_minutes: 35, distance_km: 8.5 },
+  { a: 'mactan-pier-1', b: 'caohagan', base_fare: 70, estimated_minutes: 40, distance_km: 9.2 },
+  { a: 'mactan-pier-2', b: 'nalusuan', base_fare: 70, estimated_minutes: 45, distance_km: 7.8 },
+  { a: 'mactan-pier-1', b: 'nalusuan', base_fare: 70, estimated_minutes: 55, distance_km: 8.9 },
 ];
 
 function buildRoutes() {

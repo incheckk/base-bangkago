@@ -1,0 +1,19 @@
+{
+  "holidays": [
+    {"date": "01-01", "name": "New Year", "multiplier": 2.0, "recurring": true},
+    {"date": "04-09", "name": "Araw ng Kagitingan", "multiplier": 1.2, "recurring": true},
+    {"date": "05-01", "name": "Labor Day", "multiplier": 1.2, "recurring": true},
+    {"date": "06-12", "name": "Independence Day", "multiplier": 1.5, "recurring": true},
+    {"date": "08-21", "name": "Ninoy Aquino Day", "multiplier": 1.2, "recurring": true},
+    {"date": "11-01", "name": "All Saints", "multiplier": 1.5, "recurring": true},
+    {"date": "11-30", "name": "Bonifacio Day", "multiplier": 1.2, "recurring": true},
+    {"date": "12-25", "name": "Christmas", "multiplier": 2.1, "recurring": true},
+    {"date": "12-30", "name": "Rizal Day", "multiplier": 1.2, "recurring": true},
+    {"date": "12-31", "name": "New Year's Eve", "multiplier": 2.0, "recurring": true}
+  ],
+  "special_events": [
+    {"name": "Sinulog", "month": 1, "days": 3, "multiplier": 2.0, "note": "Cebu festival, mid-January"},
+    {"name": "Holy Week", "month": 4, "days": 4, "multiplier": 1.5, "note": "Semana Santa"},
+    {"name": "Fiesta sa Opon", "month": 11, "days": 2, "multiplier": 2.0, "note": "Local Lapu-Lapu festival"}
+  ]
+}

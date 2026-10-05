@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
   },
   fill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bgElevated,
   },
 });

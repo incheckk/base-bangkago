@@ -58,11 +58,11 @@ as having agreed on the behavior.
 
 ## STACK — HARD CONSTRAINTS
 
-- React Native + Expo **SDK 54**, **must run in Expo Go** (no custom native builds,
+- React Native + Expo **SDK 57**, **must run in Expo Go** (no custom native builds,
   no `@react-native-firebase/*`, no config plugins requiring a dev build).
-  Pinned to 54 because the demo device's Expo Go caps at 54 — SDK 57 requires
-  iOS 16.4+. Do not "upgrade" this; it will break the demo phone.
-- **Expo Router v6**, file-based routing, router root is `src/app/`
+  Pinned to 57 because the stores' Expo Go ships exactly one SDK at a time.
+  Do not "upgrade" this; it will break the demo phone.
+- **Expo Router v57**, file-based routing, router root is `src/app/`
 - TypeScript (`.tsx`)
 - **Supabase** JS SDK: **Auth + Postgres** via `@supabase/supabase-js`
 - Real-time updates via Supabase Realtime, never push notifications

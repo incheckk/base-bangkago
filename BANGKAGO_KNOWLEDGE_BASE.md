@@ -20,7 +20,7 @@ database writes, real-time updates. Not a clickable mockup.
 | Technology | Version | Status | Notes |
 |---|---|---|---|
 | React Native | 0.81.5 | Active | Core framework |
-| Expo SDK | 54 (pinned) | Active | Do NOT upgrade — demo device caps at 54 |
+| Expo SDK | 57 (pinned) | Active | Do NOT upgrade — demo device's Expo Go ships one SDK at a time |
 | Expo Router | v6 (~6.0.24) | Active | File-based routing, built on React Navigation v7 |
 | React Navigation | v7 (via Expo Router) | Active | Navigation layer |
 | TypeScript | ~5.9.2 | Active | Strict mode |
@@ -31,7 +31,7 @@ database writes, real-time updates. Not a clickable mockup.
 
 ### Hard Constraints
 
-1. **SDK 54 is frozen.** Do not upgrade. The demo device's Expo Go caps at 54.
+1. **SDK 57 is the baseline.** Do not upgrade. Expo Go ships support for exactly one SDK at a time, and the demo phone's Expo Go is on 57.
 2. **Expo Go only.** No custom native builds, no config plugins requiring dev builds.
 3. **No `@react-native-firebase/*`.** Not compatible with Expo Go.
 4. **No manual `router.replace` after auth.** The layout guards handle all redirects.
@@ -2178,14 +2178,11 @@ Based on similar inter-island transportation datasets:
 
 ### 11.3 React Navigation (Standalone)
 
-**Status:** Active but accessed through Expo Router v6.
+**Status:** Active but accessed through Expo Router v57.
 
-Expo Router v6 is built on top of React Navigation v7. You don't import React Navigation directly — Expo Router wraps it. All navigation goes through `expo-router` imports (`router`, `useLocalSearchParams`, `Stack`, `Redirect`).
+Expo Router v57 no longer wraps React Navigation (since SDK 56 it uses its own navigation core). You don't import navigation libraries directly — all navigation goes through `expo-router` imports (`router`, `useLocalSearchParams`, `Stack`, `Redirect`).
 
-**When you'd use React Navigation directly:**
-- Custom transition animations not supported by Expo Router
-- Deep linking configuration beyond file-based routes
-- Bottom tab navigation (if added later)
+**Do not install `@react-navigation/*` separately** — expo-doctor flags it as an unintended pairing with Expo Router v57. Use Expo Router for everything (`Tabs`, `Stack`, animations via `Stack.Screen options`).
 
 ---
 

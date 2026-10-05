@@ -28,7 +28,7 @@ interface Props {
  * on spacing and type.
  *
  * MUST be rendered as a sibling ABOVE the screen's ScrollView, never inside it.
- * It mounts SideDrawer, whose overlay uses absoluteFillObject — inside a
+ * It mounts SideDrawer, whose overlay uses absoluteFill — inside a
  * ScrollView that resolves against the scroll content view, so the drawer gets
  * sized to the full content height and scrolls away with it.
  */

@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
   // ---------- QR scanner ----------
   scanWrap: { flex: 1, backgroundColor: '#000' },
   scanOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,

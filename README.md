@@ -4,7 +4,7 @@ Capstone prototype — a ride-hailing platform for sea travel between Mactan and
 Olango, Cebu. Passengers book boat trips; bangkeros (boat operators) receive the
 requests in real time.
 
-Expo SDK 54 · Expo Router v6 · TypeScript · Supabase Auth + Postgres.
+Expo SDK 57 · Expo Router v57 · TypeScript · Supabase Auth + Postgres.
 Runs in **Expo Go** — no custom native build.
 
 ## Setup

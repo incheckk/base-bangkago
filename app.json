@@ -40,7 +40,10 @@
           "photosPermission": "BangkaGo needs access to your photos so you can upload your verification documents and GCash QR code.",
           "cameraPermission": "BangkaGo needs your camera so you can take photos of your verification documents and GCash QR code."
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

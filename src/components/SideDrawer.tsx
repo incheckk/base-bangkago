@@ -132,8 +132,8 @@ export function SideDrawer({ visible, onClose, items, title }: Props) {
 }
 
 const styles = StyleSheet.create({
-  overlay: { ...StyleSheet.absoluteFillObject, zIndex: 1000 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.backdrop },
+  overlay: { ...StyleSheet.absoluteFill, zIndex: 1000 },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.backdrop },
 
   drawer: {
     position: 'absolute',

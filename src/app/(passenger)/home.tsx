@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
 
   mapFallback: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.bgElevated,
     alignItems: 'center', justifyContent: 'center',
   },

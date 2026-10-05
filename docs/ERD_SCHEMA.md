@@ -284,7 +284,7 @@ Port/terminal locations.
 
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
-| `id` | TEXT | PK | e.g., 'mactan-pier-1' |
+| `id` | TEXT | PK | e.g., 'marigondon' |
 | `port_name` | TEXT | NOT NULL | Display name |
 | `location` | TEXT | | Address/area |
 | `longitude` | DECIMAL(10,7) | | GPS coordinate |

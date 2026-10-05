@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import { isRunningInExpoGo } from 'expo';
 
 import { supabase } from './supabase';
 import type { NotificationDoc } from '../types/models';
@@ -52,7 +52,15 @@ export async function createNotification(
  * Silently gives up when permission is unavailable.
  */
 export async function scheduleLocalNotification(title: string, body: string): Promise<void> {
+  // Expo Go: evaluating expo-notifications runs a push-token side effect that
+  // THROWS on Android Expo Go (push removed since SDK 53). Metro reports the
+  // module failure to LogBox BEFORE our catch sees it, so the only fix is to
+  // never load the module there — and with no setNotificationHandler in this
+  // app, Expo Go would not display it in the foreground anyway. The in-app
+  // surfaces carry the message. Dev/production builds load it normally.
+  if (isRunningInExpoGo()) return;
   try {
+    const Notifications = await import('expo-notifications');
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') {
       const req = await Notifications.requestPermissionsAsync();

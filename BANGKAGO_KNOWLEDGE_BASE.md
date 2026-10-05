@@ -1379,7 +1379,7 @@ export const typography = {
 #### `piers`
 | Column | Type | Notes |
 |---|---|---|
-| `id` | text (PK) | e.g. `'mactan-pier-1'` |
+| `id` | text (PK) | e.g. `'marigondon'` |
 | `name` | text | Display name |
 | `island` | text | Island name |
 | `map_x` | float | 0–1 normalized for SVG |
@@ -1440,7 +1440,7 @@ export const typography = {
 | Bangkero (assigned only) | `accepted` → `completed` | `operator_id` must equal caller uid |
 | Bangkero (any available) | `open` → `open` | May only append own uid to `rejected_by` |
 
-- `piers` + `routes`: client-read-only (seeded via service role key).
+- `ports` + `routes`: client-read-only (seeded via service role key).
 - Booking `create`: requires role = passenger + own uid + status = `'open'`.
 - No deletes anywhere in production code.
 
@@ -1448,8 +1448,8 @@ export const typography = {
 
 | Type | Count | Details |
 |---|---|---|
-| Piers | 5 | Mactan Pier 1, Mactan Pier 2, Olango Port, Caohagan, Nalusuan |
-| Routes | 12 | 6 pairs, both directions, ₱70 flat, 15–55 min |
+| Ports | 9 | Marigondon, Angasil, Hilton, Maribago, Caohagan, Sulpa, St. Vicente, Hilotongan, Nalusuan |
+| Routes | 40 | 20 pairs, both directions, ₱100 flat, 30 min (migration 021) |
 | Accounts | 3 | 1 passenger, 2 bangkeros (all password: `demo1234`) |
 | Bookings | 4 | 2 completed, 2 cancelled (historical) |
 
@@ -2107,7 +2107,7 @@ const predictions = await fetch(`${API_URL}/predict-demand`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    route_id: 'mactan-pier-2-to-olango',
+    route_id: 'maribago__hilotongan',
     prediction_date: new Date().toISOString(),
     weather_id: currentWeatherId,
     is_holiday: isPhilippineHoliday()

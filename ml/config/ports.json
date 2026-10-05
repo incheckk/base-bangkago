@@ -8,7 +8,6 @@
     {"id": "sulpa", "name": "Sulpa Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2400, "longitude": 124.0520, "sort_order": 6, "is_mainland": false, "popularity_weight": 3, "geofence_radius_m": 300},
     {"id": "st-vicente", "name": "St. Vicente Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2530, "longitude": 124.0420, "sort_order": 7, "is_mainland": false, "popularity_weight": 3, "geofence_radius_m": 300},
     {"id": "hilotongan", "name": "Hilotongan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2600, "longitude": 124.0380, "sort_order": 8, "is_mainland": false, "popularity_weight": 2, "geofence_radius_m": 300},
-    {"id": "nalusuan", "name": "Nalusuan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2850, "longitude": 124.0550, "sort_order": 9, "is_mainland": false, "popularity_weight": 2, "geofence_radius_m": 300},
-    {"id": "pandanon", "name": "Pandanon Island", "location": "Bohol", "latitude": 10.1850, "longitude": 124.1110, "sort_order": 10, "is_mainland": false, "popularity_weight": 1, "geofence_radius_m": 300}
+    {"id": "nalusuan", "name": "Nalusuan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2850, "longitude": 124.0550, "sort_order": 9, "is_mainland": false, "popularity_weight": 2, "geofence_radius_m": 300}
   ]
 }

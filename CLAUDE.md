@@ -99,7 +99,9 @@ as having agreed on the behavior.
 Source of truth is `migrations/002_create_all_tables.sql` (schema) and
 `003_add_rls_policies.sql` (35 policies). Run both in the Supabase SQL editor.
 **002 drops and recreates everything** — never re-run it against data you care
-about.
+about. **Never re-run 017** either — its blanket `UPDATE routes SET
+base_fare = 70` resets every admin-edited fare. 017 is superseded by
+**021_final_ports_routes.sql** (9 ports / 40 routes / ₱100).
 
 **Naming changed from the prototype. Old names are gone:**
 
@@ -196,7 +198,7 @@ BangkeroScreenHeader, AuthErrorScreen
 - `migrations/002_create_all_tables.sql` (full ERD), `003_add_rls_policies.sql`
   (35 policies). Both already applied to the hosted project.
 - `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
-  `npm run reset`. Seeded and verified: 5 ports, 12 routes, 3 accounts, 4 bookings.
+   `npm run reset`. Seeded: 9 ports, 40 routes, 3 accounts, 4 bookings.
 - `.env` (gitignored), `.env.example` committed with **placeholders only**
 
 **⚠️ Security debt:** the real `SUPABASE_SERVICE_ROLE_KEY` was committed in
@@ -266,10 +268,15 @@ written yet — 3.7 and 3.8 both depend on it. Build it with 3.7.
 
 ## DEMO RELIABILITY — HARD REQUIREMENT
 
+- **Android first, always.** Our users — bangkeros especially — are Android
+  users; the demo phone is BOTH Android and iOS. Every feature must work in **Android
+  Expo Go**; verify on Android before checking iOS. iOS passing does NOT
+  mean it works — iOS Expo Go tolerates things Android throws on (the
+  expo-notifications crash shipped to iOS unnoticed once already).
 - **Seed script** (Supabase service role key, in .env):
-  - 5 ports: Mactan Pier 1 (Punta Engaño), Mactan Pier 2 (Maribago),
-    Olango Island Port (Sta. Rosa), Caohagan Island, Nalusuan Island
-  - 12 routes, both directions, ₱70 flat, 15–55 min
+  - 9 ports: Marigondon, Angasil, Hilton, Maribago (mainland) + Caohagan,
+    Sulpa, St. Vicente, Hilotongan, Nalusuan (islands)
+  - 40 routes, both directions, ₱100 flat, 30 min (migration 021)
   - 3 accounts, all password `demo1234`:
     - `0917 123 4567` passenger — Juan Dela Cruz
     - `0918 123 4567` bangkero — Mang Lito · MBCA Sto. Niño · 8 pax

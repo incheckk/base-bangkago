@@ -115,7 +115,7 @@ async function seedAccounts() {
   console.log(`  ports       ${ports}`);
 
   const routes = await seedRoutes();
-  console.log(`  routes      ${routes} (6 pairs, both directions)`);
+  console.log(`  routes      ${routes} (20 pairs, both directions, ₱100 flat)`);
 
   const people = await seedAccounts();
   console.log(`  accounts    ${Object.keys(people).length} (password: ${DEMO_PASSWORD})`);

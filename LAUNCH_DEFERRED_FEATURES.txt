@@ -52,6 +52,10 @@ B2. PUSH NOTIFICATIONS
     - "You are #1 — offer held for you"
     - hold cascaded to you
     - booking accepted / boarding / no-show / trip updates
+    NOTE: scheduleLocalNotification is a NO-OP inside Expo Go (guarded
+    by isRunningInExpoGo() in notification.service — evaluating
+    expo-notifications throws in Expo Go on Android). Real local/push
+    notifications need a dev build + setNotificationHandler.
 
 B3. (shipped — Phase 3A: bangkero gates, migrations/010_bangkero_gates.sql)
 B4. DEPARTURE FLOW POLISH (roadmap item 5)
@@ -213,10 +217,13 @@ D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 → 008 → 009 → 010
     → 011 → 012 → 013 → 014 → 015 → 016 → 017 → 018 → 019 via SQL
     editor, in order.
     013 ratings guard, 014 island hopping, 015 downpayments,
-    016 boat rental (hourly_rate + rentals), 017 flat fare ₱70,
+    016 boat rental (hourly_rate + rentals), 017 flat fare ₱70 (NEVER
+    re-run — superseded by 021, 9 ports / 40 routes / ₱100),
     018 login fix (users-select recursion — run FIRST when testing the
     fix-pass build), 019 phase-4 fixes (companion policy, assign_next_hold
-    guard, downpayments/rentals unique indexes, package-3 stops).
+    guard, downpayments/rentals unique indexes, package-3 stops),
+    020 advance booking + QR, 021 final ports/routes (9 ports / 40
+    routes / ₱100; wipes demo trip data — see E5).
     Set up migration automation (supabase CLI / CI) before public
     deployment — and fix 017's blanket UPDATE (E5) first.
     NOTE: the `docs` storage bucket (011) is PUBLIC — fine for the

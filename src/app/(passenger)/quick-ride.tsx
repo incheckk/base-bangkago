@@ -16,10 +16,10 @@ import { colors, elevation, radii, spacing, touchTarget, typography } from '@/th
 const QUICK_ROUTES: {
   fromId: string; from: string; toId: string; to: string; fare: number; minutes: number;
 }[] = [
-  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', toId: 'olango-port', to: 'Olango Island Port', fare: 70, minutes: 15 },
-  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', toId: 'olango-port', to: 'Olango Island Port', fare: 70, minutes: 20 },
-  { fromId: 'mactan-pier-2', from: 'Mactan Pier 2', toId: 'caohagan', to: 'Caohagan Island', fare: 70, minutes: 35 },
-  { fromId: 'mactan-pier-1', from: 'Mactan Pier 1', toId: 'nalusuan', to: 'Nalusuan Island', fare: 70, minutes: 55 },
+  { fromId: 'marigondon', from: 'Marigondon Port', toId: 'caohagan', to: 'Caohagan Island', fare: 100, minutes: 30 },
+  { fromId: 'marigondon', from: 'Marigondon Port', toId: 'nalusuan', to: 'Nalusuan Island', fare: 100, minutes: 30 },
+  { fromId: 'maribago', from: 'Maribago Port', toId: 'sulpa', to: 'Sulpa Island', fare: 100, minutes: 30 },
+  { fromId: 'hilton', from: 'Hilton Port', toId: 'hilotongan', to: 'Hilotongan Island', fare: 100, minutes: 30 },
 ];
 
 export default function QuickRide() {

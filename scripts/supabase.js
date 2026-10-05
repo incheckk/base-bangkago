@@ -51,24 +51,31 @@ const authEmail = (e164) => `${AUTH_EMAIL_PREFIX}${e164.slice(1)}@${AUTH_EMAIL_D
 
 // ---------------------------------------------------------------- ports
 
+// Final network (migration 021): 9 ports, 40 routes, ₱100 flat, 30 min.
+// Keep in sync with ml/config/ports.json + ml/config/routes.json.
 const PORTS = [
-  { id: 'mactan-pier-1', port_name: 'Mactan Pier 1 (Punta Engaño)', location: 'Mactan, Cebu', latitude: 10.3068, longitude: 124.0120, sort_order: 1, is_active: true },
-  { id: 'mactan-pier-2', port_name: 'Mactan Pier 2 (Maribago)', location: 'Mactan, Cebu', latitude: 10.2950, longitude: 124.0050, sort_order: 2, is_active: true },
-  { id: 'olango-port', port_name: 'Olango Island Port (Sta. Rosa)', location: 'Olango, Cebu', latitude: 10.3320, longitude: 124.0450, sort_order: 3, is_active: true },
-  { id: 'caohagan', port_name: 'Caohagan Island', location: 'Caohagan, Cebu', latitude: 10.2750, longitude: 124.0650, sort_order: 4, is_active: true },
-  { id: 'nalusuan', port_name: 'Nalusuan Island', location: 'Nalusuan, Cebu', latitude: 10.2850, longitude: 124.0550, sort_order: 5, is_active: true },
+  { id: 'marigondon', port_name: 'Marigondon Port', location: 'Lapu-Lapu, Cebu', latitude: 10.2715, longitude: 124.0005, sort_order: 1, is_active: true },
+  { id: 'angasil', port_name: 'Angasil Port', location: 'Lapu-Lapu, Cebu', latitude: 10.2565, longitude: 123.9920, sort_order: 2, is_active: true },
+  { id: 'hilton', port_name: 'Hilton Port', location: 'Lapu-Lapu, Cebu', latitude: 10.2478, longitude: 123.9890, sort_order: 3, is_active: true },
+  { id: 'maribago', port_name: 'Maribago Port', location: 'Lapu-Lapu, Cebu', latitude: 10.2950, longitude: 124.0050, sort_order: 4, is_active: true },
+  { id: 'caohagan', port_name: 'Caohagan Island', location: 'Lapu-Lapu, Cebu', latitude: 10.2750, longitude: 124.0650, sort_order: 5, is_active: true },
+  { id: 'sulpa', port_name: 'Sulpa Island', location: 'Lapu-Lapu, Cebu', latitude: 10.2400, longitude: 124.0520, sort_order: 6, is_active: true },
+  { id: 'st-vicente', port_name: 'St. Vicente Island', location: 'Lapu-Lapu, Cebu', latitude: 10.2530, longitude: 124.0420, sort_order: 7, is_active: true },
+  { id: 'hilotongan', port_name: 'Hilotongan Island', location: 'Lapu-Lapu, Cebu', latitude: 10.2600, longitude: 124.0380, sort_order: 8, is_active: true },
+  { id: 'nalusuan', port_name: 'Nalusuan Island', location: 'Lapu-Lapu, Cebu', latitude: 10.2850, longitude: 124.0550, sort_order: 9, is_active: true },
 ];
 
 // ---------------------------------------------------------------- routes
 
-const ROUTE_PAIRS = [
-  { a: 'mactan-pier-2', b: 'olango-port', base_fare: 70, estimated_minutes: 15, distance_km: 5.2 },
-  { a: 'mactan-pier-1', b: 'olango-port', base_fare: 70, estimated_minutes: 20, distance_km: 6.8 },
-  { a: 'mactan-pier-2', b: 'caohagan', base_fare: 70, estimated_minutes: 35, distance_km: 8.5 },
-  { a: 'mactan-pier-1', b: 'caohagan', base_fare: 70, estimated_minutes: 40, distance_km: 9.2 },
-  { a: 'mactan-pier-2', b: 'nalusuan', base_fare: 70, estimated_minutes: 45, distance_km: 7.8 },
-  { a: 'mactan-pier-1', b: 'nalusuan', base_fare: 70, estimated_minutes: 55, distance_km: 8.9 },
-];
+const MAINLAND = ['marigondon', 'angasil', 'hilton', 'maribago'];
+const ISLANDS = ['caohagan', 'sulpa', 'st-vicente', 'hilotongan', 'nalusuan'];
+
+const ROUTE_PAIRS = [];
+for (const a of MAINLAND) {
+  for (const b of ISLANDS) {
+    ROUTE_PAIRS.push({ a, b, base_fare: 100, estimated_minutes: 30, distance_km: null });
+  }
+}
 
 function buildRoutes() {
   const routes = [];
@@ -118,10 +125,10 @@ const ACCOUNTS = [
 // ---------------------------------------------------------------- bookings
 
 const SEED_BOOKINGS = [
-  { daysAgo: 12, from: 'mactan-pier-2', to: 'olango-port', passengerCount: 2, status: 'completed', operator: '+639181234567' },
-  { daysAgo: 8,  from: 'mactan-pier-1', to: 'caohagan', passengerCount: 4, status: 'cancelled' },
-  { daysAgo: 5,  from: 'mactan-pier-1', to: 'nalusuan', passengerCount: 1, status: 'cancelled' },
-  { daysAgo: 2,  from: 'mactan-pier-2', to: 'nalusuan', passengerCount: 3, status: 'completed', operator: '+639191234567' },
+  { daysAgo: 12, from: 'maribago', to: 'hilotongan', passengerCount: 2, status: 'completed', operator: '+639181234567' },
+  { daysAgo: 8,  from: 'marigondon', to: 'caohagan', passengerCount: 4, status: 'cancelled' },
+  { daysAgo: 5,  from: 'marigondon', to: 'nalusuan', passengerCount: 1, status: 'cancelled' },
+  { daysAgo: 2,  from: 'maribago', to: 'nalusuan', passengerCount: 3, status: 'completed', operator: '+639191234567' },
 ];
 
 /**

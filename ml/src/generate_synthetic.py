@@ -1,12 +1,16 @@
-"""Script 1: generate 2 years of synthetic booking data.
+"""Script 1: generate 2 years of synthetic booking data (v3.0).
 
 Reads:  config/ports.json, config/routes.json, config/holidays.json
-Writes: data/raw/synthetic_bookings.csv (~50k rows)
+Writes: data/raw/synthetic_bookings.csv
 
-Rules (locked from bangkero interviews, Option A):
+Rules (locked from bangkero interviews, v3.0 — 3 new ports):
 - trip_stat is always 'completed'; cancellations are modelled as
   whole no-sail days skipped by season probability.
-- Fare is a flat PHP 70 per passenger.
+- Fare is a flat PHP 100 per passenger.
+- 4 mainland departure ports x 6 island destinations (48 routes).
+- Routes operate with probability popularity_weight / 3 per day.
+- Bangka size is picked per trip: medium (cap 15) or large (cap 25).
+- Holiday-adjusted pax above capacity overflows into extra trips.
 """
 
 import csv
@@ -31,15 +35,18 @@ from src.utils import (
 
 DATE_START = date(2024, 1, 1)
 DATE_END = date(2025, 12, 31)
-FARE_PER_HEAD = 70
-BANGKA_CAPACITY = 15
-NO_SAIL_PROB = {"amihan": 0.117, "summer": 0.017, "habagat": 0.183}
+FARE_PER_HEAD = 100
+BANGKA_CAPACITY_MEDIUM = 15
+BANGKA_CAPACITY_LARGE = 25
+MEDIUM_PROBABILITY = 0.6
+NO_SAIL_PROB = {"amihan": 0.15, "summer": 0.017, "habagat": 0.183}
 PEAK_HOURS_WEIGHTS = {
-    7: 3, 8: 3, 9: 3, 10: 3, 11: 2, 12: 2,
-    13: 1, 14: 1, 15: 1, 16: 1, 17: 1, 18: 1,
+    7: 2, 8: 3, 9: 5, 10: 4, 11: 2, 12: 1,
+    13: 1, 14: 1, 15: 1, 16: 1, 17: 2, 18: 2,
 }
-ISLAND_HOPPING_PRICE_MIN = 3000
-ISLAND_HOPPING_PRICE_MAX = 3500
+ISLAND_HOPPING_MEDIUM_PRICE = 3500
+ISLAND_HOPPING_LARGE_PRICE = 7000
+ISLAND_HOPPING_POPULAR_ISLANDS = ("caohagan", "sulpa", "st-vicente")
 
 FIRST_NAMES = [
     "Juan", "Maria", "Jose", "Ana", "Pedro", "Rosa", "Miguel", "Luz",
@@ -87,8 +94,21 @@ def generate_boat_name() -> str:
     return random.choice(BOAT_NAMES)
 
 
+def pick_boat() -> tuple[str, int, int, int]:
+    """Pick a bangka size for one trip.
+
+    Returns:
+        (size_label, capacity, chunk_min, chunk_max).
+        medium: cap 15, booking chunks of 5-9.
+        large:  cap 25, booking chunks of 8-15.
+    """
+    if random.random() < MEDIUM_PROBABILITY:
+        return "medium", BANGKA_CAPACITY_MEDIUM, 5, 9
+    return "large", BANGKA_CAPACITY_LARGE, 8, 15
+
+
 def pick_booking_hour() -> int:
-    """Pick an operating hour weighted toward morning peaks."""
+    """Pick an operating hour weighted toward the 9-10 AM peak."""
     hours = list(PEAK_HOURS_WEIGHTS.keys())
     weights = list(PEAK_HOURS_WEIGHTS.values())
     return random.choices(hours, weights=weights, k=1)[0]
@@ -106,7 +126,7 @@ def build_booking_row(
     hour = pick_booking_hour()
     minute = random.randint(0, 59)
     depart_dt = datetime(trip_day.year, trip_day.month, trip_day.day, hour, minute)
-    estimated = int(route.get("estimated_minutes", 20))
+    estimated = int(route.get("estimated_minutes", 30))
     arrival_dt = depart_dt + timedelta(minutes=estimated)
 
     if random.random() < 0.8:  # 80% advance booking, 2–3 days before
@@ -136,12 +156,20 @@ def build_booking_row(
     }
 
 
-def split_into_bookings(pax: int) -> list[int]:
-    """Split a trip's passenger total into booking-size chunks of 5–9."""
-    booking_size = random.randint(5, 9)
+def split_into_bookings(
+    pax: int, chunk_min: int = 5, chunk_max: int = 9
+) -> list[int]:
+    """Split a trip's passenger total into booking-size chunks."""
+    booking_size = random.randint(chunk_min, chunk_max)
     num_bookings = max(1, math.ceil(pax / booking_size))
     base, remainder = divmod(pax, num_bookings)
     return [base + (1 if i < remainder else 0) for i in range(num_bookings)]
+
+
+def route_operates(route: dict) -> bool:
+    """Decide if a route runs today: P = popularity_weight / 3."""
+    weight = route.get("popularity_weight", 3)
+    return random.random() < weight / 3
 
 
 def main() -> None:
@@ -153,6 +181,11 @@ def main() -> None:
     holidays = load_config("holidays.json")
     port_lookup = {p["id"]: p["name"] for p in ports}
 
+    hop_routes = [
+        r for r in routes
+        if r["end_port_id"] in ISLAND_HOPPING_POPULAR_ISLANDS
+    ]
+
     out_path = root / "data" / "raw" / "synthetic_bookings.csv"
     ensure_dir(out_path.parent)
 
@@ -162,7 +195,7 @@ def main() -> None:
     island_hopping_due = 0
 
     days = list(date_range(DATE_START, DATE_END))
-    for trip_day in tqdm(days, desc="Generating synthetic bookings"):
+    for trip_day in tqdm(days, desc="Generating synthetic bookings (v3.0)"):
         season = get_season(trip_day)
         day_type = get_day_type(trip_day)
         if random.random() < NO_SAIL_PROB[season]:
@@ -171,37 +204,46 @@ def main() -> None:
         holiday_mult = get_holiday_multiplier(trip_day, holidays)
 
         for route in routes:
-            num_trips = random.randint(1, 2) if day_type == "weekday" else 3
-            for _ in range(num_trips):
-                base_pax = (
-                    random.randint(5, 8)
-                    if day_type == "weekday"
-                    else random.randint(12, 15)
-                )
-                adjusted = int(base_pax * holiday_mult)
-                pax = min(adjusted, BANGKA_CAPACITY)
-                for chunk in split_into_bookings(pax):
-                    rows.append(
-                        build_booking_row(
-                            trip_day, route, port_lookup, chunk,
-                            "passenger", FARE_PER_HEAD * chunk,
-                        )
-                    )
-                    season_counts[season] += chunk
-                    day_type_counts[day_type] += chunk
+            if not route_operates(route):
+                continue  # unpopular route skips this day
 
-        # Island hopping: ~2–4 per week total across bangkeros.
+            num_rounds = random.randint(1, 2) if day_type == "weekday" else 3
+            for _ in range(num_rounds):
+                base_pax = (
+                    random.randint(5, 15)
+                    if day_type == "weekday"
+                    else random.randint(12, 22)
+                )
+                remaining = int(base_pax * holiday_mult)
+                while remaining > 0:
+                    _size, capacity, c_min, c_max = pick_boat()
+                    pax = min(remaining, capacity)
+                    for chunk in split_into_bookings(pax, c_min, c_max):
+                        rows.append(
+                            build_booking_row(
+                                trip_day, route, port_lookup, chunk,
+                                "passenger", FARE_PER_HEAD * chunk,
+                            )
+                        )
+                        season_counts[season] += chunk
+                        day_type_counts[day_type] += chunk
+                    remaining -= pax  # overflow becomes another trip
+
+        # Island hopping: 1–2 per week total across all bangkeros.
         island_hopping_due += 1
         if island_hopping_due >= 7:
             island_hopping_due = 0
-            for _ in range(random.randint(2, 4)):
+            for _ in range(random.randint(1, 2)):
                 hop_day = trip_day - timedelta(days=random.randint(0, 6))
                 if hop_day < DATE_START:
                     continue
-                hop_pax = random.randint(10, BANGKA_CAPACITY)
-                hop_route = random.choice(routes)
-                hop_price = random.randint(
-                    ISLAND_HOPPING_PRICE_MIN, ISLAND_HOPPING_PRICE_MAX
+                _size, hop_capacity, _c_min, _c_max = pick_boat()
+                hop_pax = random.randint(10, hop_capacity)
+                hop_route = random.choice(hop_routes)
+                hop_price = (
+                    ISLAND_HOPPING_MEDIUM_PRICE
+                    if _size == "medium"
+                    else ISLAND_HOPPING_LARGE_PRICE
                 )
                 rows.append(
                     build_booking_row(

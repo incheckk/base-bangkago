@@ -1,9 +1,14 @@
 {
   "ports": [
-    {"id": "mactan-pier-1", "name": "Mactan Pier 1 (Punta Engaño)", "location": "Mactan, Cebu", "latitude": 10.3068, "longitude": 124.012, "sort_order": 1},
-    {"id": "mactan-pier-2", "name": "Mactan Pier 2 (Maribago)", "location": "Mactan, Cebu", "latitude": 10.295, "longitude": 124.005, "sort_order": 2},
-    {"id": "olango-port", "name": "Olango Island Port (Sta. Rosa)", "location": "Olango, Cebu", "latitude": 10.332, "longitude": 124.045, "sort_order": 3},
-    {"id": "caohagan", "name": "Caohagan Island", "location": "Caohagan, Cebu", "latitude": 10.275, "longitude": 124.065, "sort_order": 4},
-    {"id": "nalusuan", "name": "Nalusuan Island", "location": "Nalusuan, Cebu", "latitude": 10.285, "longitude": 124.055, "sort_order": 5}
+    {"id": "marigondon", "name": "Marigondon Port", "location": "Lapu-Lapu, Cebu", "latitude": 10.2715, "longitude": 124.0005, "sort_order": 1, "is_mainland": true, "is_main": true, "geofence_radius_m": 300},
+    {"id": "angasil", "name": "Angasil Port", "location": "Lapu-Lapu, Cebu", "latitude": 10.2565, "longitude": 123.9920, "sort_order": 2, "is_mainland": true, "is_main": false, "geofence_radius_m": 300},
+    {"id": "hilton", "name": "Hilton Port", "location": "Lapu-Lapu, Cebu", "latitude": 10.2478, "longitude": 123.9890, "sort_order": 3, "is_mainland": true, "is_main": false, "geofence_radius_m": 300},
+    {"id": "maribago", "name": "Maribago Port", "location": "Lapu-Lapu, Cebu", "latitude": 10.2950, "longitude": 124.0050, "sort_order": 4, "is_mainland": true, "is_main": false, "geofence_radius_m": 300},
+    {"id": "caohagan", "name": "Caohagan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2750, "longitude": 124.0650, "sort_order": 5, "is_mainland": false, "popularity_weight": 3, "geofence_radius_m": 300},
+    {"id": "sulpa", "name": "Sulpa Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2400, "longitude": 124.0520, "sort_order": 6, "is_mainland": false, "popularity_weight": 3, "geofence_radius_m": 300},
+    {"id": "st-vicente", "name": "St. Vicente Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2530, "longitude": 124.0420, "sort_order": 7, "is_mainland": false, "popularity_weight": 3, "geofence_radius_m": 300},
+    {"id": "hilotongan", "name": "Hilotongan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2600, "longitude": 124.0380, "sort_order": 8, "is_mainland": false, "popularity_weight": 2, "geofence_radius_m": 300},
+    {"id": "nalusuan", "name": "Nalusuan Island", "location": "Lapu-Lapu, Cebu", "latitude": 10.2850, "longitude": 124.0550, "sort_order": 9, "is_mainland": false, "popularity_weight": 2, "geofence_radius_m": 300},
+    {"id": "pandanon", "name": "Pandanon Island", "location": "Bohol", "latitude": 10.1850, "longitude": 124.1110, "sort_order": 10, "is_mainland": false, "popularity_weight": 1, "geofence_radius_m": 300}
   ]
 }

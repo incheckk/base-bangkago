@@ -1,4 +1,4 @@
-"""Script 5: train the Random Forest demand model (v3.0).
+"""Script 5: train and compare demand models (v4.0 — RF vs GB shootout).
 
 Reads:  data/processed/training_data.csv (33,648 rows x 20 cols),
         config/model_params.json
@@ -20,6 +20,11 @@ Rules:
   both are derived from the target (daily_demand / its booking count),
   so including them is target leakage. Expected feature count: 75.
 
+- Two candidates, winner by test R2 (both random_state=42):
+  RandomForest (grid: n_estimators=[500]) vs GradientBoosting
+  (n_estimators=500, lr=0.1, max_depth=5). Winner overwrites
+  models/demand_rf.pkl so downstream scripts keep working.
+
 W1 leakage note: resolved. rolling_7/rolling_30 are shifted back 1 day
 (Script 4 fix) and no longer include the target day's demand.
 """
@@ -37,7 +42,7 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import (
     mean_absolute_error,
     mean_absolute_percentage_error,
@@ -52,6 +57,10 @@ warnings.filterwarnings("ignore")
 
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
+RF_ESTIMATORS = 500
+GB_ESTIMATORS = 500
+GB_LEARNING_RATE = 0.1
+GB_MAX_DEPTH = 5
 EXPECTED_ROWS = 33648
 SLOW_GRID_WARN_S = 600
 CATEGORICALS = ["route_id", "weather_condition", "day_of_week", "season"]
@@ -158,8 +167,34 @@ def run_grid_search(
     return search.best_estimator_, dict(search.best_params_), n_combos, cv
 
 
+def train_gradient_boosting(
+    X_train: pd.DataFrame, y_train: pd.Series
+) -> GradientBoostingRegressor:
+    """Fit a GradientBoostingRegressor challenger (fixed hyperparams).
+
+    Returns:
+        Fitted GradientBoostingRegressor.
+    """
+    print("\n=== Training GradientBoostingRegressor ===")
+    print(f"Params: n_estimators={GB_ESTIMATORS}, "
+          f"learning_rate={GB_LEARNING_RATE}, max_depth={GB_MAX_DEPTH}")
+    model = GradientBoostingRegressor(
+        n_estimators=GB_ESTIMATORS,
+        learning_rate=GB_LEARNING_RATE,
+        max_depth=GB_MAX_DEPTH,
+        random_state=RANDOM_STATE,
+        verbose=1,
+    )
+    start = time.time()
+    model.fit(X_train, y_train)
+    print(f"GradientBoosting fit took {time.time() - start:.0f}s")
+    return model
+
+
 def evaluate(
-    model: RandomForestRegressor, X_test: pd.DataFrame, y_test: pd.Series
+    model: RandomForestRegressor | GradientBoostingRegressor,
+    X_test: pd.DataFrame, y_test: pd.Series,
+    label: str = "test set",
 ) -> dict[str, float]:
     """Compute MAE, RMSE, R2 and MAPE on the test set.
 
@@ -184,7 +219,7 @@ def evaluate(
         mape = float("nan")
     excluded = int((~nonzero).sum())
 
-    print("Metrics on test set:")
+    print(f"Metrics on {label}:")
     print(f"  MAE:  {mae:.2f} passengers")
     print(f"  RMSE: {rmse:.2f} passengers")
     print(f"  R2:   {r2:.4f}")
@@ -201,14 +236,16 @@ def evaluate(
 
 
 def save_artifacts(
-    model: RandomForestRegressor,
+    model: RandomForestRegressor | GradientBoostingRegressor,
     best_params: dict,
     metrics: dict[str, float],
     feature_columns: list[str],
     n_train: int,
     n_test: int,
+    model_type: str,
+    comparison: dict,
 ) -> None:
-    """Save the model pickle, metadata JSON, and print paths."""
+    """Save the winning model pickle, metadata JSON, and print paths."""
     root = get_project_root()
     models_dir = root / "models"
     ensure_dir(models_dir)
@@ -218,12 +255,14 @@ def save_artifacts(
 
     metadata = {
         "trained_at": datetime.now().isoformat(),
+        "model_type": model_type,
         "n_features": len(feature_columns),
         "n_train": n_train,
         "n_test": n_test,
         "best_params": best_params,
         "metrics": metrics,
         "feature_columns": feature_columns,
+        "comparison": comparison,
     }
     meta_path = models_dir / "train_metadata.json"
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -234,7 +273,9 @@ def save_artifacts(
 
 
 def plot_importance(
-    model: RandomForestRegressor, feature_columns: list[str]
+    model: RandomForestRegressor | GradientBoostingRegressor,
+    feature_columns: list[str],
+    model_name: str = "RandomForest",
 ) -> None:
     """Save a horizontal bar chart of the top 10 feature importances."""
     root = get_project_root()
@@ -253,7 +294,7 @@ def plot_importance(
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.barh([name for name, _ in top], [score for _, score in top])
     ax.set_xlabel("Importance")
-    ax.set_title("Top 10 Feature Importances — RandomForest (v3.0)")
+    ax.set_title(f"Top 10 Feature Importances — {model_name} (v4.0)")
     fig.tight_layout()
     out_path = plots_dir / "feature_importance.png"
     fig.savefig(out_path, dpi=150)
@@ -262,7 +303,7 @@ def plot_importance(
 
 
 def main() -> None:
-    """Train, evaluate, and save the demand model."""
+    """Train RF + GB candidates, save the higher-R2 winner."""
     df = load_data()
     train_df, test_df, cutoff = split_chronological(df)
     X_train, X_test, y_train, y_test, feature_columns = build_features(
@@ -274,21 +315,57 @@ def main() -> None:
           f"test {len(X_test)} | test share "
           f"{len(X_test) / len(df) * 100:.1f}% (TEST_SIZE={TEST_SIZE})")
 
-    best_model, best_params, n_combos, cv = run_grid_search(X_train, y_train)
+    rf_model, rf_params, n_combos, cv = run_grid_search(X_train, y_train)
     if cv > 0:
         print(f"Grid search: {n_combos} combinations x {cv} folds = "
               f"{n_combos * cv} fits")
     else:
         print("Grid search: disabled in config — base model fitted")
-    print(f"Best params: {best_params}")
+    print(f"RF best params: {rf_params}")
 
-    metrics = evaluate(best_model, X_test, y_test)
+    print("\n=== RandomForest Results ===")
+    rf_metrics = evaluate(rf_model, X_test, y_test, label="test set (RF)")
+    rf_r2 = rf_metrics["r2"]
 
+    gb_model = train_gradient_boosting(X_train, y_train)
+    print("\n=== GradientBoosting Results ===")
+    gb_metrics = evaluate(gb_model, X_test, y_test, label="test set (GB)")
+    gb_r2 = gb_metrics["r2"]
+    print(f"  MAE:  {gb_metrics['mae']:.2f}")
+    print(f"  RMSE: {gb_metrics['rmse']:.2f}")
+    print(f"  R2:   {gb_r2:.4f}")
+
+    gb_params = {
+        "n_estimators": GB_ESTIMATORS,
+        "learning_rate": GB_LEARNING_RATE,
+        "max_depth": GB_MAX_DEPTH,
+        "random_state": RANDOM_STATE,
+    }
+
+    print("\n=== Side-by-side ===")
+    print(f"  RF R2: {rf_r2:.4f}")
+    print(f"  GB R2: {gb_r2:.4f}")
+
+    if gb_r2 > rf_r2:
+        print(f"\n*** GradientBoosting wins: R2={gb_r2:.4f} "
+              f"vs RF R2={rf_r2:.4f} ***")
+        best_model, best_params = gb_model, gb_params
+        best_metrics, best_name = gb_metrics, "GradientBoostingRegressor"
+        winner = "GB"
+    else:
+        print(f"\n*** RandomForest wins: R2={rf_r2:.4f} "
+              f"vs GB R2={gb_r2:.4f} ***")
+        best_model, best_params = rf_model, rf_params
+        best_metrics, best_name = rf_metrics, "RandomForestRegressor"
+        winner = "RF"
+
+    comparison = {"rf_r2": rf_r2, "gb_r2": gb_r2, "winner": winner}
     save_artifacts(
-        best_model, best_params, metrics, feature_columns,
+        best_model, best_params, best_metrics, feature_columns,
         len(X_train), len(X_test),
+        model_type=best_name, comparison=comparison,
     )
-    plot_importance(best_model, feature_columns)
+    plot_importance(best_model, feature_columns, model_name=best_name)
 
 
 if __name__ == "__main__":

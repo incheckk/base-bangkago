@@ -1,6 +1,5 @@
 {
-  "trained_at": "2026-10-06T23:13:23.221123",
-  "model_type": "RandomForestRegressor",
+  "trained_at": "2026-10-03T21:40:35.407258",
   "n_features": 75,
   "n_train": 26928,
   "n_test": 6720,
@@ -8,13 +7,13 @@
     "max_depth": 10,
     "min_samples_leaf": 1,
     "min_samples_split": 2,
-    "n_estimators": 1000
+    "n_estimators": 200
   },
   "metrics": {
-    "mae": 10.914065447909312,
-    "rmse": 15.514086832304544,
-    "r2": 0.50430356191291,
-    "mape": 0.3447098081192279
+    "mae": 11.436365356852942,
+    "rmse": 16.529632630883185,
+    "r2": 0.4203558925200842,
+    "mape": 0.39457921056512013
   },
   "feature_columns": [
     "lag_1",
@@ -92,10 +91,5 @@
     "season_amihan",
     "season_habagat",
     "season_summer"
-  ],
-  "comparison": {
-    "rf_r2": 0.50430356191291,
-    "gb_r2": 0.4577846199863821,
-    "winner": "RF"
-  }
+  ]
 }

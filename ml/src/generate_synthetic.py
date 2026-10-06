@@ -210,9 +210,9 @@ def main() -> None:
             num_rounds = random.randint(1, 2) if day_type == "weekday" else 3
             for _ in range(num_rounds):
                 base_pax = (
-                    random.randint(5, 15)
+                    random.randint(8, 12)
                     if day_type == "weekday"
-                    else random.randint(12, 22)
+                    else random.randint(15, 20)
                 )
                 remaining = int(base_pax * holiday_mult)
                 while remaining > 0:

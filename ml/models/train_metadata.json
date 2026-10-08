@@ -1,9 +1,9 @@
 {
-  "trained_at": "2026-10-06T23:13:23.221123",
+  "trained_at": "2026-10-07T12:13:22.507163",
   "model_type": "RandomForestRegressor",
-  "n_features": 75,
-  "n_train": 26928,
-  "n_test": 6720,
+  "n_features": 67,
+  "n_train": 31600,
+  "n_test": 7880,
   "best_params": {
     "max_depth": 10,
     "min_samples_leaf": 1,
@@ -11,10 +11,10 @@
     "n_estimators": 1000
   },
   "metrics": {
-    "mae": 10.914065447909312,
-    "rmse": 15.514086832304544,
-    "r2": 0.50430356191291,
-    "mape": 0.3447098081192279
+    "mae": 10.478419087498628,
+    "rmse": 14.077155218342078,
+    "r2": 0.51301648685283,
+    "mape": 0.33934678692159376
   },
   "feature_columns": [
     "lag_1",
@@ -32,7 +32,6 @@
     "route_id_angasil__caohagan",
     "route_id_angasil__hilotongan",
     "route_id_angasil__nalusuan",
-    "route_id_angasil__pandanon",
     "route_id_angasil__st-vicente",
     "route_id_angasil__sulpa",
     "route_id_caohagan__angasil",
@@ -46,29 +45,22 @@
     "route_id_hilton__caohagan",
     "route_id_hilton__hilotongan",
     "route_id_hilton__nalusuan",
-    "route_id_hilton__pandanon",
     "route_id_hilton__st-vicente",
     "route_id_hilton__sulpa",
     "route_id_maribago__caohagan",
     "route_id_maribago__hilotongan",
     "route_id_maribago__nalusuan",
-    "route_id_maribago__pandanon",
     "route_id_maribago__st-vicente",
     "route_id_maribago__sulpa",
     "route_id_marigondon__caohagan",
     "route_id_marigondon__hilotongan",
     "route_id_marigondon__nalusuan",
-    "route_id_marigondon__pandanon",
     "route_id_marigondon__st-vicente",
     "route_id_marigondon__sulpa",
     "route_id_nalusuan__angasil",
     "route_id_nalusuan__hilton",
     "route_id_nalusuan__maribago",
     "route_id_nalusuan__marigondon",
-    "route_id_pandanon__angasil",
-    "route_id_pandanon__hilton",
-    "route_id_pandanon__maribago",
-    "route_id_pandanon__marigondon",
     "route_id_st-vicente__angasil",
     "route_id_st-vicente__hilton",
     "route_id_st-vicente__maribago",
@@ -94,8 +86,8 @@
     "season_summer"
   ],
   "comparison": {
-    "rf_r2": 0.50430356191291,
-    "gb_r2": 0.4577846199863821,
+    "rf_r2": 0.51301648685283,
+    "gb_r2": 0.5008001981037185,
     "winner": "RF"
   }
 }

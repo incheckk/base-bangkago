@@ -25,7 +25,6 @@ const PAYMENT_METHODS: {
   description: string;
 }[] = [
   { key: 'cash', label: 'Cash', icon: '💵', description: 'Pay onboard to the bangkero' },
-  { key: 'gcash', label: 'GCash', icon: '📱', description: 'Pay via GCash on board' },
 ];
 
 /** Rides happen the day you book them — there is no date to pick. */
@@ -159,6 +158,7 @@ export default function PaymentScreen() {
         try {
           const companions = JSON.parse(params.companionsJson) as {
             firstName: string; lastName: string; age?: number; sex?: string; contact?: string;
+            address?: string;
           }[];
           await Promise.all(
             companions.map((c) =>
@@ -168,6 +168,7 @@ export default function PaymentScreen() {
                 age: c.age,
                 sex: c.sex,
                 contactNumber: c.contact,
+                address: c.address,
                 passengerType: 'regular',
                 bookingId,
               }).catch(() => null),
@@ -252,7 +253,9 @@ export default function PaymentScreen() {
         }
       }
 
-      router.push({
+      // replace, not push: the payment form must leave the stack so the
+      // hardware/back gesture can never re-open it and double-book.
+      router.replace({
         pathname: '/(passenger)/booking-confirmed',
         params: {
           ...params,
@@ -419,6 +422,10 @@ export default function PaymentScreen() {
                   );
                 })}
               </View>
+              <Text style={styles.methodNote}>
+                Paying by GCash? Select Cash above and pay via GCash onboard — the bangkero
+                will confirm it when you board.
+              </Text>
             </View>
           )}
 
@@ -475,6 +482,13 @@ const styles = StyleSheet.create({
   mtLg: { marginTop: spacing.xl },
 
   methodList: { gap: spacing.md },
+  methodNote: {
+    ...typography.caption,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: spacing.sm,
+  },
 
   escrowCard: {
     backgroundColor: colors.surface,

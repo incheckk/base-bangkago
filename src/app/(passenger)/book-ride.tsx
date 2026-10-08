@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -10,7 +11,6 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { SchedulePicker, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
-import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
 import { usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
@@ -19,24 +19,8 @@ import { getQueuedSeatCeiling } from '@/services/queue.service';
 import type { RouteDoc } from '@/types/models';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
-/**
- * Everyone who rides under this booking. The booker is always passenger #1
- * (their name already lives on the booking row); each companion is captured
- * here and written to `passenger_details` after the booking is created.
- */
-interface Companion {
-  firstName: string;
-  lastName: string;
-  age?: number;
-  sex?: string;
-  contact?: string;
-}
-
 /** Ceiling while no boat reports a capacity (e.g. every bangkero offline). */
 const FALLBACK_MAX_PAX = 12;
-
-const initialsOf = (first: string, last: string) =>
-  `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
 
 export default function BookRide() {
   const insets = useSafeAreaInsets();
@@ -57,15 +41,9 @@ export default function BookRide() {
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [maxPax, setMaxPax] = useState(FALLBACK_MAX_PAX);
 
-  const [modalOpen, setModalOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [blocked, setBlocked] = useState<{ bookingId: string; ref: string } | null>(null);
   const [ban, setBan] = useState<number | null>(null);
-  const [draftFirst, setDraftFirst] = useState('');
-  const [draftLast, setDraftLast] = useState('');
-  const [draftAge, setDraftAge] = useState('');
-  const [draftSex, setDraftSex] = useState('');
-  const [draftContact, setDraftContact] = useState('');
 
   useEffect(() => {
     if (params.fromId) setFromId(params.fromId);
@@ -136,33 +114,6 @@ export default function BookRide() {
     const tempFrom = fromId;
     setFromId(toId);
     setToId(tempFrom);
-  }
-
-  function removeCompanion(index: number) {
-    setCompanions((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function addCompanion() {
-    const first = draftFirst.trim();
-    const last = draftLast.trim();
-    if (!first || !last) return;
-    const ageNum = parseInt(draftAge.trim(), 10);
-    setCompanions((prev) => [
-      ...prev,
-      {
-        firstName: first,
-        lastName: last,
-        age: Number.isFinite(ageNum) && ageNum > 0 ? ageNum : undefined,
-        sex: draftSex || undefined,
-        contact: draftContact.trim() || undefined,
-      },
-    ]);
-    setDraftFirst('');
-    setDraftLast('');
-    setDraftAge('');
-    setDraftSex('');
-    setDraftContact('');
-    setModalOpen(false);
   }
 
   async function proceed() {
@@ -252,7 +203,7 @@ export default function BookRide() {
 
               <Text style={styles.legLabel}>TO</Text>
               <Text style={[styles.legValue, !toPort && styles.legValueEmpty]} numberOfLines={1}>
-                {toPort?.portName ?? 'Select a destination'}
+                {toPort?.portName ?? (fromId ? 'Select a destination' : 'Pick a departure first')}
               </Text>
             </View>
 
@@ -280,14 +231,20 @@ export default function BookRide() {
               <Text style={styles.sectionLabel}>DEPARTURE PORT</Text>
               <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
 
-              <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
-              <PortChips
-                ports={ports.data}
-                selected={toId}
-                disabled={fromId}
-                isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
-                onSelect={setToId}
-              />
+              {/* Destination only exists once a departure is picked — two grids
+                  at once made people pick them in the wrong order. */}
+              {!!fromId && (
+                <>
+                  <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
+                  <PortChips
+                    ports={ports.data}
+                    selected={toId}
+                    disabled={fromId}
+                    isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
+                    onSelect={setToId}
+                  />
+                </>
+              )}
             </>
           )}
 
@@ -303,69 +260,23 @@ export default function BookRide() {
 
           {/* You are passenger #1; companions ride under your booking. */}
           <Text style={[styles.sectionLabel, styles.mtLg]}>PASSENGERS</Text>
-          <View style={styles.paxCard}>
-            <View style={styles.paxRow}>
-              <View style={styles.paxAvatar}>
-                <Text style={styles.paxAvatarText}>
-                  {profile ? initialsOf(profile.firstName, profile.lastName) : 'Y'}
-                </Text>
-              </View>
-              <View style={styles.paxInfo}>
-                <Text style={styles.paxName} numberOfLines={1}>{bookerName}</Text>
-                <Text style={styles.paxMeta} numberOfLines={1}>You — this booking is under your name</Text>
-              </View>
-            </View>
-
-            {companions.map((c, i) => (
-              <View key={`${c.lastName}-${c.firstName}-${i}`} style={[styles.paxRow, styles.paxRowDivided]}>
-                <View style={[styles.paxAvatar, styles.paxAvatarAlt]}>
-                  <Text style={[styles.paxAvatarText, styles.paxAvatarTextAlt]}>
-                    {initialsOf(c.firstName, c.lastName)}
-                  </Text>
-                </View>
-                <View style={styles.paxInfo}>
-                  <Text style={styles.paxName} numberOfLines={1}>{c.firstName} {c.lastName}</Text>
-                  <Text style={styles.paxMeta} numberOfLines={1}>
-                    {[c.age ? `${c.age} yrs old` : null, c.sex ? c.sex.charAt(0).toUpperCase() + c.sex.slice(1) : null]
-                      .filter(Boolean)
-                      .join(' · ') || 'Companion'}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={() => removeCompanion(i)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${c.firstName}`}
-                >
-                  <Text style={styles.paxRemove}>✕</Text>
-                </Pressable>
-              </View>
-            ))}
-
-            <Pressable
-              onPress={() => setModalOpen(true)}
-              disabled={atCap}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.paxAdd,
-                atCap && styles.paxAddOff,
-                pressed && !atCap && styles.pressed,
-              ]}
-            >
-              <Text style={[styles.paxAddText, atCap && styles.paxAddTextOff]}>+ Add passenger</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.paxHint}>
-            {atCap
-              ? ceilingFromQueue
-                ? `Seat limit reached — ${maxPax} seats on the biggest boat waiting at ${fromPort?.portName ?? 'this port'}`
-                : `Seat limit reached — ${maxPax} seats on the largest boat`
-              : ceilingFromQueue
-                ? `Up to ${maxPax} seats — biggest boat waiting at ${fromPort?.portName ?? 'this port'}`
-                : fromPort
-                  ? `Up to ${maxPax} seats — no boats waiting at ${fromPort.portName} yet; your request will wait in queue.`
-                  : `Up to ${maxPax} seats — largest boat available right now`}
-          </Text>
+          <CompanionForm
+            companions={companions}
+            onChange={setCompanions}
+            maxCount={maxPax}
+            bookerName={bookerName}
+            hint={
+              atCap
+                ? ceilingFromQueue
+                  ? `Seat limit reached — ${maxPax} seats on the biggest boat waiting at ${fromPort?.portName ?? 'this port'}`
+                  : `Seat limit reached — ${maxPax} seats on the largest boat`
+                : ceilingFromQueue
+                  ? `Up to ${maxPax} seats — biggest boat waiting at ${fromPort?.portName ?? 'this port'}`
+                  : fromPort
+                    ? `Up to ${maxPax} seats — no boats waiting at ${fromPort.portName} yet; your request will wait in queue.`
+                    : `Up to ${maxPax} seats — largest boat available right now`
+            }
+          />
         </View>
       </ScrollView>
 
@@ -392,98 +303,6 @@ export default function BookRide() {
 
         <PrimaryButton label="Proceed to Payment" onPress={proceed} disabled={!ready} loading={checking} />
       </View>
-
-      <Modal
-        visible={modalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setModalOpen(false)}
-            accessibilityLabel="Close"
-          />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Passenger information</Text>
-            <Text style={styles.modalHint}>
-              They ride under your booking — the bangkero checks IDs for discounts on board.
-            </Text>
-
-            <TextField
-              label="First name"
-              value={draftFirst}
-              onChangeText={setDraftFirst}
-              placeholder="Juan"
-              autoCapitalize="words"
-            />
-            <TextField
-              label="Last name"
-              value={draftLast}
-              onChangeText={setDraftLast}
-              placeholder="Dela Cruz"
-              autoCapitalize="words"
-            />
-            <View style={styles.modalRow}>
-              <View style={styles.modalHalf}>
-                <TextField
-                  label="Age"
-                  value={draftAge}
-                  onChangeText={setDraftAge}
-                  placeholder="Optional"
-                  keyboardType="number-pad"
-                  maxLength={3}
-                />
-              </View>
-              <View style={styles.modalHalf}>
-                <TextField
-                  label="Contact"
-                  value={draftContact}
-                  onChangeText={setDraftContact}
-                  placeholder="Optional"
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-
-            <Text style={styles.modalFieldLabel}>SEX</Text>
-            <View style={styles.sexRow}>
-              {(['female', 'male'] as const).map((s) => {
-                const active = draftSex === s;
-                return (
-                  <Pressable
-                    key={s}
-                    onPress={() => setDraftSex(s)}
-                    style={({ pressed }) => [styles.sexChip, active && styles.sexChipActive, pressed && !active && styles.pressed]}
-                  >
-                    <Text style={[styles.sexChipText, active && styles.sexChipTextActive]}>
-                      {s === 'female' ? 'Female' : 'Male'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View style={styles.modalActions}>
-              <View style={styles.modalActionBtn}>
-                <PrimaryButton
-                  label="Cancel"
-                  variant="secondary"
-                  onPress={() => setModalOpen(false)}
-                />
-              </View>
-              <View style={styles.modalActionBtn}>
-                <PrimaryButton
-                  label="Add passenger"
-                  onPress={addCompanion}
-                  disabled={!draftFirst.trim() || !draftLast.trim()}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* One active trip at a time — the pending booking is offered directly
           so the passenger never has to hunt for it. */}
@@ -665,41 +484,7 @@ const styles = StyleSheet.create({
   portChipTextActive: { color: colors.primary },
   portChipTextOff: { color: colors.textMuted },
 
-  // ---------- passengers ----------
-  paxCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing.lg,
-  },
-  paxRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  paxRowDivided: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-  paxAvatar: {
-    width: 36, height: 36, borderRadius: radii.pill,
-    backgroundColor: colors.primaryTint,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  paxAvatarAlt: { backgroundColor: colors.surfaceAlt },
-  paxAvatarText: { ...typography.caption, color: colors.primary, fontWeight: '700', fontSize: 12 },
-  paxAvatarTextAlt: { color: colors.textSecondary },
-  paxInfo: { flex: 1, minWidth: 0 },
-  paxName: { flexShrink: 1, ...typography.bodyStrong },
-  paxMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  paxRemove: { flexShrink: 1, color: colors.danger, fontSize: 15, fontWeight: '700', paddingHorizontal: spacing.xs },
-  paxAdd: {
-    minHeight: touchTarget, alignItems: 'center', justifyContent: 'center',
-    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
-    borderStyle: 'dashed',
-  },
-  paxAddOff: { opacity: 0.4 },
-  paxAddText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
-  paxAddTextOff: { color: colors.textMuted },
-  paxHint: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
-
-  // ---------- companion modal ----------
+  // ---------- companion modal (kept for the blocked/no-show dialogs) ----------
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
@@ -715,20 +500,6 @@ const styles = StyleSheet.create({
   },
   modalTitle: { ...typography.title, marginBottom: spacing.xs },
   modalHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.lg },
-  modalRow: { flexDirection: 'row', gap: spacing.md },
-  modalHalf: { flex: 1 },
-  modalFieldLabel: { ...typography.label, marginBottom: spacing.sm },
-  sexRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
-  sexChip: {
-    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    minHeight: 36, justifyContent: 'center',
-  },
-  sexChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  sexChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  sexChipTextActive: { color: colors.primary },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalActionBtn: { flex: 1 },
   blockedRef: {

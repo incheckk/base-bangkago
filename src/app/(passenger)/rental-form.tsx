@@ -2,17 +2,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { ScrollHintBar } from '@/components/ScrollHintBar';
 import { ErrorState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { getAdminGcashQr } from '@/services/app-settings.service';
 import { friendlyError } from '@/services/booking.service';
 import { pickImage } from '@/services/documents.service';
 import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
-import { createNotification } from '@/services/notification.service';
-import { createRental } from '@/services/rental.service';
+import { createPassengerDetail } from '@/services/passenger-detail.service';
+import { createRental, getBangkaBlockedDates } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 /** The next 7 days starting TOMORROW — rentals are always advance, so they always escrow. */
@@ -31,9 +33,11 @@ function nextDays(count: number): { iso: string; label: string }[] {
 
 /**
  * Rental request + 50% GCash escrow in one screen (Phase 4C): pick a
- * date and hours, file the admin QR payment (reference + screenshot),
- * and the request goes straight to the bangkero as pending. The
- * remainder is collected in person when the charter completes.
+ * date and hours (days the boat is already booked are crossed out —
+ * 027), file the admin QR payment (reference + screenshot). The
+ * request waits in awaiting_payment; the bangkero hears about it when
+ * the admin approves the escrow. The remainder is collected in person
+ * when the charter completes.
  */
 export default function RentalFormScreen() {
   const { profile } = useAuth();
@@ -52,6 +56,9 @@ export default function RentalFormScreen() {
   const [date, setDate] = useState(() => days[0]?.iso ?? '');
   const [hours, setHours] = useState(2);
   const [eventName, setEventName] = useState('');
+  const [companions, setCompanions] = useState<Companion[]>([]);
+  // Days this boat/operator is already committed to (027) — dehighlighted below.
+  const [blocked, setBlocked] = useState<string[]>([]);
 
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoaded, setQrLoaded] = useState(false);
@@ -78,9 +85,31 @@ export default function RentalFormScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    if (!params.bangkaId) return;
+    getBangkaBlockedDates(params.bangkaId)
+      .then((v) => {
+        if (!alive) return;
+        setBlocked(v);
+        // Never leave the selection sitting on a day that came back booked.
+        setDate((cur) =>
+          v.includes(cur) ? nextDays(7).find((d) => !v.includes(d.iso))?.iso ?? '' : cur
+        );
+      })
+      .catch(() => {
+        // Chips stay tappable; the insert trigger still refuses the day.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [params.bangkaId]);
+
   const total = rate * hours;
   const down = Math.round(total * 0.5);
   const remainder = total - down;
+  const maxPax = Number(params.capacity) || 12;
+  const bookerName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'You';
 
   async function chooseProof(source: 'camera' | 'gallery') {
     try {
@@ -125,6 +154,23 @@ export default function RentalFormScreen() {
         hours,
       });
 
+      // Companions ride under this charter (026 boat_rental_id). A failed
+      // insert must never block the request — the rental already exists.
+      await Promise.all(
+        companions.map((c) =>
+          createPassengerDetail({
+            firstName: c.firstName,
+            lastName: c.lastName,
+            age: c.age,
+            sex: c.sex,
+            contactNumber: c.contact,
+            address: c.address,
+            passengerType: 'regular',
+            boatRentalId: rental.rentalId,
+          }).catch(() => null),
+        ),
+      );
+
       // Escrow row — booking already exists, so a failed insert only
       // flags the confirmation instead of blocking it.
       let downWarning = false;
@@ -139,14 +185,9 @@ export default function RentalFormScreen() {
         downWarning = true;
       }
 
-      if (params.bangkeroId) {
-        createNotification(
-          params.bangkeroId,
-          'New boat rental request',
-          `${profile.firstName} requested ${params.boatName}${eventName.trim() ? ` (${eventName.trim()})` : ''} on ${date} for ${hours} hour${hours === 1 ? '' : 's'}.`
-        ).catch(() => {});
-      }
-
+      // No notification here on purpose: the request sits in
+      // awaiting_payment where the bangkero cannot act on it. They are
+      // notified the moment the admin approves the escrow (020/027).
       router.replace({
         pathname: '/(passenger)/my-rentals',
         params: {
@@ -195,24 +236,36 @@ export default function RentalFormScreen() {
           />
 
           <Text style={[styles.fieldLabel, styles.mtLg]}>DATE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <ScrollHintBar contentContainerStyle={styles.chips}>
             {days.map((d) => {
               const active = d.iso === date;
+              const off = blocked.includes(d.iso);
               return (
                 <Pressable
                   key={d.iso}
-                  onPress={() => setDate(d.iso)}
+                  onPress={off ? undefined : () => setDate(d.iso)}
+                  disabled={off}
+                  accessibilityRole="button"
+                  accessibilityLabel={off ? `${d.label}, booked` : d.label}
                   style={({ pressed }) => [
                     styles.chip,
                     active && styles.chipActive,
+                    off && styles.chipOff,
                     pressed && !active && styles.chipPressed,
                   ]}
                 >
-                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{d.label}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+                  <Text style={[styles.chipText, active && styles.chipTextActive, off && styles.chipTextOff]}>
+                    {d.label}
+                  </Text>
+              </Pressable>
+            );
+          })}
+          </ScrollHintBar>
+          {blocked.length > 0 && (
+            <Text style={styles.dateHint}>
+              Crossed-out dates are already booked for this boat.
+            </Text>
+          )}
 
           <View style={styles.hoursRow}>
             <View style={{ flex: 1 }}>
@@ -250,6 +303,16 @@ export default function RentalFormScreen() {
             </View>
           </View>
         </View>
+
+        <Text style={styles.sectionLabel}>PASSENGERS</Text>
+        <CompanionForm
+          companions={companions}
+          onChange={setCompanions}
+          maxCount={maxPax}
+          bookerName={bookerName}
+          bookerMeta="You — this rental is under your name"
+          hint={`Up to ${maxPax} seats — name everyone coming along; the bangkero sees this list.`}
+        />
 
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
         <View style={styles.card}>
@@ -314,8 +377,8 @@ export default function RentalFormScreen() {
         {proofUri && <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />}
 
         <Text style={styles.escrowHint}>
-          The bangkero sees your request right away; the admin confirms the downpayment from
-          their side. Nothing is charged in the app — the remainder is paid in person.
+          The bangkero is notified once the admin approves your downpayment, then confirms or
+          declines. Nothing is charged in the app — the remainder is paid in person.
         </Text>
 
         {!!error && (
@@ -377,8 +440,11 @@ const styles = StyleSheet.create({
   },
   chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
   chipPressed: { opacity: 0.7 },
+  chipOff: { opacity: 0.45 },
   chipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   chipTextActive: { color: colors.primary, fontWeight: '700' },
+  chipTextOff: { color: colors.textMuted, textDecorationLine: 'line-through' },
+  dateHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
 
   hoursRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.md },
   hoursHint: { ...typography.caption, color: colors.textMuted, fontSize: 11 },

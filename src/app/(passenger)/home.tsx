@@ -238,7 +238,8 @@ export default function PassengerHome() {
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         title={MENU_TITLE.passenger}
-        items={menuFor('passenger')}
+        // Already on home — a Home row here does nothing but close the drawer.
+        items={menuFor('passenger').filter((i) => i.label !== 'Home')}
       />
 
       {/* ---------- floating header ---------- */}
@@ -432,7 +433,7 @@ export default function PassengerHome() {
           <View style={styles.sectionHead}>
             <Text style={styles.sectionLabel}>RECENT TRIPS</Text>
             {bookings.data.length > 0 && (
-              <Pressable onPress={() => router.push('/(passenger)/trips')} hitSlop={12}>
+              <Pressable onPress={() => router.push('/(passenger)/bookings')} hitSlop={12}>
                 <Text style={styles.sectionAction}>See all</Text>
               </Pressable>
             )}

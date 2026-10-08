@@ -97,6 +97,8 @@ async function seedAccounts() {
           bangka_type: 'pump_boat',
           capacity: acct.capacity,
           bangkero_id: uid,
+          // Listed in the passenger rental catalog from the start (027).
+          rental_listed: true,
         });
         if (bangkaError) throw bangkaError;
       }
@@ -130,6 +132,7 @@ Done. Sign in with any of:
   0917 123 4567   Juan Dela Cruz      passenger
   0918 123 4567   Mang Lito           bangkero · MBCA Sto. Niño · 8 pax
   0919 123 4567   Pedro V.            bangkero · MBCA Bantay Dagat · 10 pax
+  0920 123 4567   Lina Reyes          coastguard · view only
   0930 913 2995   Admin               admin · password: qqqwww
 
   password: ${DEMO_PASSWORD}

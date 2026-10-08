@@ -42,5 +42,6 @@ export default function Index() {
 
   if (profile.role === 'admin') return <Redirect href="/(admin)/home" />;
   if (profile.role === 'bangkero') return <Redirect href="/(bangkero)/home" />;
+  if (profile.role === 'coastguard') return <Redirect href="/(coastguard)/home" />;
   return <Redirect href="/(passenger)/home" />;
 }

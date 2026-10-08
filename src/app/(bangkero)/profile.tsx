@@ -24,6 +24,7 @@ import { formatPhone } from '@/utils/phone';
 const MENU_ITEMS = [
   { key: 'earnings', label: 'Earnings', icon: '💰' },
   { key: 'trips', label: 'Trip History', icon: '🚤' },
+  { key: 'rentals', label: 'Boat Rentals', icon: '🛥️' },
   { key: 'ratings', label: 'My Ratings', icon: '⭐' },
   { key: 'documents', label: 'Documents', icon: '📄' },
   { key: 'passengers', label: 'Manifest', icon: '📋' },
@@ -38,6 +39,7 @@ const MENU_ITEMS = [
 const ROUTE_MAP: Record<string, string> = {
   earnings: '/(bangkero)/earnings',
   trips: '/(bangkero)/trips',
+  rentals: '/(bangkero)/rentals',
   ratings: '/(bangkero)/ratings',
   documents: '/(bangkero)/verify-boat',
   passengers: '/(bangkero)/manifest',

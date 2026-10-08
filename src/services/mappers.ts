@@ -125,6 +125,9 @@ export function mapBookingRow(row: any): BookingDoc {
     holdExpiresAt: row.hold_expires_at ?? null,
     acceptedAt: row.accepted_at,
     onboardedAt: row.onboarded_at ?? null,
+    // ?? null keeps this working before migration 022 adds the column
+    disputedAt: row.disputed_at ?? null,
+    noShowAt: row.no_show_at ?? null,
     completedAt: row.completed_at,
     cancelledAt: row.cancelled_at,
     scheduledDate: row.scheduled_date ?? null,

@@ -7,6 +7,7 @@ import {
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { useLockBack } from '@/hooks/useLockBack';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const CHECKLIST = [
@@ -16,6 +17,9 @@ const CHECKLIST = [
 ];
 
 export default function PostTripScreen() {
+  // Part of the completed-transaction chain — exits are the three buttons
+  // below, all `replace`, so back never reopens arrived/departure.
+  useLockBack();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   function toggle(key: string) {
@@ -26,7 +30,7 @@ export default function PostTripScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Post Trip" subtitle="TRIP COMPLETE" />
+      <BangkeroScreenHeader title="Post Trip" subtitle="TRIP COMPLETE" showBack={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.hero}>
@@ -63,13 +67,13 @@ export default function PostTripScreen() {
         <View style={styles.footer}>
           <PrimaryButton
             label="View Trip Summary"
-            onPress={() => router.push('/(bangkero)/trip-summary')}
+            onPress={() => router.replace('/(bangkero)/trip-summary')}
           />
           <View style={{ height: spacing.md }} />
           <PrimaryButton
             label="View Earnings"
             variant="secondary"
-            onPress={() => router.push('/(bangkero)/earnings')}
+            onPress={() => router.replace('/(bangkero)/earnings')}
           />
           <View style={{ height: spacing.md }} />
           <PrimaryButton

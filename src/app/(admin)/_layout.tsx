@@ -24,6 +24,7 @@ export default function AdminLayout() {
 
   if (!profile) return <Redirect href="/" />;
 
+  if (profile.role === 'coastguard') return <Redirect href="/(coastguard)/home" />;
   if (profile.role !== 'admin') return <Redirect href="/(passenger)/home" />;
 
   return (

@@ -6,7 +6,7 @@ export interface TripManifest {
   actualArrivalTime: string | null;
   totalPassengersOnBoard: number;
   totalParcelsOnBoard: number;
-  status: 'draft' | 'finalized' | 'cancelled';
+  status: 'draft' | 'finalized' | 'completed' | 'cancelled';
   generatedAt: string;
   bangkaId: string;
   bangkeroId: string;
@@ -93,12 +93,15 @@ export async function createManifest(manifest: {
   return mapManifest(data);
 }
 
-export async function getActiveManifest(bangkeroId: string): Promise<TripManifest | null> {
+export async function getActiveManifest(
+  bangkeroId: string,
+  includeCompleted = false
+): Promise<TripManifest | null> {
   const { data, error } = await supabase
     .from('trip_manifest')
     .select('*')
     .eq('bangkero_id', bangkeroId)
-    .in('status', ['draft', 'finalized'])
+    .in('status', includeCompleted ? ['draft', 'finalized', 'completed'] : ['draft', 'finalized'])
     .order('generated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -113,6 +116,17 @@ export async function finalizeManifest(manifestId: string): Promise<void> {
     .update({ status: 'finalized' })
     .eq('id', manifestId);
 
+  if (error) throw error;
+}
+
+/** Close out the manifest when the trip arrives (007 allows 'completed';
+ *  trip-summary reads with includeCompleted so it still renders). */
+export async function completeManifest(manifest: TripManifest): Promise<void> {
+  const { error } = await supabase
+    .from('trip_manifest')
+    .update({ status: 'completed' })
+    .eq('id', manifest.manifestId)
+    .eq('bangkero_id', manifest.bangkeroId);
   if (error) throw error;
 }
 

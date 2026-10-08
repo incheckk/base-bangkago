@@ -30,7 +30,6 @@ const ROLE_ITEMS: Record<UserRole | 'admin', MenuItem[]> = {
     { icon: 'home', label: 'Home', onPress: () => router.replace('/(passenger)/home') },
     { icon: 'bookings', label: 'My Bookings', onPress: () => router.replace('/(passenger)/bookings') },
     { icon: 'rental', label: 'My Rentals', onPress: () => router.replace('/(passenger)/my-rentals') },
-    { icon: 'history', label: 'Trip History', onPress: () => router.replace('/(passenger)/trips') },
   ],
   bangkero: [
     { icon: 'home', label: 'Home', onPress: () => router.replace('/(bangkero)/home') },
@@ -46,11 +45,19 @@ const ROLE_ITEMS: Record<UserRole | 'admin', MenuItem[]> = {
     { icon: 'people', label: 'Manage Operators', onPress: () => router.replace('/(admin)/operators') },
     { icon: 'profile', label: 'All Users', onPress: () => router.replace('/(admin)/all-users') },
     { icon: 'boat', label: 'Active Trips', onPress: () => router.replace('/(admin)/active-trips') },
-    { icon: 'route', label: 'Fleet Overview', onPress: () => router.replace('/(admin)/fleet-overview') },
+    { icon: 'anchor', label: 'Fleet Overview', onPress: () => router.replace('/(admin)/fleet-overview') },
+    { icon: 'port', label: 'Manage Ports', onPress: () => router.replace('/(admin)/manage-ports') },
+    { icon: 'route', label: 'Manage Routes', onPress: () => router.replace('/(admin)/manage-routes') },
+    { icon: 'receipt', label: 'Reports', onPress: () => router.replace('/(admin)/reports') },
+    { icon: 'rental', label: 'Boat Rentals', onPress: () => router.replace('/(admin)/boat-rentals') },
     { icon: 'cash', label: 'Downpayments', onPress: () => router.replace('/(admin)/downpayments') },
     { icon: 'card', label: 'GCash QR', onPress: () => router.replace('/(admin)/gcash-qr') },
     { icon: 'alert', label: 'System Alerts', onPress: () => router.replace('/(admin)/system-alerts') },
     { icon: 'settings', label: 'Developer Options', onPress: () => router.replace('/(admin)/developer-options') },
+  ],
+  // B12 view-only tier: see queues and fares, change nothing.
+  coastguard: [
+    { icon: 'home', label: 'Home', onPress: () => router.replace('/(coastguard)/home') },
   ],
 };
 
@@ -58,6 +65,7 @@ const PROFILE_ROUTE: Record<UserRole | 'admin', Parameters<typeof router.replace
   passenger: '/(passenger)/profile',
   bangkero: '/(bangkero)/profile',
   admin: '/(admin)/profile',
+  coastguard: '/(coastguard)/profile',
 };
 
 /**
@@ -69,6 +77,7 @@ export const MENU_TITLE: Record<UserRole | 'admin', string> = {
   passenger: 'PASSENGER',
   bangkero: 'BANGKERO',
   admin: 'ADMIN',
+  coastguard: 'COASTGUARD / LGU',
 };
 
 export function menuFor(role: UserRole | 'admin'): MenuItem[] {

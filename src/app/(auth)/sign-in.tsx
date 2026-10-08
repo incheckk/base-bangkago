@@ -18,6 +18,7 @@ const DEMO_ACCOUNTS: { label: string; phone: string; password?: string }[] = [
   { label: 'Passenger', phone: '0917 123 4567' },
   { label: 'Bangkero 1', phone: '0918 123 4567' },
   { label: 'Bangkero 2', phone: '0919 123 4567' },
+  { label: 'Coastguard', phone: '0920 123 4567' },
   // Admin was created by hand in Supabase, not by the seed script, so it
   // keeps its own password.
   { label: 'Admin', phone: '0930 913 2995', password: 'qqqwww' },

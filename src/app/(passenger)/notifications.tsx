@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -9,7 +10,15 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
-  const { data, loading, error, markAsRead } = useNotifications(user?.id ?? null);
+  const { data, loading, error, markAsRead, markAllRead, clearOld } = useNotifications(user?.id ?? null);
+
+  // Opening the inbox IS the read receipt — the home badge clears through
+  // realtime. Older-than-a-day rows go via the explicit button below.
+  useEffect(() => {
+    if (!user?.id) return;
+    void markAllRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   if (loading) {
     return (
@@ -39,22 +48,27 @@ export default function NotificationsScreen() {
             message="You're all caught up!"
           />
         ) : (
-          <View style={styles.list}>
-            {data.map((n) => (
-              <Pressable
-                key={n.notificationId}
-                onPress={() => markAsRead(n.notificationId)}
-                style={[styles.card, !n.isRead && styles.cardUnread]}
-              >
-                {!n.isRead && <View style={styles.dot} />}
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{n.title}</Text>
-                  <Text style={styles.cardMessage}>{n.message}</Text>
-                  <Text style={styles.cardTime}>{formatTimeAgo(n.createdAt)}</Text>
-                </View>
-              </Pressable>
-            ))}
-          </View>
+          <>
+            <Pressable style={styles.clearBtn} onPress={() => void clearOld()} hitSlop={8}>
+              <Text style={styles.clearText}>Clear older than a day</Text>
+            </Pressable>
+            <View style={styles.list}>
+              {data.map((n) => (
+                <Pressable
+                  key={n.notificationId}
+                  onPress={() => markAsRead(n.notificationId)}
+                  style={[styles.card, !n.isRead && styles.cardUnread]}
+                >
+                  {!n.isRead && <View style={styles.dot} />}
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle}>{n.title}</Text>
+                    <Text style={styles.cardMessage}>{n.message}</Text>
+                    <Text style={styles.cardTime}>{formatTimeAgo(n.createdAt)}</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          </>
         )}
       </ScrollView>
     </ScreenContainer>
@@ -74,6 +88,8 @@ function formatTimeAgo(iso: string) {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
+  clearBtn: { alignSelf: 'flex-end', marginBottom: spacing.sm },
+  clearText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
   list: { gap: spacing.md },
   card: {
     flexDirection: 'row',

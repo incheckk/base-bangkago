@@ -8,10 +8,11 @@ import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Icon } from '@/components/Icon';
-import { slotLabel, todayIso } from '@/components/SchedulePicker';
+import { sailsLabel, slotLabel, todayIso } from '@/components/SchedulePicker';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
   useAcceptedBookings, useBangkero, useDevFlags, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
@@ -19,6 +20,7 @@ import {
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
+import { getTodayPredictions } from '@/services/demand.service';
 import { getIslandPackages } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import {
@@ -26,7 +28,7 @@ import {
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { BookingDoc } from '@/types/models';
+import type { BookingDoc, DemandPredictionDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
@@ -37,6 +39,10 @@ const clock = (ms: number) => {
 
 /** Future-dated trip → escrow + admin gate; today stays the fast same-day flow. */
 const isAdvance = (b: BookingDoc) => !!b.scheduledDate && b.scheduledDate > todayIso();
+
+// ponytail: fixed cutoffs (≥25 high, ≥12 med) — recalibrate once real rows accumulate.
+const demandLevel = (pax: number): 'low' | 'medium' | 'high' =>
+  pax >= 25 ? 'high' : pax >= 12 ? 'medium' : 'low';
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -52,6 +58,11 @@ function categoryLabel(b: BookingDoc, pkgName?: string): string | null {
   if (isAdvance(b)) {
     return `ADVANCE · ${shortDate(b.scheduledDate as string)}${b.scheduledTime ? ` · ${slotLabel(b.scheduledTime)}` : ''}`;
   }
+  // Sail day: isAdvance has flipped false, but the slot still matters —
+  // without this the advance chip vanishes on the morning it sails.
+  if (b.scheduledDate === todayIso() && b.scheduledTime) {
+    return `TODAY · ${slotLabel(b.scheduledTime)}`;
+  }
   return null;
 }
 
@@ -60,6 +71,7 @@ export default function BangkeroHome() {
   const { user, profile } = useAuth();
   const uid = user?.id ?? null;
 
+  const notifications = useNotifications(uid);
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
   // Island-package catalogue (static) — just the names behind the chips.
@@ -69,6 +81,20 @@ export default function BangkeroHome() {
       .then((rows) => setPkgNames(Object.fromEntries(rows.map((r) => [r.packageId, r.packageName]))))
       .catch(() => {});
   }, []);
+  // Today's model predictions behind the "AI DEMAND TODAY" badges.
+  const [todayDemand, setTodayDemand] = useState<DemandPredictionDoc[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getTodayPredictions()
+      .then((rows) => { if (alive) setTodayDemand(rows); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const topDemand = todayDemand
+    .filter((r): r is DemandPredictionDoc & { routeId: string; predictedPassengers: number } =>
+      r.routeId != null && r.predictedPassengers != null)
+    .sort((a, b) => b.predictedPassengers - a.predictedPassengers)
+    .slice(0, 3);
   const trips = useMyTrips(uid);
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
@@ -105,6 +131,12 @@ export default function BangkeroHome() {
   // advances every second; the boat's own fix is re-read every 15s so
   // the distance badge tracks the boat as it moves.
   const ports = usePorts();
+  /** `mactan__pandanon` → "Mactan → Pandanon" for the demand list. */
+  const demandRouteName = (routeId: string) => {
+    const [from, to] = routeId.split('__');
+    const nameOf = (id?: string) => ports.data.find((p) => p.portId === id)?.portName ?? id ?? '';
+    return `${nameOf(from)} → ${nameOf(to)}`;
+  };
   const myQueue = useMyPortQueue(uid);
   // Admin demo switches: 009 lifts the queue/dwell/route/capacity
   // rules; 010 lifts the verification + rating gates. Independent.
@@ -310,14 +342,17 @@ export default function BangkeroHome() {
       markActed(b.bookingId);
       // The phone may be face-down in a pocket — a local ping is the fastest
       // way to say "people are standing at the pier right now".
+      const sails = sailsLabel(b.scheduledDate, b.scheduledTime);
       scheduleLocalNotification(
-        'Passengers are waiting',
-        `Your passengers are waiting at ${b.fromPortName}. Stay online to reach them.`
+        isAdvance(b) ? 'Advance trip confirmed' : 'Passengers are waiting',
+        isAdvance(b) && sails
+          ? `Your boat sails ${sails} — ${b.fromPortName} → ${b.toPortName}.`
+          : `Your passengers are waiting at ${b.fromPortName}. Stay online to reach them.`
       ).catch(() => {});
       createNotification(
         b.userId,
         'Booking Accepted',
-        `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.`
+        `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.${sails ? ` Sails ${sails}.` : ''}`
       ).catch(() => {});
       router.push({
         pathname: '/(bangkero)/booking-status',
@@ -439,14 +474,35 @@ export default function BangkeroHome() {
         title={profile ? `Kumusta, ${profile.firstName}` : 'Kumusta'}
         showBack={false}
         right={
-          <Pressable
-            onPress={() => router.replace('/(bangkero)/profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Profile"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="profile" size={20} color={colors.text} />
-          </Pressable>
+          <View style={styles.headerRight}>
+            <Pressable
+              onPress={() => router.push('/(bangkero)/notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={
+                notifications.unreadCount > 0
+                  ? `Notifications, ${notifications.unreadCount} unread`
+                  : 'Notifications'
+              }
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="bell" size={20} color={colors.text} />
+              {notifications.unreadCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => router.replace('/(bangkero)/profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="profile" size={20} color={colors.text} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -691,12 +747,22 @@ export default function BangkeroHome() {
           </>
         )}
 
-        <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
-        <View style={styles.demandRow}>
-          <DemandBadge level="high" predictedPassengers={32} />
-          <DemandBadge level="medium" predictedPassengers={18} />
-          <DemandBadge level="low" predictedPassengers={8} />
-        </View>
+        {topDemand.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
+            {topDemand.map((row) => (
+              <View key={row.routeId} style={styles.demandRow}>
+                <Text style={styles.demandRoute} numberOfLines={1}>
+                  {demandRouteName(row.routeId)}
+                </Text>
+                <DemandBadge
+                  level={demandLevel(row.predictedPassengers)}
+                  predictedPassengers={row.predictedPassengers}
+                />
+              </View>
+            ))}
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>EARNINGS</Text>
         <View style={styles.earningsRow}>
@@ -787,6 +853,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', borderRadius: radii.pill,
   },
   iconBtnPressed: { backgroundColor: colors.surface },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  notifBadge: {
+    position: 'absolute', top: 1, right: 1,
+    backgroundColor: colors.danger, borderRadius: radii.pill,
+    minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
+    borderWidth: 2, borderColor: colors.bg,
+  },
+  notifBadgeText: { flexShrink: 1, ...typography.micro, fontSize: 10 },
 
   // ---------- availability hero ----------
   statusCard: {
@@ -890,7 +965,8 @@ const styles = StyleSheet.create({
   countPillLive: { backgroundColor: colors.primary },
   countPillTextLive: { flexShrink: 1, ...typography.label, color: colors.primaryText, letterSpacing: 0 },
 
-  demandRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  demandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.sm },
+  demandRoute: { ...typography.body, flex: 1, color: colors.textSecondary },
 
   // ---------- earnings ----------
   earningsRow: { flexDirection: 'row', gap: spacing.md },

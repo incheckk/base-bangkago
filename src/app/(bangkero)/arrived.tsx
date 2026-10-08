@@ -7,14 +7,16 @@ import {
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { useLockBack } from '@/hooks/useLockBack';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useAuth } from '@/hooks/useAuth';
 import { updateParcelStatus } from '@/services/parcel.service';
-import { friendlyError } from '@/services/booking.service';
-import { stampManifestArrival } from '@/services/manifest.service';
+import { completeBooking, forceCompleteBooking, friendlyError } from '@/services/booking.service';
+import { completeManifest, stampManifestArrival } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import { supabase } from '@/services/supabase';
+import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { ParcelDoc, ParcelStatus } from '@/types/models';
 
@@ -24,6 +26,9 @@ const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelSta
 };
 
 export default function ArrivedScreen() {
+  // Post-transaction screen — back would walk into departure and re-run the
+  // depart/notify flow. Only the explicit buttons leave.
+  useLockBack();
   const { user } = useAuth();
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
   const { data: parcels } = useBangkeroParcels(user?.id ?? null);
@@ -65,15 +70,33 @@ export default function ArrivedScreen() {
   }
 
   async function handleComplete() {
+    if (completing) return;
     setCompleting(true);
-    if (user?.id) {
-      supabase
-        .from('bookings')
-        .select('id, ref, user_id')
-        .eq('operator_id', user.id)
-        .eq('trip_stat', 'accepted')
-        .then(({ data }) => {
-          (data ?? []).forEach((b) => {
+    try {
+      if (user?.id) {
+        // Today's accepted trips only — future-dated ones sail another day
+        // and must not be completed (or told to disembark) now.
+        const { data } = await supabase
+          .from('bookings')
+          .select('id, ref, user_id')
+          .eq('operator_id', user.id)
+          .eq('trip_stat', 'accepted')
+          .or(`scheduled_date.is.null,scheduled_date.lte.${manilaTodayIso()}`);
+        await Promise.all(
+          (data ?? []).map(async (b) => {
+            // Close the booking out now (023 complete_trip). It refuses a
+            // party that was never marked onboarded — force_complete_trip
+            // (026) is the fallback while the arrival-bypass switch is on.
+            // Both failing leaves the booking accepted, as before.
+            try {
+              await completeBooking(b.id);
+            } catch {
+              try {
+                await forceCompleteBooking(b.id);
+              } catch {
+                // bypass off — home's "Mark completed" path still applies
+              }
+            }
             if (b.user_id) {
               createNotification(
                 b.user_id,
@@ -81,17 +104,23 @@ export default function ArrivedScreen() {
                 `Boat for trip ${b.ref} has arrived. Please disembark.`
               ).catch(() => {});
             }
-          });
-        });
+          }),
+        );
+      }
+      if (manifest) {
+        // Close the manifest too (007 allows 'completed'); trip-summary
+        // reads with includeCompleted so the report still renders.
+        await completeManifest(manifest).catch(() => {});
+      }
+    } catch {
+      // never strand the bangkero here — the trip list re-syncs anyway
     }
-    setTimeout(() => {
-      router.push('/(bangkero)/post-trip');
-    }, 800);
+    router.replace('/(bangkero)/post-trip');
   }
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Arrived" showDrawer={false} />
+      <BangkeroScreenHeader title="Arrived" showDrawer={false} showBack={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.hero}>
@@ -177,7 +206,7 @@ export default function ArrivedScreen() {
               <PrimaryButton
                 label="View Summary"
                 variant="secondary"
-                onPress={() => router.push('/(bangkero)/trips')}
+                onPress={() => router.replace('/(bangkero)/trips')}
               />
             </View>
           </>

@@ -214,11 +214,18 @@ export default function SailingScreen() {
                 <View style={styles.companions}>
                   <Text style={styles.companionsLabel}>COMPANIONS</Text>
                   {companions.map((c) => (
-                    <Text key={c.passengerId} style={styles.companion} numberOfLines={1}>
-                      {c.firstName} {c.lastName}
-                      {c.age != null ? ` · ${c.age}` : ''}
-                      {c.sex ? ` · ${c.sex}` : ''}
-                    </Text>
+                    <View key={c.passengerId}>
+                      <Text style={styles.companion} numberOfLines={1}>
+                        {c.firstName} {c.lastName}
+                        {c.age != null ? ` · ${c.age}` : ''}
+                        {c.sex ? ` · ${c.sex}` : ''}
+                      </Text>
+                      {!!c.address && (
+                        <Text style={styles.companionAddress} numberOfLines={1}>
+                          📍 {c.address}
+                        </Text>
+                      )}
+                    </View>
                   ))}
                 </View>
               )}
@@ -382,6 +389,7 @@ const styles = StyleSheet.create({
   },
   companionsLabel: { ...typography.label, marginBottom: spacing.xs },
   companion: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
+  companionAddress: { flexShrink: 1, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
 
   parcelCard: {
     backgroundColor: colors.surface,

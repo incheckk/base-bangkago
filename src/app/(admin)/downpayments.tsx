@@ -42,10 +42,11 @@ function createdLabel(iso: string): string {
 }
 
 /**
- * Escrow review (migration 015): passengers file GCash reference +
+ * Escrow review (migration 015/020): passengers file GCash reference +
  * screenshot when they book an island hop or boat rental; approve or
- * refund it here. Approval is bookkeeping only — nothing in the trip
- * flow waits on it — but the passenger is notified either way.
+ * refund it here. Approval RELEASES the trip — advance booking
+ * pending → open, rental awaiting_payment → pending — so payer and
+ * (for rentals) the bangkero are notified either way.
  */
 export default function AdminDownpaymentsScreen() {
   const [rows, setRows] = useState<AdminDownpaymentRow[]>([]);
@@ -107,6 +108,10 @@ export default function AdminDownpaymentsScreen() {
   }
 
   const proofUrl = detail ? docPublicUrl(detail.proofUrl) : null;
+  // A dead storage path renders a blank white box without this — swap to
+  // the dashed "unavailable" state instead of a silent failure.
+  const [proofFailed, setProofFailed] = useState(false);
+  useEffect(() => { setProofFailed(false); }, [detail?.downpaymentId]);
 
   return (
     <ScreenContainer padded={false}>
@@ -215,8 +220,13 @@ export default function AdminDownpaymentsScreen() {
               GCash ref: {detail?.referenceNum || '—'} · filed {detail ? createdLabel(detail.createdAt) : ''}
             </Text>
 
-            {proofUrl ? (
-              <Image source={{ uri: proofUrl }} style={styles.modalImg} resizeMode="contain" />
+            {proofUrl && !proofFailed ? (
+              <Image
+                source={{ uri: proofUrl }}
+                style={styles.modalImg}
+                resizeMode="contain"
+                onError={() => setProofFailed(true)}
+              />
             ) : (
               <View style={styles.modalImgMissing}>
                 <Text style={styles.modalImgMissingText}>Proof screenshot unavailable</Text>

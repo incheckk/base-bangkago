@@ -4,7 +4,7 @@
  * BANKEROS → BANGKEROS typo fix applied.
  */
 
-export type UserRole = 'passenger' | 'bangkero' | 'admin';
+export type UserRole = 'passenger' | 'bangkero' | 'admin' | 'coastguard';
 
 /**
  * Booking/trip statuses:
@@ -24,7 +24,7 @@ export type BangkaType = 'pump_boat' | 'banca' | 'speed_boat' | 'other';
 
 export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'bank_transfer';
 
-export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+export type PaymentStatus = 'pending' | 'completed' | 'failed';
 
 export type PassengerType = 'regular' | 'senior' | 'student' | 'child';
 
@@ -41,7 +41,7 @@ export type RentalStatus =
 
 export type ParcelStatus = 'pending' | 'in_transit' | 'delivered' | 'returned';
 
-export type ManifestStatus = 'draft' | 'finalized' | 'cancelled';
+export type ManifestStatus = 'draft' | 'finalized' | 'completed' | 'cancelled';
 
 // =============================================================
 // Core Doc types (used by hooks and services)
@@ -159,6 +159,10 @@ export interface BookingDoc {
   acceptedAt: string | null;
   /** Set when the bangkero confirms passengers are on board. */
   onboardedAt: string | null;
+  /** Passenger reported "I was NOT on board" after departure (022) — trip continues. */
+  disputedAt: string | null;
+  /** Booker missed the boat but companions sailed (022 partial no-show). */
+  noShowAt: string | null;
   completedAt: string | null;
   cancelledAt: string | null;
   /** Sailing schedule; slot required too when the date is in the future. */
@@ -175,11 +179,16 @@ export interface PassengerDetailDoc {
   contactNumber: string | null;
   passengerType: PassengerType;
   declaredWeightKg: number | null;
-  bookingId: string;
+  /** Rides (regular/package); null for charter companions (026). */
+  bookingId: string | null;
+  /** Charters; null for ride companions (026). Exactly one is set. */
+  boatRentalId: string | null;
   /** QR payload token (companion payload = 'PAX' + this). */
   qrToken: string;
   boardedAt: string | null;
   noShowAt: string | null;
+  /** Home address on the manifest (migration 028); null for legacy rows. */
+  address: string | null;
 }
 
 export interface PaymentDoc {

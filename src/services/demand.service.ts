@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { manilaTodayIso } from '../utils/date';
 import type { DemandPredictionDoc } from '../types/models';
 
 function mapRow(row: any): DemandPredictionDoc {
@@ -39,7 +40,7 @@ export async function getDemandForRoute(
 }
 
 export async function getTodayPredictions(): Promise<DemandPredictionDoc[]> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = manilaTodayIso();
 
   const { data, error } = await supabase
     .from('demand_predictions')

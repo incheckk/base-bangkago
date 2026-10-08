@@ -16,6 +16,7 @@ export default function ManageRoutes() {
   const { data: routes, loading, refresh } = useRoutes();
   const { data: ports } = useAllPorts();
   const [showForm, setShowForm] = useState(false);
+  const [openPick, setOpenPick] = useState<'start' | 'end' | null>(null);
 
   const [editId, setEditId] = useState<string | null>(null);
   const [startPortId, setStartPortId] = useState('');
@@ -32,6 +33,7 @@ export default function ManageRoutes() {
     setDistanceKm('');
     setEstimatedMinutes('');
     setShowForm(false);
+    setOpenPick(null);
   }
 
   function editRoute(route: RouteDoc) {
@@ -103,9 +105,23 @@ export default function ManageRoutes() {
         {showForm && (
           <View style={styles.formCard}>
             <Text style={styles.formTitle}>{editId ? 'Edit Route' : 'New Route'}</Text>
-            <TextField label="Start Port ID" value={startPortId} onChangeText={setStartPortId} placeholder="port-id" />
+            <PortSelect
+              label="Start Port"
+              value={startPortId}
+              open={openPick === 'start'}
+              onToggle={() => setOpenPick(openPick === 'start' ? null : 'start')}
+              onPick={(id) => { setStartPortId(id); setOpenPick(null); }}
+              ports={ports}
+            />
             <View style={{ height: spacing.md }} />
-            <TextField label="End Port ID" value={endPortId} onChangeText={setEndPortId} placeholder="port-id" />
+            <PortSelect
+              label="End Port"
+              value={endPortId}
+              open={openPick === 'end'}
+              onToggle={() => setOpenPick(openPick === 'end' ? null : 'end')}
+              onPick={(id) => { setEndPortId(id); setOpenPick(null); }}
+              ports={ports}
+            />
             <View style={{ height: spacing.md }} />
             <TextField label="Base Fare (₱)" value={baseFare} onChangeText={setBaseFare} placeholder="85" />
             <View style={{ height: spacing.md }} />
@@ -152,6 +168,43 @@ export default function ManageRoutes() {
   );
 }
 
+/** Inline port dropdown — the old raw port-id TextFields invited typos. */
+function PortSelect({
+  label, value, open, onToggle, onPick, ports,
+}: {
+  label: string;
+  value: string;
+  open: boolean;
+  onToggle: () => void;
+  onPick: (id: string) => void;
+  ports: { portId: string; portName: string }[];
+}) {
+  return (
+    <View>
+      <Text style={styles.selectLabel}>{label}</Text>
+      <Pressable style={styles.selectBtn} onPress={onToggle}>
+        <Text style={[styles.selectText, !value && styles.selectPlaceholder]} numberOfLines={1}>
+          {value ? ports.find((p) => p.portId === value)?.portName ?? value : 'Pick a port'}
+        </Text>
+        <Text style={styles.selectCaret}>{open ? '▾' : '▸'}</Text>
+      </Pressable>
+      {open && (
+        <View style={styles.selectList}>
+          {ports.map((p) => (
+            <Pressable
+              key={p.portId}
+              style={styles.selectOption}
+              onPress={() => onPick(p.portId)}
+            >
+              <Text style={styles.selectOptionText} numberOfLines={1}>{p.portName}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
 
@@ -169,6 +222,22 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 
   list: { gap: spacing.md },
+  selectLabel: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, marginBottom: spacing.xs },
+  selectBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    minHeight: touchTarget, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: radii.sm, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  selectText: { flexShrink: 1, color: colors.text, fontSize: 14 },
+  selectPlaceholder: { color: colors.textMuted },
+  selectCaret: { color: colors.textSecondary, fontSize: 12 },
+  selectList: {
+    marginTop: spacing.xs, borderRadius: radii.sm, borderWidth: 1,
+    borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden',
+  },
+  selectOption: { minHeight: touchTarget, justifyContent: 'center', paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+  selectOptionText: { flexShrink: 1, color: colors.text, fontSize: 14 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

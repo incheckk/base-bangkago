@@ -6,14 +6,20 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { useLockBack } from '@/hooks/useLockBack';
 import { usePorts } from '@/hooks/useSupabase';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function TripSummary() {
+  // Terminal screen — only "Done" (replace) leaves; no walking back into
+  // post-trip/arrived to re-run the completion flow.
+  useLockBack();
   const { user } = useAuth();
-  const { manifest, passengers, parcels } = useTripManifest(user?.id ?? null);
+  // includeCompleted: arrived marks the manifest 'completed' before this
+  // screen opens — without it the summary would render empty.
+  const { manifest, passengers, parcels } = useTripManifest(user?.id ?? null, true);
   const { data: ports } = usePorts();
   const [passengerFare, setPassengerFare] = useState(0);
   const [parcelFare, setParcelFare] = useState(0);
@@ -75,7 +81,7 @@ export default function TripSummary() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Trip Summary" showDrawer={false} />
+      <BangkeroScreenHeader title="Trip Summary" showDrawer={false} showBack={false} />
       <View style={styles.scroll}>
         <View style={styles.checkCircle}>
           <Text style={styles.checkMark}>✓</Text>

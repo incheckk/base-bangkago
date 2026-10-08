@@ -257,6 +257,13 @@ export function friendlyAuthError(e: unknown): string {
   if (message.includes('Pick two different ports')) {
     return 'Pick two different ports.';
   }
+  // ---- Whole-day conflict (027) — one committed day per bangkero ----
+  if (message.includes('already have a booking or charter scheduled')) {
+    return 'You already have a trip or charter on that date — finish or cancel it first.';
+  }
+  if (message.includes('already booked for this boat')) {
+    return 'That date is already booked for this boat — pick another day.';
+  }
   if (message.includes('created as a passenger')) {
     return message;
   }

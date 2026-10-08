@@ -9,7 +9,7 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const INFO = [
   { icon: '⏰', title: 'Operating Hours', desc: '5:00 AM – 6:00 PM daily' },
-  { icon: '🎫', title: 'Booking Policy', desc: 'Book up to 24 hours in advance. Cancel for free up to 2 hours before departure.' },
+  { icon: '🎫', title: 'Booking Policy', desc: 'Book up to 14 days in advance. Cancel for free any time before departure.' },
   { icon: '🧳', title: 'Luggage Allowance', desc: '1 carry-on bag included. Additional luggage may incur extra fees.' },
   { icon: '⚠️', title: 'Safety', desc: 'Life jackets provided. Trips may be cancelled due to weather conditions.' },
 ];

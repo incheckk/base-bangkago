@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useRealtimeQuery } from './useRealtimeQuery';
-import { getDispatchBypass, getGatesBypass } from '../services/dev.service';
+import { getArrivalBypass, getDispatchBypass, getGatesBypass } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import {
   getAllActiveQueues, getMyQueue, getPortQueue, refreshHolds, type MyQueueState,
@@ -390,6 +390,8 @@ export interface DevFlags {
   dispatchBypass: boolean;
   /** Admin demo switch: true lifts the verification + rating gates (010). */
   gatesBypass: boolean;
+  /** Admin demo switch: true lets the arrived screen close out unboarded trips (026). */
+  arrivalBypass: boolean;
 }
 
 /**
@@ -399,7 +401,7 @@ export interface DevFlags {
  * screen re-reads immediately instead of waiting for the realtime echo.
  */
 export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
-  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false });
+  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false, arrivalBypass: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
@@ -408,13 +410,14 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
     const id = ++seq.current;
     // Each flag tolerates its own migration being unrun: pre-009 reads
     // OFF, and a 009-only database still shows the dispatch switch for
-    // real while gates read OFF.
-    const [dispatch, gates] = await Promise.all([
+    // real while gates/arrival read OFF.
+    const [dispatch, gates, arrival] = await Promise.all([
       getDispatchBypass().catch(() => false),
       getGatesBypass().catch(() => false),
+      getArrivalBypass().catch(() => false),
     ]);
     if (id !== seq.current) return;
-    setData({ dispatchBypass: dispatch, gatesBypass: gates });
+    setData({ dispatchBypass: dispatch, gatesBypass: gates, arrivalBypass: arrival });
     setError(null);
     setLoading(false);
   }, []);

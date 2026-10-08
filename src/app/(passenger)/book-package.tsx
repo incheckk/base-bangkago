@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SchedulePicker, todayIso } from '@/components/SchedulePicker';
@@ -15,10 +16,11 @@ import type { IslandPackageDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 /**
- * Package booking: pax count only — everyone rides under the booker's
- * name (no companion form; LAUNCH note). The itinerary's first→last
- * ports become the booking's route, so nothing downstream changes.
- * Money: total = price × pax, 50% GCash escrow now, rest onboard.
+ * Package booking: companions are named right here (shared form) so the
+ * bangkero's manifest shows who is sailing; pax = 1 booker + companions.
+ * The itinerary's first→last ports become the booking's route, so
+ * nothing downstream changes. Money: total = price × pax, 50% GCash
+ * escrow now, rest onboard.
  */
 export default function BookPackage() {
   const { profile } = useAuth();
@@ -28,7 +30,8 @@ export default function BookPackage() {
   const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [pax, setPax] = useState(1);
+  const [companions, setCompanions] = useState<Companion[]>([]);
+  const pax = 1 + companions.length;
   const [scheduledDate, setScheduledDate] = useState(todayIso());
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
@@ -44,7 +47,7 @@ export default function BookPackage() {
         if (!alive) return;
         if (!row) throw new Error('That package no longer exists.');
         setPkg(row);
-        setPax(1);
+        setCompanions([]);
         setLoadError(null);
       } catch (e) {
         if (alive) setLoadError(friendlyError(e));
@@ -120,6 +123,7 @@ export default function BookPackage() {
         fare: String(total),
         packageId: pkg.packageId,
         packageName: pkg.packageName,
+        companionsJson: JSON.stringify(companions),
         scheduledDate,
         scheduledTime: scheduledTime ?? '',
         ...(advance ? { downAmount: String(down), remainder: String(remainder) } : {}),
@@ -144,8 +148,7 @@ export default function BookPackage() {
     );
   }
 
-  const atMin = pax <= 1;
-  const atMax = pax >= pkg.maxCapacity;
+  const bookerName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'You';
 
   return (
     <ScreenContainer padded={false}>
@@ -191,41 +194,13 @@ export default function BookPackage() {
         />
 
         <Text style={styles.sectionLabel}>PASSENGERS</Text>
-        <View style={styles.paxCard}>
-          <Text style={styles.paxLabel}>Seats</Text>
-          <View style={styles.stepper}>
-            <Pressable
-              onPress={() => !atMin && setPax((n) => Math.max(1, n - 1))}
-              disabled={atMin}
-              accessibilityRole="button"
-              accessibilityLabel="Fewer passengers"
-              style={({ pressed }) => [
-                styles.stepBtn,
-                atMin && styles.stepBtnOff,
-                pressed && !atMin && styles.stepBtnPressed,
-              ]}
-            >
-              <Text style={[styles.stepBtnText, atMin && styles.stepBtnTextOff]}>−</Text>
-            </Pressable>
-            <Text style={styles.stepValue}>{pax}</Text>
-            <Pressable
-              onPress={() => !atMax && setPax((n) => Math.min(pkg.maxCapacity, n + 1))}
-              disabled={atMax}
-              accessibilityRole="button"
-              accessibilityLabel="More passengers"
-              style={({ pressed }) => [
-                styles.stepBtn,
-                atMax && styles.stepBtnOff,
-                pressed && !atMax && styles.stepBtnPressed,
-              ]}
-            >
-              <Text style={[styles.stepBtnText, atMax && styles.stepBtnTextOff]}>+</Text>
-            </Pressable>
-          </View>
-        </View>
-        <Text style={styles.paxHint}>
-          Everyone rides under your booking name — tickets are checked at the pier.
-        </Text>
+        <CompanionForm
+          companions={companions}
+          onChange={setCompanions}
+          maxCount={pkg.maxCapacity}
+          bookerName={bookerName}
+          hint={`Up to ${pkg.maxCapacity} seats — name everyone riding, tickets are checked at the pier.`}
+        />
 
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
         <View style={styles.card}>
@@ -309,26 +284,6 @@ const styles = StyleSheet.create({
   stopBody: { flex: 1 },
   stopName: { ...typography.bodyStrong, lineHeight: 24 },
   stopLine: { width: 2, height: 14, backgroundColor: colors.border, marginVertical: 2, marginLeft: 11 },
-
-  paxCard: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: colors.surface, borderRadius: radii.lg,
-    borderWidth: 1, borderColor: colors.borderSubtle, padding: spacing.lg,
-  },
-  paxLabel: { ...typography.bodyStrong },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  stepBtn: {
-    width: 38, height: 38, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepBtnOff: { opacity: 0.4 },
-  stepBtnPressed: { borderColor: colors.primary },
-  stepBtnText: { fontSize: 20, fontWeight: '700', color: colors.primary },
-  stepBtnTextOff: { color: colors.textMuted },
-  stepValue: { ...typography.title, minWidth: 28, textAlign: 'center' },
-  paxHint: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
 
   sumRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

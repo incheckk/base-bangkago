@@ -1,7 +1,9 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { ScrollHintBar } from './ScrollHintBar';
 import { colors, radii, spacing, typography } from '../theme/tokens';
+import { manilaTodayIso } from '../utils/date';
 
 // =============================================================
 // Shared sailing-date picker (020). Today…+13 — 14 days total.
@@ -24,12 +26,21 @@ export function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Today's YYYY-MM-DD in Manila — not the device's timezone. */
 export function todayIso(): string {
-  return isoDay(new Date());
+  return manilaTodayIso();
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Oct 9 · 7:00 AM" — notification/banner copy for a scheduled sail. */
+export function sailsLabel(date: string | null, time: string | null): string | null {
+  if (!date) return null;
+  const [, m, d] = date.split('-').map(Number);
+  const day = `${MONTHS[(m ?? 1) - 1]} ${d}`;
+  return time ? `${day} · ${slotLabel(time)}` : day;
+}
 
 interface Props {
   date: string;
@@ -56,7 +67,7 @@ export function SchedulePicker({ date, time, onDate, onTime }: Props) {
 
   return (
     <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
+      <ScrollHintBar contentContainerStyle={styles.strip}>
         {days.map((d) => {
           const active = d.iso === date;
           return (
@@ -78,7 +89,7 @@ export function SchedulePicker({ date, time, onDate, onTime }: Props) {
             </Pressable>
           );
         })}
-      </ScrollView>
+      </ScrollHintBar>
 
       {advance && (
         <View style={styles.slotsWrap}>

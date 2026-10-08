@@ -44,6 +44,9 @@ export async function getRentableBangkas(): Promise<RentableBangka[]> {
     .from('bangkas')
     .select('*, bangkeros!inner(id, display_name, verification_stat)')
     .eq('bangkeros.verification_stat', 'verified')
+    // Opt-in catalog: the bangkero lists the boat from their
+    // Boat Rentals screen (rental_listed, 027).
+    .eq('rental_listed', true)
     .order('hourly_rate');
 
   if (error) throw error;
@@ -186,6 +189,30 @@ export async function getRentalsForBangkero(bangkeroUid: string): Promise<Bangke
 // Status flow + counterparty notifications
 // -------------------------------------------------------------
 
+export interface AdminRentalRow extends BoatRentalDoc {
+  boatName: string | null;
+  operatorName: string | null;
+  renterName: string | null;
+}
+
+/** Every rental, newest first — admin view (boat_rentals_select_admin, 016). */
+export async function listAllRentals(): Promise<AdminRentalRow[]> {
+  const { data, error } = await supabase
+    .from('boat_rentals')
+    .select('*, bangkas(bangka_name, bangkeros(display_name)), users(first_name, last_name)')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    ...mapRentalRow(row),
+    boatName: row.bangkas?.bangka_name ?? null,
+    operatorName: row.bangkas?.bangkeros?.display_name ?? null,
+    renterName: row.users
+      ? `${row.users.first_name ?? ''} ${row.users.last_name ?? ''}`.trim() || null
+      : null,
+  }));
+}
+
 export interface RentalNotifyContext {
   rentalId: string;
   /** Whom to notify — passenger on bangkero actions, bangkero on cancel. */
@@ -275,12 +302,13 @@ export interface OwnBangka {
   bangkaId: string;
   bangkaName: string;
   hourlyRate: number;
+  rentalListed: boolean;
 }
 
 export async function getOwnBangkas(bangkeroUid: string): Promise<OwnBangka[]> {
   const { data, error } = await supabase
     .from('bangkas')
-    .select('id, bangka_name, hourly_rate')
+    .select('id, bangka_name, hourly_rate, rental_listed')
     .eq('bangkero_id', bangkeroUid)
     .order('bangka_name');
 
@@ -289,6 +317,7 @@ export async function getOwnBangkas(bangkeroUid: string): Promise<OwnBangka[]> {
     bangkaId: row.id,
     bangkaName: row.bangka_name,
     hourlyRate: Number(row.hourly_rate ?? 500),
+    rentalListed: !!row.rental_listed,
   }));
 }
 
@@ -301,4 +330,26 @@ export async function setHourlyRate(bangkaId: string, hourlyRate: number): Promi
     .update({ hourly_rate: hourlyRate })
     .eq('id', bangkaId);
   if (error) throw error;
+}
+
+/** Show/hide the boat in the passenger rental catalog (027). */
+export async function setRentalListed(bangkaId: string, listed: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('bangkas')
+    .update({ rental_listed: listed })
+    .eq('id', bangkaId);
+  if (error) throw error;
+}
+
+/**
+ * Dates this boat cannot be chartered: its own live rentals plus days
+ * the operator already committed to (accepted trips). SECURITY DEFINER
+ * RPC (027) — RLS would hide other renters' rows from the browser.
+ */
+export async function getBangkaBlockedDates(bangkaId: string): Promise<string[]> {
+  const { data, error } = await supabase.rpc('bangka_blocked_dates', {
+    p_bangka_id: bangkaId,
+  });
+  if (error) throw error;
+  return (data ?? []).map((row: { blocked_date: string }) => row.blocked_date);
 }

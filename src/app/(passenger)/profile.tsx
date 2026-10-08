@@ -137,11 +137,7 @@ export default function PassengerProfile() {
         {/* Menu */}
         <View style={styles.menu}>
           <MenuItem label="My Bookings" onPress={() => router.push('/(passenger)/bookings')} />
-          <MenuItem label="Trip History" onPress={() => router.push('/(passenger)/trips')} />
-          <MenuItem label="Wallet" onPress={() => router.push('/(passenger)/wallet')} />
           <MenuItem label="Notifications" onPress={() => router.push('/(passenger)/notifications')} />
-          <MenuItem label="Settings" onPress={() => {/* TODO */}} />
-          <MenuItem label="About" onPress={() => {/* TODO */}} />
         </View>
 
         {/* Error */}

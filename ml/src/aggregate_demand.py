@@ -15,7 +15,7 @@ Rules:
   is rounded to 2 decimals.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 
@@ -29,7 +29,8 @@ from src.utils import (
 )
 
 DATE_START = date(2024, 1, 1)
-DATE_END = date(2025, 12, 31)
+# Mirrors Scripts 1-2 so the grid covers the prediction week (today..+6).
+DATE_END = date.today() + timedelta(days=6)
 
 OUTPUT_COLUMNS = [
     "date", "route_id", "daily_demand", "booking_count",

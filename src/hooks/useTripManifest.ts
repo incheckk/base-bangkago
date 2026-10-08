@@ -17,7 +17,7 @@ interface Result {
   finalizeManifest: () => Promise<void>;
 }
 
-export function useTripManifest(bangkeroId: string | null): Result {
+export function useTripManifest(bangkeroId: string | null, includeCompleted = false): Result {
   const [manifest, setManifest] = useState<TripManifestDoc | null>(null);
   const [passengers, setPassengers] = useState<ManifestPassengerDoc[]>([]);
   const [parcels, setParcels] = useState<ManifestParcelDoc[]>([]);
@@ -29,7 +29,7 @@ export function useTripManifest(bangkeroId: string | null): Result {
     if (!bangkeroId) { setManifest(null); setPassengers([]); setParcels([]); setLoading(false); return; }
     const id = ++seq.current;
     try {
-      const m = await getActiveManifest(bangkeroId);
+      const m = await getActiveManifest(bangkeroId, includeCompleted);
       if (id !== seq.current) return;
       setManifest(m);
       if (m) {
@@ -51,7 +51,7 @@ export function useTripManifest(bangkeroId: string | null): Result {
       setError(e.message ?? 'Failed to load manifest');
       setLoading(false);
     }
-  }, [bangkeroId]);
+  }, [bangkeroId, includeCompleted]);
 
   useEffect(() => { void load(); }, [load]);
   // Children are subscribed too — boarding taps and parcel hand-offs mutate

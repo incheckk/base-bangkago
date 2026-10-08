@@ -17,6 +17,11 @@ interface Props {
   showDrawer?: boolean;
   /** Optional trailing control, e.g. an "Add" button. */
   right?: React.ReactNode;
+  /**
+   * Which sidebar this header opens. Defaults to admin; the coastguard
+   * role shares this header (same look) with its own read-only menu.
+   */
+  role?: 'admin' | 'coastguard';
 }
 
 /**
@@ -39,6 +44,7 @@ export function AdminScreenHeader({
   showBack = true,
   showDrawer = true,
   right,
+  role = 'admin',
 }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -47,14 +53,14 @@ export function AdminScreenHeader({
       <SideDrawer
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={MENU_TITLE.admin}
-        items={menuFor('admin')}
+        title={MENU_TITLE[role]}
+        items={menuFor(role)}
       />
 
       <View style={styles.header}>
         {showBack && (
           <Pressable
-            onPress={() => safeBack('/(admin)/home')}
+            onPress={() => safeBack(role === 'coastguard' ? '/(coastguard)/home' : '/(admin)/home')}
             accessibilityRole="button"
             accessibilityLabel="Go back"
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}

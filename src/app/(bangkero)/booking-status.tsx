@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { Icon } from '@/components/Icon';
+import { sailsLabel, todayIso } from '@/components/SchedulePicker';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
@@ -12,7 +13,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
 import {
-  acceptBooking, rejectBooking, friendlyError, noShowPassenger, setOnboarded,
+  acceptBooking, rejectBooking, friendlyError, resolveGroupNoShow, setOnboarded,
   setPassengerBoarded, verifyBoardingQr,
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
@@ -45,7 +46,16 @@ export default function BookingStatus() {
     return () => { alive = false; };
   }, [booking?.packageId]);
 
-  // Companions ride under the booker as one boarding group.
+  /**
+   * Latched the moment a no-show lands. The row flips to cancelled a beat
+   * later through realtime — without this, a second tap re-runs the RPC.
+   */
+  const [noShowDone, setNoShowDone] = useState(false);
+  /** B7: counter-report sent for the current dispute — latch the button. */
+  const [counterSent, setCounterSent] = useState(false);
+
+  // Companions ride under the booker as one boarding group. Re-fetched after
+  // a partial no-show (022) so absent companions show their stamped state.
   const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
   useEffect(() => {
     if (!bookingId) return;
@@ -56,7 +66,7 @@ export default function BookingStatus() {
         // the tree still renders the booker without names
       });
     return () => { alive = false; };
-  }, [bookingId]);
+  }, [bookingId, noShowDone]);
 
   // Optimistic boarding state; the server value catches up through realtime.
   const [boardOverride, setBoardOverride] = useState<boolean | null>(null);
@@ -64,17 +74,60 @@ export default function BookingStatus() {
   const boarded = boardOverride ?? !!booking?.onboardedAt;
   const [boardPending, setBoardPending] = useState(false);
 
-  /** Everyone resolved = booker confirmed + every companion boarded or no-showed. */
+  // Booker resolved = confirmed aboard, OR reported NOT aboard (022 dispute),
+  // OR marked absent while companions sailed (022 partial no-show).
+  const bookerResolved = boarded || !!booking?.disputedAt || !!booking?.noShowAt;
+  /** Everyone resolved = booker resolved + every companion boarded or no-showed. */
   const companionsResolved = companions.every((c) => c.boardedAt || c.noShowAt);
-  const canStart = boarded && companionsResolved;
 
-  // QR scanner: one scan at a time — `busy` latches so a frame burst
-  // can't fire the RPC four times before the modal closes.
+  // Advance/slot bookings (020): the accepted row sits until its sailing
+  // time — Start Trip and no-show both stay locked until the slot arrives.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  const scheduledAt =
+    booking?.scheduledDate && booking?.scheduledTime
+      ? new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`).getTime()
+      : null;
+  const advanceLocked = scheduledAt !== null && now < scheduledAt;
+  const canStart = bookerResolved && companionsResolved && !advanceLocked;
+
+  // QR scanner: one scan at a time — `scanLatch` releases ONLY when the
+  // scanner reopens, never after a success: the fade-out Modal keeps the
+  // camera mounted, so a second QR in frame would otherwise double-fire
+  // the RPC in the gap.
   const [scanOpen, setScanOpen] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [scanMessage, setScanMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const scanLatch = useRef(false);
+  // Frame rect in the camera view's coordinate space, from onLayout on the
+  // green square — only QRs whose centre falls inside it count.
+  // ponytail: portrait demo only — a rotation would need a re-measure
+  const frameRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  // ponytail: scanned payloads are remembered per booking-screen visit —
+  // one QR = one check-in, ever; revisiting the booking resets the page.
+  const scannedRef = useRef<Set<string>>(new Set());
+  const scanRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Free the camera after a cooldown so an error/duplicate doesn't wedge it. */
+  function armScanRetry() {
+    if (scanRetryRef.current) clearTimeout(scanRetryRef.current);
+    scanRetryRef.current = setTimeout(() => {
+      scanLatch.current = false;
+      setScanBusy(false);
+      scanRetryRef.current = null;
+    }, 800);
+  }
+
+  useEffect(
+    () => () => {
+      if (scanRetryRef.current) clearTimeout(scanRetryRef.current);
+    },
+    []
+  );
 
   /** Manual tick for one companion row (undo with a second tap). */
   async function toggleCompanion(c: PassengerDetailDoc) {
@@ -99,19 +152,72 @@ export default function BookingStatus() {
     }
   }
 
-  async function handleScan(result: { data: string }) {
+  async function handleScan(result: BarcodeScanningResult) {
+    // Only the square counts. Bounds arrive in the camera view's coordinate
+    // space — the same one onLayout reports for the frame. Some platforms
+    // report an empty box; fail open so scanning keeps working there.
+    const b = result.bounds;
+    if (frameRect.current && b && b.size.width > 0 && b.size.height > 0) {
+      const cx = b.origin.x + b.size.width / 2;
+      const cy = b.origin.y + b.size.height / 2;
+      const f = frameRect.current;
+      const m = 12;
+      if (cx < f.x - m || cx > f.x + f.w + m || cy < f.y - m || cy > f.y + f.h + m) return;
+    }
     if (scanLatch.current) return;
     scanLatch.current = true;
     setScanBusy(true);
+
+    // Same QR again — say it ON the camera screen, fire nothing.
+    if (scannedRef.current.has(result.data)) {
+      setScanMessage({
+        ok: false,
+        text: 'QR code already scanned — that passenger is already checked in.',
+      });
+      armScanRetry();
+      return;
+    }
+
+    // Companion payloads are 'PAX'+token; anything else must be the booking
+    // ref. Branch on the SHAPE — the old code fell back to "booker" whenever
+    // the local companion list was stale, so scanning a companion ticked the
+    // wrong row. The RPC stamps the correct row server-side; the refetch
+    // below just brings the list back in sync.
+    const isCompanionPayload = result.data.startsWith('PAX');
+    const isBookerPayload =
+      !!booking?.ref && result.data.toUpperCase() === booking.ref.toUpperCase();
+
+    if (!isCompanionPayload && !isBookerPayload) {
+      setScanMessage({ ok: false, text: 'That QR code does not belong to this trip.' });
+      armScanRetry();
+      return;
+    }
+
     try {
       const name = await verifyBoardingQr(result.data);
-      const hit = companions.find((c) => `PAX${c.qrToken}` === result.data);
-      if (hit) {
+      scannedRef.current.add(result.data);
+
+      if (isCompanionPayload) {
+        let hit = companions.find((c) => `PAX${c.qrToken}` === result.data);
+        if (!hit) {
+          // List was stale — refetch, then match again before giving up.
+          try {
+            const fresh = await getPassengerDetailsByBooking(bookingId);
+            setCompanions(fresh);
+            hit = fresh.find((c) => `PAX${c.qrToken}` === result.data);
+          } catch {
+            // fall through to the not-on-this-trip message
+          }
+        }
+        if (!hit) {
+          setScanMessage({ ok: false, text: 'That QR code is not on this trip.' });
+          armScanRetry();
+          return;
+        }
+        const pid = hit.passengerId;
         setCompanions((rows) =>
           rows.map((x) =>
-            x.passengerId === hit.passengerId
-              ? { ...x, boardedAt: new Date().toISOString() }
-              : x
+            x.passengerId === pid ? { ...x, boardedAt: new Date().toISOString() } : x
           )
         );
       } else {
@@ -120,14 +226,18 @@ export default function BookingStatus() {
       }
       setScanMessage({ ok: true, text: `${name} checked in` });
       setScanOpen(false);
+      // Latch STAYS engaged — openScanner() is the only release point.
     } catch (e) {
       setScanMessage({ ok: false, text: friendlyError(e) });
+      armScanRetry();
     }
-    scanLatch.current = false;
-    setScanBusy(false);
   }
 
   async function openScanner() {
+    if (scanRetryRef.current) {
+      clearTimeout(scanRetryRef.current);
+      scanRetryRef.current = null;
+    }
     setScanMessage(null);
     if (!permission?.granted) {
       const res = await requestPermission();
@@ -136,14 +246,10 @@ export default function BookingStatus() {
         return;
       }
     }
+    scanLatch.current = false;
+    setScanBusy(false);
     setScanOpen(true);
   }
-
-  /**
-   * Latched the moment a no-show lands. The row flips to cancelled a beat
-   * later through realtime — without this, a second tap re-runs the RPC.
-   */
-  const [noShowDone, setNoShowDone] = useState(false);
 
   const isCargo = booking?.serviceType === 'cargo';
 
@@ -156,18 +262,22 @@ export default function BookingStatus() {
         uid,
         displayName: bangkero.data?.displayName ?? '',
       });
+      // Confirmation both ways: the passenger learns the trip is set (with
+      // its sail slot), and the bangkero's pocket ping says what they took.
+      const sails = sailsLabel(booking.scheduledDate, booking.scheduledTime);
+      const advance = !!booking.scheduledDate && booking.scheduledDate > todayIso();
       if (booking.userId) {
         createNotification(
           booking.userId,
           'Booking Accepted',
-          `Your trip ${booking.ref} was accepted.`
+          `Your trip ${booking.ref} was accepted.${sails ? ` Sails ${sails}.` : ''}`
         ).catch(() => {});
       }
-      // People are standing at the pier — ping the phone even if the app
-      // gets backgrounded a second later.
       scheduleLocalNotification(
-        'Passengers are waiting',
-        `Your passengers are waiting at ${booking.fromPortName}. Stay online to reach them.`
+        advance ? 'Advance trip confirmed' : 'Passengers are waiting',
+        advance
+          ? `Your boat sails ${sails} — ${booking.fromPortName} → ${booking.toPortName}.`
+          : `Your passengers are waiting at ${booking.fromPortName}. Stay online to reach them.`
       ).catch(() => {});
     } catch (e) {
       setActionError(friendlyError(e));
@@ -205,7 +315,7 @@ export default function BookingStatus() {
     if (!booking || noShowDone) return;
     Alert.alert(
       'Passenger(s) didn’t board',
-      `Mark ${booking.ref} as a no-show? The boat leaves with everyone who boarded, and the no-showed passenger is banned from booking for a while.`,
+      `The boat leaves with everyone who boarded on ${booking.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
       [
         { text: 'Go back', style: 'cancel' },
         { text: 'Mark no-show', style: 'destructive', onPress: () => void handleNoShow() },
@@ -218,12 +328,39 @@ export default function BookingStatus() {
     setBoardPending(true);
     setActionError(null);
     try {
-      await noShowPassenger(booking);
+      await resolveGroupNoShow(booking);
       setNoShowDone(true);
     } catch (e) {
       setActionError(friendlyError(e));
     }
     setBoardPending(false);
+  }
+
+  /**
+   * B7 counter-report: the passenger filed a not-aboard dispute — the
+   * bangkero gets one fixed-response line to their record.
+   */
+  function confirmCounterReport() {
+    if (!booking?.userId) return;
+    Alert.alert(
+      'Counter-report',
+      `Tell ${booking.passengerName ?? 'the passenger'} you dispute their report? They are notified that the boat waited and their party was called to board.`,
+      [
+        { text: 'Go back', style: 'cancel' },
+        {
+          text: 'Send counter-report',
+          onPress: () => {
+            createNotification(
+              booking.userId,
+              'Bangkero counters your report',
+              `The captain disputes your not-aboard report on ${booking.ref}: the boat waited at ${booking.fromPortName} and your party was called to board. Coastguard will review both statements.`
+            )
+              .then(() => setCounterSent(true))
+              .catch(() => setActionError('Could not send the counter-report — try again.'));
+          },
+        },
+      ]
+    );
   }
 
   async function handleDecline() {
@@ -286,6 +423,14 @@ export default function BookingStatus() {
               </View>
             )}
 
+            {booking.status === 'accepted' && !!booking.disputedAt && (
+              <View style={styles.banner}>
+                <Text style={styles.bannerText}>
+                  {booking.passengerName ?? 'The passenger'} reports they were NOT on board. The trip continues — tick who actually sailed, then Start Trip.
+                </Text>
+              </View>
+            )}
+
             <View style={styles.card}>
               <Text style={styles.cardLabel}>PASSENGER INFO</Text>
               <Text style={styles.cardValue} numberOfLines={1}>{booking.passengerName ?? 'N/A'}</Text>
@@ -324,7 +469,9 @@ export default function BookingStatus() {
                     <Text style={styles.boardSub}>
                       {isCargo
                         ? `Cargo trip · ${boarded ? 'loaded' : 'not loaded yet'}`
-                        : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
+                        : booking.disputedAt
+                          ? 'Reported NOT aboard — trip continues'
+                          : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
                     </Text>
                   </View>
                 </Pressable>
@@ -417,23 +564,39 @@ export default function BookingStatus() {
               )}
             </View>
 
+            {/* B7 — the passenger filed a not-aboard dispute; one reply. */}
+            {booking.status === 'accepted' && !!booking.disputedAt && (
+              <PrimaryButton
+                label={counterSent ? 'Counter-report sent' : 'Counter-report passenger'}
+                variant="danger"
+                onPress={confirmCounterReport}
+                disabled={counterSent}
+                style={{ marginTop: spacing.md }}
+              />
+            )}
+
             {booking.status === 'accepted' && !canStart && (
               <>
                 <Text style={styles.gateHint}>
-                  {isCargo
-                    ? 'Confirm the cargo is loaded to start the trip.'
-                    : boarded && !companionsResolved
-                      ? 'Tick every passenger who is aboard to start the trip.'
-                      : 'Confirm everyone is on board to start the trip.'}
+                  {advanceLocked
+                    ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Start Trip opens when the slot arrives.`
+                    : isCargo
+                      ? 'Confirm the cargo is loaded to start the trip.'
+                      : bookerResolved && !companionsResolved
+                        ? 'Tick every passenger who is aboard to start the trip.'
+                        : 'Confirm everyone is on board to start the trip.'}
                 </Text>
-                <PrimaryButton
-                  label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
-                  variant="danger"
-                  onPress={confirmNoShow}
-                  loading={boardPending}
-                  disabled={noShowDone}
-                  style={styles.noShowBtn}
-                />
+                {/* Nobody missed a boat that has not left yet. */}
+                {!advanceLocked && (
+                  <PrimaryButton
+                    label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
+                    variant="danger"
+                    onPress={confirmNoShow}
+                    loading={boardPending}
+                    disabled={noShowDone}
+                    style={styles.noShowBtn}
+                  />
+                )}
               </>
             )}
           </>
@@ -455,10 +618,34 @@ export default function BookingStatus() {
             <LoadingState label="Requesting camera…" />
           )}
           <View style={styles.scanOverlay}>
-            <View style={styles.scanFrame} />
+            <View
+              style={styles.scanFrame}
+              onLayout={(e) => {
+                const { x, y, width, height } = e.nativeEvent.layout;
+                frameRect.current = { x, y, w: width, h: height };
+              }}
+            />
             <Text style={styles.scanHint}>
               Point at the passenger&apos;s boarding QR code
             </Text>
+            {/* Feedback where the bangkero is actually looking — the outer
+                banner sits behind this modal while the camera is open. */}
+            {!!scanMessage && (
+              <View
+                style={[
+                  styles.scanMsg,
+                  scanMessage.ok ? styles.scanMsgOk : styles.scanMsgErr,
+                ]}
+              >
+                <Text
+                  style={
+                    scanMessage.ok ? styles.scanMsgOkText : styles.scanMsgErrText
+                  }
+                >
+                  {scanMessage.text}
+                </Text>
+              </View>
+            )}
             <PrimaryButton
               label="Close"
               variant="secondary"
@@ -571,6 +758,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   scanHint: { ...typography.caption, color: '#fff', textAlign: 'center' },
+  scanMsg: {
+    alignSelf: 'stretch',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  scanMsgOk: { borderColor: colors.primary },
+  scanMsgErr: { borderColor: colors.danger },
+  scanMsgOkText: { color: '#fff', fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  scanMsgErrText: { color: '#ffd9d9', fontSize: 13, textAlign: 'center', fontWeight: '600' },
   scanClose: { marginTop: spacing.lg, alignSelf: 'stretch' },
 
   gateHint: {

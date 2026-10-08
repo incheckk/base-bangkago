@@ -6,7 +6,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { useDevFlags } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
-import { setDispatchBypass, setGatesBypass } from '@/services/dev.service';
+import { setArrivalBypass, setDispatchBypass, setGatesBypass } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const LIFTED = [
@@ -39,14 +39,16 @@ export default function DeveloperOptions() {
 
   const dispatchOn = flags.data.dispatchBypass;
   const gatesOn = flags.data.gatesBypass;
-  const on = dispatchOn || gatesOn;
+  const arrivalOn = flags.data.arrivalBypass;
+  const on = dispatchOn || gatesOn || arrivalOn;
 
-  async function toggle(which: 'dispatch' | 'gates', next: boolean) {
+  async function toggle(which: 'dispatch' | 'gates' | 'arrival', next: boolean) {
     setBusy(which);
     setActionError(null);
     try {
       if (which === 'dispatch') await setDispatchBypass(next);
-      else await setGatesBypass(next);
+      else if (which === 'gates') await setGatesBypass(next);
+      else await setArrivalBypass(next);
       flags.refresh();
     } catch (e) {
       setActionError(friendlyError(e));
@@ -125,6 +127,32 @@ export default function DeveloperOptions() {
                 : gatesOn
                   ? 'ON — gates are lifted'
                   : 'OFF — verification + rating enforced'}
+            </Text>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Bypass arrival close-out</Text>
+                <Text style={styles.rowHint}>
+                  Lets Complete Trip finish accepted bookings even when passengers were never
+                  marked onboarded — for stage demos where boarding was skipped.
+                </Text>
+              </View>
+              <Switch
+                value={arrivalOn}
+                onValueChange={(next) => void toggle('arrival', next)}
+                disabled={busy !== null}
+                trackColor={{ false: colors.border, true: colors.warningTint }}
+                thumbColor={arrivalOn ? colors.warning : colors.surface}
+              />
+            </View>
+            <Text style={[styles.rowStatus, { color: arrivalOn ? colors.danger : colors.textMuted }]}>
+              {busy === 'arrival'
+                ? 'Saving…'
+                : arrivalOn
+                  ? 'ON — unboarded trips can close out'
+                  : 'OFF — onboarding enforced'}
             </Text>
           </View>
         )}

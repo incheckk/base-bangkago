@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { FilterChips } from '@/components/FilterChips';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -9,6 +11,21 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRecentBookings } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
+
+/**
+ * One screen for live bookings AND trip history (was two screens).
+ * Active rows open Booking Details (owns Cancel / QR / track); finished
+ * rows open the read-only Trip Details.
+ */
+const FILTERS = [
+  { key: 'active', label: 'Active' },
+  { key: 'completed', label: 'Completed' },
+  { key: 'cancelled', label: 'Cancelled' },
+  { key: 'all', label: 'All' },
+];
+
+const isActive = (b: BookingDoc) =>
+  b.status === 'open' || b.status === 'accepted' || b.status === 'pending';
 
 /**
  * Which timestamp matters depends on where the booking ended up. Showing
@@ -28,13 +45,23 @@ const fmt = (iso: string) =>
     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
   });
 
+const EMPTY: Record<string, { title: string; message: string }> = {
+  active: { title: 'No active bookings', message: 'Your current bookings will appear here.' },
+  completed: { title: 'No completed trips', message: 'Finished trips will appear here.' },
+  cancelled: { title: 'No cancelled trips', message: 'Cancelled bookings will appear here.' },
+  all: { title: 'No bookings yet', message: 'Book a ride and it will show up here.' },
+};
+
 export default function BookingsScreen() {
   const { user } = useAuth();
   const { data, loading, error } = useRecentBookings(user?.id ?? null, 50);
+  const [filter, setFilter] = useState('active');
 
-  const activeBookings = data.filter(
-    (b) => b.status === 'open' || b.status === 'accepted' || b.status === 'pending'
-  );
+  const filtered = data.filter((b) => {
+    if (filter === 'all') return true;
+    if (filter === 'active') return isActive(b);
+    return b.status === filter;
+  });
 
   if (loading) {
     return (
@@ -54,22 +81,26 @@ export default function BookingsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="My Bookings" subtitle="ACTIVE" />
+      <PassengerScreenHeader title="My Bookings" subtitle={filter.toUpperCase()} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {activeBookings.length === 0 ? (
-          <EmptyState
-            icon="🚤"
-            title="No active bookings"
-            message="Your current bookings will appear here."
-          />
+        <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
+
+        {filtered.length === 0 ? (
+          <EmptyState icon="🚤" {...(EMPTY[filter] ?? EMPTY.all)} />
         ) : (
           <View style={styles.list}>
-            {activeBookings.map((b) => (
+            {filtered.map((b) => (
               <Pressable
                 key={b.bookingId}
                 // Booking Details owns the Cancel button; Trip Details doesn't.
-                onPress={() => router.push(`/(passenger)/booking/${b.bookingId}`)}
+                onPress={() =>
+                  router.push(
+                    isActive(b)
+                      ? `/(passenger)/booking/${b.bookingId}`
+                      : `/(passenger)/trip/${b.bookingId}`
+                  )
+                }
                 style={styles.card}
               >
                 <View style={styles.cardTop}>
@@ -114,7 +145,7 @@ export default function BookingsScreen() {
 
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, flexGrow: 1 },
-  list: { gap: spacing.md },
+  list: { gap: spacing.md, marginTop: spacing.sm },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

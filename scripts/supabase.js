@@ -120,6 +120,13 @@ const ACCOUNTS = [
     boatName: 'MBCA Bantay Dagat',
     capacity: 10,
   },
+  {
+    // B12 fourth role — view-only coastguard/LGU tier.
+    phone: '+639201234567',
+    role: 'coastguard',
+    firstName: 'Lina',
+    lastName: 'Reyes',
+  },
 ];
 
 // ---------------------------------------------------------------- bookings

@@ -5,10 +5,13 @@ import type { DownpaymentDoc, DownpaymentStatus } from '../types/models';
 // =============================================================
 // GCash escrow downpayments (migration 015). The passenger pays 50%
 // to the admin's QR outside the app, then files reference + screenshot
-// here. The admin approves/refunds — bookkeeping only, nothing is
-// gated on it. Deliberately a SEPARATE table from `payments` so the
-// Phase 3 stack (maybeSingle lookups, mark_paid, the departure/sailing
-// Record collapse) never sees a second row per booking.
+// here. Since 020 the review GATES the trip: approving flips an advance
+// booking pending → open and a rental awaiting_payment → pending
+// (review_advance_escrow), refunding cancels it — so approvals notify
+// the payer AND, for rentals, the bangkero (who only ever sees the
+// request after approval). Deliberately a SEPARATE table from
+// `payments` so the Phase 3 stack (maybeSingle lookups, mark_paid, the
+// departure/sailing Record collapse) never sees a second row per booking.
 // =============================================================
 
 function mapRow(row: any): DownpaymentDoc {
@@ -137,6 +140,9 @@ export interface AdminDownpaymentRow extends DownpaymentDoc {
   notifyUserId: string | null;
   /** passenger_name for bookings; resolved via users for rentals. */
   payerName: string | null;
+  /** Owner of the chartered boat — notified when a rental escrow clears. */
+  rentalBangkeroId: string | null;
+  rentalBoatName: string | null;
 }
 
 function humanDate(iso: string): string {
@@ -157,7 +163,8 @@ export async function listDownpayments(
     .select(`
       *,
       booking:bookings(id, ref, passenger_name, user_id, from_port_name, to_port_name, service_type, num_of_passenger),
-      rental:boat_rentals(id, event_name, rental_date, hours, total_price, user_id, status, bangka_id)
+      rental:boat_rentals(id, event_name, rental_date, hours, total_price, user_id, status, bangka_id,
+        bangkas(bangka_name, bangkero_id))
     `)
     .order('created_at', { ascending: false });
 
@@ -202,15 +209,18 @@ export async function listDownpayments(
       notifyUserId: booking?.user_id ?? rental?.user_id ?? null,
       payerName: booking?.passenger_name
         ?? (rental?.user_id ? nameById.get(rental.user_id) ?? null : null),
+      rentalBangkeroId: rental?.bangkas?.bangkero_id ?? null,
+      rentalBoatName: rental?.bangkas?.bangka_name ?? null,
     };
   });
 }
 
 /**
  * Admin approves the escrow row: the booking flips pending → open (it
- * appears on bangkero desks) and the payer is told. One update + one
- * RPC + one notification — the notification is best-effort (the approval
- * itself must not roll back over a notification hiccup).
+ * appears on bangkero desks) and a rental awaiting_payment → pending
+ * (the bangkero's first sighting of it). One update + one RPC + best-
+ * effort notifications to payer and — for rentals — the bangkero; the
+ * approval itself must not roll back over a notification hiccup.
  */
 export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void> {
   const { error } = await supabase
@@ -236,6 +246,16 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
       row.notifyUserId,
       'Downpayment confirmed',
       `Your GCash downpayment of ₱${row.amount} for ${row.label} has been confirmed. It is now visible to bangkeros.`
+    ).catch(() => {});
+  }
+
+  // The rental reaches the bangkero's desk only NOW (awaiting_payment →
+  // pending), so this is the moment they must hear about it.
+  if (flipped && row.boatRentalId && row.rentalBangkeroId) {
+    await createNotification(
+      row.rentalBangkeroId,
+      'New boat rental request',
+      `${row.payerName ?? 'A passenger'} wants to rent ${row.rentalBoatName ?? 'your boat'} (${row.serviceLabel}). The downpayment is approved — confirm or decline.`
     ).catch(() => {});
   }
 }

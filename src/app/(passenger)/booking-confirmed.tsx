@@ -7,9 +7,13 @@ import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { slotLabel } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { useLockBack } from '@/hooks/useLockBack';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function BookingConfirmed() {
+  // Terminal screen: back (arrow, gesture or hardware) must never re-open
+  // the payment form — that was the double-booking path.
+  useLockBack();
   const params = useLocalSearchParams<{
     fromName: string;
     toName: string;
@@ -63,7 +67,7 @@ export default function BookingConfirmed() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Booking Requested" showDrawer={false} />
+      <PassengerScreenHeader title="Booking Requested" showDrawer={false} showBack={false} />
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

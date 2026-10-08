@@ -26,6 +26,7 @@ export default function PassengerLayout() {
   if (!profile) return <Redirect href="/" />;
 
   if (profile.role === 'admin') return <Redirect href="/(admin)/home" />;
+  if (profile.role === 'coastguard') return <Redirect href="/(coastguard)/home" />;
   if (profile.role !== 'passenger') return <Redirect href="/(bangkero)/home" />;
 
   return (
@@ -35,6 +36,9 @@ export default function PassengerLayout() {
         contentStyle: { backgroundColor: colors.bg },
         animation: 'slide_from_right',
       }}
-    />
+    >
+      {/* Success screen — swipe-back would re-open the payment form. */}
+      <Stack.Screen name="booking-confirmed" options={{ gestureEnabled: false }} />
+    </Stack>
   );
 }

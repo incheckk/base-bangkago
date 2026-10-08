@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
+import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import {
   type BangkeroRentalRow,
   type OwnBangka,
@@ -17,9 +18,10 @@ import {
   getOwnBangkas,
   getRentalsForBangkero,
   setHourlyRate,
+  setRentalListed,
 } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { RentalStatus } from '@/types/models';
+import type { PassengerDetailDoc, RentalStatus } from '@/types/models';
 
 const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: 'Pending', fg: colors.warning, bg: colors.warningTint },
@@ -30,9 +32,10 @@ const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: strin
 };
 
 /**
- * The bangkero's charter desk (Phase 4C): incoming rental requests
- * with Confirm / Decline, confirmed ones to Complete once the day is
- * done (remainder collected in person), plus the boat's hourly rate.
+ * The bangkero's charter desk (Phase 4C): listing toggle + hourly
+ * rate per boat, incoming rental requests with Confirm / Decline,
+ * confirmed ones to Complete once the day is done (remainder
+ * collected in person). A rental day is locked once accepted (027).
  */
 export default function BangkeroRentalsScreen() {
   const { user } = useAuth();
@@ -40,22 +43,30 @@ export default function BangkeroRentalsScreen() {
 
   const [rows, setRows] = useState<BangkeroRentalRow[]>([]);
   const [boats, setBoats] = useState<OwnBangka[]>([]);
+  const [riders, setRiders] = useState<Record<string, PassengerDetailDoc[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rateDraft, setRateDraft] = useState<Record<string, string>>({});
   const [savingRate, setSavingRate] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!uid) return;
     try {
-      const [rentals, own] = await Promise.all([
-        getRentalsForBangkero(uid),
+      const rentals = await getRentalsForBangkero(uid);
+      const [own, detailRows] = await Promise.all([
         getOwnBangkas(uid),
+        getPassengerDetailsByRentals(rentals.map((r) => r.rentalId)).catch(() => []),
       ]);
       setRows(rentals);
       setBoats(own);
+      const byRental: Record<string, PassengerDetailDoc[]> = {};
+      for (const d of detailRows) {
+        if (d.boatRentalId) (byRental[d.boatRentalId] ??= []).push(d);
+      }
+      setRiders(byRental);
       setRateDraft((prev) => {
         const next = { ...prev };
         for (const b of own) {
@@ -134,6 +145,21 @@ export default function BangkeroRentalsScreen() {
     setSavingRate(null);
   }
 
+  async function toggleListing(boat: OwnBangka, listed: boolean) {
+    if (togglingId) return;
+    setTogglingId(boat.bangkaId);
+    setActionError(null);
+    try {
+      await setRentalListed(boat.bangkaId, listed);
+      setBoats((prev) =>
+        prev.map((b) => (b.bangkaId === boat.bangkaId ? { ...b, rentalListed: listed } : b))
+      );
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setTogglingId(null);
+  }
+
   if (loading) {
     return (
       <ScreenContainer>
@@ -170,7 +196,18 @@ export default function BangkeroRentalsScreen() {
           </View>
         )}
 
-        {/* Charter rate — what passengers pay per hour (016). */}
+        {/* How the rental module works + opt-in listing (027). */}
+        <View style={styles.howCard}>
+          <Text style={styles.howTitle}>LIST YOUR BOAT FOR PASSENGERS</Text>
+          <Text style={styles.howBody}>
+            Flip the switch to make your boat show up in the passenger Boat Rental catalog.
+            Passengers pick a date and pay the 50% GCash escrow; once the admin approves it,
+            the request lands here — Confirm or Decline. A confirmed charter locks that whole
+            day: you cannot take rides, island hops, or other charters on the same date.
+          </Text>
+        </View>
+
+        {/* Charter rate + catalog visibility — what passengers see and pay. */}
         {boats.map((b) => (
           <View key={b.bangkaId} style={styles.rateCard}>
             <View style={styles.rateHead}>
@@ -191,8 +228,23 @@ export default function BangkeroRentalsScreen() {
                 variant="secondary"
                 onPress={() => void saveRate(b)}
                 loading={savingRate === b.bangkaId}
-                disabled={savingRate !== null}
+                disabled={savingRate !== null || togglingId !== null}
                 style={styles.rateBtn}
+              />
+            </View>
+            <View style={styles.listRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.listLabel}>Visible to passengers</Text>
+                <Text style={styles.listHint}>
+                  {b.rentalListed ? 'Listed in the rental catalog' : 'Hidden from the catalog'}
+                </Text>
+              </View>
+              <Switch
+                value={b.rentalListed}
+                onValueChange={(v) => void toggleListing(b, v)}
+                disabled={togglingId !== null || savingRate !== null}
+                trackColor={{ false: colors.borderSubtle, true: colors.primaryTint }}
+                thumbColor={b.rentalListed ? colors.primary : colors.surface}
               />
             </View>
           </View>
@@ -206,6 +258,7 @@ export default function BangkeroRentalsScreen() {
             <RentalCard
               key={row.rentalId}
               row={row}
+              riders={riders[row.rentalId] ?? []}
               busy={busyId === row.rentalId}
               actions={
                 <>
@@ -237,6 +290,7 @@ export default function BangkeroRentalsScreen() {
             <RentalCard
               key={row.rentalId}
               row={row}
+              riders={riders[row.rentalId] ?? []}
               busy={busyId === row.rentalId}
               actions={
                 <PrimaryButton
@@ -255,7 +309,7 @@ export default function BangkeroRentalsScreen() {
           <>
             <Text style={styles.sectionLabel}>HISTORY</Text>
             {history.map((row) => (
-              <RentalCard key={row.rentalId} row={row} busy={false} />
+              <RentalCard key={row.rentalId} row={row} riders={riders[row.rentalId] ?? []} busy={false} />
             ))}
           </>
         )}
@@ -266,10 +320,12 @@ export default function BangkeroRentalsScreen() {
 
 function RentalCard({
   row,
+  riders,
   busy,
   actions,
 }: {
   row: BangkeroRentalRow;
+  riders: PassengerDetailDoc[];
   busy: boolean;
   actions?: React.ReactNode;
 }) {
@@ -288,6 +344,11 @@ function RentalCard({
       <Text style={styles.cardMeta} numberOfLines={1}>
         {row.boatName ?? 'Boat'} · {formatDate(row.rentalDate)} · {row.hours}h · ₱{row.totalPrice}
       </Text>
+      {riders.length > 0 && (
+        <Text style={styles.cardMeta} numberOfLines={2}>
+          Riders: {riders.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
+        </Text>
+      )}
       {!!actions && <View style={styles.actions}>{actions}</View>}
     </View>
   );
@@ -336,6 +397,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   rateBtn: { minWidth: 110, minHeight: 44 },
+
+  howCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  howTitle: { ...typography.label, color: colors.text, marginBottom: spacing.sm },
+  howBody: { fontSize: 13, lineHeight: 19, color: colors.textMuted },
+
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  listLabel: { fontSize: 13, fontWeight: '600', color: colors.text },
+  listHint: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
   emptyLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },

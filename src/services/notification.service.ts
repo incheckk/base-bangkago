@@ -19,7 +19,8 @@ export async function fetchNotifications(userId: string): Promise<NotificationDo
     .from('notifications')
     .select('*')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(100);
 
   if (error) throw error;
   return (data ?? []).map(mapNotificationRow);
@@ -30,6 +31,29 @@ export async function markNotificationRead(id: string): Promise<void> {
     .from('notifications')
     .update({ is_read: true })
     .eq('id', id);
+
+  if (error) throw error;
+}
+
+/** Badge clear — one write when the inbox opens; realtime syncs every badge. */
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', userId)
+    .eq('is_read', false);
+
+  if (error) throw error;
+}
+
+/** Manual tidy-up — the inbox's "Clear old" button drops anything past a day. */
+export async function clearOldNotifications(userId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', userId)
+    .lt('created_at', cutoff);
 
   if (error) throw error;
 }

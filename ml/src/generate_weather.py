@@ -14,7 +14,7 @@ Rules:
 import csv
 import random
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 from tqdm import tqdm
 
@@ -28,7 +28,9 @@ from src.utils import (
 
 SEED = 42
 DATE_START = date(2024, 1, 1)
-DATE_END = date(2025, 12, 31)
+# Must reach at least today+6 — Script 7 predicts those dates and needs
+# a weather row per (date, start port) to build features.
+DATE_END = date.today() + timedelta(days=6)
 
 # season -> (wind_mu, wind_sd, wind_lo, wind_hi,
 #            wave_mu, wave_sd, wave_lo, wave_hi,

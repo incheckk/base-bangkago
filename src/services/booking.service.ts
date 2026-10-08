@@ -1,7 +1,9 @@
 import type { BangkeroDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
+import { manilaTodayIso } from '../utils/date';
 import { friendlyAuthError } from './auth.service';
 import { mapRouteRow } from './mappers';
 import { createNotification } from './notification.service';
+import { getPassengerDetailsByBooking } from './passenger-detail.service';
 import { supabase } from './supabase';
 
 /** Supabase speaks in error objects; screens need sentences. */
@@ -112,8 +114,7 @@ interface CreateArgs {
 /** Advance = sailing date after today (Manila). Needs the 50% escrow. */
 export function isAdvanceDate(scheduledDate?: string | null): boolean {
   if (!scheduledDate) return false;
-  const manilaToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-  return scheduledDate > manilaToday;
+  return scheduledDate > manilaTodayIso();
 }
 
 /**
@@ -240,6 +241,28 @@ export async function completeBooking(bookingId: string): Promise<void> {
 }
 
 /**
+ * Arrival-bypass fallback (026): complete_trip refuses bookings that
+ * were never marked onboarded; this RPC skips that one check — but ONLY
+ * while the admin's dev_flags.arrival_bypass switch is on, and still
+ * only for the assigned bangkero. The RPC raises when the flag is off.
+ */
+export async function forceCompleteBooking(bookingId: string): Promise<void> {
+  const { error } = await supabase.rpc('force_complete_trip', { p_booking_id: bookingId });
+  if (error) throw error;
+}
+
+/**
+ * C8: the operator stamps the actual departure time (the 004 UPDATE
+ * policy blocks partial writes on an accepted row, hence the RPC).
+ */
+export async function stampBookingDepart(bookingId: string): Promise<void> {
+  const { error } = await supabase.rpc('stamp_booking_depart', {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+}
+
+/**
  * Bangkero confirms (or un-confirms) that the whole party is aboard.
  * Column-scoped RPC — writes ONLY onboarded_at, nothing else.
  */
@@ -302,6 +325,73 @@ export async function noShowPassenger(booking: {
     `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} after you were told to board.` +
       (mins ? ` You can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : '')
   ).catch(() => {});
+}
+
+/**
+ * Passenger group dispute (022): the reporter is marked NOT aboard —
+ * trip_stat is untouched, so the rest of the party sails and the trip
+ * still completes. Solo bookings cancel instead (call site decides).
+ */
+export async function disputeBoarding(bookingId: string): Promise<void> {
+  const { error } = await supabase.rpc('dispute_boarding', {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Bangkero marks the booker absent while companions sail (022):
+ * no_show_at without cancelling — feeds the ban, trip stays accepted.
+ */
+export async function markBookerAbsent(bookingId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_booker_absent', {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Group no-show with per-passenger granularity (022):
+ *  - NOBODY from the booking sailed → cancel it exactly as before
+ *    (mark_no_show: cancelled + no_show_at + ban + notification);
+ *  - SOMEONE sailed → keep the booking accepted, mark only the absent
+ *    passengers (booker via mark_booker_absent, companions via
+ *    set_passenger_boarded('not_boarded')) and tell the booker.
+ * Returns which path ran so the call site can latch its UI.
+ */
+export async function resolveGroupNoShow(booking: {
+  bookingId: string;
+  ref: string;
+  userId: string;
+  fromPortName: string | null;
+  onboardedAt: string | null;
+}): Promise<'cancelled' | 'partial'> {
+  const companions = await getPassengerDetailsByBooking(booking.bookingId).catch(
+    () => []
+  );
+  const anyoneSailed = !!booking.onboardedAt || companions.some((c) => !!c.boardedAt);
+
+  if (!anyoneSailed) {
+    await noShowPassenger(booking);
+    return 'cancelled';
+  }
+
+  if (!booking.onboardedAt) await markBookerAbsent(booking.bookingId);
+  for (const c of companions) {
+    if (!c.boardedAt && !c.noShowAt) {
+      await setPassengerBoarded(c.passengerId, 'not_boarded').catch(() => null);
+    }
+  }
+
+  const ban = await getBookingBan(booking.userId).catch(() => null);
+  const mins = ban?.minutesLeft;
+  createNotification(
+    booking.userId,
+    'Some passengers did not board',
+    `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} without the passengers who missed boarding — the rest of the booking continues.` +
+      (mins ? ` The booker can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : '')
+  ).catch(() => {});
+  return 'partial';
 }
 
 export async function setAvailability(

@@ -10,9 +10,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
 import { getDownpaymentByRental } from '@/services/downpayment.service';
+import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import { cancelRental, getMyRentals, type PassengerRentalRow } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { DownpaymentDoc, RentalStatus } from '@/types/models';
+import type { DownpaymentDoc, PassengerDetailDoc, RentalStatus } from '@/types/models';
 
 const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: 'Pending', fg: colors.warning, bg: colors.warningTint },
@@ -39,6 +40,7 @@ export default function MyRentalsScreen() {
 
   const [rows, setRows] = useState<PassengerRentalRow[]>([]);
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
+  const [riders, setRiders] = useState<Record<string, PassengerDetailDoc[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -49,15 +51,21 @@ export default function MyRentalsScreen() {
     try {
       const rentals = await getMyRentals(user.id);
       setRows(rentals);
-      const downRows = await Promise.all(
-        rentals.map((r) => getDownpaymentByRental(r.rentalId).catch(() => null))
-      );
+      const [downRows, detailRows] = await Promise.all([
+        Promise.all(rentals.map((r) => getDownpaymentByRental(r.rentalId).catch(() => null))),
+        getPassengerDetailsByRentals(rentals.map((r) => r.rentalId)).catch(() => []),
+      ]);
       const map: Record<string, DownpaymentDoc> = {};
       rentals.forEach((r, i) => {
         const d = downRows[i];
         if (d) map[r.rentalId] = d;
       });
       setDowns(map);
+      const byRental: Record<string, PassengerDetailDoc[]> = {};
+      for (const d of detailRows) {
+        if (d.boatRentalId) (byRental[d.boatRentalId] ??= []).push(d);
+      }
+      setRiders(byRental);
       setError(null);
     } catch (e) {
       setError(friendlyError(e));
@@ -144,6 +152,7 @@ export default function MyRentalsScreen() {
           rows.map((row) => {
             const status = STATUS_STYLES[row.status] ?? STATUS_STYLES.pending;
             const down = downs[row.rentalId];
+            const rideList = riders[row.rentalId] ?? [];
             const total = row.totalPrice;
             const remainder = total - (down?.amount ?? Math.round(total * 0.5));
             const justSubmitted = params.rentalId === row.rentalId;
@@ -166,6 +175,11 @@ export default function MyRentalsScreen() {
                   {formatDate(row.rentalDate)} · {row.hours}h · ₱{total}
                   {row.operatorName ? ` · ${row.operatorName}` : ''}
                 </Text>
+                {rideList.length > 0 && (
+                  <Text style={styles.meta} numberOfLines={2}>
+                    Riders: {rideList.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
+                  </Text>
+                )}
 
                 <View style={styles.divider} />
 

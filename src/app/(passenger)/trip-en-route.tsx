@@ -9,18 +9,21 @@ import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import { useVesselTracking } from '@/hooks/useVesselTracking';
 import { usePorts, useBooking } from '@/hooks/useSupabase';
 import { getActiveBooking } from '@/services/booking.service';
+import { fetchUserDoc } from '@/services/auth.service';
 import { getAverageRating } from '@/services/rating.service';
+import { getBangkaIdForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, touchTarget } from '@/theme/tokens';
 
 const STEPS = ['Boarded', 'En Route', 'Arriving', 'Arrived'];
 
 /**
- * The live trip screen. The map and step animations are still the
- * GPS-deferred placeholders (LAUNCH B5), but everything shown about
- * the bangkero — name, boat, rating, status, route — now comes from
- * the passenger's real active booking instead of hardcoded mock data.
+ * The live trip screen. The map shows the bangka's latest GPS fix in
+ * realtime (B5: useVesselTracking on the operator's boat — bookings
+ * never carry bangka_id, so it resolves through the bangkero). Steps,
+ * bangkero, rating and route all come from the real active booking.
  */
 export default function TripEnRoute() {
   const { user } = useAuth();
@@ -48,6 +51,39 @@ export default function TripEnRoute() {
 
   const { data: booking, loading, error } = useBooking(activeId ?? null);
   const [avgRating, setAvgRating] = useState<number | null>(null);
+  // The booking row keeps only the operator's name — the number lives on users.
+  const [operatorPhone, setOperatorPhone] = useState<string | null>(null);
+
+  // Which boat to watch: bookings never carry bangka_id (accept only
+  // records the operator), so resolve it through the bangkero's fleet.
+  const [bangkaId, setBangkaId] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (!booking?.operatorId) {
+      setBangkaId(null);
+      return;
+    }
+    getBangkaIdForBangkero(booking.operatorId)
+      .then((id) => { if (alive) setBangkaId(id); })
+      .catch(() => { if (alive) setBangkaId(null); });
+    return () => { alive = false; };
+  }, [booking?.operatorId]);
+
+  // Latest fix first (getTrackingByBangka orders desc), refreshed live.
+  const { data: positions } = useVesselTracking(bangkaId);
+  const vessel = positions[0] ?? null;
+
+  useEffect(() => {
+    let alive = true;
+    if (!booking?.operatorId) {
+      setOperatorPhone(null);
+      return;
+    }
+    fetchUserDoc(booking.operatorId)
+      .then((u) => { if (alive) setOperatorPhone(u?.phone ?? null); })
+      .catch(() => { if (alive) setOperatorPhone(null); });
+    return () => { alive = false; };
+  }, [booking?.operatorId]);
 
   useEffect(() => {
     let alive = true;
@@ -116,9 +152,22 @@ export default function TripEnRoute() {
     <ScreenContainer>
       <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Map area */}
+        {/* Map area — live vessel marker when a fix has been reported. */}
         <View style={styles.mapArea}>
-          <MapContainer ports={ports.data} height={260} />
+          <MapContainer
+            ports={ports.data}
+            height={260}
+            vessels={
+              vessel
+                ? [{
+                    latitude: vessel.latitude,
+                    longitude: vessel.longitude,
+                    speed: vessel.speed,
+                    bangkaId: vessel.bangkaId,
+                  }]
+                : []
+            }
+          />
         </View>
 
         <View style={styles.content}>
@@ -182,10 +231,16 @@ export default function TripEnRoute() {
             </Pressable>
 
             <Pressable
-              style={styles.contactButton}
-              onPress={() => {/* TODO: phone call integration */}}
+              style={[styles.contactButton, !operatorPhone && styles.contactDisabled]}
+              disabled={!operatorPhone}
+              onPress={() => {
+                if (!operatorPhone) return;
+                void router.push(`tel:${operatorPhone.replace('+', '')}`);
+              }}
             >
-              <Text style={styles.contactText}>Contact Bangkero</Text>
+              <Text style={styles.contactText}>
+                {operatorPhone ? 'Contact Bangkero' : 'Contact unavailable'}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -331,6 +386,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderSubtle,
   },
+  contactDisabled: { opacity: 0.5 },
   contactText: {
     color: colors.textSecondary,
     fontSize: 15,

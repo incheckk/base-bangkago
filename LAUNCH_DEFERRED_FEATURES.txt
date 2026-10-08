@@ -2,9 +2,11 @@
 BANGKAGO — DEFERRED FEATURES & DECISIONS
 Review this list when the system is PUBLISHED TO THE PUBLIC / GOES LIVE.
 Compiled as of the Phase 1 (trip rules) + Phase 2 (port queue) build,
-updated through Phase 4C (ratings, island hopping, boat rental) and the
-post-4C fix pass (P0 login recursion + P1 chain fixes; see migrations
-018/019). Section [E] carries the P2 security debt moved out of that pass.
+updated through Phase 4C (ratings, island hopping, boat rental), the
+post-4C fix pass (018/019), and the M1-M6 build (2026-10: acceptance
+confirmations, ML demand, F-screen cleanup, coastguard role, rental +
+island-hop companions, trip close-out, live en-route tracking).
+Section [E] carries the P2 security debt moved out of that pass.
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -27,11 +29,12 @@ post-4C fix pass (P0 login recursion + P1 chain fixes; see migrations
    Phone asleep / app killed = boat drops from dispatch after 3 min (no
    GPS fix). Only correct once background tracking ships (item B1).
 
-4. ISLAND-HOP BOOKINGS HAVE NO COMPANION LIST (Phase 4B)
-   Package bookings take a PASSENGER COUNT only — no per-companion
-   names/IDs, so the sailings manifest for packages shows the head
-   count. If coastguard passenger manifests must name every rider,
-   add a companion form before launch.
+4. ISLAND-HOP / RENTAL COMPANION LIST (Phase 4B/4C)
+   SHIPPED in the M1-M6 build: book-package and rental-form capture
+   companions through the shared CompanionForm; rows land in
+   passenger_details (booking_id for rides, boat_rental_id for rentals,
+   migration 026) and render for passenger AND bangkero. Still open:
+   companions remain INSERT-only (E7) — no edit/correct flow.
 
 5. BOAT RENTAL HOURLY RATE DEFAULT (Phase 4C)
    bangkas.hourly_rate defaults to ₱500 (migration 016) when a
@@ -52,6 +55,8 @@ B2. PUSH NOTIFICATIONS
     - "You are #1 — offer held for you"
     - hold cascaded to you
     - booking accepted / boarding / no-show / trip updates
+    - departure-time reminders (M1 sailReminder is an IN-APP banner;
+      the 3b scheduled local notification is a no-op in Expo Go)
     NOTE: scheduleLocalNotification is a NO-OP inside Expo Go (guarded
     by isRunningInExpoGo() in notification.service — evaluating
     expo-notifications throws in Expo Go on Android). Real local/push
@@ -59,9 +64,17 @@ B2. PUSH NOTIFICATIONS
 
 B3. (shipped — Phase 3A: bangkero gates, migrations/010_bangkero_gates.sql)
 B4. DEPARTURE FLOW POLISH (roadmap item 5)
+    SHIPPED in the M1-M6 build: the arrived screen now closes the trip
+    out — completes today's accepted bookings (complete_trip, 023) and
+    flips the manifest to 'completed' (trip-summary reads with
+    includeCompleted). Demo switch: dev_flags.arrival_bypass (026)
+    lets Complete Trip finish bookings that were never marked onboarded
+    — remove with the rest of C7 before launch.
 B5. GPS EN-ROUTE TRACKING FOR PASSENGERS (roadmap item 6)
-    Live boat position on the passenger trip screen (trip-en-route.tsx
-    placeholder exists).
+    SHIPPED: trip-en-route shows the boat's latest fix as a live map
+    marker (useVesselTracking, realtime; bookings never carry
+    bangka_id so it resolves through getBangkaIdForBangkero).
+    Foreground-only — background GPS is still B1.
 B6. (shipped — Phase 3B: documents verify flow + GCash QR, migrations
     011_documents_storage.sql / 012_mark_paid.sql)
 B7. DISPUTE COUNTER-REPORT — bangkero side deliberately not built.
@@ -84,28 +97,27 @@ B9. REAL GCASH PAYMENT INTEGRATION
     completes; package remainders are a 'cash' payment row collected
     onboard. No real gateway in any of these paths yet.
 B10. DEMAND PREDICTION (ML)
-    DemandBadge on bangkero home shows placeholder numbers. Per the
-    knowledge base: Phase 1 = collect >1000 bookings; Phase 2 = train
-    model + deploy FastAPI; Phase 3 = integrate predictions; Phase 4 =
-    admin fleet optimization.
+     PARTIALLY SHIPPED in the M1-M6 build: ml/ pipeline trained (RF
+     R² 0.51), predictions land in demand_predictions (migration 024
+     + insert_predictions.sql), and the passenger home "AI DEMAND
+     TODAY" block renders real rows. Still open: the bangkero-home
+     DemandBadge stays a placeholder, and the KB's FastAPI service /
+     admin fleet-optimization phases are not built.
 B11. NATIVE MAPS (dev build): react-native-maps + OSM tiles instead of
-    WebView-based map (KB "Future" item).
+     WebView-based map (KB "Future" item).
 B12. COASTGUARD / LGU — FOURTH MOBILE ROLE (view-only)
-     Papers/design treat the system as FOUR mobile roles: Admin,
-     Bangkero, Passenger, and Coastguard/LGU — a view-only tier with
-     lower permissions than admin. Current build has only the first
-     three (UserRole in types/models.ts). Intended scope: read-only
-     screens only — View Live Port Queues and View Routes & Fares
-     (reuse admin views); NO route/port editing. To build later:
-     extend UserRole, sign-in role routing, menu.ts, and the
-     role-guard redirects in the _layout files.
+     SHIPPED in the M1-M6 build (M4): UserRole 'coastguard',
+     (coastguard) route group with Live Port Queues + Routes & Fares
+     (read-only), role-guard redirects, sign-in demo chip, seeded as
+     0920 123 4567 Lina Reyes (after 025). NO route/port editing —
+     by design.
 
 [C] CODE TODOs LEFT IN THE APP
 --------------------------------------------------------------------------------
-C1. passenger/profile.tsx:143-144 — "Settings" and "About" menu items are
-    no-ops (placeholder onPress).
-C2. passenger/trip-en-route.tsx:186 — "call bangkero" button is a no-op
-    (phone call integration, e.g. Linking.openURL('tel:...')).
+C1. (shipped in M4 — the no-op Settings/About menu items were removed
+    from passenger profile; nothing else to delete.)
+C2. (shipped in M4 — trip-en-route "Contact Bangkero" now dials via
+    router.push('tel:...') with the number from users.phone.)
 C3. migrations/007_accepted_trip_rules.sql:332 —
     CREATE UNIQUE INDEX bookings_one_active_per_passenger is COMMENTED
     OUT. Enable after verifying no legacy rows violate it (would block a
@@ -120,27 +132,25 @@ C6. PaymentStatus still includes 'refunded' in the DB CHECK for
     value in a future migration.
 C7. ADMIN DEV OPTIONS (new) — src/app/(admin)/developer-options.tsx,
     menu/quick-action entries, dev.service.ts, useDevFlags(), and
-    migrations/009_dev_dispatch_bypass.sql + 010_bangkero_gates.sql
-    exist ONLY for the classroom demo. Switch 1 (dispatch_bypass)
-    lifts FCFS queue/dwell/GPS/route/capacity rules; switch 2
-    (gates_bypass) lifts the bangkero gates — document verification +
-    registered boat to go online, and documents + rating floor to
-    receive/accept offers (bangkero_online_gate trigger, gates_ok(),
-    accept_booking_hold / assign_next_hold checks in 010).
+    migrations/009_dev_dispatch_bypass.sql + 010_bangkero_gates.sql +
+    026_rental_companions_arrival_bypass.sql exist ONLY for the
+    classroom demo. Switch 1 (dispatch_bypass) lifts FCFS
+    queue/dwell/GPS/route/capacity rules; switch 2 (gates_bypass)
+    lifts the bangkero gates — document verification + registered boat
+    to go online, and documents + rating floor to receive/accept
+    offers (bangkero_online_gate trigger, gates_ok(),
+    accept_booking_hold / assign_next_hold checks in 010); switch 3
+    (arrival_bypass, 026) lets force_complete_trip close out trips
+    whose passengers were never marked onboarded.
     Before public launch: remove the screen + nav entries, drop the
-    dev_flags table and both set_*_bypass RPCs, drop the
-    trg_bangkero_online_gate trigger, and revert the
-    dev_dispatch_bypass()/dev_gates_bypass()/gates_ok() checks in the
-    009/010-patched functions.
-C8. bookings.depart_time / arrival_time are NEVER STAMPED — 004's
-    bookings_bangkero_complete policy lets the operator update an
-    accepted booking ONLY when the new row says trip_stat='completed'
-    (WITH CHECK), so any partial update (depart time) on an accepted
-    row is rejected. Sailing times live on trip_manifest instead
-    (actual_departure_time / actual_arrival_time, stamped by
-    populateManifestDeparture and stampManifestArrival). If per-booking
-    times are wanted, relax/extend the policy (or move stamping into a
-    SECURITY DEFINER RPC) before launch.
+    dev_flags table and all set_*_bypass / force_complete_trip RPCs,
+    drop the trg_bangkero_online_gate trigger, and revert the
+    dev_dispatch_bypass()/dev_gates_bypass()/dev_arrival_bypass()/
+    gates_ok() checks in the 009/010/026-patched functions.
+C8. (shipped in 023 — stamp_booking_depart stamps depart_time and
+    complete_trip stamps arrival_time as SECURITY DEFINER RPCs,
+    bypassing the 004 column restriction. Kept for context: sailing
+    times ALSO live on trip_manifest.)
 
 [E] P2 SECURITY DEBT — deferred out of the post-4C fix pass
 --------------------------------------------------------------------------------
@@ -204,26 +214,27 @@ E6. SIGN-UP ORPHANS (email-confirm + profile failures)
 
 E7. passenger_details HAS NO DELETE (or UPDATE) POLICY
     Companion rows are INSERT-only from the passenger's side — a
-    booking's companion list can never be corrected or removed.
-    Add passenger-owned UPDATE/DELETE (or an RPC) before launch.
+    booking's OR rental's companion list can never be corrected or
+    removed (026 added boat_rental_id, same gap). Add
+    passenger-owned UPDATE/DELETE (or an RPC) before launch.
 
 E8. bookings_one_active_per_passenger INDEX STILL OFF — see C3.
 
 [D] ENVIRONMENT / INFRA
 --------------------------------------------------------------------------------
-D1. EXPO SDK PINNED TO 54 — do NOT upgrade until the demo device /
+D1. EXPO SDK PINNED TO 57 — do NOT upgrade until the demo device /
     Expo Go constraint is gone (AGENTS.md). Revisit at launch.
-D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 → 008 → 009 → 010
-    → 011 → 012 → 013 → 014 → 015 → 016 → 017 → 018 → 019 via SQL
-    editor, in order.
-    013 ratings guard, 014 island hopping, 015 downpayments,
-    016 boat rental (hourly_rate + rentals), 017 flat fare ₱70 (NEVER
-    re-run — superseded by 021, 9 ports / 40 routes / ₱100),
-    018 login fix (users-select recursion — run FIRST when testing the
-    fix-pass build), 019 phase-4 fixes (companion policy, assign_next_hold
-    guard, downpayments/rentals unique indexes, package-3 stops),
-    020 advance booking + QR, 021 final ports/routes (9 ports / 40
-    routes / ₱100; wipes demo trip data — see E5).
+D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — in numeric order via
+    SQL editor. Never re-run 002 (drops everything) or 017 (blanket
+    `UPDATE routes SET base_fare = 70` — superseded by 021, 9 ports /
+    40 routes / ₱100; resets admin-edited fares, see E5). PENDING
+    RUNS for the M1-M6 build, in order:
+      022 dispute + no-show, 023 code-todo RPCs (C6/C3/C8),
+      024 demand_predictions index (then paste
+      ml/output/sql/insert_predictions.sql — 280 rows),
+      025 coastguard role (then `npm run seed` to create the
+      coastguard demo account),
+      026 rental companions + arrival bypass.
     Set up migration automation (supabase CLI / CI) before public
     deployment — and fix 017's blanket UPDATE (E5) first.
     NOTE: the `docs` storage bucket (011) is PUBLIC — fine for the
@@ -232,14 +243,15 @@ D2. SUPABASE MIGRATIONS MUST BE RUN MANUALLY — 007 → 008 → 009 → 010
 D3. SECURITY DEFINER RPCs are the write path for trip rules — review all
     RLS policies + function grants with a security pass before launch
     (concrete list: section [E]).
-D4. DEMO ACCOUNTS (as of the fix pass)
+D4. DEMO ACCOUNTS (as of the M1-M6 build)
     Seeded by scripts/seed.js, password demo1234:
       0917 123 4567  Juan Dela Cruz   passenger
       0918 123 4567  Mang Lito        bangkero · MBCA Sto. Niño
       0919 123 4567  Pedro V.         bangkero · MBCA Bantay Dagat
+      0920 123 4567  Lina Reyes       coastguard (needs 025 + reseed)
     Admin (created by hand in Supabase, NOT the seed):
       0930 913 2995  Admin (Jan Villa) · password qqqwww
-    — also wired as a 4th quick-login chip on sign-in.
+    — wired as quick-login chips on sign-in.
 D5. GCASH QR IS STILL EMPTY — app_settings.gcash_qr_url = '' (the
     package/rental escrow screens show the "admin has not uploaded
     their GCash QR yet" placeholder). Upload a real QR in Admin → GCash
@@ -247,12 +259,11 @@ D5. GCASH QR IS STILL EMPTY — app_settings.gcash_qr_url = '' (the
 
 [F] SCREENS BUILT BUT NOT REACHABLE (no menu/nav entry)
 --------------------------------------------------------------------------------
-Deliberately left unwired in the fix pass — they exist and compile, but
-nothing links to them. Either wire them before launch or delete them:
-  (admin)    manage-ports, manage-routes, pending-operators, reports
-  (passenger) booked, find-bangkero, parcel-details
-Note: manage-routes' route-id derivation was still fixed (route.service
-createRoute) so the screen is safe to wire as-is.
+CLEARED in the M1-M6 build (M3): manage-ports, manage-routes and
+reports are wired into the admin menu (manage-routes port pickers use
+the inline PortSelect dropdown); pending-operators, (passenger) booked,
+find-bangkero and parcel-details were DELETED. The trip-en-route entry
+moved onto the accepted-booking card. Nothing left unwired.
 
 ================================================================================
 END — keep this file updated whenever a feature is consciously deferred.

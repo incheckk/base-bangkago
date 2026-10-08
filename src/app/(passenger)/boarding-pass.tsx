@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -13,15 +13,16 @@ import type { PassengerDetailDoc } from '@/types/models';
 
 /**
  * One QR per rider (020): the booker's code is the booking ref, every
- * companion's is 'PAX' + their qr_token. The bangkero scans them from
- * the boarding checklist — showing all of them here keeps the whole
- * party on one screen.
+ * companion's is 'PAX' + their qr_token. Accordion — one code at a time,
+ * all collapsed by default, so the bangkero only faces the passenger
+ * they are actually scanning.
  */
 export default function BoardingPass() {
   const { bookingId } = useLocalSearchParams<{ bookingId?: string }>();
   const { data: booking, loading, error } = useBooking(bookingId ?? null);
   const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -56,7 +57,13 @@ export default function BoardingPass() {
           or ticked off before the trip starts.
         </Text>
 
-        <PassengerQR name={bookerName} sublabel="You (booking ref)" value={booking.ref} />
+        <PassengerQR
+          name={bookerName}
+          sublabel="You (booking ref)"
+          value={booking.ref}
+          open={openId === booking.ref}
+          onToggle={() => setOpenId((prev) => (prev === booking.ref ? null : booking.ref))}
+        />
 
         {companions.map((c) => (
           <PassengerQR
@@ -64,6 +71,8 @@ export default function BoardingPass() {
             name={`${c.firstName} ${c.lastName}`}
             sublabel="Companion"
             value={`PAX${c.qrToken}`}
+            open={openId === c.passengerId}
+            onToggle={() => setOpenId((prev) => (prev === c.passengerId ? null : c.passengerId))}
           />
         ))}
 
@@ -76,19 +85,42 @@ export default function BoardingPass() {
   );
 }
 
-function PassengerQR({ name, sublabel, value }: { name: string; sublabel: string; value: string }) {
+function PassengerQR({
+  name,
+  sublabel,
+  value,
+  open,
+  onToggle,
+}: {
+  name: string;
+  sublabel: string;
+  value: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
     <View style={styles.card}>
-      <View style={styles.cardHead}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${name} boarding code`}
+        style={styles.cardHead}
+      >
         <View style={styles.cardHeadText}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
           <Text style={styles.sublabel}>{sublabel}</Text>
         </View>
-        <View style={styles.qrWrap}>
-          <QRCode value={value} size={132} backgroundColor="#FFFFFF" color="#0B1F2A" />
+        <Text style={[styles.chevron, open && styles.chevronOpen]}>›</Text>
+      </Pressable>
+      {open && (
+        <View style={styles.qrBox}>
+          <View style={styles.qrWrap}>
+            <QRCode value={value} size={132} backgroundColor="#FFFFFF" color="#0B1F2A" />
+          </View>
+          <Text style={styles.payload} numberOfLines={1}>{value}</Text>
         </View>
-      </View>
-      <Text style={styles.payload} numberOfLines={1}>{value}</Text>
+      )}
     </View>
   );
 }
@@ -109,6 +141,9 @@ const styles = StyleSheet.create({
   cardHeadText: { flex: 1, minWidth: 0 },
   name: { ...typography.bodyStrong, fontSize: 16 },
   sublabel: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  chevron: { fontSize: 26, lineHeight: 28, fontWeight: '700', color: colors.textMuted },
+  chevronOpen: { color: colors.primary, transform: [{ rotate: '90deg' }] },
+  qrBox: { alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   qrWrap: {
     backgroundColor: '#FFFFFF',
     borderRadius: radii.md,
@@ -121,7 +156,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
     textAlign: 'center',
-    marginTop: spacing.md,
     letterSpacing: 1,
   },
 

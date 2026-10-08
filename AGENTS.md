@@ -41,35 +41,109 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
-- **2026-10-05 — Expo SDK 54 → 57 upgrade (branch `chore/expo-sdk-57`,
-  commit 3ec0972).** Dependencies upgraded, `react-native-maps` removed
-  (unused), `StyleSheet.absoluteFillObject` → `absoluteFill` (removed in
-  RN 0.86), eslint react-hooks v7 compiler rules demoted to `warn`, stale
-  SDK-54 mentions patched across docs. Gates green: expo-doctor 21/21,
-  tsc clean, lint 0 errors, Android bundle exports. **Pending: on-device
-  smoke test in Expo Go, then merge.**
-- **2026-10-05 — Migration 021 written (pending run).**
-  `migrations/021_final_ports_routes.sql` replaces the 5-port / 12-route /
-  ₱70 seed with 9 ports / 40 routes / ₱100 flat / 30 min: wipes demo trip
-  data, repoints island-package stops, hard-deletes old network, inserts
-  the new one. Matching updates: `scripts/supabase.js` + `seed.js`,
-  `quick-ride.tsx` presets, `ml/config` (pandanon dropped — 9 ports /
-  40 routes, verified identical to the seed), CLAUDE.md / KB / this file.
-  **Pending: run 021 in the SQL editor, then `npm run seed`, then smoke
-  test booking flow.** Never re-run 017 (blanket ₱70 update) afterwards.
-- **2026-10-05 — Android Expo Go crash fixed.** `expo-notifications` v57
-  throws at module evaluation on Android Expo Go (push removed since
-  SDK 53), which killed `notification.service` → `booking.service` →
-  25 routes ("missing default export") and crashed the passenger Stack
-  (`ErrorBoundary of undefined`). Fix: `scheduleLocalNotification` now
-  returns early via `isRunningInExpoGo()` — Metro logs caught module-eval
-  errors to LogBox, so Expo Go must never load `expo-notifications` at
-  all (lazy `import()` only runs in dev/production builds); deleted the
-  dead `usePushNotifications.ts` hook. **Android is the priority platform —
-  bangkeros and the demo phone are Android (CLAUDE.md DEMO
-  RELIABILITY); always verify on Android first.**
-- **Next: on-device Expo Go smoke test** (SDK 57 + new ports/routes),
-  then merge `chore/expo-sdk-57` to main.
+- **2026-10-08 — Passenger nav cleanup + booking-flow fixes + QR/manifest
+  upgrades (gates green: tsc clean, lint 0 errors / 123 warnings,
+  expo-doctor 21/21).**
+  - Nav: bookings + trip history merged into `bookings.tsx` (filter
+    chips active/completed/cancelled/all navigate by status);
+    `trips.tsx` and `wallet.tsx` DELETED; Trip History/Wallet removed
+    from profile + menu.ts; home drawer no longer lists Home; "See
+    all" → bookings. Typed routes regenerated (`expo start` CI).
+  - Book-ride: destination chips hidden until a departure is picked
+    ("Pick a departure first"); CompanionForm now has keyboard
+    avoidance + tap-outside dismiss, format validation (letters-only
+    name, age 1-120, `normalizePhone`), a required Address field,
+    Reset button, and a confirm alert on Remove — all fields required.
+  - Address plumbing: `passenger_details.address` (migration 028),
+    createPassengerDetail/mapRow, JSON parse in payment + rental-form,
+    shown on the bangkero sailing manifest.
+  - QR verify branches on payload SHAPE (PAX* = companion, ref match
+    = booker, else reject) with a refetch — a stale companion list no
+    longer ticks the booker when a companion's code is scanned.
+  - Date strips (SchedulePicker + rental-form) get `ScrollHintBar`
+    (edge chevron only while content overflows); boarding pass is an
+    accordion (one QR at a time, all collapsed); scanner accepts only
+    codes whose centre lands inside the drawn 220×220 square (bounds +
+    onLayout, fail-open when the platform reports no bounds).
+- **2026-10-07 — Boat Rentals made reachable on bangkero + admin
+  (gates green: tsc clean, lint 0 errors / 127 warnings, expo-doctor
+  21/21).**
+  - Bangkero: Phase 3D removed the header burger and no SideDrawer
+    renders on the bangkero stack, so `menuFor('bangkero')` was dead
+    code and `/(bangkero)/rentals` had no entry point — added
+    "Boat Rentals" to the Profile screen MENU_ITEMS/ROUTE_MAP (the
+    profile screen IS the bangkero nav hub).
+  - Admin: new read-only `(admin)/boat-rentals.tsx` screen (status
+    filter chips, realtime, awaiting_payment rows point to
+    Downpayments) + `listAllRentals()` in rental.service.ts + admin
+    menu entry above Downpayments. Admin money actions stay in
+    Downpayments — no duplication.
+  - Lint baseline 126 → 127: one more instance of the known
+    demoted `react-hooks/set-state-in-effect` pattern (same
+    `useEffect(load)` as downpayments and ~40 screens).
+  - Note: `menuFor('bangkero')` still exists in menu.ts but nothing
+    renders a bangkero drawer — entries must go through
+    `(bangkero)/profile.tsx` MENU_ITEMS.
+- **2026-10-07 — Boat rental module completed + whole-day booking
+  conflicts (migration 027; gates green: tsc clean, lint 0 errors /
+  126 warnings, expo-doctor 21/21).**
+  - `bangkas.rental_listed` opt-in: bangkero toggles it from the
+    Boat Rentals screen (description card + Switch); passenger
+    catalog only lists listed boats (seed lists demo boats).
+  - Admin escrow approval now notifies the **bangkero** too (the
+    rental only reaches their desk at approval); the premature
+    creation-time notification in rental-form was removed.
+  - One committed day per bangkero, DB-enforced by triggers (027):
+    an accepted booking (ride or island-hop, scheduled_date/NULL=today)
+    or a live rental blocks every other ride/package/charter that day
+    in `accept_booking_hold`, rental inserts, and `confirmRental`.
+    RAISE message surfaces through friendlyError.
+  - rental-form dehighlights blocked dates via the
+    `bangka_blocked_dates` RPC (SECURITY DEFINER, dates only).
+  - departure.tsx now filters accepted trips to today (mirror of
+    arrived.tsx) so an advance booking can't wedge "Ready to Depart".
+- **2026-10-07 — M1-M6 build complete (all gates green: tsc clean, lint
+  0 errors / 126 warnings, expo-doctor 21/21).**
+  - **M1** — accept confirmation modals (book-ride accept + booking
+    status), sail date/time chip label, clear-old-notifications
+    (1-day cutoff, both inboxes), sailReminder banner on the booking
+    screen.
+  - **M2** — `utils/date.ts` (manilaTodayIso) replaces ad-hoc date
+    math; fares-info copy = book up to 14 days ahead; passenger home
+    "AI DEMAND TODAY" wired to real `demand_predictions` rows; ML
+    pipeline ran end-to-end (RF R² 0.51, cutoff leakage-free),
+    evaluate/predict/export_sql under `ml/`, migration 024.
+  - **M3** — F screens cleared: manage-ports/manage-routes/reports
+    wired into admin menu (PortSelect dropdowns), pending-operators +
+    (passenger) booked/find-bangkero/parcel-details deleted;
+    trip-en-route entry moved to the accepted-booking card; C1 no-op
+    menu items removed; C2 contact-bangkero dials `tel:`.
+  - **M4** — coastguard role: `UserRole 'coastguard'`, migration 025,
+    `(coastguard)` group (live port queues + routes/fares, read-only),
+    AdminScreenHeader role-aware, role redirects in every _layout,
+    demo chip + seed account (needs 025 + reseed).
+  - **M5** — shared `CompanionForm` (book-ride/package/rental-form);
+    rental companions via `passenger_details.boat_rental_id` +
+    migration 026 (nullable booking_id, XOR CHECK, RLS rental
+    branches); party lists in my-rentals + bangkero rentals; B4
+    close-out (arrived completes today's accepted bookings + flips
+    manifest to 'completed', trip-summary reads includeCompleted,
+    arrival_bypass demo switch = C7 switch 3, force_complete_trip
+    RPC); B5 live vessel marker in trip-en-route (useVesselTracking
+    via getBangkaIdForBangkero — bookings never carry bangka_id).
+  - **M6** — LAUNCH_DEFERRED_FEATURES.txt rewritten (B4/B5/B12/C1/C2/
+    C8/F/A4 shipped; D1→SDK 57; D2 pending list; D4 coastguard
+    account) + this section.
+- **USER MUST RUN:** `migrations/028_passenger_address.sql` (adds
+  `passenger_details.address`). Everything else 022 → 023 → 024 →
+  `ml/output/sql/insert_predictions.sql` → 025 → seed → 026 → 027 is
+  applied (seed succeeded WITH `rental_listed`, which proves 027 is
+  in). 028 is the only migration pending.
+- **Next:** Expo Go smoke test (coastguard, companions incl. address
+  on manifest, close-out, rental listing/escrow-notification/day-block,
+  boat-rentals entry points, **merged bookings, QR accordion + scanner
+  square, companion-scan ticks the right row**), then merge
+  `chore/expo-sdk-57` to main.
 - **ML pipeline trained** (feature engineering, aggregation, model
   training under `ml/`). In-app DemandBadge is still a placeholder —
   integration is deferred (B10).
@@ -104,29 +178,26 @@ sync when something is deferred).
 - Migrations are applied **manually in the SQL editor, in numeric
   order**; they are not automated yet (D2).
 
-**Demo switches to remove (C7)** — Admin → developer-options bypasses
-(`dispatch_bypass`, `gates_bypass`) + `dev_flags` table, the two
-`set_*_bypass` RPCs, and `trg_bangkero_online_gate` exist only for the
-classroom demo. Strip before launch.
 
 **Not built yet, needed at launch**
 - B1 — background GPS (Expo Go = foreground only; port queues and
   dispatch fail with the screen off). Needs a dev build.
-- B2 — push notifications (offer/hold alerts are realtime chips only).
+- B2 — push notifications (offer/hold alerts are realtime chips only;
+  sailReminder 3b local reminder is a no-op in Expo Go).
 - B9 — real GCash gateway; today payments are marked paid on board with
   an optional manual reference, escrow is settled out of band.
-- B12 — fourth Coastguard/LGU role (view-only screens).
-- B5 — passenger en-route boat tracking (screen placeholder exists).
+  (B12 coastguard, B4 close-out, B5 en-route tracking: shipped M4/M5.)
 
 **Environment (D5, D2)** — upload a real GCash QR (Admin → GCash QR)
 before any downpayment demo; `docs` storage bucket is public — switch to
 private + signed URLs at launch.
 
-**Unwired screens (F)** — exist and compile, but nothing links to them:
-(admin) manage-ports, manage-routes, pending-operators, reports;
-(passenger) booked, find-bangkero, parcel-details. Wire or delete.
+**Unwired screens (F)** — CLEARED (M3): manage-ports, manage-routes and
+reports are wired into the admin menu; pending-operators, booked,
+find-bangkero and parcel-details were deleted. If a screen ever shows up
+here again, wire or delete it.
 
 **Product rules to revisit (A)** — strict queue-only can stall requests
 forever; 3-min hold / 5-min dwell / 3-min freshness are demo numbers;
-island-hop bookings have no companion list; `bangkas.hourly_rate`
-defaults to ₱500.
+`bangkas.hourly_rate` defaults to ₱500. (A4 island-hop companion list —
+shipped M5.)

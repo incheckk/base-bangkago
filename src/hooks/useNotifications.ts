@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 import { useRealtimeQuery } from './useRealtimeQuery';
-import { fetchNotifications, markNotificationRead } from '../services/notification.service';
+import {
+  clearOldNotifications, fetchNotifications, markAllNotificationsRead, markNotificationRead,
+} from '../services/notification.service';
 import type { NotificationDoc } from '../types/models';
 
 interface Result {
@@ -9,6 +11,10 @@ interface Result {
   loading: boolean;
   error: string | null;
   markAsRead: (id: string) => Promise<void>;
+  /** Badge clear — marks every row read in one write + mirrors locally. */
+  markAllRead: () => Promise<void>;
+  /** Clears rows older than a day — wired to the inbox's "Clear old" button. */
+  clearOld: () => Promise<void>;
   unreadCount: number;
 }
 
@@ -49,7 +55,28 @@ export function useNotifications(userId: string | null): Result {
     }
   };
 
+  const markAllRead = async () => {
+    if (!userId) return;
+    try {
+      await markAllNotificationsRead(userId);
+      setData((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to mark notifications as read');
+    }
+  };
+
+  const clearOld = async () => {
+    if (!userId) return;
+    try {
+      await clearOldNotifications(userId);
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      setData((prev) => prev.filter((n) => new Date(n.createdAt).getTime() >= cutoff));
+    } catch {
+      // housekeeping only — never surface it to the user
+    }
+  };
+
   const unreadCount = data.filter((n) => !n.isRead).length;
 
-  return { data, loading, error, markAsRead, unreadCount };
+  return { data, loading, error, markAsRead, markAllRead, clearOld, unreadCount };
 }

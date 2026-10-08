@@ -13,13 +13,14 @@ import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
-import { friendlyError, noShowPassenger } from '@/services/booking.service';
+import { friendlyError, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
 import { cancelActiveManifests, createManifest, populateManifestDeparture } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import {
   getPaymentsForBookings, markBookingPaid,
 } from '@/services/payment.service';
 import { supabase } from '@/services/supabase';
+import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
 
@@ -45,6 +46,9 @@ export default function DepartureScreen() {
   const { data: weather, loading: weatherLoading } = useWeatherData(manifest?.departurePortId ?? 'p1');
   // Live working set: accepted only, no 10-row cap — older-created accepted
   // bookings used to fall outside the slice and split silently.
+  // Future-dated (advance) bookings are excluded — today's departure list
+  // only sails today (mirror of arrived.tsx; 027 makes advance accepts
+  // common). Payment reads below still cover every accepted row.
   const accepted = useAcceptedBookings(bangkeroId);
 
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -56,12 +60,18 @@ export default function DepartureScreen() {
   const [hasBangka, setHasBangka] = useState<boolean | null>(null);
 
   // Boarding split: who is confirmed aboard, and who is still on the pier.
-  const acceptedTrips = accepted.data;
+  // A partial no-show / dispute (022) keeps the booking accepted with
+  // onboarded_at NULL — resolved, not waiting, so it never blocks depart.
+  const todayIso = manilaTodayIso();
+  const acceptedTrips = accepted.data.filter(
+    (t) => !t.scheduledDate || t.scheduledDate <= todayIso
+  );
   const boardedTrips = acceptedTrips.filter((t) => t.onboardedAt);
   const waitingTrips = acceptedTrips.filter((t) => !t.onboardedAt);
+  const pendingTrips = waitingTrips.filter((t) => !t.noShowAt && !t.disputedAt);
   // Vacuous-true with no accepted trips — the empty-departure guard below
   // is what actually decides whether the boat may leave.
-  const allBoarded = waitingTrips.length === 0;
+  const allBoarded = pendingTrips.length === 0;
   const anyoneAboard = boardedTrips.length > 0;
   const [noShowId, setNoShowId] = useState<string | null>(null);
   const [actedNoShow, setActedNoShow] = useState<Set<string>>(new Set());
@@ -152,7 +162,7 @@ export default function DepartureScreen() {
     if (actedNoShow.has(t.bookingId)) return;
     Alert.alert(
       'Passenger didn’t board',
-      `Mark ${t.ref} as a no-show? The boat leaves with everyone who boarded, and the passenger is banned from booking for a while.`,
+      `The boat leaves with everyone who boarded on ${t.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
       [
         { text: 'Go back', style: 'cancel' },
         { text: 'Mark no-show', style: 'destructive', onPress: () => void doNoShow(t) },
@@ -164,7 +174,7 @@ export default function DepartureScreen() {
     if (actedNoShow.has(t.bookingId)) return;
     setNoShowId(t.bookingId);
     try {
-      await noShowPassenger(t);
+      await resolveGroupNoShow(t);
       setActedNoShow((prev) => new Set(prev).add(t.bookingId));
     } catch (e) {
       setGenError(friendlyError(e));
@@ -229,6 +239,8 @@ export default function DepartureScreen() {
         .eq('trip_stat', 'accepted')
         .then(({ data }) => {
           (data ?? []).forEach((b) => {
+            // C8: actual depart time — best effort, never blocks departure.
+            stampBookingDepart(b.id).catch(() => {});
             if (b.user_id) {
               createNotification(
                 b.user_id,
@@ -279,29 +291,37 @@ export default function DepartureScreen() {
                 <>
                   <View style={styles.boardDivider} />
                   <Text style={styles.boardGroupLabel}>NOT BOARDED</Text>
-                  {waitingTrips.map((t) => (
-                    <View key={t.bookingId} style={styles.boardRow}>
-                      <Text style={styles.boardWait}>○</Text>
-                      <View style={styles.boardBody}>
-                        <Text style={styles.boardName} numberOfLines={1}>
-                          {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                  {waitingTrips.map((t) => {
+                    // Partial no-show / dispute (022): resolved, nothing to tap.
+                    const resolved = !!t.noShowAt || !!t.disputedAt;
+                    return (
+                      <View key={t.bookingId} style={styles.boardRow}>
+                        <Text style={resolved ? styles.boardMiss : styles.boardWait}>
+                          {resolved ? '✕' : '○'}
                         </Text>
-                        <Text style={styles.boardSub} numberOfLines={1}>
-                          {t.ref} · still on the pier
-                        </Text>
+                        <View style={styles.boardBody}>
+                          <Text style={styles.boardName} numberOfLines={1}>
+                            {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                          </Text>
+                          <Text style={styles.boardSub} numberOfLines={1}>
+                            {t.ref} · {resolved ? 'marked absent' : 'still on the pier'}
+                          </Text>
+                        </View>
+                        {!resolved && (
+                          <View style={styles.boardAction}>
+                            <PrimaryButton
+                              label="Didn’t board"
+                              variant="danger"
+                              onPress={() => confirmNoShow(t)}
+                              loading={noShowId === t.bookingId}
+                              disabled={actedNoShow.has(t.bookingId)}
+                              style={styles.noShowBtn}
+                            />
+                          </View>
+                        )}
                       </View>
-                      <View style={styles.boardAction}>
-                        <PrimaryButton
-                          label="Didn’t board"
-                          variant="danger"
-                          onPress={() => confirmNoShow(t)}
-                          loading={noShowId === t.bookingId}
-                          disabled={actedNoShow.has(t.bookingId)}
-                          style={styles.noShowBtn}
-                        />
-                      </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </>
               )}
 

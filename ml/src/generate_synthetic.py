@@ -34,7 +34,9 @@ from src.utils import (
 )
 
 DATE_START = date(2024, 1, 1)
-DATE_END = date(2025, 12, 31)
+# Always cover through next week so Script 7 has real feature rows for
+# "today .. today+6" to predict — the app only ever reads those dates.
+DATE_END = date.today() + timedelta(days=6)
 FARE_PER_HEAD = 100
 BANGKA_CAPACITY_MEDIUM = 15
 BANGKA_CAPACITY_LARGE = 25

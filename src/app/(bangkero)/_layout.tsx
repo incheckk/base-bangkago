@@ -52,6 +52,7 @@ export default function BangkeroLayout() {
   if (!profile) return <Redirect href="/" />;
 
   if (profile.role === 'admin') return <Redirect href="/(admin)/home" />;
+  if (profile.role === 'coastguard') return <Redirect href="/(coastguard)/home" />;
   if (profile.role !== 'bangkero') return <Redirect href="/(passenger)/home" />;
 
   return (
@@ -61,6 +62,11 @@ export default function BangkeroLayout() {
         contentStyle: { backgroundColor: colors.bg },
         animation: 'slide_from_right',
       }}
-    />
+    >
+      {/* Completed-trip chain — swipe-back would re-run arrival/notifications. */}
+      <Stack.Screen name="arrived" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="post-trip" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="trip-summary" options={{ gestureEnabled: false }} />
+    </Stack>
   );
 }

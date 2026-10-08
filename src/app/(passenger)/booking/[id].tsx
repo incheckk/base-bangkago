@@ -4,14 +4,14 @@ import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
-import { slotLabel } from '@/components/SchedulePicker';
+import { slotLabel, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useAuth } from '@/hooks/useAuth';
 import { useBooking, usePortQueue, usePorts } from '@/hooks/useSupabase';
-import { cancelBooking, friendlyError } from '@/services/booking.service';
+import { cancelBooking, disputeBoarding, friendlyError } from '@/services/booking.service';
 import { getDownpaymentByBooking } from '@/services/downpayment.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
@@ -235,9 +235,23 @@ export default function BookingDetail() {
     if (!booking || acted || busy) return;
     setBusy(true);
     setActionError(null);
-    const done = await finishCancelled(
-      'Passenger disputes being aboard — reports the boat departed without them.'
-    );
+    // Solo — nobody else is aboard, so cancel exactly as before. Group —
+    // mark ONLY this passenger absent (022): the rest of the party sails.
+    const isGroup = booking.numOfPassenger > 1;
+    let done: boolean;
+    if (isGroup) {
+      try {
+        await disputeBoarding(booking.bookingId);
+        done = true;
+      } catch (e) {
+        setActionError(friendlyError(e));
+        done = false;
+      }
+    } else {
+      done = await finishCancelled(
+        'Passenger disputes being aboard — reports the boat departed without them.'
+      );
+    }
     if (done) {
       if (booking.operatorId) {
         // False-onboard: a harsher deduction — this one is an accusation.
@@ -245,13 +259,16 @@ export default function BookingDetail() {
         createNotification(
           booking.operatorId,
           'Passenger disputes departure',
-          `A passenger reports they were NOT on board for ${booking.ref}. The trip was cancelled and your rating has been penalised.`
+          isGroup
+            ? `A passenger reports they were NOT on board for ${booking.ref}. They are marked not aboard — the rest of the booking continues and the trip will complete normally.`
+            : `A passenger reports they were NOT on board for ${booking.ref}. The trip was cancelled and your rating has been penalised.`
         ).catch(() => {});
         // Boat's last known position, so whoever investigates has a starting point.
         getLatestPositionForBangkero(booking.operatorId)
           .then((found) => createAlert({
             message:
               `Passenger disputes departure for ${booking.ref} (${booking.fromPortName} → ${booking.toPortName}). ` +
+              (isGroup ? 'Booking continues — passenger marked not aboard. ' : 'Trip cancelled. ') +
               (found
                 ? `Boat last seen at ${found.position.latitude.toFixed(5)}, ${found.position.longitude.toFixed(5)} at ${new Date(found.position.recordedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}.`
                 : 'No GPS fix on record.'),
@@ -278,7 +295,9 @@ export default function BookingDetail() {
   function confirmDispute() {
     Alert.alert(
       "I'm NOT on board",
-      'Use this only if the boat has already left without you. Your trip is cancelled and the boat crew is investigated.',
+      booking && booking.numOfPassenger > 1
+        ? 'Use this only if the boat has already left without you. You are marked as not aboard — the rest of your group\u2019s trip continues and the boat crew is investigated.'
+        : 'Use this only if the boat has already left without you. Your trip is cancelled and the boat crew is investigated.',
       [
         { text: 'Go back', style: 'cancel' },
         { text: 'Report it', style: 'destructive', onPress: () => void dispute() },
@@ -305,6 +324,28 @@ export default function BookingDetail() {
   const escapeClock = `${Math.floor(escapeIn / 60000)}:${String(
     Math.floor((escapeIn % 60000) / 1000)
   ).padStart(2, '0')}`;
+
+  // 3a reminder — the sail slot is impossible to miss on the eve and the
+  // morning of sailing (far-off dates are already covered by the schedule
+  // row). Reuses the escape ticker above, so the countdown stays live.
+  const sailReminder = (() => {
+    if (booking?.status !== 'accepted' || booking.onboardedAt || !booking.scheduledDate) return null;
+    const dayDiff = Math.round(
+      (new Date(`${booking.scheduledDate}T00:00:00`).getTime() -
+        new Date(`${todayIso()}T00:00:00`).getTime()) / 86400000
+    );
+    const when = booking.scheduledTime ? ` · ${slotLabel(booking.scheduledTime)}` : '';
+    if (dayDiff === 1) return `Sails tomorrow${when}`;
+    if (dayDiff !== 0 || !booking.scheduledTime) {
+      return dayDiff === 0 ? 'Sails today' : null;
+    }
+    const ms = new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`).getTime() - now;
+    if (ms <= 0) return `Sailing today${when} — due now`;
+    const h = Math.floor(ms / 3_600_000);
+    const m = Math.round((ms % 3_600_000) / 60_000);
+    const left = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+    return `Sails today${when} — in ~${left}`;
+  })();
 
   if (loading) {
     return <ScreenContainer><LoadingState label="Loading booking…" /></ScreenContainer>;
@@ -373,6 +414,12 @@ export default function BookingDetail() {
             {!!booking.operatorBoatName && (
               <Text style={styles.operatorBoat}>{booking.operatorBoatName}</Text>
             )}
+          </View>
+        )}
+
+        {!!sailReminder && (
+          <View style={styles.reminder}>
+            <Text style={styles.reminderText}>{sailReminder}</Text>
           </View>
         )}
 
@@ -449,9 +496,11 @@ export default function BookingDetail() {
           {booking.status === 'accepted' && (
             <>
               <Text style={styles.waiting}>
-                {booking.onboardedAt
-                  ? 'You are confirmed on board. Safe travels!'
-                  : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
+                {booking.disputedAt
+                  ? 'You reported that you were NOT on board. The trip continues for the rest of your group — the bangkero and Coastguard have been notified.'
+                  : booking.onboardedAt
+                    ? 'You are confirmed on board. Safe travels!'
+                    : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
               </Text>
               <PrimaryButton
                 label="View trip details"
@@ -471,9 +520,18 @@ export default function BookingDetail() {
                 style={styles.secondaryAction}
               />
 
+              {/* Live progress + SOS/contact — the en-route view. */}
+              <PrimaryButton
+                label="Track live trip"
+                variant="secondary"
+                onPress={() => router.push('/(passenger)/trip-en-route')}
+                style={styles.secondaryAction}
+              />
+
               {/* Escape valve: opens 10 minutes after accept, closes for good
-                  the moment the bangkero confirms everyone is aboard. */}
-              {!booking.onboardedAt &&
+                  the moment the bangkero confirms everyone is aboard — or the
+                  passenger files the not-aboard dispute (the boat has left). */}
+              {!booking.onboardedAt && !booking.disputedAt &&
                 (escapeReady ? (
                   <PrimaryButton
                     label="I can't reach my boat"
@@ -565,6 +623,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   pendingText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+
+  reminder: {
+    backgroundColor: colors.primaryTint,
+    borderColor: colors.primary,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  reminderText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
 
   card: {
     backgroundColor: colors.surface,

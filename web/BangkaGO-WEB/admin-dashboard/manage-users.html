@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Manage Users</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <script>
+    (function () {
+      try {
+        var role = sessionStorage.getItem("bangkago_role");
+        if (role !== "admin") throw new Error("unauthorized");
+      } catch (e) {
+        location.replace("../../bangkaGo-access.html");
+      }
+    })();
+  </script>
+
+  
+</head>
+<body data-page="manage-users">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Manage Users</h6>
+            <span class="muted-note">User directory and account controls</span>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <input id="userSearch" class="form-control" placeholder="Search name or email">
+            </div>
+            <div class="col-md-3">
+              <select id="roleFilter" class="form-select">
+                <option value="">All Roles</option>
+                <option>Admin</option>
+                <option>LGU</option>
+                <option>Coast Guard</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <select id="statusFilter" class="form-select">
+                <option value="">All Status</option>
+                <option>Active</option>
+                <option>Suspended</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button id="userReset" class="btn btn-outline-secondary">Reset</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Last Login</th>
+                  <th style="min-width: 200px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- UPDATE STATUS MODAL -->
+  <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="statusForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Update User Status</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><strong>User:</strong> <span id="statusUserLabel">-</span></div>
+          <div class="mb-3">
+            <label class="form-label">New Status</label>
+            <select id="newStatus" class="form-select" required>
+              <option value="Active">Active</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Notes</label>
+            <textarea id="statusNotes" class="form-control" rows="3" placeholder="Optional note..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-bangkago">Save Status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ASSIGN ROLE MODAL -->
+  <div class="modal fade" id="roleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="roleForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Assign User Role</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><strong>User:</strong> <span id="roleUserLabel">-</span></div>
+          <div class="mb-3">
+            <label class="form-label">New Role</label>
+            <select id="newRole" class="form-select" required>
+              <option value="Admin">Admin</option>
+              <option value="LGU">LGU</option>
+              <option value="Coast Guard">Coast Guard</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Notes</label>
+            <textarea id="roleNotes" class="form-control" rows="3" placeholder="Optional note..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-outline-dark">Assign Role</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/admin-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+
+  <script>
+    const users = [
+      {name:"Ana Cruz",email:"ana@bangkago.ph",role:"Admin",status:"Active",last:"2026-04-16 14:10",notes:""},
+      {name:"Leo Santos",email:"leo@lgu.gov.ph",role:"LGU",status:"Active",last:"2026-04-16 13:49",notes:""},
+      {name:"Mara Dizon",email:"mara@coastguard.ph",role:"Coast Guard",status:"Suspended",last:"2026-04-15 17:12",notes:"Under review"}
+    ];
+
+    const usersBody = document.getElementById('usersBody');
+    const userSearch = document.getElementById('userSearch');
+    const roleFilter = document.getElementById('roleFilter');
+    const statusFilter = document.getElementById('statusFilter');
+
+    const statusModal = new bootstrap.Modal(document.getElementById("statusModal"));
+    const roleModal = new bootstrap.Modal(document.getElementById("roleModal"));
+
+    const statusUserLabel = document.getElementById("statusUserLabel");
+    const roleUserLabel = document.getElementById("roleUserLabel");
+    const newStatus = document.getElementById("newStatus");
+    const newRole = document.getElementById("newRole");
+    const statusNotes = document.getElementById("statusNotes");
+    const roleNotes = document.getElementById("roleNotes");
+
+    let selectedIndex = null;
+
+    function badge(s){
+      return s === "Active" ? "text-bg-success" : "text-bg-danger";
+    }
+
+    function nowStamp(){
+      const d = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function renderTable(data){
+      usersBody.innerHTML = "";
+      data.forEach((u, i) => {
+        usersBody.innerHTML += `
+          <tr>
+            <td>${u.name}</td>
+            <td>${u.email}</td>
+            <td>${u.role}</td>
+            <td><span class="badge ${badge(u.status)}">${u.status}</span></td>
+            <td>${u.last}</td>
+            <td>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal(${i})">
+                  <i class="bi bi-toggle-on"></i> Status
+                </button>
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openRoleModal(${i})">
+                  <i class="bi bi-person-gear"></i> Role
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function runFilter(){
+      const q = userSearch.value.toLowerCase().trim();
+      renderTable(users.filter(u => {
+        const match = u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+        const r = roleFilter.value ? u.role === roleFilter.value : true;
+        const s = statusFilter.value ? u.status === statusFilter.value : true;
+        return match && r && s;
+      }));
+    }
+
+    window.openStatusModal = function(index){
+      selectedIndex = index;
+      const u = users[index];
+      statusUserLabel.textContent = `${u.name} (${u.email})`;
+      newStatus.value = u.status;
+      statusNotes.value = u.notes || "";
+      statusModal.show();
+    }
+
+    window.openRoleModal = function(index){
+      selectedIndex = index;
+      const u = users[index];
+      roleUserLabel.textContent = `${u.name} (${u.email})`;
+      newRole.value = u.role;
+      roleNotes.value = u.notes || "";
+      roleModal.show();
+    }
+
+    document.getElementById("statusForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      if(selectedIndex === null) return;
+
+      users[selectedIndex].status = newStatus.value;
+      users[selectedIndex].notes = statusNotes.value.trim();
+      users[selectedIndex].last = nowStamp();
+
+      runFilter();
+      statusModal.hide();
+      alert("User status updated.");
+    });
+
+    document.getElementById("roleForm").addEventListener("submit", function(e){
+      e.preventDefault();
+      if(selectedIndex === null) return;
+
+      users[selectedIndex].role = newRole.value;
+      users[selectedIndex].notes = roleNotes.value.trim();
+      users[selectedIndex].last = nowStamp();
+
+      runFilter();
+      roleModal.hide();
+      alert("User role assigned.");
+    });
+
+    userSearch.addEventListener('input', runFilter);
+    roleFilter.addEventListener('change', runFilter);
+    statusFilter.addEventListener('change', runFilter);
+
+    document.getElementById('userReset').addEventListener('click', () => {
+      userSearch.value = "";
+      roleFilter.value = "";
+      statusFilter.value = "";
+      renderTable(users);
+    });
+
+    renderTable(users);
+  </script>
+</body>
+</html>

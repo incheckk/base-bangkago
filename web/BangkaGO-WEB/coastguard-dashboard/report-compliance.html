@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo LGU/Coast Guard — Report Compliance Issue</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <script>
+    (function () {
+      try {
+        var role = sessionStorage.getItem("bangkago_role");
+        if (role !== "coastguard") throw new Error("unauthorized");
+      } catch (e) {
+        location.replace("../../bangkaGo-access.html");
+      }
+    })();
+  </script>
+</head>
+<body data-page="report-compliance">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="row g-3 filter-row">
+          <!-- Submit Report -->
+          <div class="col-xl-8">
+            <div class="cg-card">
+              <div class="panel-head">
+                <h6 class="mb-0">Submit Report</h6>
+                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+              </div>
+
+              <form id="complianceForm" class="row g-3 filter-row">
+                <div class="col-md-6">
+                  <label class="form-label">Vessel</label>
+                  <select class="form-select" id="vessel" required>
+                    <option value="">Select vessel</option>
+                    <option>Boat 03</option>
+                    <option>Boat 06</option>
+                    <option>Boat 08</option>
+                    <option>Boat 11</option>
+                    <option>Boat 15</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Issue Type</label>
+                  <select class="form-select" id="issueType" required>
+                    <option value="">Select issue</option>
+                    <option>Overcapacity Risk</option>
+                    <option>Route Deviation</option>
+                    <option>Missing Safety Gear</option>
+                    <option>Manifest Mismatch</option>
+                    <option>Unauthorized Stop</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Location / Zone</label>
+                  <input type="text" class="form-control" id="zone" placeholder="e.g. East Marker 4" required>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Observed Time</label>
+                  <input type="datetime-local" class="form-control" id="obsTime" required>
+                </div>
+
+                <div class="col-12">
+                  <label class="form-label">Report Details</label>
+                  <textarea class="form-control" id="details" rows="5" placeholder="Describe what happened..." required></textarea>
+                </div>
+
+                <div class="col-12 d-flex gap-2 flex-wrap">
+                  <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-send-fill"></i> Submit Report
+                  </button>
+                  <button class="btn btn-outline-secondary" type="reset">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                  </button>
+                </div>
+              </form>
+
+              <div id="submitMsg" class="alert alert-success mt-3 d-none mb-0">
+                Compliance report submitted successfully.
+              </div>
+            </div>
+          </div>
+
+          <!-- Attach Evidence -->
+          <div class="col-xl-4">
+            <div class="cg-card">
+              <div class="panel-head">
+                <h6 class="mb-0">Attach Evidence</h6>
+              </div>
+
+              <label class="form-label">Upload file(s)</label>
+              <input id="evidenceInput" class="form-control mb-2" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.mp4">
+
+              <div class="small text-secondary mb-2">
+                Accepted: JPG, PNG, PDF, MP4
+              </div>
+
+              <ul class="activity-list mb-3" id="fileList">
+                <li><span>No files attached yet.</span><small>waiting</small></li>
+              </ul>
+
+              <button id="clearFilesBtn" type="button" class="btn btn-outline-danger w-100">
+                <i class="bi bi-trash3"></i> Clear Attachments
+              </button>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/coastguard-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+  <script>
+    const evidenceInput = document.getElementById("evidenceInput");
+    const fileList = document.getElementById("fileList");
+    const clearFilesBtn = document.getElementById("clearFilesBtn");
+    const form = document.getElementById("complianceForm");
+    const submitMsg = document.getElementById("submitMsg");
+
+    function renderFiles(files){
+      fileList.innerHTML = "";
+      if (!files.length){
+        fileList.innerHTML = `<li><span>No files attached yet.</span><small>waiting</small></li>`;
+        return;
+      }
+
+      [...files].forEach(file => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span>${file.name}</span><small>${Math.ceil(file.size / 1024)} KB</small>`;
+        fileList.appendChild(li);
+      });
+    }
+
+    evidenceInput.addEventListener("change", () => renderFiles(evidenceInput.files));
+
+    clearFilesBtn.addEventListener("click", () => {
+      evidenceInput.value = "";
+      renderFiles([]);
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      submitMsg.classList.remove("d-none");
+      setTimeout(() => submitMsg.classList.add("d-none"), 2500);
+      form.reset();
+      renderFiles([]);
+    });
+  </script>
+</body>
+</html>

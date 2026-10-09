@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Analyze Demand</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <script>
+    (function () {
+      try {
+        var role = sessionStorage.getItem("bangkago_role");
+        if (role !== "admin") throw new Error("unauthorized");
+      } catch (e) {
+        location.replace("../../bangkaGo-access.html");
+      }
+    })();
+  </script>
+
+  <style>
+    .kpi-card{
+      border:1px solid #d8dee8;
+      border-radius:16px;
+      padding:1rem;
+      background:#fff;
+      box-shadow:0 2px 10px rgba(16,24,40,.04);
+      height:100%;
+    }
+    .kpi-value{font-size:2rem;font-weight:700;line-height:1.1}
+    .kpi-sub{font-size:.95rem}
+    .soft-bar{
+      height:34px;border-radius:8px;
+      background:linear-gradient(90deg,#cfe9dd,#a7d7bf);
+    }
+    .soft-bar.warn{background:linear-gradient(90deg,#efe7d3,#e5cf9f);}
+    .panel-card{
+      border:1px solid #d8dee8;border-radius:16px;background:#fff;
+      box-shadow:0 2px 10px rgba(16,24,40,.04);
+    }
+    .action-btn{
+      min-width:140px;height:38px;display:inline-flex;align-items:center;justify-content:center;gap:.35rem;border-radius:8px
+    }
+  </style>
+</head>
+<body data-page="analyze-demand">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+
+        <!-- Use-case sub-features -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <button class="btn btn-outline-primary action-btn" id="btnPredictions">
+            <i class="bi bi-graph-up"></i> View Predictions
+          </button>
+          <button class="btn btn-outline-dark action-btn" id="btnTrends">
+            <i class="bi bi-bar-chart"></i> View Trends
+          </button>
+          <button class="btn btn-bangkago action-btn" id="btnInsights">
+            <i class="bi bi-lightbulb"></i> Generate Insights
+          </button>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="row g-3 mb-3">
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-card">
+              <div class="text-muted">Total Trips (Today)</div>
+              <div class="kpi-value">84</div>
+              <div class="kpi-sub text-success">+9% vs yesterday</div>
+              <div class="soft-bar mt-3"></div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-card">
+              <div class="text-muted">Peak Hour</div>
+              <div class="kpi-value">16:00</div>
+              <div class="kpi-sub text-warning">High queue</div>
+              <div class="soft-bar warn mt-3"></div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-card">
+              <div class="text-muted">Top Route</div>
+              <div class="kpi-value">R-01</div>
+              <div class="kpi-sub text-success">Marigondon Port → Olango</div>
+              <div class="soft-bar mt-3"></div>
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-6">
+            <div class="kpi-card">
+              <div class="text-muted">Forecast Tomorrow</div>
+              <div class="kpi-value">+12%</div>
+              <div class="kpi-sub text-success">Expected demand rise</div>
+              <div class="soft-bar mt-3"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-lg-8">
+            <div class="panel-card p-3">
+              <h4 class="mb-3">Demand by Route (Mock Analytics)</h4>
+              <div class="table-responsive">
+                <table class="table table-theme align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Route</th>
+                      <th>Bookings</th>
+                      <th>Trips Completed</th>
+                      <th>Avg Load</th>
+                      <th>Trend</th>
+                    </tr>
+                  </thead>
+                  <tbody id="routeDemandBody">
+                    <tr>
+                      <td>R-01 (Marigondon Port → Olango)</td>
+                      <td>122</td>
+                      <td>28</td>
+                      <td>86%</td>
+                      <td><span class="badge text-bg-success">Rising</span></td>
+                    </tr>
+                    <tr>
+                      <td>R-02 (Mactan Port → Olango)</td>
+                      <td>98</td>
+                      <td>22</td>
+                      <td>73%</td>
+                      <td><span class="badge text-bg-info">Stable</span></td>
+                    </tr>
+                    <tr>
+                      <td>R-04 (Mactan Port → Caohagan)</td>
+                      <td>64</td>
+                      <td>14</td>
+                      <td>61%</td>
+                      <td><span class="badge text-bg-warning">Volatile</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4">
+            <div class="panel-card p-3">
+              <h4 class="mb-3">Recommendations</h4>
+              <div class="d-flex justify-content-between border-bottom py-2">
+                <span>Add 1 extra trip on R-01 at 16:00–18:00</span>
+                <span class="text-muted">priority high</span>
+              </div>
+              <div class="d-flex justify-content-between border-bottom py-2">
+                <span>Keep current fleet on R-02</span>
+                <span class="text-muted">priority normal</span>
+              </div>
+              <div class="d-flex justify-content-between py-2">
+                <span>Monitor weather before expanding R-04</span>
+                <span class="text-muted">priority medium</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- View Predictions Modal -->
+  <div class="modal fade" id="predictionsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">View Predictions</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="list-group">
+            <li class="list-group-item d-flex justify-content-between">
+              <span>R-01 (Marigondon Port → Olango)</span><strong>+12%</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>R-02 (Mactan Port → Olango)</span><strong>-3%</strong>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>R-04 (Mactan Port → Caohagan)</span><strong>+5%</strong>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Trends Modal -->
+  <div class="modal fade" id="trendsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">View Trends</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2"><strong>R-01:</strong> Strong upward demand during afternoon peak.</p>
+          <p class="mb-2"><strong>R-02:</strong> Stable demand with slight weekday dips.</p>
+          <p class="mb-0"><strong>R-04:</strong> Variable demand, sensitive to weather conditions.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Insights Modal -->
+  <div class="modal fade" id="insightsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="insightForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Generate Insights</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">Select Focus Route</label>
+          <select id="insightRoute" class="form-select mb-3">
+            <option>R-01 (Marigondon Port → Olango)</option>
+            <option>R-02 (Mactan Port → Olango)</option>
+            <option>R-04 (Mactan Port → Caohagan)</option>
+          </select>
+          <div id="insightOutput" class="alert alert-info mb-0">
+            Click <strong>Generate</strong> to produce recommendation.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-bangkago">Generate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+  <script>
+    const predictionsModal = new bootstrap.Modal('#predictionsModal');
+    const trendsModal = new bootstrap.Modal('#trendsModal');
+    const insightsModal = new bootstrap.Modal('#insightsModal');
+
+    document.getElementById('btnPredictions').addEventListener('click', () => predictionsModal.show());
+    document.getElementById('btnTrends').addEventListener('click', () => trendsModal.show());
+    document.getElementById('btnInsights').addEventListener('click', () => insightsModal.show());
+
+    document.getElementById('insightForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      const route = document.getElementById('insightRoute').value;
+      const output = document.getElementById('insightOutput');
+
+      let message = '';
+      if(route.includes('R-01')) message = 'Add 1 extra trip between 16:00–18:00 and prioritize larger-capacity vessels.';
+      else if(route.includes('R-02')) message = 'Maintain current schedule; demand is stable and service level is acceptable.';
+      else message = 'Enable weather-triggered dispatch and keep standby vessel during volatile demand periods.';
+
+      output.className = 'alert alert-success mb-0';
+      output.textContent = message;
+    });
+  </script>
+</body>
+</html>

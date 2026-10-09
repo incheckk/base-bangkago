@@ -41,6 +41,23 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-10 — Static web merged into `web/` + Supabase login wired.**
+  - Source: `insik\BASE-WEB\BangkaGO-WEB` (incheckk/BangkaGO-WEB, PR #11)
+    copied as-is into `web/` — layout preserved (relative links span
+    `bangkaGo-access.html` → `BangkaGO-WEB/{admin,coastguard}-dashboard/`,
+    topbars → `../../bangkaGo-access.html`, landing = `web/FrontPage/`).
+  - Wired: `web/config.js` (EXPO_PUBLIC_* URL + anon key, NEVER the
+    service-role key), `web/supabase-client.js` (supabase-js 2.112.4 UMD
+    from CDN, same version as the app; mirrors `phone.ts` so login takes
+    a PH mobile number), real `signInWithPassword` in `bangkaGo-access.html`
+    (demo admin/admin123 bypass REMOVED by decision), role guard at the top
+    of each dashboard's `layout-loader.js`, topbar Logout now signs out of
+    Supabase.
+  - Not wired yet (LAUNCH_DEFERRED `[G]`): dashboard page data is still
+    mocked HTML arrays; guard is client-side only (RLS is the boundary).
+  - Run the web: `npm run web` → http://localhost:3000 (HTTP required —
+    partials load via fetch). Landing `/FrontPage/`, portal
+    `/bangkaGo-access.html`. Mobile app untouched; gates unaffected.
 - **2026-10-08 — Passenger nav cleanup + booking-flow fixes + QR/manifest
   upgrades (gates green: tsc clean, lint 0 errors / 123 warnings,
   expo-doctor 21/21).**

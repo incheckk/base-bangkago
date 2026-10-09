@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo LGU/Coast Guard — View Operator Records</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <script>
+    (function () {
+      try {
+        var role = sessionStorage.getItem("bangkago_role");
+        if (role !== "coastguard") throw new Error("unauthorized");
+      } catch (e) {
+        location.replace("../../bangkaGo-access.html");
+      }
+    })();
+  </script>
+</head>
+<body data-page="reports">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <!-- KPI row — same border, little gap -->
+        <div class="row g-2 mb-3 kpi-strip">
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Operators Logged</p>
+              <h3>24</h3>
+              <span class="kpi-up">All records synced</span>
+              <div class="kpi-mini-chart chart-up"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Departures Verified</p>
+              <h3>17</h3>
+              <span class="kpi-up">Today</span>
+              <div class="kpi-mini-chart chart-up"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Conditional Trips</p>
+              <h3>3</h3>
+              <span class="kpi-warn">Need monitoring</span>
+              <div class="kpi-mini-chart chart-warn"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Compliance Flags</p>
+              <h3>2</h3>
+              <span class="kpi-down">For admin review</span>
+              <div class="kpi-mini-chart chart-down"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <!-- LEFT: Operator records + Departure log -->
+          <div class="col-xl-8">
+            <div class="cg-card mb-3">
+              <div class="panel-head">
+                <h6 class="mb-0">Operator Records (Read-Only)</h6>
+                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+              </div>
+
+              <div class="row g-2 mb-3 align-items-end filter-row">
+                <div class="col-12 col-sm-6 col-md-5">
+                  <label class="form-label visually-hidden" for="opSearchInput">Search</label>
+                  <input id="opSearchInput" class="form-control w-100" type="text" placeholder="Search operator, vessel, or ID">
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                  <label class="form-label visually-hidden" for="opStatusFilter">Status</label>
+                  <select id="opStatusFilter" class="form-select w-100">
+                    <option value="">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="On Duty">On Duty</option>
+                    <option value="Suspended">Suspended</option>
+                  </select>
+                </div>
+                <div class="col-12 col-sm-6 col-md-2 d-grid">
+                  <button id="opResetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                </div>
+              </div>
+
+              <div id="opResultCount" class="small text-secondary mb-2"></div>
+
+              <div class="table-responsive">
+                <table class="table table-theme align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Operator ID</th>
+                      <th>Name</th>
+                      <th>Assigned Vessel</th>
+                      <th>Trips (7d)</th>
+                      <th>Last Activity</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="operatorTableBody"></tbody>
+                </table>
+              </div>
+
+              <p id="opEmptyState" class="cg-empty d-none">
+                No operator records matched your filters.
+              </p>
+            </div>
+
+            <!-- Cleaned Departure Verification Log -->
+            <div class="cg-card">
+              <div class="panel-head">
+                <h6 class="mb-0">Departure Verification Log </h6>
+                <span class="muted-note">Read-only monitoring</span>
+              </div>
+
+              <div class="row g-2 mb-3 align-items-end filter-row">
+                <div class="col-12 col-sm-6 col-md-5">
+                  <label class="form-label visually-hidden" for="depSearchInput">Search</label>
+                  <input id="depSearchInput" class="form-control w-100" type="text" placeholder="Search vessel or verifier">
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                  <label class="form-label visually-hidden" for="depResultFilter">Result</label>
+                  <select id="depResultFilter" class="form-select w-100">
+                    <option value="">All Results</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Conditional">Conditional</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+                <div class="col-12 col-sm-6 col-md-2 d-grid">
+                  <button id="depResetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                </div>
+              </div>
+
+              <div id="depResultCount" class="small text-secondary mb-2"></div>
+
+              <div class="table-responsive">
+                <table class="table table-theme align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Vessel</th>
+                      <th>Verifier</th>
+                      <th>Time</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody id="departureTableBody"></tbody>
+                </table>
+              </div>
+
+              <p id="depEmptyState" class="cg-empty d-none">
+                No departure logs matched your filters.
+              </p>
+            </div>
+          </div>
+
+          <!-- RIGHT: Compliance history -->
+          <div class="col-xl-4">
+            <div class="cg-card h-100">
+              <div class="panel-head">
+                <h6 class="mb-0">Compliance History Feed</h6>
+              </div>
+
+              <ul class="activity-list mb-3" id="complianceFeed">
+                <li><span>Boat 03 flagged: route deviation (South Passage)</span><small>12m ago</small></li>
+                <li><span>Boat 11 departure marked conditional</span><small>25m ago</small></li>
+                <li><span>Operator BK-004 set to suspended status</span><small>44m ago</small></li>
+                <li><span>Station 2 submitted compliance report</span><small>2h ago</small></li>
+              </ul>
+
+              <hr>
+              <h6 class="mb-2">Review Queue</h6>
+              <div class="health-item"><span>New Reports</span><span class="badge text-bg-warning">3</span></div>
+              <div class="health-item"><span>For Admin Action</span><span class="badge text-bg-danger">2</span></div>
+              <div class="health-item"><span>Closed Today</span><span class="badge text-bg-success">5</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/coastguard-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+  <script>
+    // -----------------------------
+    // Operator records data/filter
+    // -----------------------------
+    const operators = [
+      { id: "BK-001", name: "Juan Dela Cruz", vessel: "Boat 08", trips: 9, last: "14:40", status: "On Duty" },
+      { id: "BK-002", name: "Mario Santos", vessel: "Boat 03", trips: 7, last: "14:22", status: "Active" },
+      { id: "BK-003", name: "Rogelio Navarro", vessel: "Boat 11", trips: 6, last: "13:58", status: "Active" },
+      { id: "BK-004", name: "Pedro Alonzo", vessel: "Boat 15", trips: 2, last: "12:47", status: "Suspended" },
+      { id: "BK-005", name: "Nilo Ramos", vessel: "Boat 06", trips: 8, last: "14:31", status: "On Duty" }
+    ];
+
+    const opTableBody = document.getElementById("operatorTableBody");
+    const opSearchInput = document.getElementById("opSearchInput");
+    const opStatusFilter = document.getElementById("opStatusFilter");
+    const opResetBtn = document.getElementById("opResetBtn");
+    const opResultCount = document.getElementById("opResultCount");
+    const opEmptyState = document.getElementById("opEmptyState");
+
+    function opBadge(status){
+      if (status === "On Duty") return "text-bg-info";
+      if (status === "Active") return "text-bg-success";
+      return "text-bg-danger";
+    }
+
+    function renderOperators(data){
+      opTableBody.innerHTML = "";
+
+      if (data.length === 0) opEmptyState.classList.remove("d-none");
+      else opEmptyState.classList.add("d-none");
+
+      data.forEach(o => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${o.id}</td>
+          <td>${o.name}</td>
+          <td>${o.vessel}</td>
+          <td>${o.trips}</td>
+          <td>${o.last}</td>
+          <td><span class="badge ${opBadge(o.status)}">${o.status}</span></td>
+        `;
+        opTableBody.appendChild(tr);
+      });
+
+      opResultCount.textContent = `Showing ${data.length} operator record(s)`;
+    }
+
+    function filterOperators(){
+      const q = opSearchInput.value.trim().toLowerCase();
+      const status = opStatusFilter.value;
+
+      const filtered = operators.filter(o => {
+        const textMatch =
+          o.id.toLowerCase().includes(q) ||
+          o.name.toLowerCase().includes(q) ||
+          o.vessel.toLowerCase().includes(q);
+
+        const statusMatch = status ? o.status === status : true;
+        return textMatch && statusMatch;
+      });
+
+      renderOperators(filtered);
+    }
+
+    opSearchInput.addEventListener("input", filterOperators);
+    opStatusFilter.addEventListener("change", filterOperators);
+    opResetBtn.addEventListener("click", () => {
+      opSearchInput.value = "";
+      opStatusFilter.value = "";
+      renderOperators(operators);
+    });
+
+    // -----------------------------
+    // Departure logs data/filter (cleaner)
+    // -----------------------------
+    const departures = [
+      { vessel: "Boat 08", verifier: "Office", time: "13:18", result: "Approved" },
+      { vessel: "Boat 03", verifier: "Office", time: "13:00", result: "Conditional" },
+      { vessel: "Boat 11", verifier: "Office", time: "12:39", result: "Approved" },
+      { vessel: "Boat 15", verifier: "Office", time: "11:49", result: "Rejected" }
+    ];
+
+    const depTableBody = document.getElementById("departureTableBody");
+    const depSearchInput = document.getElementById("depSearchInput");
+    const depResultFilter = document.getElementById("depResultFilter");
+    const depResetBtn = document.getElementById("depResetBtn");
+    const depResultCount = document.getElementById("depResultCount");
+    const depEmptyState = document.getElementById("depEmptyState");
+
+    function depBadge(result){
+      if (result === "Approved") return "text-bg-success";
+      if (result === "Conditional") return "text-bg-warning";
+      return "text-bg-danger";
+    }
+
+    function renderDepartures(data){
+      depTableBody.innerHTML = "";
+
+      if (data.length === 0) depEmptyState.classList.remove("d-none");
+      else depEmptyState.classList.add("d-none");
+
+      data.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${d.vessel}</td>
+          <td>${d.verifier}</td>
+          <td>${d.time}</td>
+          <td><span class="badge ${depBadge(d.result)}">${d.result}</span></td>
+        `;
+        depTableBody.appendChild(tr);
+      });
+
+      depResultCount.textContent = `Showing ${data.length} departure verification log(s)`;
+    }
+
+    function filterDepartures(){
+      const q = depSearchInput.value.trim().toLowerCase();
+      const result = depResultFilter.value;
+
+      const filtered = departures.filter(d => {
+        const textMatch =
+          d.vessel.toLowerCase().includes(q) ||
+          d.verifier.toLowerCase().includes(q);
+
+        const resultMatch = result ? d.result === result : true;
+        return textMatch && resultMatch;
+      });
+
+      renderDepartures(filtered);
+    }
+
+    depSearchInput.addEventListener("input", filterDepartures);
+    depResultFilter.addEventListener("change", filterDepartures);
+    depResetBtn.addEventListener("click", () => {
+      depSearchInput.value = "";
+      depResultFilter.value = "";
+      renderDepartures(departures);
+    });
+
+    // initial render
+    renderOperators(operators);
+    renderDepartures(departures);
+  </script>
+</body>
+</html>

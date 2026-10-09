@@ -232,28 +232,44 @@ export default function DepartureScreen() {
       }
     }
     if (bangkeroId) {
-      supabase
-        .from('bookings')
-        .select('id, ref, user_id')
-        .eq('operator_id', bangkeroId)
-        .eq('trip_stat', 'accepted')
-        .then(({ data }) => {
-          (data ?? []).forEach((b) => {
-            // C8: actual depart time — best effort, never blocks departure.
-            stampBookingDepart(b.id).catch(() => {});
-            if (b.user_id) {
-              createNotification(
-                b.user_id,
-                'Trip Departed',
-                `Boat for trip ${b.ref} has departed.`
-              ).catch(() => {});
-            }
-          });
-        });
+      // Only today's sailing — future advance bookings sail another day
+      // and must not be stamped or notified now.
+      const todayIds = acceptedTrips.map((t) => t.bookingId);
+      if (todayIds.length > 0) {
+        try {
+          const { data } = await supabase
+            .from('bookings')
+            .select('id, ref, user_id')
+            .eq('operator_id', bangkeroId)
+            .eq('trip_stat', 'accepted')
+            .in('id', todayIds);
+          await Promise.all(
+            (data ?? []).map(async (b) => {
+              // C8: actual depart time — best effort, never blocks departure.
+              try {
+                await stampBookingDepart(b.id);
+              } catch {
+                // ignore — manifest already records the sailing
+              }
+              if (b.user_id) {
+                try {
+                  await createNotification(
+                    b.user_id,
+                    'Trip Departed',
+                    `Boat for trip ${b.ref} has departed.`
+                  );
+                } catch {
+                  // ignore — departure still proceeds
+                }
+              }
+            })
+          );
+        } catch {
+          // ignore — departure still proceeds, manifest is the record
+        }
+      }
     }
-    setTimeout(() => {
-      router.push('/(bangkero)/arrived');
-    }, 1000);
+    router.push('/(bangkero)/arrived');
   }
 
   const steps = ['Manifest', 'Checklist', 'Weather', 'Ready'];

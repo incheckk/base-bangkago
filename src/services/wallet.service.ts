@@ -12,6 +12,7 @@ function mapTxRow(row: any): WalletTransactionDoc {
     amount: row.amount,
     walletId: row.wallet_id,
     bookingId: row.booking_id,
+    createdAt: row.created_at ?? null,
   };
 }
 
@@ -31,7 +32,7 @@ export async function getWalletTransactions(walletId: string): Promise<WalletTra
     .from('wallet_transactions')
     .select('*')
     .eq('wallet_id', walletId)
-    .order('id', { ascending: false });
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
   return (data ?? []).map(mapTxRow);

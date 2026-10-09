@@ -277,6 +277,7 @@ export interface WalletTransactionDoc {
   amount: number;
   walletId: string;
   bookingId: string | null;
+  createdAt: string | null;
 }
 
 export interface VesselTrackingDoc {

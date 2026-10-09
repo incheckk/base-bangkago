@@ -7,6 +7,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useWallet } from '@/hooks/useWallet';
+import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const TX_TYPE_MAP: Record<string, { label: string; color: string }> = {
@@ -21,12 +22,15 @@ export default function BangkeroEarnings() {
   const { wallet, transactions, loading, error, topUp } = useWallet(user?.id ?? null);
   const [toppingUp, setToppingUp] = useState(false);
 
+  const todayIso = manilaTodayIso();
+  const weekAgoIso = toManilaIso(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)) ?? todayIso;
+
   const todayCredits = transactions
-    .filter((t) => t.type === 'credit' && isToday(t.transactionId))
+    .filter((t) => t.type === 'credit' && toManilaIso(t.createdAt) === todayIso)
     .reduce((sum, t) => sum + t.amount, 0);
 
   const weekCredits = transactions
-    .filter((t) => t.type === 'credit')
+    .filter((t) => t.type === 'credit' && (toManilaIso(t.createdAt) ?? '') >= weekAgoIso)
     .reduce((sum, t) => sum + t.amount, 0);
 
   async function handleTopUp() {
@@ -119,9 +123,12 @@ export default function BangkeroEarnings() {
   );
 }
 
-function isToday(_id: string) {
-  const now = new Date();
-  return true;
+/** Manila calendar day (YYYY-MM-DD) for a timestamp, null when unknown. */
+function toManilaIso(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
 }
 
 const styles = StyleSheet.create({

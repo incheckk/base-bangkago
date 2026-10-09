@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { LoadingState, ErrorState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useLockBack } from '@/hooks/useLockBack';
 import { usePorts } from '@/hooks/useSupabase';
@@ -19,45 +20,78 @@ export default function TripSummary() {
   const { user } = useAuth();
   // includeCompleted: arrived marks the manifest 'completed' before this
   // screen opens — without it the summary would render empty.
-  const { manifest, passengers, parcels } = useTripManifest(user?.id ?? null, true);
+  const { manifest, passengers, parcels, loading, error } = useTripManifest(user?.id ?? null, true);
   const { data: ports } = usePorts();
   const [passengerFare, setPassengerFare] = useState(0);
   const [parcelFare, setParcelFare] = useState(0);
+  const [fareLoading, setFareLoading] = useState(true);
+  const [fareError, setFareError] = useState<string | null>(null);
 
-  // Real money for THIS sailing: the bookings that were written into the
-  // manifest's passenger rows at departure (passenger fares + cargo freight).
+  // Real money for THIS sailing: passenger fares from the manifest's
+  // passenger rows plus cargo freight resolved through the manifest's
+  // parcel rows (cargo bookings are never written into
+  // manifest_passengers, so reading fares from there alone always yields
+  // parcelFare = 0).
   useEffect(() => {
     let cancelled = false;
     async function loadFare() {
       if (!manifest?.manifestId) return;
-      const { data: seatRows, error: seatErr } = await supabase
-        .from('manifest_passengers')
-        .select('booking_id')
-        .eq('manifest_id', manifest.manifestId);
-      if (seatErr || cancelled) return;
-      const ids = [...new Set((seatRows ?? []).map((r) => r.booking_id))];
-      if (ids.length === 0) return;
-      const { data: bookings, error: bkErr } = await supabase
-        .from('bookings')
-        .select('service_type, total_price')
-        .in('id', ids);
-      if (bkErr || cancelled || !bookings) return;
-      setPassengerFare(
-        bookings
-          .filter((b) => b.service_type !== 'cargo')
-          .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
-      );
-      setParcelFare(
-        bookings
-          .filter((b) => b.service_type === 'cargo')
-          .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
-      );
+      setFareLoading(true);
+      setFareError(null);
+      try {
+        const { data: seatRows, error: seatErr } = await supabase
+          .from('manifest_passengers')
+          .select('booking_id')
+          .eq('manifest_id', manifest.manifestId);
+        if (seatErr) throw seatErr;
+        const seatIds = [...new Set((seatRows ?? []).map((r) => r.booking_id))];
+
+        // Cargo leg: manifest_parcels -> parcels.booking_id -> bookings.
+        const parcelIds = [...new Set(parcels.map((p) => p.parcelId))];
+        let cargoBookingIds: string[] = [];
+        if (parcelIds.length > 0) {
+          const { data: parcelRows, error: parcelErr } = await supabase
+            .from('parcels')
+            .select('booking_id')
+            .in('id', parcelIds);
+          if (parcelErr) throw parcelErr;
+          cargoBookingIds = [...new Set((parcelRows ?? []).map((r) => r.booking_id).filter(Boolean))];
+        }
+
+        const ids = [...new Set([...seatIds, ...cargoBookingIds])];
+        if (cancelled) return;
+        if (ids.length === 0) {
+          setPassengerFare(0);
+          setParcelFare(0);
+          return;
+        }
+        const { data: bookings, error: bkErr } = await supabase
+          .from('bookings')
+          .select('service_type, total_price')
+          .in('id', ids);
+        if (bkErr) throw bkErr;
+        if (cancelled || !bookings) return;
+        setPassengerFare(
+          bookings
+            .filter((b) => b.service_type !== 'cargo')
+            .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
+        );
+        setParcelFare(
+          bookings
+            .filter((b) => b.service_type === 'cargo')
+            .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
+        );
+      } catch (e: any) {
+        if (!cancelled) setFareError(e?.message ?? 'Could not load fares.');
+      } finally {
+        if (!cancelled) setFareLoading(false);
+      }
     }
     void loadFare();
     return () => {
       cancelled = true;
     };
-  }, [manifest?.manifestId]);
+  }, [manifest?.manifestId, parcels]);
 
   const departure = manifest?.actualDepartureTime
     ? new Date(manifest.actualDepartureTime)
@@ -77,6 +111,31 @@ export default function TripSummary() {
     const hrs = Math.floor(mins / 60);
     const rem = mins % 60;
     durationText = hrs > 0 ? `${hrs}h ${rem}m` : `${rem}m`;
+  }
+
+  if (loading || fareLoading) {
+    return (
+      <ScreenContainer padded={false}>
+        <BangkeroScreenHeader title="Trip Summary" showDrawer={false} showBack={false} />
+        <View style={styles.center}>
+          <LoadingState label="Loading trip summary…" />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (error || fareError || !manifest) {
+    return (
+      <ScreenContainer padded={false}>
+        <BangkeroScreenHeader title="Trip Summary" showDrawer={false} showBack={false} />
+        <View style={styles.center}>
+          <ErrorState message={error ?? fareError ?? 'No completed trip found. Complete a sailing first.'} />
+          <View style={styles.footer}>
+            <PrimaryButton label="Back to Home" onPress={() => router.replace('/(bangkero)/home')} />
+          </View>
+        </View>
+      </ScreenContainer>
+    );
   }
 
   return (
@@ -141,6 +200,7 @@ export default function TripSummary() {
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   scroll: {
     flex: 1,
     paddingHorizontal: spacing.xl,

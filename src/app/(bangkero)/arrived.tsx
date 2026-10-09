@@ -36,6 +36,7 @@ export default function ArrivedScreen() {
   const [completing, setCompleting] = useState(false);
   const [parcelBusy, setParcelBusy] = useState<string | null>(null);
   const [parcelError, setParcelError] = useState<string | null>(null);
+  const [completeError, setCompleteError] = useState<string | null>(null);
 
   // Opening this screen IS the arrival — stamp it once (idempotent) so the
   // trip duration and Trip Summary get real times.
@@ -72,29 +73,33 @@ export default function ArrivedScreen() {
   async function handleComplete() {
     if (completing) return;
     setCompleting(true);
+    setCompleteError(null);
+    const failedRefs: string[] = [];
+    let manifestFailed = false;
     try {
       if (user?.id) {
         // Today's accepted trips only — future-dated ones sail another day
         // and must not be completed (or told to disembark) now.
-        const { data } = await supabase
+        const { data, error: fetchError } = await supabase
           .from('bookings')
           .select('id, ref, user_id')
           .eq('operator_id', user.id)
           .eq('trip_stat', 'accepted')
           .or(`scheduled_date.is.null,scheduled_date.lte.${manilaTodayIso()}`);
-        await Promise.all(
+        if (fetchError) throw fetchError;
+        const results = await Promise.all(
           (data ?? []).map(async (b) => {
             // Close the booking out now (023 complete_trip). It refuses a
             // party that was never marked onboarded — force_complete_trip
             // (026) is the fallback while the arrival-bypass switch is on.
-            // Both failing leaves the booking accepted, as before.
             try {
               await completeBooking(b.id);
             } catch {
               try {
                 await forceCompleteBooking(b.id);
               } catch {
-                // bypass off — home's "Mark completed" path still applies
+                failedRefs.push(b.ref ?? b.id);
+                return;
               }
             }
             if (b.user_id) {
@@ -106,14 +111,32 @@ export default function ArrivedScreen() {
             }
           }),
         );
+        void results;
       }
       if (manifest) {
         // Close the manifest too (007 allows 'completed'); trip-summary
         // reads with includeCompleted so the report still renders.
-        await completeManifest(manifest).catch(() => {});
+        try {
+          await completeManifest(manifest);
+        } catch {
+          manifestFailed = true;
+        }
       }
-    } catch {
-      // never strand the bangkero here — the trip list re-syncs anyway
+    } catch (e) {
+      setCompleteError(friendlyError(e));
+      setCompleting(false);
+      return;
+    }
+    if (failedRefs.length > 0 || manifestFailed) {
+      setCompleteError(
+        manifestFailed && failedRefs.length > 0
+          ? `Could not close ${failedRefs.join(', ')} and the manifest. Check connection and tap Complete Trip to retry — staying here so nothing strands.`
+          : manifestFailed
+            ? 'Could not close the manifest. Check connection and tap Complete Trip to retry — staying here so nothing strands.'
+            : `Could not close ${failedRefs.join(', ')}. Tap Complete Trip to retry — staying here so nothing strands.`
+      );
+      setCompleting(false);
+      return;
     }
     router.replace('/(bangkero)/post-trip');
   }
@@ -196,6 +219,11 @@ export default function ArrivedScreen() {
             )}
 
             <View style={styles.footer}>
+              {completeError && (
+                <View style={styles.banner}>
+                  <Text style={styles.bannerText}>{completeError}</Text>
+                </View>
+              )}
               <PrimaryButton
                 label="Complete Trip"
                 onPress={handleComplete}

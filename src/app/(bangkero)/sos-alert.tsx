@@ -10,17 +10,46 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusCard } from '@/components/StatusCard';
 import { useAuth } from '@/hooks/useAuth';
 import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
+import { useMyPortQueue, usePorts } from '@/hooks/useSupabase';
+import { useTripManifest } from '@/hooks/useTripManifest';
 import { friendlyError } from '@/services/booking.service';
+import { getMyLastFix } from '@/services/queue.service';
 import { createAlert } from '@/services/safety-alert.service';
+import { getBangkaIdForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 export default function SosAlertScreen() {
-  const { profile } = useAuth();
-  const portId = profile?.uid ? 'p1' : null;
-  const { data: alerts } = useSafetyAlerts(portId);
+  const { profile, user } = useAuth();
+  const uid = user?.id ?? null;
+
+  // Port resolution: live queue row first (where the boat physically is),
+  // then today's manifest departure port, else omit (port_id is nullable).
+  // The old hardcoded 'p1' no longer exists since 021 reseeded the network,
+  // which is exactly the FK violation in the bug report.
+  const myQueue = useMyPortQueue(uid);
+  const { manifest } = useTripManifest(uid);
+  const ports = usePorts();
+  const knownIds = new Set(ports.data.map((p) => p.portId));
+  const queuePort = myQueue.data.entry?.portId ?? null;
+  const manifestPort = manifest?.departurePortId ?? null;
+  const valid = (id: string | null) => (id && knownIds.has(id) ? id : null);
+  const resolvedPortId = valid(queuePort) ?? valid(manifestPort) ?? null;
+  const resolvedPortName = resolvedPortId
+    ? ports.data.find((p) => p.portId === resolvedPortId)?.portName ?? resolvedPortId
+    : null;
+
+  // Recent alerts unfiltered — filtering by a single (possibly null) port
+  // would hide the bangkero's own history.
+  const { data: alerts } = useSafetyAlerts(null);
 
   const [alertState, setAlertState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // Mirror the admin System Alerts filter: resolved rows stay in the table
+  // (is_resolved = true) but leave the active list, so a resolve in admin
+  // visibly clears this screen too instead of looking stuck.
+  const activeAlerts = alerts.filter((a) => !a.isResolved);
+  const resolvedAlerts = alerts.filter((a) => a.isResolved);
 
   function handleSos() {
     Alert.alert(
@@ -36,10 +65,24 @@ export default function SosAlertScreen() {
             setSendError(null);
             try {
               const who = profile ? `${profile.firstName} ${profile.lastName}` : 'a bangkero';
+              // Owned boat (satisfies safety_alerts_insert_bangkero RLS);
+              // null falls back to the bangka-less port policy (005).
+              const bangkaId = uid ? await getBangkaIdForBangkero(uid).catch(() => null) : null;
+              // Fresh GPS so coast guard has location even when port is null.
+              const fix = uid ? await getMyLastFix(uid).catch(() => null) : null;
+              const where = resolvedPortName
+                ? ` Near ${resolvedPortName}.`
+                : queuePort ?? manifestPort
+                  ? ' (port unknown).'
+                  : ' (not queued — location below).';
+              const gps = fix
+                ? ` Last fix ${fix.latitude.toFixed(5)}, ${fix.longitude.toFixed(5)}.`
+                : '';
               await createAlert({
-                message: `Emergency SOS from ${who}. Immediate assistance needed.`,
+                message: `Emergency SOS from ${who}.${where}${gps} Immediate assistance needed.`,
                 severity: 'critical',
-                portId: portId ?? undefined,
+                bangkaId: bangkaId ?? undefined,
+                portId: resolvedPortId ?? undefined,
               });
               setAlertState('sent');
             } catch (e) {
@@ -76,7 +119,9 @@ export default function SosAlertScreen() {
               ? 'Sending alert…'
               : alertState === 'sent'
                 ? 'Alert Sent'
-                : 'Tap to send emergency alert to coast guard'}
+                : resolvedPortName
+                  ? `Tap to send emergency alert to coast guard (near ${resolvedPortName})`
+                  : 'Tap to send emergency alert to coast guard'}
           </Text>
         </View>
 
@@ -96,18 +141,41 @@ export default function SosAlertScreen() {
           </View>
         )}
 
-        {alerts.length > 0 && (
+        {alerts.length === 0 ? (
+          <Text style={styles.emptyLine}>No alerts yet — resolved and active alerts will appear here.</Text>
+        ) : (
           <>
-            <Text style={styles.sectionLabel}>RECENT ALERTS</Text>
-            {alerts.map((a) => (
-              <StatusCard
-                key={a.alertId}
-                title={a.severity.toUpperCase()}
-                message={a.message}
-                severity={a.severity}
-                timestamp={new Date(a.createdAt).toLocaleString()}
-              />
-            ))}
+            <Text style={styles.sectionLabel}>
+              ACTIVE ALERTS{activeAlerts.length > 0 ? ` · ${activeAlerts.length}` : ''}
+            </Text>
+            {activeAlerts.length === 0 ? (
+              <Text style={styles.emptyLine}>You&apos;re clear — no active alerts.</Text>
+            ) : (
+              activeAlerts.map((a) => (
+                <StatusCard
+                  key={a.alertId}
+                  title={a.severity.toUpperCase()}
+                  message={a.message}
+                  severity={a.severity}
+                  timestamp={new Date(a.createdAt).toLocaleString()}
+                />
+              ))
+            )}
+            {resolvedAlerts.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>RESOLVED</Text>
+                {resolvedAlerts.map((a) => (
+                  <StatusCard
+                    key={a.alertId}
+                    title={a.severity.toUpperCase()}
+                    message={a.message}
+                    severity={a.severity}
+                    timestamp={new Date(a.createdAt).toLocaleString()}
+                    resolved
+                  />
+                ))}
+              </>
+            )}
           </>
         )}
 
@@ -184,5 +252,6 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
+  emptyLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   footer: { marginTop: spacing.xxl },
 });

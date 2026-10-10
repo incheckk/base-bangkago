@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -10,9 +10,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useMyTrips } from '@/hooks/useSupabase';
+import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { PaymentDoc } from '@/types/models';
+import type { PassengerDetailDoc, PaymentDoc } from '@/types/models';
 import {
   Sailing, buildSailings, sailingDayLabel, todayKey,
 } from '@/utils/sailings';
@@ -50,19 +51,62 @@ export default function ManifestScreen() {
   useEffect(() => { void loadPayments(); }, [loadPayments]);
   useRealtimeQuery(loadPayments, [{ table: 'payments' }]);
 
+  // Companion names for search, fetched from the search handler (not an
+  // effect) so no new set-state-in-effect instance is introduced. Cleared
+  // when the query clears; a trip arriving mid-search joins the cache on
+  // the next keystroke.
+  const [detailCache, setDetailCache] = useState<Record<string, PassengerDetailDoc[]>>({});
+  const fetchSeq = useRef(0);
+  async function fetchDetails(ids: string[]) {
+    const seq = ++fetchSeq.current;
+    const rows = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          return [id, await getPassengerDetailsByBooking(id)] as const;
+        } catch {
+          return [id, []] as const;
+        }
+      })
+    );
+    if (fetchSeq.current !== seq) return;
+    setDetailCache(Object.fromEntries(rows));
+  }
+  function handleSearch(v: string) {
+    setSearch(v);
+    if (!v.trim() || tripIds.length === 0) {
+      fetchSeq.current += 1;
+      setDetailCache({});
+      return;
+    }
+    void fetchDetails(tripIds);
+  }
+
   const sailings = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = q
-      ? trips.data.filter((t) =>
-          (t.passengerName ?? '').toLowerCase().includes(q) ||
-          t.ref.toLowerCase().includes(q)
-        )
+      ? trips.data.filter((t) => {
+          if ((t.passengerName ?? '').toLowerCase().includes(q)) return true;
+          if (t.ref.toLowerCase().includes(q)) return true;
+          if (
+            parcels.data.some(
+              (p) =>
+                p.bookingId === t.bookingId &&
+                p.receiverName.toLowerCase().includes(q)
+            )
+          ) {
+            return true;
+          }
+          return (detailCache[t.bookingId] ?? []).some((c) =>
+            `${c.firstName} ${c.lastName}`.toLowerCase().includes(q)
+          );
+        })
       : trips.data;
     return buildSailings(filtered, parcels.data, payments);
-  }, [trips.data, parcels.data, payments, search]);
+  }, [trips.data, parcels.data, payments, search, detailCache]);
 
   const inProgress = sailings.filter((s) => s.inProgress);
   const today = todayKey();
+  const upcoming = sailings.filter((s) => !s.inProgress && s.day > today);
   const doneToday = sailings.filter((s) => !s.inProgress && s.day === today);
   const earlier = sailings.filter((s) => !s.inProgress && s.day < today);
 
@@ -92,10 +136,10 @@ export default function ManifestScreen() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by passenger or booking ref…"
+            placeholder="Search passenger, companion, parcel, or ref…"
             placeholderTextColor={colors.textMuted}
             value={search}
-            onChangeText={setSearch}
+            onChangeText={handleSearch}
           />
         </View>
 
@@ -105,7 +149,7 @@ export default function ManifestScreen() {
             title={search ? 'No sailings found' : 'No sailings yet'}
             message={
               search
-                ? 'Try a different passenger name or booking reference.'
+                ? 'Try a different name, parcel receiver, or booking reference.'
                 : 'Accepted trips appear here grouped by route and day.'
             }
           />
@@ -114,6 +158,11 @@ export default function ManifestScreen() {
             {inProgress.length > 0 && (
               <Section title="IN PROGRESS">
                 {inProgress.map((s) => <SailingCard key={s.key} sailing={s} />)}
+              </Section>
+            )}
+            {upcoming.length > 0 && (
+              <Section title="UPCOMING">
+                {upcoming.map((s) => <SailingCard key={s.key} sailing={s} upcoming />)}
               </Section>
             )}
             {doneToday.length > 0 && (
@@ -142,7 +191,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function SailingCard({ sailing }: { sailing: Sailing }) {
+function SailingCard({ sailing, upcoming }: { sailing: Sailing; upcoming?: boolean }) {
   return (
     <Pressable
       onPress={() =>
@@ -157,9 +206,9 @@ function SailingCard({ sailing }: { sailing: Sailing }) {
         <Text style={styles.route} numberOfLines={1}>
           {sailing.from} → {sailing.to}
         </Text>
-        <View style={[styles.chip, sailing.inProgress ? styles.chipLive : styles.chipDone]}>
-          <Text style={[styles.chipText, sailing.inProgress ? styles.chipTextLive : styles.chipTextDone]}>
-            {sailing.inProgress ? 'In progress' : 'Completed'}
+        <View style={[styles.chip, sailing.inProgress ? styles.chipLive : upcoming ? styles.chipSoon : styles.chipDone]}>
+          <Text style={[styles.chipText, sailing.inProgress ? styles.chipTextLive : upcoming ? styles.chipTextSoon : styles.chipTextDone]}>
+            {sailing.inProgress ? 'In progress' : upcoming ? 'Upcoming' : 'Completed'}
           </Text>
         </View>
       </View>
@@ -221,9 +270,11 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: spacing.md, paddingVertical: 3, borderRadius: radii.pill },
   chipLive: { backgroundColor: colors.primaryTint },
   chipDone: { backgroundColor: colors.neutralTint },
+  chipSoon: { backgroundColor: colors.warningTint },
   chipText: { fontSize: 11, fontWeight: '700' },
   chipTextLive: { color: colors.primary },
   chipTextDone: { color: colors.textSecondary },
+  chipTextSoon: { color: colors.warning },
 
   day: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.xs },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },

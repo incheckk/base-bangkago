@@ -28,13 +28,35 @@ export default function BangkeroLayout() {
     return () => { alive = false; };
   }, [uid]);
 
-  const { startTracking } = useLocationTracking(bangkaId);
-  const startedRef = useRef(false);
+  const { startTracking, stopTracking } = useLocationTracking(bangkaId);
+  // Which boat the watcher is actually flying. The old startedRef latched
+  // the first id forever: switching boats kept reporting the old hull,
+  // and logout never stopped the watch.
+  const activeBangkaRef = useRef<string | null>(null);
+  const trackerRef = useRef({ startTracking, stopTracking });
   useEffect(() => {
-    if (!bangkaId || startedRef.current) return;
-    startedRef.current = true;
-    void startTracking();
-  }, [bangkaId, startTracking]);
+    trackerRef.current = { startTracking, stopTracking };
+  });
+  useEffect(() => {
+    if (!uid || !bangkaId) {
+      if (activeBangkaRef.current) {
+        trackerRef.current.stopTracking();
+        activeBangkaRef.current = null;
+      }
+      return;
+    }
+    if (activeBangkaRef.current === bangkaId) return;
+    if (activeBangkaRef.current) trackerRef.current.stopTracking();
+    activeBangkaRef.current = bangkaId;
+    void trackerRef.current.startTracking();
+  }, [uid, bangkaId]);
+  useEffect(
+    () => () => {
+      trackerRef.current.stopTracking();
+      activeBangkaRef.current = null;
+    },
+    []
+  );
 
   if (!user) return <Redirect href="/(auth)/welcome" />;
 

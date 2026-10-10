@@ -58,7 +58,9 @@ export default function SailingScreen() {
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
   const [details, setDetails] = useState<Record<string, PassengerDetailDoc[]>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
-  const [reference, setReference] = useState('');
+  // Reference drafts keyed by booking — one shared input mixed refs
+  // across rows when several bookings were unpaid at once.
+  const [references, setReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
 
   const sailing: Sailing | null = useMemo(() => {
@@ -123,7 +125,7 @@ export default function SailingScreen() {
     setPayingId(bookingId);
     setPayError(null);
     try {
-      await markBookingPaid(bookingId, reference.trim() || undefined);
+      await markBookingPaid(bookingId, references[bookingId]?.trim() || undefined);
       await loadPayments();
     } catch (e) {
       setPayError(friendlyError(e));
@@ -271,28 +273,29 @@ export default function SailingScreen() {
                   {paid ? '✓ Paid' : 'Pending'}
                 </Text>
                 {canMark && (
-                  <PrimaryButton
-                    label="Mark as paid"
-                    onPress={() => void markPaid(b.bookingId)}
-                    loading={payingId === b.bookingId}
-                    disabled={payingId !== null}
-                    style={styles.payBtn}
-                  />
+                  <>
+                    <TextInput
+                      style={styles.refInput}
+                      placeholder="GCash / receipt reference (optional)"
+                      placeholderTextColor={colors.textMuted}
+                      value={references[b.bookingId] ?? ''}
+                      onChangeText={(v) =>
+                        setReferences((prev) => ({ ...prev, [b.bookingId]: v }))
+                      }
+                      autoCapitalize="characters"
+                    />
+                    <PrimaryButton
+                      label="Mark as paid"
+                      onPress={() => void markPaid(b.bookingId)}
+                      loading={payingId === b.bookingId}
+                      disabled={payingId !== null}
+                      style={styles.payBtn}
+                    />
+                  </>
                 )}
               </View>
             );
           })}
-
-          {allAboard && unpaid.length > 0 && (
-            <TextInput
-              style={styles.refInput}
-              placeholder="GCash / receipt reference (optional)"
-              placeholderTextColor={colors.textMuted}
-              value={reference}
-              onChangeText={setReference}
-              autoCapitalize="characters"
-            />
-          )}
 
           {!allAboard && unpaid.length > 0 && (
             <Text style={styles.payHint}>

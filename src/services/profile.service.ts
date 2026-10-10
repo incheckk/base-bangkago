@@ -68,12 +68,15 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
       .maybeSingle();
 
     if (existing) {
+      // UPDATE sends dirty fields only — the old `|| 'My Bangka' /
+      // || 10` fallbacks clobbered the untouched column on every save.
+      const patch: { bangka_name?: string; capacity?: number } = {};
+      if (name) patch.bangka_name = name;
+      if (parsed !== null) patch.capacity = parsed;
+      if (Object.keys(patch).length === 0) return;
       const { error } = await supabase
         .from('bangkas')
-        .update({
-          bangka_name: name || 'My Bangka',
-          capacity: parsed || 10,
-        })
+        .update(patch)
         .eq('id', existing.id);
       if (error) throw error;
     } else {

@@ -31,7 +31,36 @@ export default function ArrivedScreen() {
   useLockBack();
   const { user } = useAuth();
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
-  const { data: parcels } = useBangkeroParcels(user?.id ?? null);
+  const { data: allParcels } = useBangkeroParcels(user?.id ?? null);
+
+  // Scope parcels to THIS sailing: the hook returns full history, but the
+  // disembarkation list must only cover today's close-out set (same scope
+  // handleComplete uses below). Null = scope unknown, show everything
+  // rather than an empty list.
+  const [sailingIds, setSailingIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('operator_id', user.id)
+          .eq('trip_stat', 'accepted')
+          .or(`scheduled_date.is.null,scheduled_date.lte.${manilaTodayIso()}`);
+        if (alive) setSailingIds((data ?? []).map((b) => b.id));
+      } catch {
+        if (alive) setSailingIds(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
+  const parcels = sailingIds
+    ? allParcels.filter((p) => sailingIds.includes(p.bookingId))
+    : allParcels;
 
   const [completing, setCompleting] = useState(false);
   const [parcelBusy, setParcelBusy] = useState<string | null>(null);
@@ -166,7 +195,10 @@ export default function ArrivedScreen() {
             <View style={styles.card}>
               <View style={styles.cardRow}>
                 <Text style={styles.cardLabel}>Passengers</Text>
-                <Text style={styles.cardValue}>{passengers.length} to disembark</Text>
+                <Text style={styles.cardValue}>
+                  {passengers.length} {passengers.length === 1 ? 'party' : 'parties'} ·{' '}
+                  {manifest?.totalPassengersOnBoard ?? '?'} pax to disembark
+                </Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.cardRow}>
@@ -176,7 +208,10 @@ export default function ArrivedScreen() {
               <View style={styles.divider} />
               <View style={styles.cardRow}>
                 <Text style={styles.cardLabel}>Parcels</Text>
-                <Text style={styles.cardValue}>{parcels.length} to unload</Text>
+                <Text style={styles.cardValue}>
+                  {parcels.length} {parcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
+                  {manifest?.totalParcelsOnBoard ?? '?'} items to unload
+                </Text>
               </View>
             </View>
 

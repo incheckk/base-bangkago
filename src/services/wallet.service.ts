@@ -38,19 +38,18 @@ export async function getWalletTransactions(walletId: string): Promise<WalletTra
   return (data ?? []).map(mapTxRow);
 }
 
+/**
+ * Top-up via the atomic server RPC (030): the transaction row and the
+ * balance move happen in one database transaction — a failure rolls
+ * both back, so the two can never drift apart. Throws on error.
+ */
 export async function topUpWallet(walletId: string, amount: number): Promise<void> {
-  const { error: txError } = await supabase
-    .from('wallet_transactions')
-    .insert({ wallet_id: walletId, type: 'top_up', amount });
-
-  if (txError) throw txError;
-
-  const { error: balError } = await supabase.rpc('increment_wallet_balance', {
+  const { error } = await supabase.rpc('top_up_wallet', {
     p_wallet_id: walletId,
     p_amount: amount,
   });
 
-  if (balError) throw balError;
+  if (error) throw error;
 }
 
 export async function creditWallet(

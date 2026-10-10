@@ -9,19 +9,25 @@ interface Props {
   message: string;
   severity: Severity;
   timestamp?: string;
+  resolved?: boolean;
 }
 
 const SEVERITY_CONFIG = SEVERITY;
 
-export function StatusCard({ title, message, severity, timestamp }: Props) {
+export function StatusCard({ title, message, severity, timestamp, resolved }: Props) {
   const config = SEVERITY_CONFIG[severity];
   return (
-    <View style={[styles.card, { backgroundColor: config.bg, borderColor: config.border }]}>
+    <View style={[styles.card, { backgroundColor: config.bg, borderColor: config.border }, resolved && styles.resolved]}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: config.fg }]}>{title}</Text>
-        {timestamp && <Text style={styles.timestamp}>{timestamp}</Text>}
+        {resolved ? (
+          <Text style={styles.resolvedBadge}>✓ Resolved</Text>
+        ) : (
+          timestamp && <Text style={styles.timestamp}>{timestamp}</Text>
+        )}
       </View>
       <Text style={styles.message}>{message}</Text>
+      {resolved && timestamp && <Text style={styles.timestamp}>{timestamp}</Text>}
     </View>
   );
 }
@@ -41,5 +47,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 14, fontWeight: '700' },
   timestamp: { color: colors.textMuted, fontSize: 11 },
+  resolvedBadge: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  resolved: { opacity: 0.65 },
   message: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 });

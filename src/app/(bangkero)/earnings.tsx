@@ -21,6 +21,7 @@ export default function BangkeroEarnings() {
   const { user } = useAuth();
   const { wallet, transactions, loading, error, topUp } = useWallet(user?.id ?? null);
   const [toppingUp, setToppingUp] = useState(false);
+  const [topUpError, setTopUpError] = useState<string | null>(null);
 
   const todayIso = manilaTodayIso();
   const weekAgoIso = toManilaIso(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)) ?? todayIso;
@@ -35,7 +36,16 @@ export default function BangkeroEarnings() {
 
   async function handleTopUp() {
     setToppingUp(true);
-    await topUp(500);
+    setTopUpError(null);
+    try {
+      await topUp(500);
+    } catch (e) {
+      // Balance untouched (030 rolls back) — inline banner, not the
+      // full-screen error state, so history stays visible for retry.
+      setTopUpError(
+        e instanceof Error ? e.message : 'Top-up failed — balance unchanged. Try again.'
+      );
+    }
     setToppingUp(false);
   }
 
@@ -88,6 +98,11 @@ export default function BangkeroEarnings() {
           onPress={handleTopUp}
           loading={toppingUp}
         />
+        {!!topUpError && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>{topUpError}</Text>
+          </View>
+        )}
 
         <Text style={styles.sectionLabel}>TRANSACTION HISTORY</Text>
 
@@ -164,6 +179,16 @@ const styles = StyleSheet.create({
   summaryValue: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
+
+  banner: {
+    backgroundColor: colors.dangerTint,
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   txRow: {
     flexDirection: 'row',

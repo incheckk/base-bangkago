@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -27,6 +27,8 @@ import {
   DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
+import { getPaymentsForBookings } from '@/services/payment.service';
+import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, DemandPredictionDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
@@ -291,7 +293,10 @@ export default function BangkeroHome() {
     if (b.heldBy) {
       return { text: 'Offered to another boat', tone: 'wait', canAccept: false, distance };
     }
-    return { text: 'Waiting for your offer…', tone: 'wait', canAccept: true, distance };
+    // No holder: first tap on Accept runs the server cascade, which may
+    // hand this very boat the offer — the button is genuinely live, so
+    // the copy must not read as "wait for an offer".
+    return { text: 'Open request — Accept to take it', tone: 'live', canAccept: true, distance };
   }
 
   /** The queue line under the availability switch. */
@@ -338,7 +343,19 @@ export default function BangkeroHome() {
       });
       // Accepted work requires the operator reachable — force online in the
       // same flow so a stale switch can never leave passengers hanging.
-      if (!available) await setAvailability(uid, true).catch(() => {});
+      // A failed force-online must surface, not vanish: with an active trip
+      // the switch is locked, so stay here showing the error.
+      if (!available) {
+        try {
+          await setAvailability(uid, true);
+        } catch (e) {
+          setActionError(
+            `Trip accepted, but going online failed: ${friendlyError(e)} Stay online from this screen — the passenger was notified.`
+          );
+          setPending(null);
+          return;
+        }
+      }
       markActed(b.bookingId);
       // The phone may be face-down in a pocket — a local ping is the fastest
       // way to say "people are standing at the pier right now".
@@ -398,17 +415,55 @@ export default function BangkeroHome() {
     setPending(null);
   }
 
-  // Earnings count only trips that actually completed, bucketed by when
-  // they completed — TODAY and THIS WEEK are real windows, not a guess.
-  const completedTrips = trips.data.filter((t) => t.status === 'completed' && t.completedAt);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const weekAgoMs = Date.now() - 7 * 86400000;
-  const todayEarnings = completedTrips
-    .filter((t) => new Date(t.completedAt as string).getTime() >= todayStart.getTime())
+  // Earnings count only trips that actually completed AND got paid,
+  // bucketed by Manila day of completion — TODAY and THIS WEEK are real
+  // windows, not a guess. (Device-local midnights skewed both on foreign
+  // phones; completed-but-unpaid trips used to inflate both cards.)
+  // Unknown payment state (offline/RLS failure) falls back to unfiltered
+  // rather than zeroing the cards.
+  const completedTrips = useMemo(
+    () => trips.data.filter((t) => t.status === 'completed' && t.completedAt),
+    [trips.data]
+  );
+  const completedIds = useMemo(
+    () => completedTrips.map((t) => t.bookingId),
+    [completedTrips]
+  );
+  const [paidIds, setPaidIds] = useState<Set<string> | null>(null);
+  useEffect(() => {
+    if (completedIds.length === 0) {
+      setPaidIds(new Set());
+      return;
+    }
+    let alive = true;
+    getPaymentsForBookings(completedIds)
+      .then((rows) => {
+        if (!alive) return;
+        setPaidIds(
+          new Set(
+            rows.filter((r) => r.paymentStatus === 'completed').map((r) => r.bookingId)
+          )
+        );
+      })
+      .catch(() => {
+        if (alive) setPaidIds(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [completedIds]);
+  const paidTrips = paidIds
+    ? completedTrips.filter((t) => paidIds.has(t.bookingId))
+    : completedTrips;
+  const homeTodayIso = manilaTodayIso();
+  const homeTodayStartMs = manilaDayStartMs(homeTodayIso);
+  const homeWeekStartMs = homeTodayStartMs - 6 * 86400000;
+  const completedMs = (t: BookingDoc) => new Date(t.completedAt as string).getTime();
+  const todayEarnings = paidTrips
+    .filter((t) => completedMs(t) >= homeTodayStartMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
-  const weekEarnings = completedTrips
-    .filter((t) => new Date(t.completedAt as string).getTime() >= weekAgoMs)
+  const weekEarnings = paidTrips
+    .filter((t) => completedMs(t) >= homeWeekStartMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   // Two groups so an operator can tell tomorrow's commitments from
@@ -452,7 +507,7 @@ export default function BangkeroHome() {
             label="Decline"
             variant="secondary"
             onPress={() => decline(b)}
-            disabled={pending === b.bookingId || acted.has(b.bookingId)}
+            disabled={pending === b.bookingId || acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
             style={styles.declineBtn}
           />
           <PrimaryButton

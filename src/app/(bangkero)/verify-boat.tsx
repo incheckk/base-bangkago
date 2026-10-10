@@ -146,6 +146,19 @@ export default function VerifyBoat() {
           you can replace or remove any of them until you submit.
         </Text>
 
+        {/* Rejected operators land here to re-upload (documents-rejected
+            links back), so the rejection must be visible on this screen —
+            not just on the notice screen. No redirect: bouncing away would
+            make re-upload unreachable. */}
+        {stat === 'rejected' && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              The admin rejected your documents — upload replacements below and
+              submit to send them back for review.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.docList}>
           {DOCUMENT_FIELDS.map((doc) => {
             const path = paths[doc.key];

@@ -53,17 +53,30 @@ export async function reportPosition(
  * The bangka row to fly (one per bangkero). Needed before the first
  * GPS tick — getLatestPositionForBangkero cannot seed tracking because
  * it returns null when no fix has ever been logged.
+ *
+ * Multi-boat operators fly the boat with the freshest GPS fix (the one
+ * actually moving); otherwise the first by name — deterministic, never
+ * an arbitrary `order(id)` pick.
  */
 export async function getBangkaIdForBangkero(bangkeroId: string): Promise<string | null> {
   const { data, error } = await supabase
     .from('bangkas')
     .select('id')
     .eq('bangkero_id', bangkeroId)
-    .order('id')
-    .limit(1)
-    .maybeSingle();
+    .order('bangka_name');
   if (error) throw error;
-  return data?.id ?? null;
+  const boats = (data ?? []) as { id: string }[];
+  if (boats.length === 0) return null;
+  if (boats.length === 1) return boats[0].id;
+  try {
+    // Latest-first globally (see getAllVesselPositions) — first own hit wins.
+    const own = new Set(boats.map((b) => b.id));
+    const ranked = (await getAllVesselPositions()).filter((p) => own.has(p.bangkaId));
+    if (ranked.length > 0) return ranked[0].bangkaId;
+  } catch {
+    // No fixes yet (or tracking unreadable) — fall through to default.
+  }
+  return boats[0].id;
 }
 
 export async function getTrackingByBangka(

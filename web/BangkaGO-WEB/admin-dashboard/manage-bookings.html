@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Manage Bookings</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <style>
+    .info-box{border:1px solid var(--gray-200);border-radius:12px;padding:.65rem .8rem;background:var(--gray-50);}
+  </style>
+</head>
+<body data-page="manage-bookings">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Manage Bookings</h6>
+            <span class="muted-note">View details, update booking status, cancel booking, view manifest</span>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <input id="bookingSearch" class="form-control" placeholder="Search booking ID, customer, route">
+            </div>
+            <div class="col-md-3">
+              <select id="bookingStatusFilter" class="form-select">
+                <option value="">All Status</option>
+                <option value="Confirmed">Confirmed</option>
+                <option value="Pending">Pending</option>
+                <option value="Cancelled">Cancelled</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button id="bookingReset" class="btn btn-outline-secondary">Reset</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Booking ID</th>
+                  <th>Customer</th>
+                  <th>Route</th>
+                  <th>Trip Date</th>
+                  <th>Status</th>
+                  <th style="min-width: 280px; white-space: nowrap;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="bookingBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- VIEW BOOKING DETAILS MODAL -->
+  <div class="modal fade" id="bookingDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">View Booking Details</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="bookingDetailsBox"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPDATE BOOKING STATUS MODAL -->
+  <div class="modal fade" id="bookingStatusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="bookingStatusForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Update Booking Status</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><strong>Booking:</strong> <span id="statusBookingRef">-</span></div>
+          <div class="mb-3">
+            <label class="form-label">New Status</label>
+            <select id="newBookingStatus" class="form-select">
+              <option value="Confirmed">Confirmed</option>
+              <option value="Pending">Pending</option>
+              <option value="Cancelled">Cancelled</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Remarks</label>
+            <textarea id="statusRemarks" class="form-control" rows="3" placeholder="Optional remarks..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-bangkago">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- VIEW MANIFEST MODAL -->
+  <div class="modal fade" id="manifestModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">View Manifest</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="manifestDetails"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+
+  <script>
+    const bookings = [
+      {
+        id:'BKG-101',
+        customer:'Maria Lopez',
+        email:'maria.lopez@email.com',
+        phone:'+63 917 123 4567',
+        route:'Marigondon Port → Olango',
+        date:'2026-04-20',
+        status:'Confirmed',
+        remarks:'',
+        passengers:[
+          {name:'Maria Lopez', type:'Adult'},
+          {name:'Carlo Cruz', type:'Adult'}
+        ],
+        totalCost:900
+      },
+      {
+        id:'BKG-102',
+        customer:'John Reyes',
+        email:'john.reyes@email.com',
+        phone:'+63 928 555 1022',
+        route:'Mactan Port → Olango',
+        date:'2026-04-21',
+        status:'Pending',
+        remarks:'',
+        passengers:[
+          {name:'John Reyes', type:'Adult'}
+        ],
+        totalCost:300
+      },
+      {
+        id:'BKG-103',
+        customer:'Ella Tan',
+        email:'ella.tan@email.com',
+        phone:'+63 939 222 3344',
+        route:'Olango Port → Caohagan',
+        date:'2026-04-22',
+        status:'Confirmed',
+        remarks:'',
+        passengers:[
+          {name:'Ella Tan', type:'Adult'},
+          {name:'Nina Lim', type:'Child'},
+          {name:'Paolo Lim', type:'Adult'}
+        ],
+        totalCost:1200
+      }
+    ];
+
+    let selectedIndex = null;
+
+    const bookingBody = document.getElementById('bookingBody');
+    const bookingSearch = document.getElementById('bookingSearch');
+    const bookingStatusFilter = document.getElementById('bookingStatusFilter');
+
+    const detailsModal = new bootstrap.Modal('#bookingDetailsModal');
+    const statusModal = new bootstrap.Modal('#bookingStatusModal');
+    const manifestModal = new bootstrap.Modal('#manifestModal');
+
+    function peso(n){
+      return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+    }
+
+    function statusBadge(status){
+      if(status === 'Confirmed') return 'text-bg-success';
+      if(status === 'Pending') return 'text-bg-warning';
+      if(status === 'Cancelled') return 'text-bg-danger';
+      return 'text-bg-info';
+    }
+
+    function renderTable(data){
+      bookingBody.innerHTML = '';
+      data.forEach((b) => {
+        const i = bookings.findIndex(x => x.id === b.id);
+
+        bookingBody.innerHTML += `
+          <tr>
+            <td>${b.id}</td>
+            <td>${b.customer}</td>
+            <td>${b.route}</td>
+            <td>${b.date}</td>
+            <td><span class="badge ${statusBadge(b.status)}">${b.status}</span></td>
+            <td>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openDetails(${i})">
+                  <i class="bi bi-eye"></i> Details
+                </button>
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatus(${i})">
+                  <i class="bi bi-arrow-repeat"></i> Status
+                </button>
+                <button class="btn btn-sm btn-outline-secondary action-btn" onclick="openManifest(${i})">
+                  <i class="bi bi-card-list"></i> Manifest
+                </button>
+                <button class="btn btn-sm btn-outline-danger action-btn" onclick="cancelBooking(${i})">
+                  <i class="bi bi-x-circle"></i> Cancel
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    function runFilter(){
+      const q = bookingSearch.value.toLowerCase().trim();
+      const s = bookingStatusFilter.value;
+
+      const filtered = bookings.filter(b => {
+        const textMatch =
+          b.id.toLowerCase().includes(q) ||
+          b.customer.toLowerCase().includes(q) ||
+          b.route.toLowerCase().includes(q);
+
+        const statusMatch = s ? b.status === s : true;
+        return textMatch && statusMatch;
+      });
+
+      renderTable(filtered);
+    }
+
+    window.openDetails = function(i){
+      const b = bookings[i];
+      document.getElementById('bookingDetailsBox').innerHTML = `
+        <div class="info-box mb-2"><strong>Booking ID:</strong> ${b.id}</div>
+        <div class="info-box mb-2"><strong>Customer:</strong> ${b.customer}</div>
+        <div class="info-box mb-2"><strong>Email:</strong> ${b.email}</div>
+        <div class="info-box mb-2"><strong>Contact Number:</strong> ${b.phone}</div>
+        <div class="info-box mb-2"><strong>Route:</strong> ${b.route}</div>
+        <div class="info-box mb-2"><strong>Trip Date:</strong> ${b.date}</div>
+        <div class="info-box mb-2"><strong>Status:</strong> ${b.status}</div>
+        <div class="info-box mb-0"><strong>Total Cost:</strong> ${peso(b.totalCost)}</div>
+      `;
+      detailsModal.show();
+    }
+
+    window.openStatus = function(i){
+      selectedIndex = i;
+      const b = bookings[i];
+      document.getElementById('statusBookingRef').textContent = `${b.id} — ${b.customer}`;
+      document.getElementById('newBookingStatus').value = b.status;
+      document.getElementById('statusRemarks').value = b.remarks || '';
+      statusModal.show();
+    }
+
+    document.getElementById('bookingStatusForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      if(selectedIndex === null) return;
+
+      bookings[selectedIndex].status = document.getElementById('newBookingStatus').value;
+      bookings[selectedIndex].remarks = document.getElementById('statusRemarks').value.trim();
+
+      runFilter();
+      statusModal.hide();
+      alert('Booking status updated.');
+    });
+
+    window.openManifest = function(i){
+      const b = bookings[i];
+      const paxCount = b.passengers.length;
+      const manifestDetails = document.getElementById('manifestDetails');
+
+      manifestDetails.innerHTML = `
+        <div class="row g-2 mb-3">
+          <div class="col-md-6"><div class="info-box"><strong>Booking ID:</strong> ${b.id}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Status:</strong> ${b.status}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Customer:</strong> ${b.customer}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Email:</strong> ${b.email}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Contact Number:</strong> ${b.phone}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${b.route}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${b.date}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>No. of Passengers:</strong> ${paxCount}</div></div>
+          <div class="col-md-12"><div class="info-box"><strong>Total Booking Cost:</strong> ${peso(b.totalCost)}</div></div>
+        </div>
+
+        <h6 class="mb-2">Passenger List</h6>
+        <div class="table-responsive">
+          <table class="table table-theme align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Passenger Name</th>
+                <th>Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${b.passengers.map((p, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td>${p.name}</td>
+                  <td>${p.type}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      manifestModal.show();
+    }
+
+    window.cancelBooking = function(i){
+      bookings[i].status = 'Cancelled';
+      runFilter();
+      alert(`Booking ${bookings[i].id} cancelled.`);
+    }
+
+    bookingSearch.addEventListener('input', runFilter);
+    bookingStatusFilter.addEventListener('change', runFilter);
+
+    document.getElementById('bookingReset').addEventListener('click', () => {
+      bookingSearch.value = '';
+      bookingStatusFilter.value = '';
+      renderTable(bookings);
+    });
+
+    renderTable(bookings);
+  </script>
+</body>
+</html>

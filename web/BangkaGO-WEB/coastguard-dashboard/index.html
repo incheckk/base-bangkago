@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo LGU/Coast Guard — Dashboard</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+</head>
+<body data-page="index">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <!-- Workflow summary cards — same border, little gap -->
+        <div class="row g-2 mb-3 kpi-strip">
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Weather Status</p>
+              <h3>Moderate</h3>
+              <span class="kpi-warn">Wind advisory in East Channel</span>
+              <div class="kpi-mini-chart chart-warn"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Alert Feed</p>
+              <h3>4 Active</h3>
+              <span class="kpi-down">1 critical needs watch</span>
+              <div class="kpi-mini-chart chart-down"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Live Fleet Map</p>
+              <h3>18 Tracked</h3>
+              <span class="kpi-up">GPS stream stable</span>
+              <div class="kpi-mini-chart chart-up"></div>
+            </div>
+          </div>
+          <div class="col-6 col-xl-3">
+            <div class="cg-card kpi-card">
+              <p>Boats at Sea</p>
+              <h3>12</h3>
+              <span class="kpi-up">6 currently docking/in-port</span>
+              <div class="kpi-mini-chart chart-up"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live map panel -->
+        <div class="row g-3 mb-3">
+          <div class="col-12">
+            <div class="cg-card map-box">
+              <div class="panel-head">
+                <h6 class="mb-0">Live Fleet Monitoring Map</h6>
+                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+              </div>
+
+              <img src="../images/map.jpg" alt="Live fleet map" class="live-map-img"/>
+
+              <div class="route-pill-wrap">
+                <span class="route-pill">Boat 08 • Marigondon Port → Olango</span>
+                <span class="route-pill">Boat 03 • Mactan Port → Olango → Caohagan → Sulpa</span>
+                <span class="route-pill">Sea State: Moderate</span>
+                <span class="route-pill">Signal: Stable</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lower panels -->
+        <div class="row g-3">
+          <div class="col-xl-7">
+            <div class="cg-card h-100">
+              <div class="panel-head">
+                <h6 class="mb-0">Alert Feed Timeline</h6>
+                <span class="muted-note">View only</span>
+              </div>
+              <ul class="activity-list">
+                <li><span>ALT-904 escalated in South Passage</span><small>2m ago</small></li>
+                <li><span>Boat 03 speed drop detected</span><small>9m ago</small></li>
+                <li><span>Wave advisory extended (East Channel)</span><small>14m ago</small></li>
+                <li><span>Geo-fence event acknowledged by Station 2</span><small>22m ago</small></li>
+                <li><span>Visibility bulletin posted by coastal watch</span><small>38m ago</small></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-xl-5">
+            <div class="cg-card h-100">
+              <div class="panel-head">
+                <h6 class="mb-0">Workflow Quick Views</h6>
+              </div>
+
+              <div class="d-grid gap-2">
+                <a href="alerts.html" class="btn btn-outline-secondary w-100"><i class="bi bi-exclamation-triangle-fill"></i>View Active Alerts</a>
+                <a href="reports.html" class="btn btn-outline-secondary w-100"><i class="bi bi-people-fill"></i>View Operator Records</a>
+                <a href="port-history.html" class="btn btn-outline-secondary w-100"><i class="bi bi-clock-history"></i>View Position History</a>
+                <a href="verify-departure.html" class="btn btn-outline-secondary w-100"><i class="bi bi-check2-circle"></i>Verify Departure</a>
+                <a href="export-manifest.html" class="btn btn-primary w-100"><i class="bi bi-download"></i>Export Manifest</a>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/coastguard-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+</body>
+</html>

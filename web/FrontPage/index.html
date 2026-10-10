@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BangkaGo — Deliver Fast. Explore More.</title>
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap"
+        rel="stylesheet" />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <!-- ===================== SCROLL PROGRESS BAR ===================== -->
+    <div class="scroll-progress" id="scrollProgress"></div>
+
+    <!-- ===================== NAVBAR ===================== -->
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top" id="mainNav">
+        <div class="container">
+
+            <!-- Logo + Brand -->
+            <a class="navbar-brand d-flex align-items-center" href="#home">
+                <img src="images/logo-BangkaGo.png" alt="BangkaGo Logo" class="nav-logo" />
+                <span class="brand-text">Bangka<span class="brand-accent">Go</span></span>
+            </a>
+
+            <!-- Mobile Toggle -->
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu"
+                aria-controls="navMenu" aria-expanded="false" aria-label="Toggle navigation">
+                <i class="bi bi-list fs-4"></i>
+            </button>
+
+            <!-- Nav Links -->
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-1 py-3 py-lg-0">
+                    <li class="nav-item"><a class="nav-link" href="#home">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#about">About Us</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#services">Our Services</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#join">Join Us</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#blog">Blog</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#contact">Contact Us</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <!-- END NAVBAR -->
+
+    <!-- ===================== HERO ===================== -->
+    <section class="hero-section d-flex align-items-center" id="home">
+        <div class="hero-slideshow">
+            <img src="image/bangka.jpg" alt="Bangka boat" class="hero-slide" />
+            <img src="image/bangka1.jpg" alt="Bangka boat" class="hero-slide" />
+            <img src="image/bangka2.jpg" alt="Bangka boat" class="hero-slide" />
+        </div>
+        <div class="hero-overlay"></div>
+        <div class="container position-relative z-1">
+            <div class="row justify-content-center text-center">
+                <div class="col-lg-8 col-xl-7 fade-in">
+
+                    <span class="hero-badge mb-3 d-inline-block">
+                        <i class="bi bi-geo-alt-fill me-1"></i> Island-Based Delivery &amp; Tours — Lapu-Lapu City
+                    </span>
+
+                    <h1 class="hero-headline">Deliver Fast.<br /><span class="text-accent">Explore More.</span></h1>
+                    <p class="hero-sub mt-3 mb-5">BangkaGo connects island communities with reliable delivery and
+                        unforgettable island-hopping tours. From your doorstep to the open sea.</p>
+
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Scroll indicator -->
+        <a class="scroll-indicator" href="#about">
+            <i class="bi bi-chevron-double-down"></i>
+        </a>
+    </section>
+    <!-- END HERO -->
+
+    <!-- ===================== STATS BAND ===================== -->
+    <section class="stats-band py-4">
+        <div class="container">
+            <div class="row text-center g-3">
+                <div class="col-6 col-md-3 fade-in">
+                    <div class="stat-item">
+                        <span class="stat-num">5K+</span>
+                        <span class="stat-label">Happy Customers</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 fade-in">
+                    <div class="stat-item">
+                        <span class="stat-num">30+</span>
+                        <span class="stat-label">Islands Served</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 fade-in">
+                    <div class="stat-item">
+                        <span class="stat-num">98%</span>
+                        <span class="stat-label">On-Time Delivery</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 fade-in">
+                    <div class="stat-item">
+                        <span class="stat-num">24/7</span>
+                        <span class="stat-label">Support Available</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END STATS -->
+
+    <!-- ===================== ABOUT ===================== -->
+    <section class="section-pad bg-white" id="about">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 fade-in" data-reveal="left">
+                    <div class="about-img-wrap">
+                        <img src="image/Marigondon-view.png" alt="About BangkaGo" class="img-fluid about-img rounded-4"
+                            onerror="this.src='https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=700&q=80'" />
+                        <div class="about-badge">
+                            <i class="bi bi-shield-check-fill fs-4 text-primary"></i>
+                            <div>
+                                <strong>Trusted &amp; Fun</strong>
+                                <small>MARINA Registered</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 fade-in" data-reveal="right">
+                    <span class="section-eyebrow">Who We Are</span>
+                    <h2 class="section-title mt-2">Bridging Islands.<br />Connecting Lives.</h2>
+                    <p class="section-body mt-3">BangkaGo is a pioneering island-based logistics and tourism platform
+                        built for the communities of Bangka Island and surrounding archipelagos in the Philippines. We
+                        combine the reliability of modern delivery services with the adventure of island exploration.
+                    </p>
+                    <p class="section-body">Our fleet of certified boats and trusted local riders ensures your parcels,
+                        groceries, and meals reach you safely — whether you're on the main island or a remote barangay
+                        across the sea.</p>
+                    <div class="row g-3 mt-3">
+                        <div class="col-6">
+                            <div class="about-feature">
+                                <i class="bi bi-check-circle-fill text-primary me-2"></i>
+                                <span>Certified Boat Operators</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="about-feature">
+                                <i class="bi bi-check-circle-fill text-primary me-2"></i>
+                                <span>Real-Time Tracking</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="about-feature">
+                                <i class="bi bi-check-circle-fill text-primary me-2"></i>
+                                <span>Insured Deliveries</span>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="about-feature">
+                                <i class="bi bi-check-circle-fill text-primary me-2"></i>
+                                <span>Eco-Friendly Routes</span>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="#services" class="btn btn-primary-custom mt-4">
+                        Explore Our Services <i class="bi bi-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END ABOUT -->
+
+    <!-- ===================== SERVICES ===================== -->
+    <section class="section-pad bg-light-gray" id="services">
+        <div class="container">
+            <div class="text-center mb-5 fade-in">
+                <span class="section-eyebrow">What We Offer</span>
+                <h2 class="section-title mt-2">Our Services</h2>
+                <p class="section-body mx-auto" style="max-width:560px;">From hot meals to island adventures, BangkaGo
+                    handles it all with speed, care, and a touch of island spirit.</p>
+            </div>
+
+            <div class="row g-4 justify-content-center">
+
+                <!-- Card 3: Parcel & Documents -->
+                <div class="col-sm-6 col-lg-4 fade-in">
+                    <div class="service-card h-100">
+                        <div class="service-icon-wrap">
+                            <i class="bi bi-box-seam-fill service-icon"></i>
+                        </div>
+                        <h5 class="service-title">Parcel Delivery &amp; Documents</h5>
+                        <p class="service-desc">Send important documents and packages with confidence. Tracked, secured,
+                            and delivered on time to any address on the island.</p>
+                        <a href="#contact" class="btn btn-service">
+                            <i class="bi bi-calendar-check me-1"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Card 4: Island Boat Delivery -->
+                <div class="col-sm-6 col-lg-4 fade-in">
+                    <div class="service-card h-100">
+                        <div class="service-icon-wrap">
+                            <i class="bi bi-water service-icon"></i>
+                        </div>
+                        <h5 class="service-title">Island Boat Delivery</h5>
+                        <p class="service-desc">Our certified bangka fleet crosses the water to deliver to remote
+                            islands and coastal communities where other couriers cannot reach.</p>
+                        <a href="#contact" class="btn btn-service">
+                            <i class="bi bi-calendar-check me-1"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Card 5: Island Hopping -->
+                <div class="col-sm-6 col-lg-4 fade-in">
+                    <div class="service-card featured-card h-100">
+                        <div class="service-icon-wrap featured-icon-wrap">
+                            <i class="bi bi-compass-fill service-icon"></i>
+                        </div>
+                        <span class="featured-badge">Popular</span>
+                        <h5 class="service-title">Island Hopping Tours</h5>
+                        <p class="service-desc">Discover stunning hidden coves, pristine beaches, and vibrant marine
+                            sanctuaries with our guided island hopping packages.</p>
+                        <a href="#contact" class="btn btn-service-featured">
+                            <i class="bi bi-calendar-check me-1"></i>
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+    <!-- END SERVICES -->
+
+    <!-- ===================== HOW IT WORKS ===================== -->
+    <section class="section-pad bg-white" id="how">
+        <div class="container">
+            <div class="text-center mb-5 fade-in">
+                <span class="section-eyebrow">Simple Process</span>
+                <h2 class="section-title mt-2">How BangkaGo Works</h2>
+            </div>
+            <div class="row g-4 text-center">
+                <div class="col-md-3 fade-in">
+                    <div class="step-item">
+                        <div class="step-num">01</div>
+                        <div class="step-icon"><i class="bi bi-search-heart"></i></div>
+                        <h6 class="step-title">Choose a Service</h6>
+                        <p class="step-desc">Select from delivery, parcel, or island hopping packages.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 fade-in">
+                    <div class="step-item">
+                        <div class="step-num">02</div>
+                        <div class="step-icon"><i class="bi bi-pin-map-fill"></i></div>
+                        <h6 class="step-title">Set Your Location</h6>
+                        <p class="step-desc">Enter your pickup and drop-off addresses or island destination.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 fade-in">
+                    <div class="step-item">
+                        <div class="step-num">03</div>
+                        <div class="step-icon"><i class="bi bi-credit-card-2-front-fill"></i></div>
+                        <h6 class="step-title">Confirm &amp; Pay</h6>
+                        <p class="step-desc">Choose your payment method and confirm your booking instantly.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 fade-in">
+                    <div class="step-item">
+                        <div class="step-num">04</div>
+                        <div class="step-icon"><i class="bi bi-truck-front-fill"></i></div>
+                        <h6 class="step-title">Track &amp; Receive</h6>
+                        <p class="step-desc">Monitor your delivery in real time and receive it at your door.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END HOW IT WORKS -->
+
+    <!-- ===================== JOIN US ===================== -->
+    <section class="section-pad join-section" id="join">
+        <div class="container">
+            <div class="row g-5 align-items-center">
+                <div class="col-lg-5 fade-in" data-reveal="left">
+                    <span class="section-eyebrow text-white-50">Become a Partner</span>
+                    <h2 class="section-title text-white mt-2">Join the BangkaGo Community</h2>
+                    <p class="text-white-75 mt-3">Whether you're a boat operator, delivery rider, restaurant owner, or
+                        tourism guide — BangkaGo has a place for you. Earn more. Grow with us.</p>
+                    <ul class="join-perks mt-4">
+                        <li><i class="bi bi-check2-circle me-2"></i> Flexible working hours</li>
+                        <li><i class="bi bi-check2-circle me-2"></i> Competitive earnings &amp; bonuses</li>
+                        <li><i class="bi bi-check2-circle me-2"></i> Free onboarding training</li>
+                        <li><i class="bi bi-check2-circle me-2"></i> Access to BangkaGo app &amp; tools</li>
+                    </ul>
+                </div>
+                <div class="col-lg-7 fade-in" data-reveal="right">
+                    <div class="form-card">
+                        <h5 class="form-card-title mb-4">
+                            <i class="bi bi-person-plus-fill me-2 text-primary"></i> Apply to Join
+                        </h5>
+                        <form id="joinForm" novalidate>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="joinName">Full Name <span
+                                            class="text-danger">*</span></label>
+                                    <input type="text" class="form-control custom-input" id="joinName"
+                                        placeholder="Juan dela Cruz" required />
+                                    <div class="invalid-feedback" id="joinNameError"></div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="joinEmail">Email Address <span
+                                            class="text-danger">*</span></label>
+                                    <input type="email" class="form-control custom-input" id="joinEmail"
+                                        placeholder="juan@email.com" required />
+                                    <div class="invalid-feedback" id="joinEmailError"></div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="joinPhone">Phone Number <span
+                                            class="text-danger">*</span></label>
+                                    <input type="tel" class="form-control custom-input" id="joinPhone"
+                                        placeholder="+63 9XX XXX XXXX" required />
+                                    <div class="invalid-feedback" id="joinPhoneError"></div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="joinRole">Role Applying For <span
+                                            class="text-danger">*</span></label>
+                                    <select class="form-select custom-input" id="joinRole" required>
+                                        <option value="">Select a role...</option>
+                                        <option>Delivery Rider</option>
+                                        <option>Boat Operator</option>
+                                        <option>Restaurant Partner</option>
+                                        <option>Tour Guide</option>
+                                        <option>Other</option>
+                                    </select>
+                                    <div class="invalid-feedback" id="joinRoleError"></div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="joinMessage">Why do you want to join? <span
+                                            class="text-danger">*</span></label>
+                                    <textarea class="form-control custom-input" id="joinMessage" rows="3"
+                                        placeholder="Tell us a bit about yourself..." required></textarea>
+                                    <div class="invalid-feedback" id="joinMessageError"></div>
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-primary-custom w-100">
+                                        <i class="bi bi-send-fill me-2"></i> Submit Application
+                                    </button>
+                                </div>
+                                <div class="col-12">
+                                    <div id="joinSuccess" class="alert alert-success d-none" role="alert">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        <strong>Application received!</strong> We'll review your details and get back to
+                                        you within 2-3 business days.
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END JOIN US -->
+
+    <!-- ===================== BLOG ===================== -->
+    <section class="section-pad bg-light-gray" id="blog">
+        <div class="container">
+            <div class="text-center mb-5 fade-in">
+                <span class="section-eyebrow">Latest Updates</span>
+                <h2 class="section-title mt-2">From the BangkaGo Blog</h2>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4 fade-in">
+                    <div class="blog-card h-100">
+                        <div class="blog-img-wrap">
+                            <img src="image/Hopping.jpg" alt="About BangkaGo" class="img-fluid about-img rounded-4"
+                                onerror="this.src='https://images.unsplash.com/photo-1519046904884-53103b34b206?w=600&q=80'" />
+                            <span class="blog-category">Delivery</span>
+                        </div>
+                        <div class="blog-body">
+                            <p class="blog-date"><i class="bi bi-calendar3 me-1"></i> January 15, 2025</p>
+                            <h6 class="blog-title">BangkaGo Delivery: Fast, Reliable, Coastal Logistics</h6>
+                            <p class="blog-excerpt">BangkaGo Delivery is a smart coastal transport solution designed to
+                                move goods quickly and efficiently across island and shoreline communities. By using
+                                traditional bangkas combined with modern coordination, it bridges the gap between areas
+                                that are hard to reach by land.</p>
+                            <a href="#blog" class="blog-link">Read More <i class="bi bi-arrow-right ms-1"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 fade-in">
+                    <div class="blog-card h-100">
+                        <div class="blog-img-wrap">
+                            <img src="image/View_beach.jpg" alt="About BangkaGo" class="img-fluid about-img rounded-4"
+                                onerror="this.src='https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=600&q=80'" />
+                            <span class="blog-category">Tourism</span>
+                        </div>
+                        <div class="blog-body">
+                            <p class="blog-date"><i class="bi bi-calendar3 me-1"></i> February 3, 2025</p>
+                            <h6 class="blog-title">BangkaGo Tourism: Explore Coastal Beauty the Local Way</h6>
+                            <p class="blog-excerpt">BangkaGo Tourism offers unique travel experiences by connecting
+                                tourists to hidden coastal destinations through safe and guided bangka rides. It
+                                promotes sustainable tourism while showcasing the natural beauty and culture of local
+                                communities.</p>
+                            <a href="#blog" class="blog-link">Read More <i class="bi bi-arrow-right ms-1"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 fade-in">
+                    <div class="blog-card h-100">
+                        <div class="blog-img-wrap">
+                            <img src="image/coast_guard.jpg" alt="About BangkaGo" class="img-fluid about-img rounded-4"
+                                onerror="this.src='https://images.unsplash.com/photo-1530538095376-a4936b35a5ef?w=600&q=80'" />
+                            <span class="blog-category">Community</span>
+                        </div>
+                        <div class="blog-body">
+                            <p class="blog-date"><i class="bi bi-calendar3 me-1"></i> February 18, 2025</p>
+                            <h6 class="blog-title">BangkaGo Community: Strengthening Partnerships with Marigondon
+                                Coastguard and LGU</h6>
+                            <p class="blog-excerpt">BangkaGo Community focuses on collaboration with local organizations
+                                such as the Marigondon Coastguard and the LGU to ensure safety, sustainability, and
+                                community development in coastal operations.</p>
+                            <a href="#blog" class="blog-link">Read More <i class="bi bi-arrow-right ms-1"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END BLOG -->
+
+    <!-- ===================== CONTACT ===================== -->
+    <section class="section-pad bg-white" id="contact">
+        <div class="container">
+            <div class="text-center mb-5 fade-in">
+                <span class="section-eyebrow">Reach Out</span>
+                <h2 class="section-title mt-2">Contact Us</h2>
+                <p class="section-body mx-auto" style="max-width:500px;">Have a question, feedback, or want to book a
+                    service? We're here to help 24/7.</p>
+            </div>
+            <div class="row g-5 align-items-start">
+                <div class="col-lg-5 fade-in">
+                    <div class="contact-info">
+                        <div class="contact-info-item">
+                            <div class="contact-icon"><i class="bi bi-geo-alt-fill"></i></div>
+                            <div>
+                                <strong>Office Address</strong>
+                                <p>Brgy. Marigondon, Lapu-Lapu City, Philippines</p>
+                            </div>
+                        </div>
+                        <div class="contact-info-item">
+                            <div class="contact-icon"><i class="bi bi-telephone-fill"></i></div>
+                            <div>
+                                <strong>Phone / Hotline</strong>
+                                <p>+63 946 344 1308</p>
+                            </div>
+                        </div>
+                        <div class="contact-info-item">
+                            <div class="contact-icon"><i class="bi bi-envelope-fill"></i></div>
+                            <div>
+                                <strong>Email Address</strong>
+                                <p>BangkaGo@gmail.com</p>
+                            </div>
+                        </div>
+                        <div class="contact-info-item">
+                            <div class="contact-icon"><i class="bi bi-clock-fill"></i></div>
+                            <div>
+                                <strong>Operating Hours</strong>
+                                <p>Monday – Sunday: 6:00 AM – 9:00 PM</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-7 fade-in">
+                    <div class="form-card">
+                        <h5 class="form-card-title mb-4">
+                            <i class="bi bi-chat-dots-fill me-2 text-primary"></i> Send a Message
+                        </h5>
+                        <form id="contactForm" novalidate>
+                            <div class="row g-3">
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="contactName">Full Name <span
+                                            class="text-danger">*</span></label>
+                                    <input type="text" class="form-control custom-input" id="contactName"
+                                        placeholder="Your name" required />
+                                    <div class="invalid-feedback" id="contactNameError"></div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <label class="form-label" for="contactEmail">Email Address <span
+                                            class="text-danger">*</span></label>
+                                    <input type="email" class="form-control custom-input" id="contactEmail"
+                                        placeholder="your@email.com" required />
+                                    <div class="invalid-feedback" id="contactEmailError"></div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="contactSubject">Subject <span
+                                            class="text-danger">*</span></label>
+                                    <input type="text" class="form-control custom-input" id="contactSubject"
+                                        placeholder="Regarding..." required />
+                                    <div class="invalid-feedback" id="contactSubjectError"></div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label" for="contactMessage">Message <span
+                                            class="text-danger">*</span></label>
+                                    <textarea class="form-control custom-input" id="contactMessage" rows="4"
+                                        placeholder="How can we help you?" required></textarea>
+                                    <div class="invalid-feedback" id="contactMessageError"></div>
+                                </div>
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-primary-custom w-100">
+                                        <i class="bi bi-send-fill me-2"></i> Send Message
+                                    </button>
+                                </div>
+                                <div class="col-12">
+                                    <div id="contactSuccess" class="alert alert-success d-none" role="alert">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        <strong>Message sent!</strong> Thank you for reaching out. We'll reply within 24
+                                        hours.
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- END CONTACT -->
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="site-footer">
+        <div class="footer-top">
+            <div class="container">
+                <div class="row g-5">
+
+                    <!-- Brand Col -->
+                    <div class="col-lg-4 col-md-6">
+                        <a class="footer-brand d-flex align-items-center gap-2 mb-3" href="#home">
+                            <img src="images/logo-BangkaGo.png" alt="BangkaGo" class="footer-logo" />
+                            <span class="footer-brand-text">Bangka<span class="brand-accent">Go</span></span>
+                        </a>
+                        <p class="footer-about">Bridging island communities through reliable delivery services and
+                            unforgettable tourism experiences in the Philippine archipelago.</p>
+                        <div class="social-icons mt-4">
+                            <a href="#" class="social-icon" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                            <a href="#" class="social-icon" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+                            <a href="#" class="social-icon" aria-label="Twitter / X"><i class="bi bi-twitter-x"></i></a>
+                            <a href="#" class="social-icon" aria-label="TikTok"><i class="bi bi-tiktok"></i></a>
+                            <a href="#" class="social-icon" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+                        </div>
+                    </div>
+
+                    <!-- Quick Links -->
+                    <div class="col-lg-2 col-md-6 col-6">
+                        <h6 class="footer-heading">Quick Links</h6>
+                        <ul class="footer-links">
+                            <li><a href="#home"><i class="bi bi-chevron-right me-1"></i>Home</a></li>
+                            <li><a href="#about"><i class="bi bi-chevron-right me-1"></i>About Us</a></li>
+                            <li><a href="#services"><i class="bi bi-chevron-right me-1"></i>Our Services</a></li>
+                            <li><a href="#join"><i class="bi bi-chevron-right me-1"></i>Join Us</a></li>
+                            <li><a href="#blog"><i class="bi bi-chevron-right me-1"></i>Blog</a></li>
+                            <li><a href="#contact"><i class="bi bi-chevron-right me-1"></i>Contact</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Services -->
+                    <div class="col-lg-3 col-md-6 col-6">
+                        <h6 class="footer-heading">Our Services</h6>
+                        <ul class="footer-links">
+                            <li><a href="#services"><i class="bi bi-box-seam me-1"></i>Parcel &amp; Documents</a></li>
+                            <li><a href="#services"><i class="bi bi-water me-1"></i>Island Boat Delivery</a></li>
+                            <li><a href="#services"><i class="bi bi-compass me-1"></i>Island Hopping Tours</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Contact Info -->
+                    <div class="col-lg-3 col-md-6">
+                        <h6 class="footer-heading">Contact Info</h6>
+                        <ul class="footer-contact">
+                            <li>
+                                <i class="bi bi-geo-alt-fill"></i>
+                                <span>Lapu-Lapu City, Marigodon, Philippines</span>
+                            </li>
+                            <li>
+                                <i class="bi bi-telephone-fill"></i>
+                                <span>+63 946 344 1308</span>
+                            </li>
+                            <li>
+                                <i class="bi bi-envelope-fill"></i>
+                                <span>BangkaGo@gmail.com</span>
+                            </li>
+                            <li>
+                                <i class="bi bi-clock-fill"></i>
+                                <span>Mon–Sun: 6:00 AM – 9:00 PM</span>
+                            </li>
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+                <p class="mb-0">&copy; 2025 BangkaGo. All rights reserved.</p>
+                <p class="mb-0">
+                    <a href="#">Privacy Policy</a> &nbsp;|&nbsp;
+                    <a href="#">Terms of Service</a> &nbsp;|&nbsp;
+                    <a href="#">Cookie Policy</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+    <!-- END FOOTER -->
+
+    <!-- Back to Top -->
+    <button id="backToTop" class="back-to-top" aria-label="Back to top">
+        <i class="bi bi-arrow-up"></i>
+    </button>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="script.js"></script>
+</body>
+
+</html>

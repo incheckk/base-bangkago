@@ -257,6 +257,32 @@ D5. GCASH QR IS STILL EMPTY — app_settings.gcash_qr_url = '' (the
     their GCash QR yet" placeholder). Upload a real QR in Admin → GCash
     QR before any presentation that exercises the downpayment flow.
 
+[G] STATIC WEB (web/) — merged 2026-10 from incheckk/BangkaGO-WEB
+--------------------------------------------------------------------------------
+W1. DASHBOARD PAGE DATA IS STILL MOCKED — every admin/coastguard
+    page renders its hardcoded HTML arrays (users[], manifests[],
+    bangkeros[]...). Only login + route guard are wired to Supabase
+    (web/config.js anon key, web/supabase-client.js, guard at the top
+    of each dashboard's assets/js/layout-loader.js). Wire pages to
+    real tables incrementally; never widen RLS to do it.
+2. ROUTE GUARD IS CLIENT-SIDE ONLY — layout-loader redirects wrong
+    roles, but that is UX, not security. Real boundary = RLS (E1-E4).
+    No server-side session for static hosting (D2/launch hosting).
+3. WEB WRITES INHERIT RLS DEBT — when dashboard pages get real write
+    actions they must go through the same guarded RPCs as the app
+    (E1/E2), never direct table writes from the anon key.
+4. RUN: `npm run web` -> http://localhost:3000 (static server; HTTP is
+    REQUIRED, file:// breaks partial fetch). Landing: /FrontPage/,
+    portal login: /bangkaGo-access.html with a seeded app account
+    (D4 — admin 0930 913 2995 / qqqwww, coastguard 0920 123 4567 /
+    demo1234). Demo bypass login was REMOVED by decision.
+5. supabase-js UMD is VENDORED at web/assets/js/supabase.js (2.112.4,
+    copied from node_modules) — jsDelivr was being blocked by ad
+    blockers mid-demo ("Cannot reach the server"). web/serve.json sets
+    cleanUrls:false so serve stops 301-stripping .html (breaks sidebar
+    active-link highlighting). Bootstrap/Fonts on the landing page are
+    still CDN (cosmetic only).
+
 [F] SCREENS BUILT BUT NOT REACHABLE (no menu/nav entry)
 --------------------------------------------------------------------------------
 CLEARED in the M1-M6 build (M3): manage-ports, manage-routes and

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BangkaGo Portal Access</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap"
+        rel="stylesheet" />
+
+    <style>
+        :root {
+            --blue-900: #0a2540;
+            --blue-800: #0d3360;
+            --blue-600: #1565c0;
+            --white: #fff;
+            --gray-200: #e2e8f0;
+            --gray-600: #475569;
+            --radius: 18px;
+            --font-display: 'Sora', sans-serif;
+            --font-body: 'DM Sans', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: var(--font-body);
+            background: linear-gradient(145deg, #f6fbff, #eef4fb);
+            color: var(--gray-600);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .portal-wrap {
+            width: min(980px, 100%);
+            background: #fff;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 30px rgba(2, 26, 56, .08);
+            overflow: hidden;
+        }
+
+        .portal-head {
+            background: linear-gradient(135deg, var(--blue-900), var(--blue-800));
+            color: #fff;
+            padding: 1.1rem 1.25rem
+        }
+
+        .portal-head h1 {
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: 1.15rem
+        }
+
+        .portal-head p {
+            margin: .3rem 0 0;
+            opacity: .85;
+            font-size: .92rem
+        }
+
+        .portal-body {
+            padding: 1.1rem
+        }
+
+        .portal-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem
+        }
+
+        .portal-card {
+            border: 1px solid var(--gray-200);
+            border-radius: 14px;
+            padding: 1rem;
+            text-decoration: none;
+            color: inherit;
+            transition: .2s ease;
+            display: block;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .portal-card:hover {
+            transform: translateY(-2px);
+            border-color: #c8def7;
+            box-shadow: 0 8px 18px rgba(21, 101, 192, .12)
+        }
+
+        .portal-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            margin-bottom: .7rem;
+            background: #eaf3ff;
+            color: var(--blue-600);
+            font-size: 1.2rem;
+        }
+
+        .portal-card h3 {
+            margin: 0;
+            font-size: 1.05rem;
+            font-family: var(--font-display);
+            color: #102a43
+        }
+
+        .portal-card p {
+            margin: .4rem 0 .9rem;
+            font-size: .92rem;
+            color: #526277
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            border-radius: 999px;
+            padding: .28rem .58rem;
+            font-size: .78rem;
+            font-weight: 700;
+            border: 1px solid
+        }
+
+        .pill-admin {
+            color: #155eef;
+            background: #eef4ff;
+            border-color: #cfe0ff
+        }
+
+        .pill-readonly {
+            color: #0369a1;
+            background: #ecfeff;
+            border-color: #b9f2ff
+        }
+
+        .portal-foot {
+            border-top: 1px solid var(--gray-200);
+            padding: .85rem 1.1rem;
+            font-size: .84rem;
+            color: #64748b;
+            background: #fbfdff
+        }
+
+        .login-note {
+            font-size: .82rem;
+            color: #64748b;
+            margin-top: .35rem
+        }
+
+        @media (max-width:768px) {
+            .portal-grid {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="portal-wrap">
+        <div class="portal-head">
+            <h1>BangkaGo Access Portal</h1>
+            <p>Role-based routing: Admin or LGU/Coast Guard</p>
+        </div>
+
+        <div class="portal-body">
+            <div class="portal-grid">
+                <button type="button" class="portal-card text-start" data-bs-toggle="modal"
+                    data-bs-target="#loginModal">
+                    <div class="portal-icon"><i class="bi bi-shield-lock-fill"></i></div>
+                    <h3>Admin Dashboard</h3>
+                    <p>Manage users, bangkeros, bangkas, routes, bookings, fleet, payments, reports, alerts.</p>
+                    <span class="pill pill-admin"><i class="bi bi-pencil-square"></i> Full Access</span>
+                </button>
+
+                <button type="button" class="portal-card text-start" data-bs-toggle="modal"
+                    data-bs-target="#loginModal">
+                    <div class="portal-icon"><i class="bi bi-eye-fill"></i></div>
+                    <h3>LGU / Coast Guard Dashboard</h3>
+                    <p>View manifests, track vessel, view weather, and report compliance issues.</p>
+                    <span class="pill pill-readonly"><i class="bi bi-lock-fill"></i> Monitored Access</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="portal-foot">
+            Sign in with your <strong>BangkaGo mobile app</strong> account. Admin and LGU / Coast Guard roles only.
+        </div>
+    </div>
+
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0" style="border-radius:14px;">
+                <div class="modal-header" style="background:linear-gradient(135deg,#0a2540,#0d3360); color:#fff;">
+                    <h5 class="modal-title"><i class="bi bi-person-lock me-2"></i>Portal Login</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+
+                <form id="portalLoginForm">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Mobile number</label>
+                            <input type="text" class="form-control" id="loginUser" placeholder="0917 123 4567"
+                                autocomplete="username" required />
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control" id="loginPass" placeholder="Enter password"
+                                autocomplete="current-password" required />
+                        </div>
+                        <div class="login-note">Same account you use in the BangkaGo app. Role routing is automatic after login.</div>
+                        <div id="loginError" class="text-danger small mt-2 d-none">Invalid credentials.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn text-white" style="background:#1565c0;">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="config.js"></script>
+    <script src="assets/js/supabase.js"></script>
+    <script src="supabase-client.js"></script>
+    <script>
+        const form = document.getElementById("portalLoginForm");
+        const userInput = document.getElementById("loginUser");
+        const passInput = document.getElementById("loginPass");
+        const errorEl = document.getElementById("loginError");
+        const loginModalEl = document.getElementById("loginModal");
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        function showError(msg) {
+            errorEl.textContent = msg;
+            errorEl.classList.remove("d-none");
+        }
+
+        // Clear error when modal opens/closes or user types - no design change
+        if (loginModalEl) {
+            loginModalEl.addEventListener("show.bs.modal", function () {
+                errorEl.classList.add("d-none");
+            });
+            loginModalEl.addEventListener("hidden.bs.modal", function () {
+                errorEl.classList.add("d-none");
+                form.reset();
+            });
+        }
+        userInput.addEventListener("input", function () { errorEl.classList.add("d-none"); });
+        passInput.addEventListener("input", function () { errorEl.classList.add("d-none"); });
+
+        form.addEventListener("submit", async function (e) {
+            e.preventDefault();
+            if (!window.bangkago || !window.bangkago.client) {
+                showError("Cannot reach the server — check your connection or disable your ad blocker for this page.");
+                return;
+            }
+
+            const identifier = userInput.value.trim();
+            const password = passInput.value;
+
+            submitBtn.disabled = true;
+            try {
+                await window.bangkago.signIn(identifier, password);
+            } catch (err) {
+                const msg = (err && err.message) || "";
+                if (msg.includes("Invalid login credentials")) showError("Incorrect mobile number or password.");
+                else if (msg.includes("Email not confirmed")) showError("This account needs confirmation. Contact support.");
+                else if (msg.toLowerCase().includes("rate limit") || msg.includes("Too many requests")) showError("Too many attempts. Wait a moment and try again.");
+                else if (msg.includes("Network") || msg.includes("fetch") || msg.includes("Cannot reach")) showError("Cannot reach the server. Check your connection.");
+                else if (msg) showError("Could not sign in (" + msg + ").");
+                else showError("Could not sign in. Please try again.");
+                submitBtn.disabled = false;
+                return;
+            }
+
+            const role = await window.bangkago.role();
+            if (role === "admin") {
+                window.location.href = "BangkaGO-WEB/admin-dashboard/admin-dashboard.html";
+            } else if (role === "coastguard") {
+                window.location.href = "BangkaGO-WEB/coastguard-dashboard/index.html";
+            } else {
+                await window.bangkago.signOut();
+                showError("This portal is for Admin and Coast Guard accounts only. Use the mobile app.");
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Already signed in with a portal role? Jump straight to that dashboard
+        // (retry-friendly: a bounced user with a live session skips the form).
+        (async function () {
+            if (!window.bangkago || !window.bangkago.client) return;
+            const role = await window.bangkago.role();
+            if (role === "admin") window.location.replace("BangkaGO-WEB/admin-dashboard/admin-dashboard.html");
+            else if (role === "coastguard") window.location.replace("BangkaGO-WEB/coastguard-dashboard/index.html");
+        })();
+    </script>
+</body>
+
+</html>

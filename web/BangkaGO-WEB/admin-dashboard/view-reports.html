@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BangkaGo Admin — View Reports</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <style>
+    .summary-box{border:1px solid var(--gray-200);border-radius:12px;background:var(--gray-50);padding:.7rem .85rem;}
+  </style>
+</head>
+<body data-page="view-reports">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">View Reports</h6>
+            <span class="muted-note">Review submitted reports, update status, and maintain audit-ready remarks</span>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <input id="reportSearch" class="form-control" placeholder="Search report ID, reporter, category, description">
+            </div>
+            <div class="col-md-2">
+              <select id="reportStatusFilter" class="form-select">
+                <option value="">All Status</option>
+                <option value="Open">Open</option>
+                <option value="Resolved">Resolved</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="reportCategoryFilter" class="form-select">
+                <option value="">All Categories</option>
+                <option value="Delay">Delay</option>
+                <option value="Safety">Safety</option>
+                <option value="Payment">Payment</option>
+                <option value="Operations">Operations</option>
+                <option value="Service">Service</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <select id="reportSort" class="form-select">
+                <option value="newest">Sort: Newest</option>
+                <option value="oldest">Sort: Oldest</option>
+                <option value="status">Sort: Status</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button id="reportReset" class="btn btn-outline-secondary">Reset</button>
+            </div>
+          </div>
+
+          <!-- Quick stats -->
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="report-chip">Total: <strong id="statTotal">0</strong></span>
+            <span class="report-chip">Open: <strong id="statOpen">0</strong></span>
+            <span class="report-chip">Resolved: <strong id="statResolved">0</strong></span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Report ID</th>
+                  <th>Reporter</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                  <th style="width:280px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="reportBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- VIEW REPORT MODAL -->
+  <div class="modal fade" id="reportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="reportTitle">View Report</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="reportContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHANGE STATUS MODAL -->
+  <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="statusForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Change Report Status</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="summary-box mb-3">
+            <div><strong>Report:</strong> <span id="statusReportId">-</span></div>
+            <div><strong>Reporter:</strong> <span id="statusReporter">-</span></div>
+            <div><strong>Category:</strong> <span id="statusCategory">-</span></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">New Status</label>
+            <select id="newReportStatus" class="form-select" required>
+              <option value="Open">Open</option>
+              <option value="Resolved">Resolved</option>
+            </select>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label">Remarks</label>
+            <textarea id="statusRemarks" class="form-control" rows="3" placeholder="Add action taken, resolution details, or follow-up notes..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-outline-dark">Save Status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- RESULT MODAL -->
+  <div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Update Complete</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="resultBox"></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+
+  <script>
+    const reports = [
+      {id:'REP-11', by:'LGU Batangas',      cat:'Delay',   desc:'Frequent late departures on Route R-02', st:'Open',     remarks:'',               created:'2026-04-15', updated:'2026-04-15'},
+      {id:'REP-12', by:'Coast Guard Unit 3',cat:'Safety',  desc:'Missing life vests reported on Boat 15', st:'Open',     remarks:'Inspection pending', created:'2026-04-16', updated:'2026-04-16'},
+      {id:'REP-13', by:'Passenger Desk',    cat:'Payment', desc:'Double charge complaint for BKG-101',     st:'Resolved', remarks:'Refund verified',   created:'2026-04-14', updated:'2026-04-16'}
+    ];
+
+    let selectedIndex = null;
+
+    const body = document.getElementById('reportBody');
+    const reportModal = new bootstrap.Modal('#reportModal');
+    const statusModal = new bootstrap.Modal('#statusModal');
+    const resultModal = new bootstrap.Modal('#resultModal');
+
+    const reportSearch = document.getElementById('reportSearch');
+    const reportStatusFilter = document.getElementById('reportStatusFilter');
+    const reportCategoryFilter = document.getElementById('reportCategoryFilter');
+    const reportSort = document.getElementById('reportSort');
+
+    function badge(status){
+      return status === 'Resolved' ? 'text-bg-success' : 'text-bg-warning';
+    }
+
+    function nowStamp(){
+      const d = new Date();
+      const pad = n => String(n).padStart(2,'0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    }
+
+    function updateStats(data){
+      const total = data.length;
+      const open = data.filter(r => r.st === 'Open').length;
+      const resolved = data.filter(r => r.st === 'Resolved').length;
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statOpen').textContent = open;
+      document.getElementById('statResolved').textContent = resolved;
+    }
+
+    function render(data){
+      body.innerHTML = '';
+      data.forEach(r => {
+        const i = reports.findIndex(x => x.id === r.id);
+        body.innerHTML += `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.by}</td>
+            <td>${r.cat}</td>
+            <td>${r.desc}</td>
+            <td><span class="badge ${badge(r.st)}">${r.st}</span></td>
+            <td>${r.updated}</td>
+            <td>
+              <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewReport(${i})">
+                  <i class="bi bi-eye"></i> View
+                </button>
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal(${i})">
+                  <i class="bi bi-arrow-repeat"></i> Change Status
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      updateStats(data);
+    }
+
+    function getFilteredSortedReports(){
+      const q = reportSearch.value.toLowerCase().trim();
+      const s = reportStatusFilter.value;
+      const c = reportCategoryFilter.value;
+      const sortBy = reportSort.value;
+
+      let data = reports.filter(r => {
+        const textMatch =
+          r.id.toLowerCase().includes(q) ||
+          r.by.toLowerCase().includes(q) ||
+          r.cat.toLowerCase().includes(q) ||
+          r.desc.toLowerCase().includes(q);
+
+        const statusMatch = s ? r.st === s : true;
+        const categoryMatch = c ? r.cat === c : true;
+
+        return textMatch && statusMatch && categoryMatch;
+      });
+
+      if(sortBy === 'newest'){
+        data.sort((a,b) => b.id.localeCompare(a.id));
+      } else if(sortBy === 'oldest'){
+        data.sort((a,b) => a.id.localeCompare(b.id));
+      } else if(sortBy === 'status'){
+        data.sort((a,b) => a.st.localeCompare(b.st));
+      }
+
+      return data;
+    }
+
+    function runFilter(){
+      render(getFilteredSortedReports());
+    }
+
+    window.viewReport = function(i){
+      const r = reports[i];
+      document.getElementById('reportTitle').textContent = `View Report (${r.id})`;
+      document.getElementById('reportContent').innerHTML = `
+        <div class="summary-box mb-2"><strong>Report ID:</strong> ${r.id}</div>
+        <div class="summary-box mb-2"><strong>Reporter:</strong> ${r.by}</div>
+        <div class="summary-box mb-2"><strong>Category:</strong> ${r.cat}</div>
+        <div class="summary-box mb-2"><strong>Description:</strong> ${r.desc}</div>
+        <div class="summary-box mb-2"><strong>Status:</strong> ${r.st}</div>
+        <div class="summary-box mb-2"><strong>Created:</strong> ${r.created}</div>
+        <div class="summary-box mb-2"><strong>Last Updated:</strong> ${r.updated}</div>
+        <div class="summary-box mb-0"><strong>Remarks:</strong> ${r.remarks || '-'}</div>
+      `;
+      reportModal.show();
+    }
+
+    window.openStatusModal = function(i){
+      selectedIndex = i;
+      const r = reports[i];
+
+      document.getElementById('statusReportId').textContent = r.id;
+      document.getElementById('statusReporter').textContent = r.by;
+      document.getElementById('statusCategory').textContent = r.cat;
+      document.getElementById('newReportStatus').value = r.st;
+      document.getElementById('statusRemarks').value = r.remarks || '';
+
+      statusModal.show();
+    }
+
+    document.getElementById('statusForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      if(selectedIndex === null) return;
+
+      reports[selectedIndex].st = document.getElementById('newReportStatus').value;
+      reports[selectedIndex].remarks = document.getElementById('statusRemarks').value.trim();
+      reports[selectedIndex].updated = nowStamp();
+
+      statusModal.hide();
+      runFilter();
+
+      document.getElementById('resultBox').innerHTML = `
+        <div class="alert alert-success mb-2">
+          Report <strong>${reports[selectedIndex].id}</strong> updated successfully.
+        </div>
+        <div class="summary-box">
+          <div><strong>New Status:</strong> ${reports[selectedIndex].st}</div>
+          <div><strong>Updated:</strong> ${reports[selectedIndex].updated}</div>
+        </div>
+      `;
+      resultModal.show();
+    });
+
+    // Filter listeners
+    reportSearch.addEventListener('input', runFilter);
+    reportStatusFilter.addEventListener('change', runFilter);
+    reportCategoryFilter.addEventListener('change', runFilter);
+    reportSort.addEventListener('change', runFilter);
+
+    document.getElementById('reportReset').addEventListener('click', () => {
+      reportSearch.value = '';
+      reportStatusFilter.value = '';
+      reportCategoryFilter.value = '';
+      reportSort.value = 'newest';
+      runFilter();
+    });
+
+    runFilter();
+  </script>
+</body>
+</html>

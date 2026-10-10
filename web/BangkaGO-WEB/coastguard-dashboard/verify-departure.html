@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Coast Guard — Verify Departure</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+</head>
+<body data-page="verify-departure">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="cg-card">
+              <div class="panel-head">
+                <h6 class="mb-0">Departure Verification Log (Read-Only)</h6>
+                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+              </div>
+
+              <!-- Search controls -->
+              <div class="row g-2 mb-3 align-items-end filter-row">
+                <div class="col-12 col-md-5">
+                  <label class="form-label visually-hidden" for="verifySearchInput">Search</label>
+                  <input id="verifySearchInput" class="form-control w-100" type="text" placeholder="Search by Ref No, vessel, port, or verifier">
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label visually-hidden" for="verifyStatusFilter">Result</label>
+                  <select id="verifyStatusFilter" class="form-select w-100">
+                    <option value="">All Results</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Conditional">Conditional</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-4 d-flex gap-2">
+                  <button id="verifySearchBtn" class="btn btn-primary flex-fill" type="button">
+                    <i class="bi bi-search"></i> Search
+                  </button>
+                  <button id="verifyResetBtn" class="btn btn-outline-secondary flex-fill" type="button">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                  </button>
+                </div>
+              </div>
+
+              <div id="verifyResultCount" class="small text-secondary mb-2"></div>
+
+              <!-- Table -->
+              <div class="table-responsive">
+                <table class="table table-theme align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Ref No.</th>
+                      <th>Vessel</th>
+                      <th>Manifest</th>
+                      <th>Port</th>
+                      <th>Verified By</th>
+                      <th>Time</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody id="verifyTableBody"></tbody>
+                </table>
+              </div>
+
+              <p id="verifyEmptyState" class="cg-empty d-none">
+                No departure records found.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/coastguard-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+  <script>
+    const departureLogs = [
+      { ref: "VD-551", vessel: "Boat 08", manifest: "MF-190", port: "Marigondon Port", verifier: "Station 2", time: "13:18", result: "Approved" },
+      { ref: "VD-548", vessel: "Boat 03", manifest: "MF-188", port: "Olango Port", verifier: "Station 1", time: "13:00", result: "Conditional" },
+      { ref: "VD-541", vessel: "Boat 11", manifest: "MF-184", port: "Mactan Port", verifier: "Station 3", time: "12:39", result: "Approved" },
+      { ref: "VD-536", vessel: "Boat 15", manifest: "MF-179", port: "Engano Port", verifier: "Station 2", time: "11:49", result: "Rejected" }
+    ];
+
+    const input = document.getElementById("verifySearchInput");
+    const filter = document.getElementById("verifyStatusFilter");
+    const searchBtn = document.getElementById("verifySearchBtn");
+    const resetBtn = document.getElementById("verifyResetBtn");
+    const tbody = document.getElementById("verifyTableBody");
+    const countEl = document.getElementById("verifyResultCount");
+    const emptyEl = document.getElementById("verifyEmptyState");
+
+    function badgeFor(result){
+      if(result === "Approved") return "text-bg-success";
+      if(result === "Conditional") return "text-bg-warning";
+      return "text-bg-danger";
+    }
+
+    function renderRows(data){
+      tbody.innerHTML = "";
+
+      if(data.length === 0){
+        emptyEl.classList.remove("d-none");
+      } else {
+        emptyEl.classList.add("d-none");
+      }
+
+      data.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${d.ref}</td>
+          <td>${d.vessel}</td>
+          <td>${d.manifest}</td>
+          <td>${d.port}</td>
+          <td>${d.verifier}</td>
+          <td>${d.time}</td>
+          <td><span class="badge ${badgeFor(d.result)}">${d.result}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      countEl.textContent = `Showing ${data.length} record(s)`;
+    }
+
+    function runSearch(){
+      const q = input.value.trim().toLowerCase();
+      const status = filter.value;
+
+      const filtered = departureLogs.filter(d => {
+        const textMatch =
+          d.ref.toLowerCase().includes(q) ||
+          d.vessel.toLowerCase().includes(q) ||
+          d.manifest.toLowerCase().includes(q) ||
+          d.port.toLowerCase().includes(q) ||
+          d.verifier.toLowerCase().includes(q);
+
+        const statusMatch = status ? d.result === status : true;
+        return textMatch && statusMatch;
+      });
+
+      renderRows(filtered);
+    }
+
+    searchBtn.addEventListener("click", runSearch);
+    resetBtn.addEventListener("click", () => {
+      input.value = "";
+      filter.value = "";
+      renderRows(departureLogs);
+    });
+    input.addEventListener("keydown", (e) => {
+      if(e.key === "Enter") runSearch();
+    });
+
+    renderRows(departureLogs);
+  </script>
+</body>
+</html>

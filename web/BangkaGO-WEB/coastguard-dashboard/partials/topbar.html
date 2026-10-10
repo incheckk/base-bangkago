@@ -1,0 +1,21 @@
+<header class="cg-topbar">
+  <div class="d-flex align-items-center gap-2 flex-shrink-0">
+    <button class="btn topbar-btn d-lg-none" id="sidebarMobileToggle" type="button" aria-label="Open navigation menu">
+      <i class="bi bi-list"></i>
+    </button>
+    <button class="btn topbar-btn d-none d-lg-inline-flex" id="sidebarDesktopToggle" type="button" aria-label="Toggle sidebar">
+      <i class="bi bi-layout-sidebar-inset"></i>
+    </button>
+
+    <div>
+      <h4 id="topbarTitle" class="mb-0">Dashboard</h4>
+      <small id="topbarSubtitle">LGU / Coast Guard read-only monitoring panel</small>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+    <button class="btn icon-btn" type="button" title="Notifications" aria-label="Notifications"><i class="bi bi-bell-fill"></i></button>
+    <a class="btn btn-outline-secondary" href="../../bangkaGo-access.html" onclick="event.preventDefault();try{sessionStorage.clear();}catch(e){}var p=window.bangkago?window.bangkago.signOut():null;Promise.resolve(p).finally(function(){location.href='../../bangkaGo-access.html';})" title="Logout" aria-label="Logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
+  </div>
+</header>

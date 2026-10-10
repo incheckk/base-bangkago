@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo LGU/Coast Guard — View Bangkeros</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+</head>
+<body data-page="view-bangkeros">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="cg-card">
+              <div class="panel-head">
+                <h6 class="mb-0">View Bangkero List (Read-Only)</h6>
+                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
+              </div>
+
+              <!-- Filters -->
+              <div class="row g-2 mb-3 align-items-end filter-row">
+                <div class="col-12 col-sm-6 col-lg-4">
+                  <label class="form-label visually-hidden" for="bangkeroSearchInput">Search</label>
+                  <input id="bangkeroSearchInput" class="form-control w-100" type="text" placeholder="Search name, license, contact">
+                </div>
+                <div class="col-6 col-sm-6 col-lg-3">
+                  <label class="form-label visually-hidden" for="statusFilter">Status</label>
+                  <select id="statusFilter" class="form-select w-100">
+                    <option value="">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="On Duty">On Duty</option>
+                    <option value="Suspended">Suspended</option>
+                  </select>
+                </div>
+                <div class="col-6 col-sm-6 col-lg-3">
+                  <label class="form-label visually-hidden" for="portFilter">Port</label>
+                  <select id="portFilter" class="form-select w-100">
+                    <option value="">All Ports</option>
+                    <option value="Marigondon Port">Marigondon Port</option>
+                    <option value="Mactan Port">Mactan Port</option>
+                    <option value="Olango Port">Olango Port</option>
+                    <option value="Caohagan Port">Caohagan Port</option>
+                    <option value="Sulpa Port">Sulpa Port</option>
+                    <option value="Engano Port">Engano Port</option>
+                  </select>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-2 d-grid">
+                  <button id="resetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                </div>
+              </div>
+
+              <div id="resultCount" class="small text-secondary mb-2"></div>
+
+              <!-- Table -->
+              <div class="table-responsive">
+                <table class="table table-theme align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th>Bangkero ID</th>
+                      <th>Full Name</th>
+                      <th>License No.</th>
+                      <th>Assigned Vessel</th>
+                      <th>Home Port</th>
+                      <th>Contact</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="bangkeroTableBody"></tbody>
+                </table>
+              </div>
+
+              <p id="emptyState" class="cg-empty d-none">
+                No bangkero records match your filters.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="assets/js/coastguard-theme.js"></script>
+  <script src="assets/js/layout-loader.js"></script>
+  <script>
+    const bangkeros = [
+      { id: "BK-001", name: "Juan Dela Cruz", license: "LIC-78231", vessel: "Boat 08", port: "Marigondon Port", contact: "0917-100-2451", status: "On Duty" },
+      { id: "BK-002", name: "Mario Santos", license: "LIC-66311", vessel: "Boat 03", port: "Mactan Port", contact: "0918-553-9012", status: "Active" },
+      { id: "BK-003", name: "Rogelio Navarro", license: "LIC-55192", vessel: "Boat 11", port: "Caohagan Port", contact: "0998-412-1134", status: "Active" },
+      { id: "BK-004", name: "Pedro Alonzo", license: "LIC-44770", vessel: "Boat 15", port: "Olango Port", contact: "0919-777-8930", status: "Suspended" },
+      { id: "BK-005", name: "Nilo Ramos", license: "LIC-93210", vessel: "Boat 06", port: "Sulpa Port", contact: "0922-001-5517", status: "On Duty" },
+      { id: "BK-006", name: "Lito Engano", license: "LIC-88412", vessel: "Boat 12", port: "Engano Port", contact: "0915-203-8844", status: "Active" }
+    ];
+
+    const tbody = document.getElementById("bangkeroTableBody");
+    const searchInput = document.getElementById("bangkeroSearchInput");
+    const statusFilter = document.getElementById("statusFilter");
+    const portFilter = document.getElementById("portFilter");
+    const resetBtn = document.getElementById("resetBtn");
+    const resultCount = document.getElementById("resultCount");
+    const emptyState = document.getElementById("emptyState");
+
+    function badgeClass(status){
+      if (status === "On Duty") return "text-bg-info";
+      if (status === "Active") return "text-bg-success";
+      return "text-bg-danger";
+    }
+
+    function renderRows(data){
+      tbody.innerHTML = "";
+
+      if (data.length === 0) emptyState.classList.remove("d-none");
+      else emptyState.classList.add("d-none");
+
+      data.forEach(b => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${b.id}</td>
+          <td>${b.name}</td>
+          <td>${b.license}</td>
+          <td>${b.vessel}</td>
+          <td>${b.port}</td>
+          <td>${b.contact}</td>
+          <td><span class="badge ${badgeClass(b.status)}">${b.status}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      resultCount.textContent = `Showing ${data.length} bangkero record(s)`;
+    }
+
+    function runFilter(){
+      const q = searchInput.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      const port = portFilter.value;
+
+      const filtered = bangkeros.filter(b => {
+        const textMatch =
+          b.id.toLowerCase().includes(q) ||
+          b.name.toLowerCase().includes(q) ||
+          b.license.toLowerCase().includes(q) ||
+          b.contact.toLowerCase().includes(q) ||
+          b.vessel.toLowerCase().includes(q);
+
+        const statusMatch = status ? b.status === status : true;
+        const portMatch = port ? b.port === port : true;
+
+        return textMatch && statusMatch && portMatch;
+      });
+
+      renderRows(filtered);
+    }
+
+    searchInput.addEventListener("input", runFilter);
+    statusFilter.addEventListener("change", runFilter);
+    portFilter.addEventListener("change", runFilter);
+
+    resetBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      statusFilter.value = "";
+      portFilter.value = "";
+      renderRows(bangkeros);
+    });
+
+    renderRows(bangkeros);
+  </script>
+</body>
+</html>

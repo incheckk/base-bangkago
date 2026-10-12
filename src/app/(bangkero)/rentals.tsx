@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
+import { getDownpaymentByRental } from '@/services/downpayment.service';
 import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import {
   type BangkeroRentalRow,
@@ -86,7 +87,9 @@ export default function BangkeroRentalsScreen() {
     void load();
   }, [load]);
 
-  useRealtimeQuery(load, [{ table: 'boat_rentals' }]);
+  // Boat rows (rate/listing) change the desk too — a rate edit from
+  // another device must refresh the drafts and totals.
+  useRealtimeQuery(load, [{ table: 'boat_rentals' }, { table: 'bangkas' }]);
 
   const notifyCtx = (row: BangkeroRentalRow) => ({
     rentalId: row.rentalId,
@@ -122,22 +125,44 @@ export default function BangkeroRentalsScreen() {
   }
 
   function askComplete(row: BangkeroRentalRow) {
-    Alert.alert(
-      'Mark rental complete?',
-      `Confirm the charter is finished and you collected ₱${row.totalPrice - Math.round(row.totalPrice * 0.5)} in person.`,
-      [
-        { text: 'Go back', style: 'cancel' },
-        { text: 'Complete', onPress: () => void act(row, completeRental) },
-      ]
-    );
+    void (async () => {
+      // Remainder = total minus what escrow actually holds. The approved
+      // downpayment is authoritative; the half-split is a fallback that
+      // rounds once (down = round, remainder = total − down) so the two
+      // halves always sum back to the total.
+      let remainder = row.totalPrice - Math.round(row.totalPrice * 0.5);
+      try {
+        const escrow = await getDownpaymentByRental(row.rentalId);
+        if (escrow && escrow.status === 'approved') {
+          remainder = row.totalPrice - escrow.amount;
+        }
+      } catch {
+        // escrow unreadable (RLS/offline) — fall back to the split
+      }
+      Alert.alert(
+        'Mark rental complete?',
+        `Confirm the charter is finished and you collected ₱${remainder} in person.`,
+        [
+          { text: 'Go back', style: 'cancel' },
+          { text: 'Complete', onPress: () => void act(row, completeRental) },
+        ]
+      );
+    })();
   }
 
   async function saveRate(boat: OwnBangka) {
     if (savingRate) return;
+    // A cleared field reads as Number('') === 0 — stop it here with a
+    // clear message instead of letting a ₱0 rate reach the service.
+    const raw = (rateDraft[boat.bangkaId] ?? '').trim();
+    if (!raw) {
+      setActionError('Enter an hourly rate above ₱0.');
+      return;
+    }
     setSavingRate(boat.bangkaId);
     setActionError(null);
     try {
-      await setHourlyRate(boat.bangkaId, Number(rateDraft[boat.bangkaId] ?? boat.hourlyRate));
+      await setHourlyRate(boat.bangkaId, Number(raw));
       await load();
     } catch (e) {
       setActionError(friendlyError(e));
@@ -178,6 +203,7 @@ export default function BangkeroRentalsScreen() {
     );
   }
 
+  const awaiting = rows.filter((r) => r.status === 'awaiting_payment');
   const pending = rows.filter((r) => r.status === 'pending');
   const confirmed = rows.filter((r) => r.status === 'confirmed');
   const history = rows.filter((r) => r.status === 'completed' || r.status === 'cancelled');
@@ -187,7 +213,7 @@ export default function BangkeroRentalsScreen() {
       <BangkeroScreenHeader
         eyebrow="CHARTERS"
         title="Boat Rentals"
-        subtitle={`${pending.length} pending · ${confirmed.length} confirmed`}
+        subtitle={`${pending.length} pending · ${confirmed.length} confirmed${awaiting.length > 0 ? ` · ${awaiting.length} awaiting payment` : ''}`}
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {!!actionError && (
@@ -249,6 +275,26 @@ export default function BangkeroRentalsScreen() {
             </View>
           </View>
         ))}
+
+        <Text style={styles.sectionLabel}>AWAITING PAYMENT</Text>
+        {awaiting.length === 0 ? (
+          <Text style={styles.emptyLine}>No charters waiting on escrow.</Text>
+        ) : (
+          <>
+            <Text style={styles.escrowHint}>
+              These passengers still owe the 50% GCash escrow — Confirm unlocks
+              once the admin approves it in Downpayments.
+            </Text>
+            {awaiting.map((row) => (
+              <RentalCard
+                key={row.rentalId}
+                row={row}
+                riders={riders[row.rentalId] ?? []}
+                busy={busyId === row.rentalId}
+              />
+            ))}
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>INCOMING REQUESTS</Text>
         {pending.length === 0 ? (
@@ -423,6 +469,7 @@ const styles = StyleSheet.create({
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
   emptyLine: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
+  escrowHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.md, lineHeight: 18 },
 
   card: {
     backgroundColor: colors.surface,

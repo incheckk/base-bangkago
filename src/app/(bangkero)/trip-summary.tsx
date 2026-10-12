@@ -26,6 +26,9 @@ export default function TripSummary() {
   const [parcelFare, setParcelFare] = useState(0);
   const [fareLoading, setFareLoading] = useState(true);
   const [fareError, setFareError] = useState<string | null>(null);
+  // No fare rows at all (not ₱0 of real fares) — a distinct empty state so
+  // a zero-report never masquerades as a successful accounting.
+  const [fareEmpty, setFareEmpty] = useState(false);
 
   // Real money for THIS sailing: passenger fares from the manifest's
   // passenger rows plus cargo freight resolved through the manifest's
@@ -63,8 +66,10 @@ export default function TripSummary() {
         if (ids.length === 0) {
           setPassengerFare(0);
           setParcelFare(0);
+          setFareEmpty(true);
           return;
         }
+        setFareEmpty(false);
         const { data: bookings, error: bkErr } = await supabase
           .from('bookings')
           .select('service_type, total_price')
@@ -132,6 +137,24 @@ export default function TripSummary() {
           <ErrorState message={error ?? fareError ?? 'No completed trip found. Complete a sailing first.'} />
           <View style={styles.footer}>
             <PrimaryButton label="Back to Home" onPress={() => router.replace('/(bangkero)/home')} />
+          </View>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (fareEmpty) {
+    return (
+      <ScreenContainer padded={false}>
+        <BangkeroScreenHeader title="Trip Summary" showDrawer={false} showBack={false} />
+        <View style={styles.scroll}>
+          <Text style={styles.title}>Trip Complete</Text>
+          <Text style={styles.emptyNote}>
+            No fares were recorded for this sailing — the manifest has no
+            passenger or parcel rows. Nothing to report yet.
+          </Text>
+          <View style={styles.footer}>
+            <PrimaryButton label="Done" onPress={() => router.replace('/(bangkero)/home')} />
           </View>
         </View>
       </ScreenContainer>
@@ -221,6 +244,13 @@ const styles = StyleSheet.create({
   checkMark: { color: colors.primaryText, fontSize: 28, fontWeight: '700' },
 
   title: { ...typography.h1, textAlign: 'center', marginBottom: spacing.xl },
+  emptyNote: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.xl,
+  },
 
   routeCard: {
     width: '100%',

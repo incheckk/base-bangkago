@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useWeatherData } from '@/hooks/useWeatherData';
+import { usePorts } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const CONDITION_ICON: Record<string, string> = {
@@ -21,7 +22,11 @@ function getIcon(condition: string | null): string {
 }
 
 export default function WeatherScreen() {
-  const { data, loading, error } = useWeatherData('p1');
+  // No port context on this screen — default to the first active port
+  // instead of the removed 'p1' seed id. Null-safe: shows the empty
+  // state until forecast data exists for the port.
+  const ports = usePorts();
+  const { data, loading, error } = useWeatherData(ports.data[0]?.portId ?? null);
 
   const condition = data?.weatherCondition ?? 'Unknown';
   const windSpeed = data?.windSpeed;

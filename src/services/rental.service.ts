@@ -226,13 +226,41 @@ export interface RentalNotifyContext {
 const rentalWhat = (ctx: RentalNotifyContext) =>
   `${ctx.boatName}${ctx.eventName ? ` (${ctx.eventName})` : ''} on ${ctx.rentalDate}, ${ctx.hours}h`;
 
-/** Bangkero accepts the request. */
-export async function confirmRental(ctx: RentalNotifyContext): Promise<void> {
-  const { error } = await supabase
+/**
+ * Guarded status transition: the UPDATE only lands when the row is still
+ * in an expected state (plus `.eq('id')`, with RLS scoping to the caller's
+ * own boats for ownership). A 0-row write means the row raced (status
+ * moved, row gone, or another owner's boat, which RLS hides) — refetch
+ * and report what happened instead of failing silently or clobbering.
+ */
+async function transitionRental(
+  rentalId: string,
+  expectedFrom: string[],
+  to: string
+): Promise<void> {
+  const { data, error } = await supabase
     .from('boat_rentals')
-    .update({ status: 'confirmed' })
-    .eq('id', ctx.rentalId);
+    .update({ status: to })
+    .eq('id', rentalId)
+    .in('status', expectedFrom)
+    .select('id');
   if (error) throw error;
+  if ((data ?? []).length > 0) return;
+
+  const { data: row } = await supabase
+    .from('boat_rentals')
+    .select('status')
+    .eq('id', rentalId)
+    .maybeSingle();
+  if (!row) {
+    throw new Error('That rental was already handled or is unavailable — the list was refreshed.');
+  }
+  throw new Error(`That rental is already ${row.status} — the list was refreshed.`);
+}
+
+/** Bangkero accepts the request (escrow-approved `pending` only). */
+export async function confirmRental(ctx: RentalNotifyContext): Promise<void> {
+  await transitionRental(ctx.rentalId, ['pending'], 'confirmed');
 
   if (ctx.notifyUserId) {
     await createNotification(
@@ -243,13 +271,9 @@ export async function confirmRental(ctx: RentalNotifyContext): Promise<void> {
   }
 }
 
-/** Bangkero turns the request down. */
+/** Bangkero turns the request down (before or after escrow approval). */
 export async function declineRental(ctx: RentalNotifyContext): Promise<void> {
-  const { error } = await supabase
-    .from('boat_rentals')
-    .update({ status: 'cancelled' })
-    .eq('id', ctx.rentalId);
-  if (error) throw error;
+  await transitionRental(ctx.rentalId, ['pending', 'awaiting_payment'], 'cancelled');
 
   if (ctx.notifyUserId) {
     await createNotification(
@@ -262,11 +286,7 @@ export async function declineRental(ctx: RentalNotifyContext): Promise<void> {
 
 /** Bangkero marks the charter finished — remainder collected in person. */
 export async function completeRental(ctx: RentalNotifyContext): Promise<void> {
-  const { error } = await supabase
-    .from('boat_rentals')
-    .update({ status: 'completed' })
-    .eq('id', ctx.rentalId);
-  if (error) throw error;
+  await transitionRental(ctx.rentalId, ['confirmed'], 'completed');
 
   if (ctx.notifyUserId) {
     await createNotification(
@@ -277,13 +297,13 @@ export async function completeRental(ctx: RentalNotifyContext): Promise<void> {
   }
 }
 
-/** Passenger withdraws a request they no longer need. */
+/** Passenger withdraws a request they no longer need (any live state). */
 export async function cancelRental(ctx: RentalNotifyContext): Promise<void> {
-  const { error } = await supabase
-    .from('boat_rentals')
-    .update({ status: 'cancelled' })
-    .eq('id', ctx.rentalId);
-  if (error) throw error;
+  await transitionRental(
+    ctx.rentalId,
+    ['awaiting_payment', 'pending', 'confirmed'],
+    'cancelled'
+  );
 
   if (ctx.notifyUserId) {
     await createNotification(
@@ -322,8 +342,10 @@ export async function getOwnBangkas(bangkeroUid: string): Promise<OwnBangka[]> {
 }
 
 export async function setHourlyRate(bangkaId: string, hourlyRate: number): Promise<void> {
-  if (!Number.isFinite(hourlyRate) || hourlyRate < 0) {
-    throw new Error('Enter a valid hourly rate.');
+  // Blank inputs arrive as Number('') === 0 — reject those alongside
+  // negatives, NaN and infinities before anything reaches the DB.
+  if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) {
+    throw new Error('Enter an hourly rate above ₱0.');
   }
   const { error } = await supabase
     .from('bangkas')

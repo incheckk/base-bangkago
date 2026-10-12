@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { Icon } from '@/components/Icon';
@@ -82,6 +82,9 @@ export default function BookingStatus() {
 
   // Advance/slot bookings (020): the accepted row sits until its sailing
   // time — Start Trip and no-show both stay locked until the slot arrives.
+  // The slot is a Manila wall time (schedules are Asia/Manila); parsing it
+  // in the device zone skews the lock by the UTC offset on foreign phones.
+  // Manila has no DST, so +08:00 is exact. Unparseable → stay locked.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
@@ -89,9 +92,16 @@ export default function BookingStatus() {
   }, []);
   const scheduledAt =
     booking?.scheduledDate && booking?.scheduledTime
-      ? new Date(`${booking.scheduledDate}T${booking.scheduledTime}:00`).getTime()
+      ? (() => {
+          const ms = new Date(
+            `${booking.scheduledDate}T${booking.scheduledTime}:00+08:00`
+          ).getTime();
+          return Number.isFinite(ms) ? ms : NaN;
+        })()
       : null;
-  const advanceLocked = scheduledAt !== null && now < scheduledAt;
+  const advanceLocked = scheduledAt === null
+    ? booking?.scheduledDate != null || booking?.scheduledTime != null
+    : now < scheduledAt;
   const canStart = bookerResolved && companionsResolved && !advanceLocked;
 
   // QR scanner: one scan at a time — `scanLatch` releases ONLY when the
@@ -129,8 +139,11 @@ export default function BookingStatus() {
     []
   );
 
-  /** Manual tick for one companion row (undo with a second tap). */
+  /** Manual tick for one companion row (undo with a second tap).
+   *  No-showed rows are terminal (022 partial no-show) — tapping them must
+   *  not resurrect boardedAt over noShowAt. */
   async function toggleCompanion(c: PassengerDetailDoc) {
+    if (c.noShowAt) return;
     const next = !c.boardedAt;
     const prevIso = c.boardedAt;
     setCompanions((rows) =>
@@ -377,14 +390,17 @@ export default function BookingStatus() {
   }
 
   async function handleStartTrip() {
+    if (!canStart) return;
     router.push('/(bangkero)/departure');
   }
 
   function handleContactPassenger() {
-    if (booking?.passengerPhone) {
-      const phone = booking.passengerPhone.replace('+', '');
-      router.push(`tel:${phone}`);
-    }
+    if (!booking?.passengerPhone) return;
+    const phone = booking.passengerPhone.replace(/[^+\d]/g, '');
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`).catch(() =>
+      setActionError(`Could not open the dialer — call ${booking.passengerPhone} manually.`)
+    );
   }
 
   return (
@@ -479,9 +495,10 @@ export default function BookingStatus() {
                   <Pressable
                     key={c.passengerId}
                     onPress={() => void toggleCompanion(c)}
-                    style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
+                    disabled={!!c.noShowAt}
+                    style={({ pressed }) => [styles.boardRow, pressed && !c.noShowAt && styles.boardRowPressed]}
                     accessibilityRole="checkbox"
-                    accessibilityState={{ checked: !!c.boardedAt }}
+                    accessibilityState={{ checked: !!c.boardedAt, disabled: !!c.noShowAt }}
                     accessibilityLabel={`${c.firstName} ${c.lastName} on board`}
                   >
                     <View style={[styles.checkbox, c.boardedAt && styles.checkboxOn]}>

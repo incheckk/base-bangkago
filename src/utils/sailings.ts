@@ -2,7 +2,10 @@ import type { BookingDoc, ParcelDoc, PaymentDoc } from '@/types/models';
 
 // =============================================================
 // Manifest = "sailings": the bangkero's bookings grouped by the
-// day they were made and the route they run (route + day group).
+// day they SAIL and the route they run (route + sail-day group).
+// Advance/slot trips carry scheduledDate — grouping by creation day
+// would scatter one sailing across booking days. Same-day trips have
+// no scheduled date, so they fall back to their Manila creation day.
 // Derived client-side from bookings + parcels + payments — no
 // schema change. Shared by the manifest list and sailing detail.
 // =============================================================
@@ -10,7 +13,7 @@ import type { BookingDoc, ParcelDoc, PaymentDoc } from '@/types/models';
 export interface Sailing {
   /** `${day}|${from}|${to}` — stable identity for navigation. */
   key: string;
-  /** Local calendar day of the bookings, YYYY-MM-DD. */
+  /** Sail day (scheduledDate, else Manila creation day), YYYY-MM-DD. */
   day: string;
   from: string;
   to: string;
@@ -30,12 +33,20 @@ function localYmd(d: Date): string {
   ).padStart(2, '0')}`;
 }
 
+/** Manila calendar day (YYYY-MM-DD) for "now" or an instant. Schedules
+ *  live in Asia/Manila — device-local days skew Today/Yesterday on
+ *  foreign phones. Manila has no DST so this is exact. */
+function manilaYmd(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
 export function dayKey(iso: string): string {
-  return localYmd(new Date(iso));
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? localYmd(new Date()) : manilaYmd(d);
 }
 
 export function todayKey(): string {
-  return localYmd(new Date());
+  return manilaYmd(new Date());
 }
 
 function offsetDay(key: string, days: number): string {
@@ -56,8 +67,10 @@ export function sailingDayLabel(day: string): string {
 }
 
 /**
- * Group bookings into sailings (day + route), attach parcel counts
+ * Group bookings into sailings (sail day + route), attach parcel counts
  * and payment state, oldest booking first inside each sailing.
+ * Cancelled bookings are excluded entirely — they neither sailed nor
+ * owe payment, so counting them inflates pax and unpaid badges.
  * The list is sorted newest sailing first.
  */
 export function buildSailings(
@@ -69,9 +82,13 @@ export function buildSailings(
   const sailingOfBooking = new Map<string, Sailing>();
 
   for (const t of trips) {
+    if (t.status === 'cancelled') continue;
     const from = t.fromPortName ?? 'Unknown port';
     const to = t.toPortName ?? 'Unknown port';
-    const day = dayKey(t.createdAt);
+    // Sail day, not booking day: advance/slot trips sail on scheduledDate.
+    const day = t.scheduledDate ?? dayKey(t.createdAt);
+    // routeId IS start__end, so one route always maps to one from/to pair;
+    // the key keeps the day|from|to shape the sailing screen navigates by.
     const key = `${day}|${from}|${to}`;
     let s = map.get(key);
     if (!s) {
@@ -99,6 +116,7 @@ export function buildSailings(
     s.bookings.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
   list.sort((a, b) => {
+    if (a.day !== b.day) return b.day.localeCompare(a.day);
     const aLast = a.bookings[a.bookings.length - 1]?.createdAt ?? '';
     const bLast = b.bookings[b.bookings.length - 1]?.createdAt ?? '';
     return bLast.localeCompare(aLast);

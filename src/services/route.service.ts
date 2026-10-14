@@ -10,6 +10,8 @@ function mapPortRow(row: any): PortDoc {
     longitude: row.longitude,
     sortOrder: row.sort_order,
     isActive: row.is_active,
+    islandGroup: row.island_group ?? 'mactan',
+    islandName: row.island_name ?? 'Mactan',
     geofenceRadiusM: row.geofence_radius_m ?? 300,
   };
 }
@@ -47,6 +49,8 @@ export async function createPort(port: Omit<PortDoc, 'sortOrder'> & { sortOrder?
       longitude: port.longitude,
       sort_order: port.sortOrder ?? 0,
       is_active: port.isActive,
+      island_group: port.islandGroup,
+      island_name: port.islandName,
       geofence_radius_m: port.geofenceRadiusM,
     })
     .select()
@@ -63,6 +67,8 @@ export async function updatePort(portId: string, updates: Partial<PortDoc>) {
   if (updates.latitude !== undefined) payload.latitude = updates.latitude;
   if (updates.longitude !== undefined) payload.longitude = updates.longitude;
   if (updates.isActive !== undefined) payload.is_active = updates.isActive;
+  if (updates.islandGroup !== undefined) payload.island_group = updates.islandGroup;
+  if (updates.islandName !== undefined) payload.island_name = updates.islandName;
   if (updates.geofenceRadiusM !== undefined) payload.geofence_radius_m = updates.geofenceRadiusM;
 
   const { error } = await supabase.from('ports').update(payload).eq('id', portId);

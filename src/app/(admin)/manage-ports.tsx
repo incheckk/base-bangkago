@@ -79,6 +79,12 @@ export default function ManagePorts() {
         location: location.trim(),
         latitude: latitude ? parseFloat(latitude) : 0,
         longitude: longitude ? parseFloat(longitude) : 0,
+        islandGroup: editId
+          ? (ports.find((x) => x.portId === editId)?.islandGroup ?? 'mactan')
+          : ('mactan' as const),
+        islandName: editId
+          ? (ports.find((x) => x.portId === editId)?.islandName ?? 'Mactan')
+          : 'Mactan',
         geofenceRadiusM: Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : 300,
         isActive: true,
         sortOrder: ports.length,

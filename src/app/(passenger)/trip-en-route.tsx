@@ -174,6 +174,10 @@ export default function TripEnRoute() {
         <MapContainer
           ports={ports.data}
           height={260}
+          // Inside a ScrollView: one-finger drag has to stay with the page or
+          // the map becomes a dead zone you cannot scroll past. Pinch and the
+          // zoom buttons still work.
+          draggable={false}
           vessels={
             vessel
               ? [{

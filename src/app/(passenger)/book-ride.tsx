@@ -186,7 +186,15 @@ export default function BookRide() {
             gives the choice a shape — you can see the crossing you just picked. */}
         <View style={styles.routeCard}>
           <View style={styles.mapWrap}>
-            <MapContainer ports={ports.data} fromPortId={fromId} toPortId={toId} height={150} />
+            {/* Inside a ScrollView, so one-finger drag stays with the page.
+                Pinch and the zoom buttons still work. */}
+            <MapContainer
+              ports={ports.data}
+              fromPortId={fromId}
+              toPortId={toId}
+              height={150}
+              draggable={false}
+            />
           </View>
 
           <View style={styles.legs}>

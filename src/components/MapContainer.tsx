@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 
 import { OSMMap } from './OSMMap';
@@ -14,11 +14,22 @@ interface Props {
   onPortPress?: (port: PortDoc) => void;
   selectedPortId?: string | null;
   vessels?: { latitude: number; longitude: number; speed?: number | null; bangkaId?: string }[];
+  /** Pass false for a map inside a ScrollView that must keep scrolling. */
+  draggable?: boolean;
+  /** Lift the zoom controls clear of an overlapping sheet. */
+  controlsOffset?: number;
+  showControls?: boolean;
 }
 
 /**
- * Map wrapper that tries OSMMap (WebView + Leaflet) first.
- * Falls back to SeaMap (static SVG) if WebView fails.
+ * Map wrapper that tries OSMMap (WebView + Leaflet) first and falls back to
+ * SeaMap (static SVG) when the tiles or Leaflet itself can't be reached.
+ *
+ * That fallback used to be unreachable: `setOsmFailed` was never called and
+ * OSMMap swallowed its own `onError`, so a blocked CDN left a grey rectangle
+ * on screen with nothing to recover it. On venue wifi — the single most likely
+ * thing to go wrong during the demo — that is the difference between a
+ * degraded map and a broken one.
  */
 export function MapContainer({
   ports,
@@ -29,6 +40,9 @@ export function MapContainer({
   onPortPress,
   selectedPortId = null,
   vessels = [],
+  draggable = true,
+  controlsOffset = 0,
+  showControls = true,
 }: Props) {
   const [osmFailed, setOsmFailed] = useState(false);
 
@@ -57,6 +71,10 @@ export function MapContainer({
         onPortPress={onPortPress}
         selectedPortId={selectedPortId}
         vessels={vessels}
+        draggable={draggable}
+        controlsOffset={controlsOffset}
+        showControls={showControls}
+        onFail={() => setOsmFailed(true)}
       />
     </View>
   );

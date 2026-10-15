@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .summary-box{border:1px solid var(--gray-200);border-radius:12px;background:var(--gray-50);padding:.7rem .85rem;}
   </style>
@@ -34,21 +34,22 @@
               </button>
             </div>
             <div class="col-md-4">
-              <input id="alertSearch" class="form-control" placeholder="Search ID, title, or message">
+              <input id="alertSearch" class="form-control" placeholder="Search ID, message, or location">
             </div>
             <div class="col-md-2">
               <select id="levelFilter" class="form-select">
                 <option value="">All Levels</option>
-                <option value="Info">Info</option>
-                <option value="Warning">Warning</option>
-                <option value="Critical">Critical</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
               </select>
             </div>
             <div class="col-md-2">
               <select id="statusFilter" class="form-select">
                 <option value="">All Status</option>
-                <option value="Open">Open</option>
-                <option value="Resolved">Resolved</option>
+                <option value="false">Open</option>
+                <option value="true">Resolved</option>
               </select>
             </div>
             <div class="col-md-1 d-grid">
@@ -61,16 +62,24 @@
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Title</th>
                   <th>Message</th>
                   <th>Level</th>
+                  <th>Location</th>
                   <th>Status</th>
+                  <th>Created</th>
                   <th style="width:280px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="alertBody"></tbody>
             </table>
           </div>
+          
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading alerts...</p>
+          </div>
+          
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
     </main>
@@ -86,19 +95,28 @@
         </div>
         <div class="modal-body">
           <div class="mb-2">
-            <label class="form-label">Alert Title</label>
-            <input id="alertTitle" class="form-control" placeholder="e.g. High Waves" required>
-          </div>
-          <div class="mb-2">
             <label class="form-label">Alert Message</label>
             <textarea id="alertMsg" class="form-control" rows="3" placeholder="Describe the alert..." required></textarea>
           </div>
+          <div class="mb-2">
+            <label class="form-label">Severity</label>
+            <select id="alertSeverity" class="form-select" required>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Related Vessel (optional)</label>
+            <select id="alertBangka" class="form-select">
+              <option value="">None</option>
+            </select>
+          </div>
           <div class="mb-0">
-            <label class="form-label">Alert Level</label>
-            <select id="alertLevel" class="form-select" required>
-              <option value="Info">Info</option>
-              <option value="Warning">Warning</option>
-              <option value="Critical">Critical</option>
+            <label class="form-label">Related Port (optional)</label>
+            <select id="alertPort" class="form-select">
+              <option value="">None</option>
             </select>
           </div>
         </div>
@@ -121,15 +139,17 @@
         <div class="modal-body">
           <div class="summary-box mb-3">
             <div><strong>Alert ID:</strong> <span id="uId">-</span></div>
-            <div><strong>Title:</strong> <span id="uTitle">-</span></div>
+            <div><strong>Message:</strong> <span id="uMessage">-</span></div>
             <div><strong>Level:</strong> <span id="uLevel">-</span></div>
+            <div><strong>Location:</strong> <span id="uLocation">-</span></div>
+            <div><strong>Created:</strong> <span id="uCreated">-</span></div>
           </div>
 
           <div class="mb-2">
             <label class="form-label">Status</label>
             <select id="uStatus" class="form-select">
-              <option value="Open">Open</option>
-              <option value="Resolved">Resolved</option>
+              <option value="false">Open</option>
+              <option value="true">Resolved</option>
             </select>
           </div>
 
@@ -157,16 +177,17 @@
         <div class="modal-body">
           <div class="summary-box mb-3">
             <div><strong>Alert ID:</strong> <span id="nId">-</span></div>
-            <div><strong>Title:</strong> <span id="nTitle">-</span></div>
+            <div><strong>Message:</strong> <span id="nMessagePreview">-</span></div>
           </div>
 
           <div class="mb-2">
             <label class="form-label">Recipients</label>
             <select id="nRecipients" class="form-select">
-              <option value="All Operators">All Operators</option>
-              <option value="Coast Guard">Coast Guard</option>
-              <option value="LGU">LGU</option>
-              <option value="Admins Only">Admins Only</option>
+              <option value="all_operators">All Operators (Bangkeros)</option>
+              <option value="coastguard">Coast Guard</option>
+              <option value="lgu">LGU</option>
+              <option value="admins">Admins Only</option>
+              <option value="all">All Users</option>
             </select>
           </div>
 
@@ -195,53 +216,96 @@
       </div>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/alerts.js"></script>
+  <script src="../../assets/js/services/bangkas.js"></script>
+  <script src="../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    let alerts = [
-      {id:'AL-01', title:'High Waves', msg:'Route R-04 may be unsafe.', level:'Warning', status:'Open', notes:''},
-      {id:'AL-02', title:'Engine Failure', msg:'Boat 15 needs immediate check.', level:'Critical', status:'Open', notes:''},
-      {id:'AL-03', title:'Port Congestion', msg:'Expected delays at Marigondon Port.', level:'Info', status:'Resolved', notes:'Traffic normalized'}
-    ];
-
+    let alerts = [];
     let selectedIndex = null;
 
     const body = document.getElementById('alertBody');
     const alertSearch = document.getElementById('alertSearch');
     const levelFilter = document.getElementById('levelFilter');
     const statusFilter = document.getElementById('statusFilter');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
 
-    const createAlertModal = new bootstrap.Modal('#createAlertModal');
-    const updateAlertModal = new bootstrap.Modal('#updateAlertModal');
-    const notifyModal = new bootstrap.Modal('#notifyModal');
-    const resultModal = new bootstrap.Modal('#resultModal');
+    const createAlertModal = new bootstrap.Modal(document.getElementById('createAlertModal'));
+    const updateAlertModal = new bootstrap.Modal(document.getElementById('updateAlertModal'));
+    const notifyModal = new bootstrap.Modal(document.getElementById('notifyModal'));
+    const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
 
-    function lvlBadge(level){
-      if(level === 'Critical') return 'text-bg-danger';
-      if(level === 'Warning') return 'text-bg-warning';
+    function lvlBadge(level) {
+      if (level === 'critical') return 'text-bg-danger';
+      if (level === 'high') return 'text-bg-danger';
+      if (level === 'medium') return 'text-bg-warning';
       return 'text-bg-info';
     }
 
-    function stBadge(status){
-      return status === 'Resolved' ? 'text-bg-success' : 'text-bg-warning';
+    function lvlText(level) {
+      if (level === 'low') return 'Info';
+      return level.charAt(0).toUpperCase() + level.slice(1);
     }
 
-    function render(data){
+    function stBadge(resolved) {
+      return resolved ? 'text-bg-success' : 'text-bg-warning';
+    }
+
+    function stText(resolved) {
+      return resolved ? 'Resolved' : 'Open';
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function getLocation(alert) {
+      if (alert.bangkaName) return 'Vessel: ' + alert.bangkaName;
+      if (alert.portName) return 'Port: ' + alert.portName;
+      return 'General';
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function render(data) {
       body.innerHTML = '';
-      data.forEach(alert => {
-        const i = alerts.findIndex(a => a.id === alert.id);
+      data.forEach((alert, i) => {
         body.innerHTML += `
           <tr>
-            <td>${alert.id}</td>
-            <td>${alert.title}</td>
-            <td>${alert.msg}</td>
-            <td><span class="badge ${lvlBadge(alert.level)}">${alert.level}</span></td>
-            <td><span class="badge ${stBadge(alert.status)}">${alert.status}</span></td>
+            <td>${alert.alertId.slice(0, 8)}...</td>
+            <td>${alert.message}</td>
+            <td><span class="badge ${lvlBadge(alert.severity)}">${lvlText(alert.severity)}</span></td>
+            <td>${getLocation(alert)}</td>
+            <td><span class="badge ${stBadge(alert.isResolved)}">${stText(alert.isResolved)}</span></td>
+            <td>${formatDate(alert.createdAt)}</td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-dark action-btn" onclick="openUpdateAlert(${i})">
-                  <i class="bi bi-check2-square"></i> Resolve
+                  <i class="bi bi-check2-square"></i> ${alert.isResolved ? 'Reopen' : 'Resolve'}
                 </button>
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="openNotify(${i})">
                   <i class="bi bi-bell"></i> Notify
@@ -253,19 +317,20 @@
       });
     }
 
-    function runFilter(){
+    function runFilter() {
       const q = alertSearch.value.toLowerCase().trim();
       const l = levelFilter.value;
       const s = statusFilter.value;
 
       const filtered = alerts.filter(a => {
         const textMatch =
-          a.id.toLowerCase().includes(q) ||
-          a.title.toLowerCase().includes(q) ||
-          a.msg.toLowerCase().includes(q);
+          a.alertId.toLowerCase().includes(q) ||
+          a.message.toLowerCase().includes(q) ||
+          (a.bangkaName || '').toLowerCase().includes(q) ||
+          (a.portName || '').toLowerCase().includes(q);
 
-        const levelMatch = l ? a.level === l : true;
-        const statusMatch = s ? a.status === s : true;
+        const levelMatch = l ? a.severity === l : true;
+        const statusMatch = s ? String(a.isResolved) === s : true;
         return textMatch && levelMatch && statusMatch;
       });
 
@@ -278,90 +343,158 @@
     });
 
     // Create alert submit
-    document.getElementById('createAlertForm').addEventListener('submit', (e) => {
+    document.getElementById('createAlertForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const id = `AL-${String(alerts.length + 1).padStart(2, '0')}`;
-      alerts.unshift({
-        id,
-        title: document.getElementById('alertTitle').value.trim(),
-        msg: document.getElementById('alertMsg').value.trim(),
-        level: document.getElementById('alertLevel').value,
-        status: 'Open',
-        notes: ''
-      });
+      const message = document.getElementById('alertMsg').value.trim();
+      const severity = document.getElementById('alertSeverity').value;
+      const bangkaId = document.getElementById('alertBangka').value || null;
+      const portId = document.getElementById('alertPort').value || null;
 
-      createAlertModal.hide();
-      e.target.reset();
-      runFilter();
+      if (!message) {
+        alert('Please enter an alert message.');
+        return;
+      }
+
+      try {
+        await window.bangkagoAlerts.create({ message, severity, bangkaId, portId });
+        createAlertModal.hide();
+        e.target.reset();
+        await loadAlerts();
+        alert("Alert created successfully.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
     // Open update/resolve modal
-    window.openUpdateAlert = function(i){
+    window.openUpdateAlert = function(i) {
       selectedIndex = i;
       const a = alerts[i];
 
-      document.getElementById('uId').textContent = a.id;
-      document.getElementById('uTitle').textContent = a.title;
-      document.getElementById('uLevel').textContent = a.level;
-      document.getElementById('uStatus').value = a.status;
-      document.getElementById('uNotes').value = a.notes || '';
+      document.getElementById('uId').textContent = a.alertId;
+      document.getElementById('uMessage').textContent = a.message;
+      document.getElementById('uLevel').textContent = lvlText(a.severity);
+      document.getElementById('uLocation').textContent = getLocation(a);
+      document.getElementById('uCreated').textContent = formatDate(a.createdAt);
+      document.getElementById('uStatus').value = a.isResolved ? 'true' : 'false';
+      document.getElementById('uNotes').value = '';
 
       updateAlertModal.show();
     }
 
     // Save update/resolve
-    document.getElementById('updateAlertForm').addEventListener('submit', (e) => {
+    document.getElementById('updateAlertForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if(selectedIndex === null) return;
+      if (selectedIndex === null) return;
 
-      alerts[selectedIndex].status = document.getElementById('uStatus').value;
-      alerts[selectedIndex].notes = document.getElementById('uNotes').value.trim();
+      const a = alerts[selectedIndex];
+      const newStatus = document.getElementById('uStatus').value === 'true';
+      const notes = document.getElementById('uNotes').value.trim();
 
-      updateAlertModal.hide();
-      runFilter();
+      try {
+        await window.bangkagoAlerts.resolve(a.alertId, notes);
+        a.isResolved = newStatus;
+        runFilter();
+        updateAlertModal.hide();
 
-      document.getElementById('resultBox').innerHTML = `
-        <div class="alert alert-success mb-0">
-          Alert <strong>${alerts[selectedIndex].id}</strong> updated to
-          <strong>${alerts[selectedIndex].status}</strong>.
-        </div>
-      `;
-      resultModal.show();
+        document.getElementById('resultBox').innerHTML = `
+          <div class="alert alert-success mb-0">
+            Alert <strong>${a.alertId.slice(0, 8)}...</strong> marked as <strong>${stText(newStatus)}</strong>.
+          </div>
+        `;
+        resultModal.show();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
     // Open notify modal
-    window.openNotify = function(i){
+    window.openNotify = function(i) {
       selectedIndex = i;
       const a = alerts[i];
 
-      document.getElementById('nId').textContent = a.id;
-      document.getElementById('nTitle').textContent = a.title;
-      document.getElementById('nRecipients').value = 'All Operators';
-      document.getElementById('nMessage').value = `[${a.level}] ${a.title}: ${a.msg}`;
+      document.getElementById('nId').textContent = a.alertId;
+      document.getElementById('nMessagePreview').textContent = a.message.length > 50 ? a.message.slice(0, 50) + '...' : a.message;
+      document.getElementById('nRecipients').value = 'all_operators';
+      document.getElementById('nMessage').value = '[' + lvlText(a.severity) + '] ' + a.message;
 
       notifyModal.show();
     }
 
     // Send notification
-    document.getElementById('notifyForm').addEventListener('submit', (e) => {
+    document.getElementById('notifyForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if(selectedIndex === null) return;
+      if (selectedIndex === null) return;
 
+      const a = alerts[selectedIndex];
       const recipients = document.getElementById('nRecipients').value;
+      const message = document.getElementById('nMessage').value.trim();
 
-      notifyModal.hide();
-      document.getElementById('resultBox').innerHTML = `
-        <div class="alert alert-success mb-2">
-          Notification sent successfully.
-        </div>
-        <div class="summary-box">
-          <div><strong>Alert:</strong> ${alerts[selectedIndex].id} - ${alerts[selectedIndex].title}</div>
-          <div><strong>Recipients:</strong> ${recipients}</div>
-        </div>
-      `;
-      resultModal.show();
+      if (!message) {
+        alert('Please enter a notification message.');
+        return;
+      }
+
+      try {
+        const result = await window.bangkagoAlerts.notify(a.alertId, recipients, message);
+        notifyModal.hide();
+
+        document.getElementById('resultBox').innerHTML = `
+          <div class="alert alert-success mb-2">
+            Notification sent to <strong>${result.count}</strong> recipient(s).
+          </div>
+          <div class="summary-box">
+            <div><strong>Alert:</strong> ${a.alertId.slice(0, 8)}... - ${a.message.slice(0, 50)}...</div>
+            <div><strong>Recipients:</strong> ${recipients.replace('_', ' ')}</div>
+          </div>
+        `;
+        resultModal.show();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
+
+    // Populate bangka and port dropdowns
+    async function populateDropdowns() {
+      try {
+        const [bangkas, ports] = await Promise.all([
+          window.bangkagoBangkas.listAll({}),
+          window.bangkagoPortsRoutes.listPorts(true)
+        ]);
+
+        const bangkaSelect = document.getElementById('alertBangka');
+        bangkas.forEach(b => {
+          if (b.bangkeroVerification === 'verified') {
+            const opt = document.createElement('option');
+            opt.value = b.bangkaId;
+            opt.textContent = b.bangkaName + ' (' + (b.bangkeroName || 'Unassigned') + ')';
+            bangkaSelect.appendChild(opt);
+          }
+        });
+
+        const portSelect = document.getElementById('alertPort');
+        ports.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.portId;
+          opt.textContent = p.portName;
+          portSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load dropdowns:', e);
+      }
+    }
+
+    async function loadAlerts() {
+      showLoading(true);
+      try {
+        alerts = await window.bangkagoAlerts.listAll({ limit: 100 });
+        render(alerts);
+      } catch (e) {
+        console.error(e);
+        showError('Failed to load alerts: ' + e.message);
+      }
+    }
 
     // Filters
     alertSearch.addEventListener('input', runFilter);
@@ -375,7 +508,18 @@
       render(alerts);
     });
 
-    render(alerts);
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'admin') return;
+
+      window.bangkagoRealtime.subscribe('safety_alerts', null, function() {
+        loadAlerts();
+      });
+      populateDropdowns();
+      loadAlerts();
+    }).catch(function(e) {
+      console.error('Failed to initialize alerts page:', e);
+      showError('Failed to initialize alerts: ' + e.message);
+    });
   </script>
 </body>
 </html>

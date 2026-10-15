@@ -1,0 +1,287 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — System Alerts</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+  <style>
+    .alert-card {
+      border-radius: var(--radius-md);
+      border-width: 1px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      transition: box-shadow 0.15s;
+    }
+    .alert-card:hover { box-shadow: 0 4px 12px rgba(16,24,40,.1); }
+    .alert-card.critical { background-color: #fef2f2; border-color: #fecaca; }
+    .alert-card.high { background-color: #fef2f2; border-color: #fecaca; }
+    .alert-card.medium { background-color: #fffbeb; border-color: #fde68a; }
+    .alert-card.low { background-color: #eff6ff; border-color: #bfdbfe; }
+    .severity-badge {
+      padding: 0.375rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .severity-critical { background-color: #ef4444; color: #fff; }
+    .severity-high { background-color: #ef4444; color: #fff; }
+    .severity-medium { background-color: #f59e0b; color: #fff; }
+    .severity-low { background-color: #3b82f6; color: #fff; }
+    .resolved-badge {
+      background-color: #dcfce7;
+      color: #166534;
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+    .compose-hint { color: var(--text-muted); font-size: 0.8rem; text-align: center; margin-top: 0.5rem; }
+  </style>
+</head>
+<body data-page="system-alerts">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Safety Alerts</h6>
+            <span class="muted-note" id="alertSubtitle">Loading...</span>
+          </div>
+
+          <!-- Filter Chips -->
+          <div class="d-flex flex-wrap gap-2 mb-3" id="filterChips">
+            <button class="btn btn-primary btn-sm" data-filter="active">Active</button>
+            <button class="btn btn-outline-secondary btn-sm" data-filter="resolved">Resolved</button>
+            <button class="btn btn-outline-secondary btn-sm" data-filter="all">All</button>
+          </div>
+
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading alerts...</p>
+          </div>
+
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+
+          <div id="alertsContainer" class="d-none">
+            <!-- Alert cards rendered here -->
+          </div>
+
+          <div id="emptyState" class="text-center py-5 d-none">
+            <div class="mb-2" style="font-size: 3rem;"><i class="bi bi-bell-fill" aria-hidden="true"></i></div>
+            <h6 id="emptyTitle">No alerts</h6>
+            <p class="text-muted" id="emptyMessage"></p>
+          </div>
+
+          <!-- Compose Notification (Coming Soon) -->
+          <div class="mt-4 text-center">
+            <button class="btn btn-outline-secondary" disabled>
+              <i class="bi bi-bell-plus me-2"></i> Compose Notification
+            </button>
+            <div class="compose-hint">Coming soon</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/alerts.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+
+  <script>
+    const alertsContainer = document.getElementById('alertsContainer');
+    const emptyState = document.getElementById('emptyState');
+    const emptyTitle = document.getElementById('emptyTitle');
+    const emptyMessage = document.getElementById('emptyMessage');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const alertSubtitle = document.getElementById('alertSubtitle');
+    const filterChips = document.getElementById('filterChips');
+
+    let alerts = [];
+    let currentFilter = 'active';
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function severityConfig(severity) {
+      const configs = {
+        critical: { label: 'CRITICAL', badgeClass: 'severity-critical', cardClass: 'critical', icon: 'bi-exclamation-triangle-fill' },
+        high: { label: 'HIGH', badgeClass: 'severity-high', cardClass: 'high', icon: 'bi-exclamation-octagon-fill' },
+        medium: { label: 'MEDIUM', badgeClass: 'severity-medium', cardClass: 'medium', icon: 'bi-exclamation-circle-fill' },
+        low: { label: 'LOW', badgeClass: 'severity-low', cardClass: 'low', icon: 'bi-info-circle-fill' }
+      };
+      return configs[severity] || configs.low;
+    }
+
+    function getLocation(alert) {
+      if (alert.bangkaName) return 'Vessel: ' + alert.bangkaName;
+      if (alert.portName) return 'Port: ' + alert.portName;
+      return 'System-wide';
+    }
+
+    function renderAlert(alert) {
+      const cfg = severityConfig(alert.severity);
+      const timeAgo = formatDate(alert.createdAt);
+      const location = getLocation(alert);
+      const isResolved = alert.isResolved;
+
+      return `
+        <div class="alert-card ${cfg.cardClass}" data-alert-id="${alert.alertId}">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <span class="severity-badge ${cfg.badgeClass}"><i class="bi ${cfg.icon} me-1"></i>${cfg.label}</span>
+            <span class="text-muted small">${timeAgo}</span>
+          </div>
+          <div class="mb-2">
+            <span class="text-muted small">${location}</span>
+          </div>
+          <p class="mb-3" style="font-size: 0.95rem; line-height: 1.6;">${alert.message}</p>
+          ${isResolved ? `
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="resolved-badge"><i class="bi bi-check-circle me-1"></i>Resolved</span>
+            </div>
+          ` : `
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-primary flex-fill" onclick="resolveAlert('${alert.alertId}')">
+                <i class="bi bi-check-lg me-1"></i> Resolve
+              </button>
+              <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="dismissAlert('${alert.alertId}')">
+                <i class="bi bi-x-lg me-1"></i> Dismiss
+              </button>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function renderAlerts() {
+      let filtered = alerts;
+      if (currentFilter === 'active') filtered = alerts.filter(a => !a.isResolved);
+      else if (currentFilter === 'resolved') filtered = alerts.filter(a => a.isResolved);
+
+      const activeCount = alerts.filter(a => !a.isResolved).length;
+      alertSubtitle.textContent = activeCount + ' unresolved';
+
+      if (filtered.length === 0) {
+        alertsContainer.classList.add('d-none');
+        emptyState.classList.remove('d-none');
+        emptyTitle.textContent = currentFilter === 'active' ? 'No active alerts' : 'No alerts';
+        emptyMessage.textContent = currentFilter === 'active' 
+          ? 'All alerts are resolved.' 
+          : 'No alerts match this filter.';
+        return;
+      }
+
+      emptyState.classList.add('d-none');
+      alertsContainer.classList.remove('d-none');
+      alertsContainer.innerHTML = filtered.map(renderAlert).join('');
+    }
+
+    function setFilter(filter) {
+      currentFilter = filter;
+      filterChips.querySelectorAll('button').forEach(btn => {
+        if (btn.dataset.filter === filter) {
+          btn.classList.remove('btn-outline-secondary');
+          btn.classList.add('btn-primary');
+        } else {
+          btn.classList.remove('btn-primary');
+          btn.classList.add('btn-outline-secondary');
+        }
+      });
+      renderAlerts();
+    }
+
+    async function loadAlerts() {
+      loadingState.classList.remove('d-none');
+      errorState.classList.add('d-none');
+      alertsContainer.classList.add('d-none');
+      emptyState.classList.add('d-none');
+
+      try {
+        alerts = await window.bangkagoAlerts.listAll({ limit: 100 });
+        renderAlerts();
+        loadingState.classList.add('d-none');
+      } catch (e) {
+        console.error(e);
+        loadingState.classList.add('d-none');
+        errorState.textContent = 'Failed to load alerts: ' + e.message;
+        errorState.classList.remove('d-none');
+      }
+    }
+
+    // Filter chip clicks
+    filterChips.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+    });
+
+    // Resolve alert
+    window.resolveAlert = async function(alertId) {
+      const alert = alerts.find(a => a.alertId === alertId);
+      if (!alert) return;
+      
+      if (!confirm('Mark this alert as resolved?')) return;
+
+      try {
+        await window.bangkagoAlerts.resolve(alertId, 'Resolved via System Alerts');
+        alert.isResolved = true;
+        renderAlerts();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
+
+    // Dismiss alert (same as resolve for now)
+    window.dismissAlert = async function(alertId) {
+      const alert = alerts.find(a => a.alertId === alertId);
+      if (!alert) return;
+      
+      if (!confirm('Dismiss this alert?')) return;
+
+      try {
+        await window.bangkagoAlerts.resolve(alertId, 'Dismissed via System Alerts');
+        alert.isResolved = true;
+        renderAlerts();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
+
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'admin') return;
+
+      window.bangkagoRealtime.subscribe('safety_alerts', null, function() {
+        loadAlerts();
+      });
+      loadAlerts();
+    }).catch(function(e) {
+      console.error('Failed to initialize system alerts:', e);
+      loadingState.classList.add('d-none');
+      errorState.textContent = 'Failed to initialize alerts: ' + e.message;
+      errorState.classList.remove('d-none');
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
 </head>
 <body data-page="manage-bangka">
   <div class="cg-shell">
@@ -22,6 +22,12 @@
           <div class="panel-head">
             <h6 class="mb-0">Manage Bangka</h6>
             <span class="muted-note">Vessel registry and readiness</span>
+          </div>
+
+          <div class="d-flex justify-content-end mb-3">
+            <button class="btn btn-bangkago" id="addBangkaBtn">
+              <i class="bi bi-plus-circle me-1"></i> Add Bangka
+            </button>
           </div>
 
           <div class="table-responsive">
@@ -39,6 +45,13 @@
               <tbody id="bangkaBody"></tbody>
             </table>
           </div>
+          
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading vessels...</p>
+          </div>
+          
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
     </main>
@@ -55,18 +68,22 @@
         <div class="modal-body">
           <div class="row g-3">
             <div class="col-md-6"><div class="form-control bg-light"><strong>Vessel:</strong> <span id="dVessel">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Type:</strong> <span id="dType">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Capacity:</strong> <span id="dCapacity">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Route:</strong> <span id="dRoute">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Maintenance:</strong> <span id="dMaintenance">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Status:</strong> <span id="dStatus">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Last Updated:</strong> <span id="dUpdated">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Max Load (kg):</strong> <span id="dMaxLoad">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Permit #:</strong> <span id="dPermit">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Hourly Rate:</strong> <span id="dHourlyRate">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Owner:</strong> <span id="dOwner">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Owner Status:</strong> <span id="dOwnerStatus">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Computed Status:</strong> <span id="dStatus">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Active Booking:</strong> <span id="dActiveBooking">-</span></div></div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- UPDATE STATUS MODAL -->
+  <!-- UPDATE STATUS MODAL (only Deactivated is actionable) -->
   <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="updateStatusForm">
@@ -76,12 +93,15 @@
         </div>
         <div class="modal-body">
           <div class="mb-2"><strong>Vessel:</strong> <span id="uVessel">-</span></div>
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            Status is derived from bangkero verification, availability, and active bookings.
+            Only <strong>Deactivated</strong> (unassign from bangkero) can be set directly.
+          </div>
           <div class="mb-3">
-            <label class="form-label">New Status</label>
+            <label class="form-label">Set to Deactivated</label>
             <select id="uStatus" class="form-select" required>
-              <option value="Available">Available</option>
-              <option value="On Trip">On Trip</option>
-              <option value="Maintenance Due">Maintenance Due</option>
+              <option value="Deactivated">Deactivated</option>
             </select>
           </div>
           <div class="mb-2">
@@ -97,7 +117,7 @@
     </div>
   </div>
 
-  <!-- DEACTIVATE MODAL -->
+  <!-- DEACTIVATE MODAL (unassign from bangkero) -->
   <div class="modal fade" id="deactivateModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="deactivateForm">
@@ -107,7 +127,7 @@
         </div>
         <div class="modal-body">
           <p class="mb-2">You are about to deactivate: <strong id="xVessel">-</strong></p>
-          <p class="text-muted mb-3">This vessel will no longer be available for assignments.</p>
+          <p class="text-muted mb-3">This will unassign the vessel from its bangkero. It will no longer be available for assignments.</p>
 
           <label class="form-label">Reason (required)</label>
           <textarea id="xReason" class="form-control" rows="3" required placeholder="Enter reason for deactivation..."></textarea>
@@ -120,31 +140,100 @@
     </div>
   </div>
 
+  <!-- ADD BANGKA MODAL -->
+  <div class="modal fade" id="addBangkaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <form class="modal-content" id="addBangkaForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Add New Bangka</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Vessel Name <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="aName" required placeholder="e.g. Boat 01">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Type</label>
+              <input type="text" class="form-control" id="aType" placeholder="e.g. Pump boat, Banca">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Capacity (passengers) <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" id="aCapacity" required min="1" max="200" placeholder="25">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Max Load (kg)</label>
+              <input type="number" class="form-control" id="aMaxLoad" min="0" placeholder="500">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Hourly Rate (₱)</label>
+              <input type="number" class="form-control" id="aHourlyRate" min="0" step="0.01" placeholder="500">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Permit Number</label>
+              <input type="text" class="form-control" id="aPermit" placeholder="Permit-12345">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Photo URL</label>
+              <input type="url" class="form-control" id="aPhoto" placeholder="https://...">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Owner (Bangkero) <span class="text-danger">*</span></label>
+              <select class="form-select" id="aBangkeroId" required>
+                <option value="">Select verified bangkero...</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Route (optional)</label>
+              <select class="form-select" id="aRouteId">
+                <option value="">No route assigned</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-bangkago">Create Bangka</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/bangkas.js"></script>
+  <script src="../../assets/js/services/bangkeros.js"></script>
+  <script src="../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    const boats = [
-      {vessel:"Boat 03",capacity:25,route:"Mactan Port → Olango",maintenance:"2026-04-20",status:"Available",updated:"2026-04-16 09:20",notes:""},
-      {vessel:"Boat 08",capacity:30,route:"Marigondon Port → Olango",maintenance:"2026-04-18",status:"On Trip",updated:"2026-04-16 11:05",notes:"Departed 10:40"},
-      {vessel:"Boat 15",capacity:20,route:"Olango Port → Caohagan",maintenance:"2026-04-16",status:"Maintenance Due",updated:"2026-04-15 16:42",notes:"Engine check pending"}
-    ];
-
+    let bangkas = [];
     let selectedIndex = null;
+    let bangkeroOptions = [];
 
     const bangkaBody = document.getElementById("bangkaBody");
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
 
     const viewBangkaModal = new bootstrap.Modal(document.getElementById("viewBangkaModal"));
     const updateStatusModal = new bootstrap.Modal(document.getElementById("updateStatusModal"));
     const deactivateModal = new bootstrap.Modal(document.getElementById("deactivateModal"));
+    const addBangkaModal = new bootstrap.Modal(document.getElementById("addBangkaModal"));
 
     const dVessel = document.getElementById("dVessel");
+    const dType = document.getElementById("dType");
     const dCapacity = document.getElementById("dCapacity");
-    const dRoute = document.getElementById("dRoute");
-    const dMaintenance = document.getElementById("dMaintenance");
+    const dMaxLoad = document.getElementById("dMaxLoad");
+    const dPermit = document.getElementById("dPermit");
+    const dHourlyRate = document.getElementById("dHourlyRate");
+    const dOwner = document.getElementById("dOwner");
+    const dOwnerStatus = document.getElementById("dOwnerStatus");
     const dStatus = document.getElementById("dStatus");
-    const dUpdated = document.getElementById("dUpdated");
+    const dActiveBooking = document.getElementById("dActiveBooking");
 
     const uVessel = document.getElementById("uVessel");
     const uStatus = document.getElementById("uStatus");
@@ -153,29 +242,40 @@
     const xVessel = document.getElementById("xVessel");
     const xReason = document.getElementById("xReason");
 
-    function statusBadge(s){
-      if(s === "Available") return "text-bg-success";
-      if(s === "On Trip") return "text-bg-info";
-      if(s === "Maintenance Due") return "text-bg-warning";
-      if(s === "Deactivated") return "text-bg-danger";
+    const addBangkaForm = document.getElementById("addBangkaForm");
+    const aBangkeroId = document.getElementById("aBangkeroId");
+
+    function statusBadge(s) {
+      if (s === "Available") return "text-bg-success";
+      if (s === "On Trip") return "text-bg-info";
+      if (s === "Offline") return "text-bg-secondary";
+      if (s === "Unverified") return "text-bg-warning";
+      if (s === "Deactivated") return "text-bg-danger";
       return "text-bg-secondary";
     }
 
-    function nowStamp(){
-      const d = new Date();
-      const pad = n => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
     }
 
-    function renderTable(){
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function renderTable() {
       bangkaBody.innerHTML = "";
-      boats.forEach((b, i) => {
+      bangkas.forEach((b, i) => {
+        // Derive route from active booking or show N/A
+        const routeDisplay = b.activeBookingRef ? 'Active: ' + b.activeBookingRef : (b.routeId ? 'Route: ' + b.routeId : '—');
         bangkaBody.innerHTML += `
           <tr>
-            <td>${b.vessel}</td>
+            <td>${b.bangkaName}</td>
             <td>${b.capacity}</td>
-            <td>${b.route}</td>
-            <td>${b.maintenance}</td>
+            <td>${routeDisplay}</td>
+            <td>—</td>
             <td><span class="badge ${statusBadge(b.status)}">${b.status}</span></td>
             <td>
               <div class="d-flex gap-2">
@@ -183,7 +283,7 @@
                   <i class="bi bi-eye"></i> View
                 </button>
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="openUpdateModal(${i})">
-                  <i class="bi bi-arrow-repeat"></i> Update
+                  <i class="bi bi-arrow-repeat"></i> Status
                 </button>
                 <button class="btn btn-sm btn-outline-danger" onclick="openDeactivateModal(${i})">
                   <i class="bi bi-slash-circle"></i> Deactivate
@@ -195,60 +295,188 @@
       });
     }
 
-    window.openViewModal = function(index){
-      const b = boats[index];
-      dVessel.textContent = b.vessel;
+    async function loadBangkeroOptions() {
+      try {
+        const verified = await window.bangkagoBangkeros.listAll({ verificationStat: 'verified' });
+        bangkeroOptions = verified;
+        aBangkeroId.innerHTML = '<option value="">Select verified bangkero...</option>';
+        verified.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.uid;
+          opt.textContent = b.displayName + (b.permitNumber ? ' (' + b.permitNumber + ')' : '');
+          aBangkeroId.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load bangkeros:', e);
+      }
+    }
+
+    async function loadRouteOptions() {
+      try {
+        const routes = await window.bangkagoPortsRoutes.listRoutes(true);
+        aRouteId.innerHTML = '<option value="">No route assigned</option>';
+        routes.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = r.routeId;
+          opt.textContent = r.startPortId + ' â†’ ' + r.endPortId + ' (â‚±' + r.baseFare + ')';
+          aRouteId.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load routes:', e);
+      }
+    }
+
+    async function loadBangkas() {
+      showLoading(true);
+      try {
+        bangkas = await window.bangkagoBangkas.listAll();
+        renderTable();
+      } catch (e) {
+        console.error(e);
+        showError('Failed to load vessels: ' + e.message);
+      }
+    }
+
+    window.openViewModal = function(index) {
+      const b = bangkas[index];
+      dVessel.textContent = b.bangkaName;
+      dType.textContent = b.bangkaType || '—';
       dCapacity.textContent = b.capacity;
-      dRoute.textContent = b.route;
-      dMaintenance.textContent = b.maintenance;
-      dStatus.textContent = b.status + (b.notes ? ` (${b.notes})` : "");
-      dUpdated.textContent = b.updated;
+      dMaxLoad.textContent = b.maxLoadKg || '—';
+      dPermit.textContent = b.permitNumber || '—';
+      dHourlyRate.textContent = b.hourlyRate ? '₱' + b.hourlyRate : '—';
+      dOwner.textContent = b.bangkeroName || 'Unassigned';
+      dOwnerStatus.textContent = b.bangkeroVerification ? 
+        (b.bangkeroVerification.charAt(0).toUpperCase() + b.bangkeroVerification.slice(1)) : '—';
+      dStatus.textContent = b.status;
+      dActiveBooking.textContent = b.activeBookingRef || 'None';
       viewBangkaModal.show();
     }
 
-    window.openUpdateModal = function(index){
+    window.openUpdateModal = function(index) {
       selectedIndex = index;
-      const b = boats[index];
-      uVessel.textContent = b.vessel;
-      uStatus.value = b.status;
-      uNotes.value = b.notes || "";
+      const b = bangkas[index];
+      uVessel.textContent = b.bangkaName;
+      uStatus.value = 'Deactivated';
+      uNotes.value = "";
       updateStatusModal.show();
     }
 
-    window.openDeactivateModal = function(index){
+    window.openDeactivateModal = function(index) {
       selectedIndex = index;
-      xVessel.textContent = boats[index].vessel;
+      const b = bangkas[index];
+      xVessel.textContent = b.bangkaName;
       xReason.value = "";
       deactivateModal.show();
     }
 
-    document.getElementById("updateStatusForm").addEventListener("submit", function(e){
+    document.getElementById("updateStatusForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-      if(selectedIndex === null) return;
+      if (selectedIndex === null) return;
 
-      boats[selectedIndex].status = uStatus.value;
-      boats[selectedIndex].notes = uNotes.value.trim();
-      boats[selectedIndex].updated = nowStamp();
+      const b = bangkas[selectedIndex];
+      const newStatus = uStatus.value;
+      const notes = uNotes.value.trim();
 
-      renderTable();
-      updateStatusModal.hide();
-      alert("Bangka status updated.");
+      try {
+        await window.bangkagoBangkas.setStatus(b.bangkaId, newStatus, notes);
+        await loadBangkas(); // Reload to get updated computed status
+        updateStatusModal.hide();
+        alert("Bangka deactivated (unassigned from bangkero).");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
-    document.getElementById("deactivateForm").addEventListener("submit", function(e){
+    document.getElementById("deactivateForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-      if(selectedIndex === null) return;
+      if (selectedIndex === null) return;
 
-      boats[selectedIndex].status = "Deactivated";
-      boats[selectedIndex].notes = `Deactivation reason: ${xReason.value.trim()}`;
-      boats[selectedIndex].updated = nowStamp();
+      const b = bangkas[selectedIndex];
+      const reason = xReason.value.trim();
 
-      renderTable();
-      deactivateModal.hide();
-      alert("Bangka deactivated.");
+      if (!confirm('Deactivate "' + b.bangkaName + '"? This will unassign it from the bangkero.')) return;
+
+      try {
+        await window.bangkagoBangkas.delete(b.bangkaId);
+        await loadBangkas();
+        deactivateModal.hide();
+        alert("Bangka deleted.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
-    renderTable();
+    // Add Bangka form submit
+    addBangkaForm.addEventListener("submit", async function(e) {
+      e.preventDefault();
+
+      const data = {
+        bangkaName: document.getElementById("aName").value.trim(),
+        bangkaType: document.getElementById("aType").value.trim() || null,
+        capacity: parseInt(document.getElementById("aCapacity").value) || 0,
+        maxLoadKg: parseFloat(document.getElementById("aMaxLoad").value) || null,
+        hourlyRate: parseFloat(document.getElementById("aHourlyRate").value) || null,
+        permitNumber: document.getElementById("aPermit").value.trim() || null,
+        bangkaPhoto: document.getElementById("aPhoto").value.trim() || null,
+        bangkeroId: document.getElementById("aBangkeroId").value
+      };
+
+      if (!data.bangkaName || !data.capacity || !data.bangkeroId) {
+        alert('Please fill required fields: Vessel Name, Capacity, Owner');
+        return;
+      }
+
+      // Add route if selected
+      const routeId = document.getElementById("aRouteId").value;
+      if (routeId) data.routeId = routeId;
+
+      try {
+        await window.bangkagoBangkas.create(data);
+        addBangkaModal.hide();
+        addBangkaForm.reset();
+        await loadBangkas();
+        alert("Bangka created successfully.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    });
+
+    // Show add modal
+    document.getElementById("addBangkaBtn").addEventListener("click", function() {
+      addBangkaModal.show();
+    });
+
+    // Reset form on modal close
+    document.getElementById("addBangkaModal").addEventListener("hidden.bs.modal", function() {
+      addBangkaForm.reset();
+    });
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('bangkas', null, function() {
+      loadBangkas();
+    });
+    window.bangkagoRealtime.subscribe('bangkeros', null, function() {
+      loadBangkas();
+      loadBangkeroOptions();
+    });
+    window.bangkagoRealtime.subscribe('bookings', null, function() {
+      loadBangkas();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        loadBangkeroOptions();
+        loadRouteOptions();
+        loadBangkas();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        showError('Authentication required. Redirecting...');
+        setTimeout(function () { location.href = '../../bangkaGo-access.html'; }, 1500);
+      }
+    })();
   </script>
 </body>
 </html>

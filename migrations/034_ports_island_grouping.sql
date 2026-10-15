@@ -1,5 +1,5 @@
 -- =============================================================
--- 032. PORTS ISLAND GROUPING (Parcel Padala Phase 0)
+-- 034. PORTS ISLAND GROUPING (Parcel Padala Phase 0)
 -- =============================================================
 -- Why: cross-island parcel detection needs a first-class grouping.
 -- ports.location is 'Lapu-Lapu, Cebu' for all 9 rows (021) and stays
@@ -14,7 +14,7 @@
 --      nalusuan -> 'Nalusuan')
 --
 -- Safe to re-run (all ADDs are IF NOT EXISTS; backfill is idempotent).
--- Run manually in the SQL editor after 031. Does NOT touch 002/017/021.
+-- Run manually in the SQL editor after 033. Does NOT touch 002/017/021.
 -- =============================================================
 
 ALTER TABLE public.ports
@@ -70,9 +70,9 @@ CREATE INDEX IF NOT EXISTS ports_island_group_idx
   ON public.ports (island_group);
 
 COMMENT ON COLUMN public.ports.island_group IS
-  'Parcel Padala Phase 0 (032): mactan = mainland ports, olango = island ports. Seeded from ml/config/ports.json is_mainland.';
+  'Parcel Padala Phase 0 (034): mactan = mainland ports, olango = island ports. Seeded from ml/config/ports.json is_mainland.';
 COMMENT ON COLUMN public.ports.island_name IS
-  'Parcel Padala Phase 0 (032): display island name (Mactan / Caohagan / Sulpa / St. Vicente / Hilotongan / Nalusuan).';
+  'Parcel Padala Phase 0 (034): display island name (Mactan / Caohagan / Sulpa / St. Vicente / Hilotongan / Nalusuan).';
 
 -- =============================================================
 -- DOWN (commented — do NOT run unless rolling back Phase 0):

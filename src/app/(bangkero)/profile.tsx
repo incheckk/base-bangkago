@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { Icon, type IconName } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
@@ -18,23 +19,32 @@ import {
 } from '@/services/profile.service';
 import { supabase } from '@/services/supabase';
 import { getAverageRating, getEffectiveRating } from '@/services/rating.service';
-import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
 
-const MENU_ITEMS = [
-  { key: 'earnings', label: 'Earnings', icon: '💰' },
-  { key: 'trips', label: 'Trip History', icon: '🚤' },
-  { key: 'rentals', label: 'Boat Rentals', icon: '🛥️' },
-  { key: 'ratings', label: 'My Ratings', icon: '⭐' },
-  { key: 'documents', label: 'Documents', icon: '📄' },
-  { key: 'passengers', label: 'Manifest', icon: '📋' },
-  { key: 'weather', label: 'Weather', icon: '🌊' },
-  { key: 'qr', label: 'GCash QR', icon: '📱' },
-  { key: 'guide', label: 'Quick Guide', icon: '📖' },
-  // The header burger is gone (3D) — SOS still has to be one tap away.
-  { key: 'sos', label: 'SOS Alert', icon: '🚨' },
-  { key: 'settings', label: 'Settings', icon: '⚙️' },
-] as const;
+/**
+ * Vector icons, not emoji.
+ *
+ * Emoji are drawn by the OS, so this menu rendered differently on the demo
+ * Android phone than on iOS, carried their own colours against the palette,
+ * and sat on a text baseline that never lined up with the label beside them.
+ * The drawer menus for the other roles already went through this.
+ */
+const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[] = [
+  { key: 'earnings', label: 'Earnings', icon: 'cash' },
+  { key: 'trips', label: 'Trip History', icon: 'history' },
+  { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
+  { key: 'ratings', label: 'My Ratings', icon: 'star' },
+  { key: 'documents', label: 'Documents', icon: 'document' },
+  { key: 'passengers', label: 'Manifest', icon: 'people' },
+  { key: 'weather', label: 'Weather', icon: 'weather' },
+  { key: 'qr', label: 'GCash QR', icon: 'qr' },
+  { key: 'guide', label: 'Quick Guide', icon: 'guide' },
+  // The header burger is gone (3D) — SOS still has to be one tap away, and
+  // it is the one row here that should not look like the others.
+  { key: 'sos', label: 'SOS Alert', icon: 'sos', danger: true },
+  { key: 'settings', label: 'Settings', icon: 'settings' },
+];
 
 const ROUTE_MAP: Record<string, string> = {
   earnings: '/(bangkero)/earnings',
@@ -340,9 +350,20 @@ export default function BangkeroProfileScreen() {
                   pressed && styles.menuPressed,
                 ]}
               >
-                <Text style={styles.menuIcon}>{item.icon}</Text>
-                <Text style={styles.menuLabel}>{item.label}</Text>
-                <Text style={styles.menuArrow}>›</Text>
+                <View style={[styles.menuIcon, item.danger && styles.menuIconDanger]}>
+                  <Icon
+                    name={item.icon}
+                    size={18}
+                    color={item.danger ? colors.danger : colors.primary}
+                  />
+                </View>
+                <Text
+                  style={[styles.menuLabel, item.danger && styles.menuLabelDanger]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+                <Icon name="forward" size={16} color={colors.textMuted} />
               </Pressable>
             );
           })}
@@ -464,7 +485,11 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    gap: spacing.md,
+    // A menu row is a tap target, so it clears 44pt on its own rather than
+    // depending on whatever height its contents happen to come out at.
+    minHeight: touchTarget,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
   menuBorder: {
@@ -472,9 +497,17 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   menuPressed: { backgroundColor: colors.bgElevated },
-  menuIcon: { flexShrink: 1, fontSize: 18, marginRight: spacing.md },
-  menuLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
-  menuArrow: { color: colors.textMuted, fontSize: 20 },
+  // A fixed tinted square, so every label starts on the same vertical line —
+  // emoji are all different widths, which left the old list ragged.
+  menuIcon: {
+    width: 32, height: 32,
+    borderRadius: radii.sm,
+    backgroundColor: colors.primaryTint,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  menuIconDanger: { backgroundColor: colors.dangerTint },
+  menuLabel: { flex: 1, minWidth: 0, ...typography.bodyStrong },
+  menuLabelDanger: { color: colors.danger },
 
   banner: {
     backgroundColor: colors.dangerTint,

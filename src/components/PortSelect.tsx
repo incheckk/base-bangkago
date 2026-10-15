@@ -132,10 +132,13 @@ export function PortPickerSheet({
  * choice, or the placeholder when nothing is picked yet.
  */
 export function PortSelect({
-  label, ports, value, onChange, isDisabled, placeholder = 'Select a port',
+  label, sheetTitle, ports, value, onChange, isDisabled, placeholder = 'Select a port',
   disabledHint, locked = false,
 }: {
   label: string;
+  /** Heading on the sheet. Defaults to `label`, which is wrong when the
+   *  field label is an all-caps section header. */
+  sheetTitle?: string;
   ports: PickablePort[];
   value: string | null;
   onChange: (portId: string) => void;
@@ -175,7 +178,7 @@ export function PortSelect({
       <PortPickerSheet
         visible={open}
         onClose={() => setOpen(false)}
-        title={label}
+        title={sheetTitle ?? label}
         ports={ports}
         selected={value}
         isDisabled={isDisabled}

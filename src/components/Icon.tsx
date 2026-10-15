@@ -45,6 +45,10 @@ export const ICONS = {
   receipt: 'receipt',
   bookings: 'list',
   history: 'time',
+  // Permits and clearances — a sheet of paper, not a receipt.
+  document: 'document-text',
+  qr: 'qr-code',
+  guide: 'book',
 
   // status
   check: 'checkmark-circle',

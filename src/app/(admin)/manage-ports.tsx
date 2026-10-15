@@ -175,6 +175,9 @@ export default function ManagePorts() {
                 </View>
               </View>
               <Text style={styles.location} numberOfLines={1}>{p.location}</Text>
+              <Text style={styles.location} numberOfLines={1}>
+                {p.islandName} · {p.islandGroup === 'mactan' ? 'Mactan mainland' : 'Olango islands'}
+              </Text>
               <View style={styles.cardMeta}>
                 <Text style={styles.metaText}>Lat: {p.latitude ?? '—'}</Text>
                 <Text style={styles.metaText}>Lng: {p.longitude ?? '—'}</Text>

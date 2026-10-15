@@ -58,6 +58,19 @@ export default function FaresInfo() {
           </View>
         ))}
 
+        <Text style={[styles.title, { marginTop: spacing.xxl }]}>Parcel Delivery</Text>
+        <Text style={styles.subtitle}>Inter-island padala rates</Text>
+
+        <View style={styles.routeCard}>
+          <View style={styles.routeMeta}>
+            <Text style={styles.routeFare}>₱120 base</Text>
+            <Text style={styles.routeDot}>·</Text>
+            <Text style={styles.routeDetail}>10kg included</Text>
+          </View>
+          <Text style={styles.routeDetail}>Excess: ₱10/kg over 10kg · Max 50kg</Text>
+          <Text style={styles.routeDetail}>Cross-island routes only (Mactan ↔ Olango)</Text>
+        </View>
+
         <Text style={[styles.title, { marginTop: spacing.xxl }]}>Good to Know</Text>
         {INFO.map((item, i) => (
           <View key={i} style={styles.infoCard}>

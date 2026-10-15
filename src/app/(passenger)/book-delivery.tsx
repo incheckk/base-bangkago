@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
 import { getActiveBooking, getBookingBan, routeIdFor } from '@/services/booking.service';
+import { calculateParcelFare } from '@/services/parcel-pricing.service';
 import type { RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -51,10 +52,22 @@ export default function BookDelivery() {
   const toPort = ports.data.find((p) => p.portId === toId);
   const route = routeFor(fromId, toId);
 
-  const totalKg = items.reduce((sum, i) => sum + (parseFloat(i.kilogram) || 0), 0);
-  const cargoFare = route
-    ? Math.round(route.baseFare * 1.5 * Math.max(1, Math.ceil(totalKg / 10)))
-    : null;
+  const totalKg = items.reduce((sum, i) => {
+    const kg = parseFloat(i.kilogram);
+    // 1-50 kg clamp per item; NaN/negative/zero contribute 0 (ready-gate blocks).
+    return sum + (Number.isFinite(kg) && kg >= 1 && kg <= 50 ? kg : 0);
+  }, 0);
+  const fareResult =
+    route && fromPort && toPort
+      ? calculateParcelFare({
+          fromPort,
+          toPort,
+          totalKg,
+          deliveryType: 'accompanied',
+        })
+      : null;
+  const cargoFare =
+    fareResult && !fareResult.blockedReason ? fareResult.fare : null;
 
   function addItem() {
     setItems((prev) => [...prev, { itemName: '', quantity: '1', kilogram: '1' }]);
@@ -74,6 +87,7 @@ export default function BookDelivery() {
     !!toId &&
     fromId !== toId &&
     cargoFare !== null &&
+    totalKg > 0 &&
     !!receiverName.trim() &&
     items.some((i) => i.itemName.trim());
 
@@ -189,7 +203,7 @@ export default function BookDelivery() {
                 <TextField label="Qty" value={item.quantity} onChangeText={(v) => updateItem(idx, 'quantity', v)} placeholder="1" />
               </View>
               <View style={styles.itemHalf}>
-                <TextField label="Weight (kg)" value={item.kilogram} onChangeText={(v) => updateItem(idx, 'kilogram', v)} placeholder="1" />
+                <TextField label="Weight (kg)" value={item.kilogram} onChangeText={(v) => updateItem(idx, 'kilogram', v)} placeholder="1" keyboardType="numeric" />
               </View>
             </View>
           </View>
@@ -199,11 +213,25 @@ export default function BookDelivery() {
           <Text style={styles.addItemText}>+ Add Another Item</Text>
         </Pressable>
 
+        {fareResult && (
+          <View style={styles.fareRow}>
+            <Text style={styles.fareLabel}>Route</Text>
+            <Text style={styles.fareValue} numberOfLines={1}>
+              {fareResult.isCrossIsland ? 'Cross-island' : 'Same zone'}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.fareCard}>
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Total Weight</Text>
             <Text style={styles.fareValue}>{totalKg.toFixed(1)} kg</Text>
           </View>
+          {fareResult?.breakdown.map((line, i) => (
+            <View key={i} style={styles.fareRow}>
+              <Text style={styles.fareLabel} numberOfLines={2}>{line}</Text>
+            </View>
+          ))}
           <View style={styles.fareRow}>
             <Text style={styles.fareLabel}>Estimated Fare</Text>
             <Text style={styles.fareValue} numberOfLines={1}>{cargoFare !== null ? `₱${cargoFare}` : '—'}</Text>

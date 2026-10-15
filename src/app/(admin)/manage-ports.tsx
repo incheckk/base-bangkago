@@ -79,6 +79,12 @@ export default function ManagePorts() {
         location: location.trim(),
         latitude: latitude ? parseFloat(latitude) : 0,
         longitude: longitude ? parseFloat(longitude) : 0,
+        islandGroup: editId
+          ? (ports.find((x) => x.portId === editId)?.islandGroup ?? 'mactan')
+          : ('mactan' as const),
+        islandName: editId
+          ? (ports.find((x) => x.portId === editId)?.islandName ?? 'Mactan')
+          : 'Mactan',
         geofenceRadiusM: Number.isFinite(parsedRadius) && parsedRadius > 0 ? parsedRadius : 300,
         isActive: true,
         sortOrder: ports.length,
@@ -169,6 +175,9 @@ export default function ManagePorts() {
                 </View>
               </View>
               <Text style={styles.location} numberOfLines={1}>{p.location}</Text>
+              <Text style={styles.location} numberOfLines={1}>
+                {p.islandName} · {p.islandGroup === 'mactan' ? 'Mactan mainland' : 'Olango islands'}
+              </Text>
               <View style={styles.cardMeta}>
                 <Text style={styles.metaText}>Lat: {p.latitude ?? '—'}</Text>
                 <Text style={styles.metaText}>Lng: {p.longitude ?? '—'}</Text>

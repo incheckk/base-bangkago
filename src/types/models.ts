@@ -98,6 +98,10 @@ export interface PortDoc {
   longitude: number | null;
   sortOrder: number;
   isActive: boolean;
+  /** Parcel Padala Phase 0 (032): 'mactan' = mainland, 'olango' = island. NOT NULL in DB. */
+  islandGroup: 'mactan' | 'olango';
+  /** Parcel Padala Phase 0 (032): display island name. NOT NULL in DB. */
+  islandName: string;
   /** GPS perimeter radius around the port, in meters (default 300, admin-tunable). */
   geofenceRadiusM: number;
 }

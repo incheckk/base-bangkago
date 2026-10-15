@@ -133,7 +133,7 @@ export default function RateTripScreen() {
   if (existing) {
     return (
       <ScreenContainer padded={false}>
-        <PassengerScreenHeader title="Rate Trip" subtitle="RATE TRIP" />
+        <PassengerScreenHeader title="Rate Trip" />
         <View style={styles.center}>
           <Text style={styles.thanksIcon}>⭐</Text>
           <Text style={styles.thanksTitle}>Already rated</Text>
@@ -154,7 +154,7 @@ export default function RateTripScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Rate Trip" subtitle="RATE TRIP" />
+      <PassengerScreenHeader title="Rate Trip" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Bangkero info */}

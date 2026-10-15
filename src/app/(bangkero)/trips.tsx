@@ -31,7 +31,7 @@ export default function TripsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="My Trips" subtitle="TRIPS" />
+      <BangkeroScreenHeader title="My Trips" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />

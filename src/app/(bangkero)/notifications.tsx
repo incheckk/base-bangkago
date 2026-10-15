@@ -38,14 +38,14 @@ export default function BangkeroNotificationsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Notifications" subtitle="ALERTS" />
+      <BangkeroScreenHeader title="Notifications" />
       <ScrollView contentContainerStyle={styles.scroll}>
 
         {data.length === 0 ? (
           <EmptyState
             icon="🔔"
             title="No notifications"
-            message="You're all caught up!"
+            message="You're all caught up."
           />
         ) : (
           <>

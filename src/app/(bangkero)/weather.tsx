@@ -30,7 +30,7 @@ export default function WeatherScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Weather" subtitle="WEATHER" />
+      <BangkeroScreenHeader title="Weather" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {loading ? (
@@ -86,7 +86,7 @@ export default function WeatherScreen() {
               </View>
             </View>
 
-            <Text style={styles.sectionLabel}>ROUTE INFO</Text>
+            <Text style={styles.sectionLabel}>ROUTE DETAILS</Text>
             <View style={styles.routeCard}>
               <Text style={styles.routeText}>
                 Weather conditions apply to your current port area. Always check conditions before departure.

@@ -20,6 +20,8 @@ export const ICONS = {
   menu: 'menu',
   back: 'chevron-back',
   forward: 'chevron-forward',
+  // Points at a list that opens downward — a dropdown field, not a link.
+  expand: 'chevron-down',
   close: 'close',
   bell: 'notifications',
   profile: 'person-circle',

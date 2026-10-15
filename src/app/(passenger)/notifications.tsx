@@ -38,14 +38,14 @@ export default function NotificationsScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Notifications" subtitle="ALERTS" />
+      <PassengerScreenHeader title="Notifications" />
       <ScrollView contentContainerStyle={styles.scroll}>
 
         {data.length === 0 ? (
           <EmptyState
             icon="🔔"
             title="No notifications"
-            message="You're all caught up!"
+            message="You're all caught up."
           />
         ) : (
           <>

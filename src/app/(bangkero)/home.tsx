@@ -81,7 +81,7 @@ export default function BangkeroHome() {
       .then((rows) => setPkgNames(Object.fromEntries(rows.map((r) => [r.packageId, r.packageName]))))
       .catch(() => {});
   }, []);
-  // Today's model predictions behind the "AI DEMAND TODAY" badges.
+  // Today's model predictions behind the demand badges.
   const [todayDemand, setTodayDemand] = useState<DemandPredictionDoc[]>([]);
   useEffect(() => {
     let alive = true;
@@ -749,7 +749,7 @@ export default function BangkeroHome() {
 
         {topDemand.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>AI DEMAND TODAY</Text>
+            <Text style={styles.sectionLabel}>TODAY'S PREDICTION</Text>
             {topDemand.map((row) => (
               <View key={row.routeId} style={styles.demandRow}>
                 <Text style={styles.demandRoute} numberOfLines={1}>

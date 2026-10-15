@@ -30,7 +30,7 @@ export default function PostTripScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Post Trip" subtitle="TRIP COMPLETE" showBack={false} />
+      <BangkeroScreenHeader eyebrow="TRIP COMPLETE" title="Post Trip" showBack={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.hero}>

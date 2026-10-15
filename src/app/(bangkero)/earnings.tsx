@@ -42,7 +42,7 @@ export default function BangkeroEarnings() {
   if (loading) {
     return (
       <ScreenContainer padded={false}>
-        <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
+        <BangkeroScreenHeader title="Earnings" />
         <View style={styles.center}>
           <LoadingState label="Loading earnings…" />
         </View>
@@ -53,7 +53,7 @@ export default function BangkeroEarnings() {
   if (error) {
     return (
       <ScreenContainer padded={false}>
-        <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
+        <BangkeroScreenHeader title="Earnings" />
         <View style={styles.center}>
           <ErrorState message={error} />
         </View>
@@ -63,7 +63,7 @@ export default function BangkeroEarnings() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Earnings" subtitle="EARNINGS" />
+      <BangkeroScreenHeader title="Earnings" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.balanceCard}>
@@ -95,7 +95,7 @@ export default function BangkeroEarnings() {
           <EmptyState
             icon="💰"
             title="No transactions yet"
-            message="Your earnings will show up here."
+            message="Your earnings will appear here."
           />
         ) : (
           transactions.map((tx) => {

@@ -154,7 +154,7 @@ export default function SailingScreen() {
       <ScreenContainer padded={false}>
         <BangkeroScreenHeader eyebrow="MANIFEST" title="Sailing" showDrawer={false} />
         <View style={styles.center}>
-          <EmptyState icon="⛵" title="Sailing not found" message="It may have been removed." />
+          <EmptyState icon="⛵" title="Sailing not found" message="It may have been cancelled or removed." />
         </View>
       </ScreenContainer>
     );

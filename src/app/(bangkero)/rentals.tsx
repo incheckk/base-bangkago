@@ -224,7 +224,7 @@ export default function BangkeroRentalsScreen() {
 
         {/* How the rental module works + opt-in listing (027). */}
         <View style={styles.howCard}>
-          <Text style={styles.howTitle}>LIST YOUR BOAT FOR PASSENGERS</Text>
+          <Text style={styles.howTitle}>LIST YOUR BOAT</Text>
           <Text style={styles.howBody}>
             Flip the switch to make your boat show up in the passenger Boat Rental catalog.
             Passengers pick a date and pay the 50% GCash escrow; once the admin approves it,

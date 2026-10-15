@@ -20,6 +20,8 @@ export const ICONS = {
   menu: 'menu',
   back: 'chevron-back',
   forward: 'chevron-forward',
+  // Points at a list that opens downward — a dropdown field, not a link.
+  expand: 'chevron-down',
   close: 'close',
   bell: 'notifications',
   profile: 'person-circle',
@@ -43,6 +45,10 @@ export const ICONS = {
   receipt: 'receipt',
   bookings: 'list',
   history: 'time',
+  // Permits and clearances — a sheet of paper, not a receipt.
+  document: 'document-text',
+  qr: 'qr-code',
+  guide: 'book',
 
   // status
   check: 'checkmark-circle',

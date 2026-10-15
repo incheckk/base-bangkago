@@ -140,7 +140,7 @@ export default function AdminDownpaymentsScreen() {
         ) : visible.length === 0 ? (
           <EmptyState
             icon="🧾"
-            title="Nothing here"
+            title="No rentals found"
             message={
               filter === 'pending'
                 ? 'No downpayments are waiting for review.'

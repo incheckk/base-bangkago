@@ -25,7 +25,7 @@ export default function AdminBookingDetail() {
 
   return (
     <ScreenContainer padded={false}>
-      <AdminScreenHeader title="Booking Detail" />
+      <AdminScreenHeader title="Booking Details" />
 
       <View style={styles.content}>
         <View style={styles.refRow}>

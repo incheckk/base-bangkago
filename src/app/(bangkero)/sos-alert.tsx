@@ -97,7 +97,7 @@ export default function SosAlertScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="SOS Alert" subtitle="EMERGENCY" />
+      <BangkeroScreenHeader title="SOS Alert" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.sosWrap}>

@@ -290,7 +290,7 @@ export default function DepartureScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Departure" subtitle="MANIFEST & CHECKLIST" />
+      <BangkeroScreenHeader eyebrow="MANIFEST & CHECKLIST" title="Departure" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <ProgressBar steps={steps} current={currentStep} />
@@ -337,7 +337,7 @@ export default function DepartureScreen() {
                         {!resolved && (
                           <View style={styles.boardAction}>
                             <PrimaryButton
-                              label="Didn’t board"
+                              label="Didn't board"
                               variant="danger"
                               onPress={() => confirmNoShow(t)}
                               loading={noShowId === t.bookingId}
@@ -394,7 +394,7 @@ export default function DepartureScreen() {
           </View>
         ) : manifest ? (
           <>
-            <Text style={styles.sectionLabel}>TRIP INFO</Text>
+            <Text style={styles.sectionLabel}>TRIP DETAILS</Text>
             <View style={styles.tripCard}>
               <View style={styles.tripRow}>
                 <Text style={styles.tripLabel}>Reference</Text>

@@ -33,7 +33,7 @@ export default function ReportIssue() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Report Issue" subtitle="Let us know what went wrong" />
+      <PassengerScreenHeader title="Report Issue" subtitle="Tell us what went wrong" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <Text style={styles.sectionLabel}>ISSUE TYPE</Text>

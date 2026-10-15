@@ -91,7 +91,7 @@ export default function AdminGcashQrScreen() {
             <Image source={{ uri: url }} style={styles.qrImage} resizeMode="contain" />
           ) : (
             <View style={styles.qrPlaceholder}>
-              <Text style={styles.qrText}>{loaded ? 'NO QR YET' : 'LOADING…'}</Text>
+              <Text style={styles.qrText}>{loaded ? 'No QR code uploaded' : 'Loading…'}</Text>
               <Text style={styles.qrSub}>Upload the escrow GCash QR code</Text>
             </View>
           )}

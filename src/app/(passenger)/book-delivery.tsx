@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PortSelect } from '@/components/PortSelect';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
@@ -130,37 +131,41 @@ export default function BookDelivery() {
       <PassengerScreenHeader title="Book Delivery" subtitle="Send parcels and cargo between ports" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.sectionLabel}>FROM PORT</Text>
-        <View style={styles.chips}>
-          {ports.data.map((p) => (
-            <Pressable
-              key={p.portId}
-              onPress={() => setFromId(p.portId)}
-              style={[styles.chip, fromId === p.portId && styles.chipActive, toId === p.portId && styles.chipDisabled]}
-              disabled={toId === p.portId}
-            >
-              <Text style={[styles.chipText, fromId === p.portId && styles.chipTextActive]} numberOfLines={1}>{p.portName}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {/* Two dropdowns, not eighteen chips.
+            Nine ports per leg filled most of the first screen with
+            near-identical pills before the form had asked anything, and the
+            grid grows every time the LGU adds a port. A blocked port now says
+            why instead of only dimming. */}
+        <PortSelect
+          label="DEPARTURE"
+          sheetTitle="Pick up from"
+          ports={ports.data}
+          value={fromId}
+          onChange={setFromId}
+          placeholder="Select a departure port"
+          isDisabled={(id) => (id === toId ? 'Same as destination' : null)}
+        />
 
-        <Text style={[styles.sectionLabel, styles.mt]}>TO PORT</Text>
-        <View style={styles.chips}>
-          {ports.data.map((p) => {
-            const blocked = !!fromId && p.portId !== fromId && !routeFor(fromId, p.portId);
-            const off = fromId === p.portId || blocked;
-            return (
-              <Pressable
-                key={p.portId}
-                onPress={() => setToId(p.portId)}
-                style={[styles.chip, toId === p.portId && styles.chipActive, off && styles.chipDisabled]}
-                disabled={off}
-              >
-                <Text style={[styles.chipText, toId === p.portId && styles.chipTextActive]} numberOfLines={1}>{p.portName}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <View style={styles.fieldGap} />
+
+        <PortSelect
+          label="DESTINATION"
+          sheetTitle="Deliver to"
+          ports={ports.data}
+          value={toId}
+          onChange={setToId}
+          // Destination has no meaning until there is an origin to route from.
+          locked={!fromId}
+          placeholder="Select a destination"
+          disabledHint="Pick a departure first"
+          isDisabled={(id) => {
+            if (id === fromId) return 'Same as departure';
+            if (!routeFor(fromId, id)) {
+              return `No route from ${fromPort?.portName ?? 'your departure port'}`;
+            }
+            return null;
+          }}
+        />
 
         <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
         <TextField label="Receiver Name" value={receiverName} onChangeText={setReceiverName} placeholder="Juan Dela Cruz" />
@@ -292,20 +297,7 @@ const styles = StyleSheet.create({
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mt: { marginTop: spacing.xl },
 
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipDisabled: { opacity: 0.35 },
-  chipText: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: colors.primaryText },
-
+  fieldGap: { height: spacing.lg },
   itemCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

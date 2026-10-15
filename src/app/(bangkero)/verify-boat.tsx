@@ -126,7 +126,7 @@ export default function VerifyBoat() {
   if (bangkero.loading || !paths) {
     return (
       <ScreenContainer padded={false}>
-        <BangkeroScreenHeader title="Verify Boat" subtitle="UPLOAD DOCUMENTS" />
+        <BangkeroScreenHeader eyebrow="UPLOAD DOCUMENTS" title="Verify Boat" />
         <View style={styles.center}><LoadingState label="Loading documents…" /></View>
       </ScreenContainer>
     );
@@ -134,7 +134,7 @@ export default function VerifyBoat() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader title="Verify Boat" subtitle="UPLOAD DOCUMENTS" />
+      <BangkeroScreenHeader eyebrow="UPLOAD DOCUMENTS" title="Verify Boat" />
       <ScrollView contentContainerStyle={styles.scroll}>
 
         <View style={styles.progressWrap}>

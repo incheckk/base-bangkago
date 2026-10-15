@@ -14,14 +14,14 @@ import { normalizePhone } from '@/utils/phone';
 
 // Matches the accounts created by the Phase 3.10 seed script.
 const DEMO_PASSWORD = 'demo1234';
-const DEMO_ACCOUNTS: { label: string; phone: string; password?: string }[] = [
-  { label: 'Passenger', phone: '0917 123 4567' },
-  { label: 'Bangkero 1', phone: '0918 123 4567' },
-  { label: 'Bangkero 2', phone: '0919 123 4567' },
-  { label: 'Coastguard', phone: '0920 123 4567' },
+const DEMO_ACCOUNTS: { role: string; name: string; phone: string; password?: string }[] = [
+  { role: 'Passenger', name: 'Juan', phone: '0917 123 4567' },
+  { role: 'Bangkero', name: 'Mang Lito', phone: '0918 123 4567' },
+  { role: 'Bangkero', name: 'Pedro', phone: '0919 123 4567' },
+  { role: 'Coastguard', name: 'Watch', phone: '0920 123 4567' },
   // Admin was created by hand in Supabase, not by the seed script, so it
   // keeps its own password.
-  { label: 'Admin', phone: '0930 913 2995', password: 'qqqwww' },
+  { role: 'Admin', name: 'Console', phone: '0930 913 2995', password: 'qqqwww' },
 ];
 
 export default function SignIn() {
@@ -133,11 +133,12 @@ export default function SignIn() {
                     disabled={busy}
                     style={({ pressed }) => [styles.devChip, pressed && styles.devChipPressed]}
                   >
-                    <Text style={styles.devChipText}>{a.label}</Text>
+                    <Text style={styles.devChipRole} numberOfLines={1}>{a.role}</Text>
+                    <Text style={styles.devChipName} numberOfLines={1}>{a.name}</Text>
                   </Pressable>
                 ))}
               </View>
-              <Text style={styles.devHint}>Seeded accounts only — dev builds, never production.</Text>
+              <Text style={styles.devHint}>Seeded accounts. Development builds only.</Text>
             </View>
           )}
         </ScrollView>
@@ -179,15 +180,28 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   devLabel: { ...typography.label, marginBottom: spacing.md },
-  devRow: { flexDirection: 'row', gap: spacing.sm },
+  devRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   devChip: {
-    flex: 1,
+    // flexBasis + grow so five chips wrap to two rows instead of each being
+    // squeezed to ~60pt, which is what crushed the labels.
+    flexBasis: '30%',
+    flexGrow: 1,
+    minWidth: 92,
     backgroundColor: colors.surfaceAlt,
     borderRadius: radii.md,
-    minHeight: touchTarget,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    minHeight: touchTarget + 8,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
     alignItems: 'center', justifyContent: 'center',
+    gap: spacing.xxs,
   },
-  devChipPressed: { opacity: 0.7 },
-  devChipText: { flexShrink: 1, ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  devChipPressed: { backgroundColor: colors.surface, borderColor: colors.primary },
+  devChipRole: { ...typography.label, fontSize: 9, letterSpacing: 0.4, flexShrink: 1 },
+  devChipName: {
+    ...typography.caption, color: colors.text, fontWeight: '700',
+    fontSize: 12, flexShrink: 1,
+  },
   devHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, fontSize: 11 },
 });

@@ -7,6 +7,7 @@ import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PortPickerSheet } from '@/components/PortSelect';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SchedulePicker, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -17,7 +18,7 @@ import { useRoutes } from '@/hooks/useRoutes';
 import { getActiveBooking, getBookingBan, getMaxOnlineBangkaCapacity, routeIdFor } from '@/services/booking.service';
 import { getQueuedSeatCeiling } from '@/services/queue.service';
 import type { RouteDoc } from '@/types/models';
-import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
+import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 /** Ceiling while no boat reports a capacity (e.g. every bangkero offline). */
 const FALLBACK_MAX_PAX = 12;
@@ -34,7 +35,7 @@ export default function BookRide() {
   const [fromId, setFromId] = useState<string | null>(params.fromId ?? null);
   const [toId, setToId] = useState<string | null>(params.toId ?? null);
   // Arriving with BOTH ports = a popular route from quick-ride: the pickers
-  // lock to that route and the chip grids step out of the way.
+  // lock to that route, since the passenger already chose it on the way in.
   const [routeLocked] = useState(!!(params.fromId && params.toId));
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [scheduledDate, setScheduledDate] = useState(todayIso());
@@ -44,6 +45,8 @@ export default function BookRide() {
   const [checking, setChecking] = useState(false);
   const [blocked, setBlocked] = useState<{ bookingId: string; ref: string } | null>(null);
   const [ban, setBan] = useState<number | null>(null);
+  /** Which leg's port list is open. One sheet serves both. */
+  const [picking, setPicking] = useState<'from' | 'to' | null>(null);
 
   useEffect(() => {
     if (params.fromId) setFromId(params.fromId);
@@ -183,7 +186,15 @@ export default function BookRide() {
             gives the choice a shape — you can see the crossing you just picked. */}
         <View style={styles.routeCard}>
           <View style={styles.mapWrap}>
-            <MapContainer ports={ports.data} fromPortId={fromId} toPortId={toId} height={150} />
+            {/* Inside a ScrollView, so one-finger drag stays with the page.
+                Pinch and the zoom buttons still work. */}
+            <MapContainer
+              ports={ports.data}
+              fromPortId={fromId}
+              toPortId={toId}
+              height={150}
+              draggable={false}
+            />
           </View>
 
           <View style={styles.legs}>
@@ -193,18 +204,48 @@ export default function BookRide() {
               <View style={[styles.legDot, styles.legDotEnd, !!toId && styles.legDotOn]} />
             </View>
 
+            {/* Each leg IS its own dropdown. The route summary used to be
+                read-only, with eighteen port chips repeating the same choice
+                further down the page — one control per decision instead. */}
             <View style={styles.legBody}>
-              <Text style={styles.legLabel}>FROM</Text>
-              <Text style={[styles.legValue, !fromPort && styles.legValueEmpty]} numberOfLines={1}>
-                {fromPort?.portName ?? 'Select a departure port'}
-              </Text>
+              <Pressable
+                onPress={() => setPicking('from')}
+                disabled={routeLocked}
+                accessibilityRole="button"
+                accessibilityLabel={`Departure: ${fromPort?.portName ?? 'not selected'}`}
+                style={({ pressed }) => [styles.legRow, pressed && !routeLocked && styles.legRowPressed]}
+              >
+                <View style={styles.legText}>
+                  <Text style={styles.legLabel}>DEPARTURE</Text>
+                  <Text style={[styles.legValue, !fromPort && styles.legValueEmpty]} numberOfLines={1}>
+                    {fromPort?.portName ?? 'Select a departure port'}
+                  </Text>
+                </View>
+                {!routeLocked && <Icon name="expand" size={18} color={colors.textMuted} />}
+              </Pressable>
 
               <View style={styles.legDivider} />
 
-              <Text style={styles.legLabel}>TO</Text>
-              <Text style={[styles.legValue, !toPort && styles.legValueEmpty]} numberOfLines={1}>
-                {toPort?.portName ?? (fromId ? 'Select a destination' : 'Pick a departure first')}
-              </Text>
+              <Pressable
+                onPress={() => setPicking('to')}
+                disabled={routeLocked || !fromId}
+                accessibilityRole="button"
+                accessibilityLabel={`Destination: ${toPort?.portName ?? 'not selected'}`}
+                style={({ pressed }) => [
+                  styles.legRow,
+                  pressed && !routeLocked && !!fromId && styles.legRowPressed,
+                ]}
+              >
+                <View style={styles.legText}>
+                  <Text style={styles.legLabel}>DESTINATION</Text>
+                  <Text style={[styles.legValue, !toPort && styles.legValueEmpty]} numberOfLines={1}>
+                    {toPort?.portName ?? (fromId ? 'Select a destination' : 'Pick a departure first')}
+                  </Text>
+                </View>
+                {!routeLocked && !!fromId && (
+                  <Icon name="expand" size={18} color={colors.textMuted} />
+                )}
+              </Pressable>
             </View>
 
             <Pressable
@@ -224,33 +265,9 @@ export default function BookRide() {
         </View>
 
         <View style={styles.body}>
-          {/* Locked route from quick-ride — the summary above already shows
-              both ports; the chip grids would only offer ways to break it. */}
-          {!routeLocked && (
-            <>
-              <Text style={styles.sectionLabel}>DEPARTURE PORT</Text>
-              <PortChips ports={ports.data} selected={fromId} disabled={toId} onSelect={setFromId} />
-
-              {/* Destination only exists once a departure is picked — two grids
-                  at once made people pick them in the wrong order. */}
-              {!!fromId && (
-                <>
-                  <Text style={[styles.sectionLabel, styles.mtLg]}>DESTINATION PORT</Text>
-                  <PortChips
-                    ports={ports.data}
-                    selected={toId}
-                    disabled={fromId}
-                    isBlocked={(id) => !!fromId && id !== fromId && !routeFor(fromId, id)}
-                    onSelect={setToId}
-                  />
-                </>
-              )}
-            </>
-          )}
-
           {/* Same-day rides leave whenever a boat is ready; a future date
               takes one of the four fixed slots and pays 50% up front (020). */}
-          <Text style={[styles.sectionLabel, styles.mtLg]}>SAILING DATE</Text>
+          <Text style={styles.sectionLabel}>SAILING DATE</Text>
           <SchedulePicker
             date={scheduledDate}
             time={scheduledTime}
@@ -303,6 +320,29 @@ export default function BookRide() {
 
         <PrimaryButton label="Proceed to Payment" onPress={proceed} disabled={!ready} loading={checking} />
       </View>
+
+      {/* One sheet, both legs. A blocked port says why rather than just
+          greying out — "no route from Marigondon" is actionable, a dimmed
+          row is a dead end you have to guess at. */}
+      <PortPickerSheet
+        visible={picking !== null}
+        onClose={() => setPicking(null)}
+        title={picking === 'to' ? 'Destination' : 'Departure'}
+        ports={ports.data}
+        selected={picking === 'to' ? toId : fromId}
+        isDisabled={(id) => {
+          if (picking === 'to') {
+            if (id === fromId) return 'Same as departure';
+            if (!routeFor(fromId, id)) return `No route from ${fromPort?.portName ?? 'your departure port'}`;
+            return null;
+          }
+          return id === toId ? 'Same as destination' : null;
+        }}
+        onSelect={(id) => {
+          if (picking === 'to') setToId(id);
+          else setFromId(id);
+        }}
+      />
 
       {/* One active trip at a time — the pending booking is offered directly
           so the passenger never has to hunt for it. */}
@@ -379,49 +419,6 @@ export default function BookRide() {
   );
 }
 
-function PortChips({
-  ports, selected, disabled, isBlocked, onSelect,
-}: {
-  ports: { portId: string; portName: string }[];
-  selected: string | null;
-  disabled: string | null;
-  isBlocked?: (portId: string) => boolean;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <View style={styles.chips}>
-      {ports.map((p) => {
-        const active = p.portId === selected;
-        const off = p.portId === disabled || !!isBlocked?.(p.portId);
-        return (
-          <Pressable
-            key={p.portId}
-            onPress={() => onSelect(p.portId)}
-            disabled={off}
-            style={({ pressed }) => [
-              styles.portChip,
-              active && styles.portChipActive,
-              off && styles.portChipOff,
-              pressed && !active && !off && styles.pressed,
-            ]}
-          >
-            {active && <Icon name="check" size={13} color={colors.primary} />}
-            <Text
-              style={[
-                styles.portChipText,
-                active && styles.portChipTextActive,
-                off && styles.portChipTextOff,
-              ]}
-            >
-              {p.portName}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 const FOOTER_H = 132;
 
 const styles = StyleSheet.create({
@@ -450,10 +447,18 @@ const styles = StyleSheet.create({
   legDotEnd: { borderRadius: radii.xs },
   legLine: { width: 2, flex: 1, minHeight: 28, backgroundColor: colors.border, marginVertical: spacing.xxs },
   legBody: { flex: 1 },
+  // Each leg is a tap target now, so it has to clear the 44pt minimum on its
+  // own rather than relying on the card's padding.
+  legRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    minHeight: touchTarget,
+  },
+  legRowPressed: { opacity: 0.6 },
+  legText: { flex: 1, minWidth: 0 },
   legLabel: { ...typography.label, marginBottom: spacing.xxs },
-  legValue: { flexShrink: 1, ...typography.bodyStrong },
+  legValue: { flexShrink: 1, ...typography.bodyStrong, lineHeight: 20 },
   legValueEmpty: { color: colors.textMuted, fontWeight: '400' },
-  legDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
+  legDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.sm },
 
   swapBtn: {
     width: touchTarget, height: touchTarget, borderRadius: radii.pill,
@@ -467,27 +472,11 @@ const styles = StyleSheet.create({
   // ---------- shared ----------
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mtLg: { marginTop: spacing.xl },
-  pressed: { opacity: 0.75 },
 
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  portChip: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    backgroundColor: colors.surface,
-    borderRadius: radii.pill,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    minHeight: 36,
-  },
-  portChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
-  portChipOff: { opacity: 0.3 },
-  portChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  portChipTextActive: { color: colors.primary },
-  portChipTextOff: { color: colors.textMuted },
-
-  // ---------- companion modal (kept for the blocked/no-show dialogs) ----------
+  // ---------- blocked / no-show dialogs ----------
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.backdrop,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
@@ -512,7 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   blockedRefLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.xxs },
-  blockedRefValue: { color: colors.text, fontSize: 16, fontWeight: '700', letterSpacing: 1 },
+  blockedRefValue: { ...typography.title, ...numeric, fontWeight: '700', letterSpacing: 1 },
 
   // ---------- sticky footer ----------
   footer: {
@@ -528,6 +517,6 @@ const styles = StyleSheet.create({
   },
   fareLabel: { flexShrink: 1, ...typography.label },
   fareNote: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
-  fareValue: { flexShrink: 1, ...typography.display, fontSize: 26, color: colors.primary },
+  fareValue: { flexShrink: 1, ...typography.h1, ...numeric, color: colors.primary },
   fareValueEmpty: { color: colors.textMuted },
 });

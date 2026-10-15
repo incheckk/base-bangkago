@@ -88,7 +88,7 @@ export default function GcashQrScreen() {
             <Image source={{ uri: url }} style={styles.qrImage} resizeMode="contain" />
           ) : (
             <View style={styles.qrPlaceholder}>
-              <Text style={styles.qrText}>NO QR YET</Text>
+              <Text style={styles.qrText}>No QR code uploaded</Text>
               <Text style={styles.qrSub}>Upload your GCash QR code</Text>
             </View>
           )}

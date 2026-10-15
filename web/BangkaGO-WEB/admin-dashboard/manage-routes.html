@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
 </head>
 <body data-page="manage-routes">
   <div class="cg-shell">
@@ -25,7 +25,7 @@
           </div>
 
           <div class="d-flex flex-wrap gap-2 mb-3">
-            <button class="btn btn-bangkago" data-bs-toggle="modal" data-bs-target="#createRouteModal">
+            <button class="btn btn-bangkago" id="createRouteBtn">
               <i class="bi bi-plus-circle me-1"></i> Create Route
             </button>
           </div>
@@ -45,6 +45,13 @@
               <tbody id="routesBody"></tbody>
             </table>
           </div>
+          
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading routes...</p>
+          </div>
+          
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
     </main>
@@ -60,27 +67,34 @@
         </div>
         <div class="modal-body">
           <div class="mb-2">
-            <label class="form-label">Route ID</label>
-            <input id="cRouteId" class="form-control" placeholder="e.g. R-05" required />
+            <label class="form-label">Start Port <span class="text-danger">*</span></label>
+            <select class="form-select" id="cStartPort" required>
+              <option value="">Select start port...</option>
+            </select>
           </div>
           <div class="mb-2">
-            <label class="form-label">Path</label>
-            <input id="cRoutePath" class="form-control" placeholder="e.g. Mactan Port → Olango" required />
+            <label class="form-label">End Port <span class="text-danger">*</span></label>
+            <select class="form-select" id="cEndPort" required>
+              <option value="">Select end port...</option>
+            </select>
           </div>
           <div class="mb-2">
-            <label class="form-label">Distance</label>
-            <input id="cRouteDistance" class="form-control" placeholder="e.g. 15 km" required />
+            <label class="form-label">Base Fare (₱) <span class="text-danger">*</span></label>
+            <input type="number" class="form-control" id="cBaseFare" min="0" step="0.01" required placeholder="85">
           </div>
           <div class="mb-2">
-            <label class="form-label">Average Time</label>
-            <input id="cRouteTime" class="form-control" placeholder="e.g. 45 min" required />
+            <label class="form-label">Distance (km)</label>
+            <input type="number" class="form-control" id="cDistance" min="0" step="0.1" placeholder="12.5">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Estimated Minutes</label>
+            <input type="number" class="form-control" id="cEstimatedMinutes" min="0" placeholder="45">
           </div>
           <div class="mb-2">
             <label class="form-label">Status</label>
-            <select id="cRouteStatus" class="form-select">
-              <option value="Open">Open</option>
-              <option value="Restricted">Restricted</option>
-              <option value="Closed">Closed</option>
+            <select class="form-select" id="cStatus">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
             </select>
           </div>
         </div>
@@ -101,25 +115,25 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-2"><strong>Route:</strong> <span id="uRouteLabel">-</span></div>
+          <div class="mb-2"><strong>Route ID:</strong> <span id="uRouteId">-</span></div>
+          <div class="mb-2"><strong>Path:</strong> <span id="uRoutePathDisplay">-</span></div>
           <div class="mb-2">
-            <label class="form-label">Path</label>
-            <input id="uRoutePath" class="form-control" required />
+            <label class="form-label">Base Fare (₱)</label>
+            <input type="number" class="form-control" id="uBaseFare" min="0" step="0.01" required>
           </div>
           <div class="mb-2">
-            <label class="form-label">Distance</label>
-            <input id="uRouteDistance" class="form-control" required />
+            <label class="form-label">Distance (km)</label>
+            <input type="number" class="form-control" id="uDistance" min="0" step="0.1">
           </div>
           <div class="mb-2">
-            <label class="form-label">Average Time</label>
-            <input id="uRouteTime" class="form-control" required />
+            <label class="form-label">Estimated Minutes</label>
+            <input type="number" class="form-control" id="uEstimatedMinutes" min="0">
           </div>
           <div class="mb-2">
             <label class="form-label">Status</label>
-            <select id="uRouteStatus" class="form-select">
-              <option value="Open">Open</option>
-              <option value="Restricted">Restricted</option>
-              <option value="Closed">Closed</option>
+            <select class="form-select" id="uStatus">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
             </select>
           </div>
         </div>
@@ -133,7 +147,7 @@
 
   <!-- MANAGE STOPS MODAL -->
   <div class="modal fade" id="manageStopsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Manage Route Stops</h5>
@@ -142,63 +156,115 @@
         <div class="modal-body">
           <div class="mb-2"><strong>Route:</strong> <span id="sRouteLabel">-</span></div>
 
-          <div class="input-group mb-3">
-            <input id="newStopInput" class="form-control" placeholder="Enter new stop name">
-            <button class="btn btn-outline-secondary" id="addStopBtn" type="button">Add</button>
+          <div class="row g-2 mb-3 align-items-end">
+            <div class="col-md-5">
+              <label class="form-label">Port</label>
+              <select class="form-select" id="sPortSelect">
+                <option value="">Select port...</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Stop Order</label>
+              <input type="number" class="form-control" id="sStopOrder" min="1" placeholder="1">
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-outline-secondary w-100" id="addStopBtn" type="button">
+                <i class="bi bi-plus me-1"></i> Add Stop
+              </button>
+            </div>
           </div>
 
-          <ul class="list-group" id="stopsList"></ul>
+          <div class="table-responsive" style="max-height: 300px;">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Port</th>
+                  <th style="width: 140px;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="stopsBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    const routes = [
-      {id:"R-01", path:"Marigondon Port → Olango", distance:"18 km", time:"52 min", status:"Open", stops:["Marigondon Port","Olango Channel","Olango Port"]},
-      {id:"R-02", path:"Mactan Port → Olango", distance:"12 km", time:"34 min", status:"Open", stops:["Mactan Port","Olango"]},
-      {id:"R-04", path:"Mactan Port → Caohagan", distance:"22 km", time:"64 min", status:"Restricted", stops:["Mactan Port","Caohagan Channel","Caohagan Port"]}
-    ];
-
-    let selectedIndex = null;
+    let routes = [];
+    let ports = [];
+    let selectedRouteIndex = null;
 
     const routesBody = document.getElementById("routesBody");
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
 
     const createRouteModal = new bootstrap.Modal(document.getElementById("createRouteModal"));
     const updateRouteModal = new bootstrap.Modal(document.getElementById("updateRouteModal"));
     const manageStopsModal = new bootstrap.Modal(document.getElementById("manageStopsModal"));
 
-    const uRouteLabel = document.getElementById("uRouteLabel");
-    const uRoutePath = document.getElementById("uRoutePath");
-    const uRouteDistance = document.getElementById("uRouteDistance");
-    const uRouteTime = document.getElementById("uRouteTime");
-    const uRouteStatus = document.getElementById("uRouteStatus");
+    const cStartPort = document.getElementById("cStartPort");
+    const cEndPort = document.getElementById("cEndPort");
+    const cBaseFare = document.getElementById("cBaseFare");
+    const cDistance = document.getElementById("cDistance");
+    const cEstimatedMinutes = document.getElementById("cEstimatedMinutes");
+    const cStatus = document.getElementById("cStatus");
+
+    const uRouteId = document.getElementById("uRouteId");
+    const uRoutePathDisplay = document.getElementById("uRoutePathDisplay");
+    const uBaseFare = document.getElementById("uBaseFare");
+    const uDistance = document.getElementById("uDistance");
+    const uEstimatedMinutes = document.getElementById("uEstimatedMinutes");
+    const uStatus = document.getElementById("uStatus");
 
     const sRouteLabel = document.getElementById("sRouteLabel");
-    const stopsList = document.getElementById("stopsList");
-    const newStopInput = document.getElementById("newStopInput");
+    const sPortSelect = document.getElementById("sPortSelect");
+    const sStopOrder = document.getElementById("sStopOrder");
+    const stopsBody = document.getElementById("stopsBody");
 
-    function statusBadge(s){
-      if(s==="Open") return "text-bg-success";
-      if(s==="Restricted") return "text-bg-warning";
-      if(s==="Closed") return "text-bg-danger";
-      return "text-bg-secondary";
+    function statusBadge(active) {
+      return active ? "text-bg-success" : "text-bg-secondary";
+    }
+    function statusText(active) {
+      return active ? "Active" : "Inactive";
     }
 
-    function renderTable(){
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function getPortName(portId) {
+      const port = ports.find(p => p.portId === portId);
+      return port ? port.portName : portId;
+    }
+
+    function renderTable() {
       routesBody.innerHTML = "";
       routes.forEach((r, i) => {
+        const path = getPortName(r.startPortId) + ' → ' + getPortName(r.endPortId);
         routesBody.innerHTML += `
           <tr>
-            <td>${r.id}</td>
-            <td>${r.path}</td>
-            <td>${r.distance}</td>
-            <td>${r.time}</td>
-            <td><span class="badge ${statusBadge(r.status)}">${r.status}</span></td>
+            <td>${r.routeId}</td>
+            <td>${path}</td>
+            <td>${r.distanceKm ? r.distanceKm + ' km' : '—'}</td>
+            <td>${r.estimatedMinutes ? r.estimatedMinutes + ' min' : '—'}</td>
+            <td><span class="badge ${statusBadge(r.isActive)}">${statusText(r.isActive)}</span></td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="openUpdateRoute(${i})">
@@ -207,6 +273,9 @@
                 <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStops(${i})">
                   <i class="bi bi-geo-alt"></i> Stops
                 </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteRoute(${i})">
+                  <i class="bi bi-trash"></i> Delete
+                </button>
               </div>
             </td>
           </tr>
@@ -214,97 +283,285 @@
       });
     }
 
-    window.openUpdateRoute = function(index){
-      selectedIndex = index;
-      const r = routes[index];
-      uRouteLabel.textContent = `${r.id} — ${r.path}`;
-      uRoutePath.value = r.path;
-      uRouteDistance.value = r.distance;
-      uRouteTime.value = r.time;
-      uRouteStatus.value = r.status;
-      updateRouteModal.show();
-    }
-
-    window.openStops = function(index){
-      selectedIndex = index;
-      renderStops(index);
-      manageStopsModal.show();
-    }
-
-    function renderStops(index){
-      const r = routes[index];
-      sRouteLabel.textContent = `${r.id} — ${r.path}`;
-      stopsList.innerHTML = "";
-
-      if(!r.stops.length){
-        stopsList.innerHTML = `<li class="list-group-item text-muted">No stops yet.</li>`;
-        return;
-      }
-
-      r.stops.forEach((stop, stopIndex) => {
-        const li = document.createElement("li");
-        li.className = "list-group-item d-flex justify-content-between align-items-center";
-        li.innerHTML = `
-          <span>${stop}</span>
-          <button class="btn btn-sm btn-outline-danger" onclick="removeStop(${stopIndex})">
-            <i class="bi bi-trash"></i>
-          </button>
-        `;
-        stopsList.appendChild(li);
+    function populatePortSelects() {
+      const portOptions = ports.map(p => `<option value="${p.portId}">${p.portName}</option>`).join('');
+      [cStartPort, cEndPort, sPortSelect].forEach(select => {
+        if (select) select.innerHTML = '<option value="">Select port...</option>' + portOptions;
       });
     }
 
-    window.removeStop = function(stopIndex){
-      if(selectedIndex === null) return;
-      routes[selectedIndex].stops.splice(stopIndex, 1);
-      renderStops(selectedIndex);
+    async function loadData() {
+      showLoading(true);
+      try {
+        [ports, routes] = await Promise.all([
+          window.bangkagoPortsRoutes.listPorts(false),
+          window.bangkagoPortsRoutes.listRoutes(false)
+        ]);
+        populatePortSelects();
+        renderTable();
+      } catch (e) {
+        console.error(e);
+        showError('Failed to load data: ' + e.message);
+      }
     }
 
-    document.getElementById("addStopBtn").addEventListener("click", () => {
-      if(selectedIndex === null) return;
-      const value = newStopInput.value.trim();
-      if(!value) return;
-      routes[selectedIndex].stops.push(value);
-      newStopInput.value = "";
-      renderStops(selectedIndex);
-    });
-
-    document.getElementById("createRouteForm").addEventListener("submit", (e) => {
+    // Create Route
+    document.getElementById("createRouteForm").addEventListener("submit", async function(e) {
       e.preventDefault();
 
-      const id = document.getElementById("cRouteId").value.trim();
-      const path = document.getElementById("cRoutePath").value.trim();
-      const distance = document.getElementById("cRouteDistance").value.trim();
-      const time = document.getElementById("cRouteTime").value.trim();
-      const status = document.getElementById("cRouteStatus").value;
+      const startPortId = cStartPort.value;
+      const endPortId = cEndPort.value;
+      const baseFare = parseFloat(cBaseFare.value);
+      const distanceKm = cDistance.value ? parseFloat(cDistance.value) : null;
+      const estimatedMinutes = cEstimatedMinutes.value ? parseInt(cEstimatedMinutes.value) : 0;
+      const isActive = cStatus.value === 'true';
 
-      if(routes.some(r => r.id.toLowerCase() === id.toLowerCase())){
-        alert("Route ID already exists.");
+      if (!startPortId || !endPortId) {
+        alert('Please select both start and end ports.');
+        return;
+      }
+      if (startPortId === endPortId) {
+        alert('Start and end ports must be different.');
+        return;
+      }
+      if (isNaN(baseFare)) {
+        alert('Please enter a valid base fare.');
         return;
       }
 
-      routes.push({ id, path, distance, time, status, stops: [] });
-      renderTable();
-      createRouteModal.hide();
-      e.target.reset();
-      alert("Route created successfully.");
+      const routeId = startPortId + '__' + endPortId;
+      // Check if route already exists
+      const existing = routes.find(r => r.routeId === routeId);
+      if (existing) {
+        alert('Route between these ports already exists.');
+        return;
+      }
+
+      try {
+        await window.bangkagoPortsRoutes.upsertRoute({
+          startPortId: startPortId,
+          endPortId: endPortId,
+          baseFare: baseFare,
+          distanceKm: distanceKm,
+          estimatedMinutes: estimatedMinutes,
+          isActive: isActive
+        });
+        createRouteModal.hide();
+        e.target.reset();
+        await loadData();
+        alert("Route created successfully.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
-    document.getElementById("updateRouteForm").addEventListener("submit", (e) => {
+    // Update Route
+    window.openUpdateRoute = function(index) {
+      selectedRouteIndex = index;
+      const r = routes[index];
+      uRouteId.textContent = r.routeId;
+      uRoutePathDisplay.textContent = getPortName(r.startPortId) + ' → ' + getPortName(r.endPortId);
+      uBaseFare.value = r.baseFare;
+      uDistance.value = r.distanceKm || '';
+      uEstimatedMinutes.value = r.estimatedMinutes || '';
+      uStatus.value = r.isActive ? 'true' : 'false';
+      updateRouteModal.show();
+    }
+
+    document.getElementById("updateRouteForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-      if(selectedIndex === null) return;
+      if (selectedRouteIndex === null) return;
 
-      routes[selectedIndex].path = uRoutePath.value.trim();
-      routes[selectedIndex].distance = uRouteDistance.value.trim();
-      routes[selectedIndex].time = uRouteTime.value.trim();
-      routes[selectedIndex].status = uRouteStatus.value;
+      const r = routes[selectedRouteIndex];
+      const baseFare = parseFloat(uBaseFare.value);
+      const distanceKm = uDistance.value ? parseFloat(uDistance.value) : null;
+      const estimatedMinutes = uEstimatedMinutes.value ? parseInt(uEstimatedMinutes.value) : 0;
+      const isActive = uStatus.value === 'true';
 
-      renderTable();
-      updateRouteModal.hide();
-      alert("Route updated successfully.");
+      if (isNaN(baseFare)) {
+        alert('Please enter a valid base fare.');
+        return;
+      }
+
+      try {
+        await window.bangkagoPortsRoutes.upsertRoute({
+          startPortId: r.startPortId,
+          endPortId: r.endPortId,
+          baseFare: baseFare,
+          distanceKm: distanceKm,
+          estimatedMinutes: estimatedMinutes,
+          isActive: isActive
+        });
+        updateRouteModal.hide();
+        await loadData();
+        alert("Route updated successfully.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
     });
 
-    renderTable();
+    // Delete Route
+    window.deleteRoute = async function(index) {
+      const r = routes[index];
+      if (!confirm('Delete route "' + getPortName(r.startPortId) + ' → ' + getPortName(r.endPortId) + '"?')) return;
+
+      try {
+        await window.bangkagoPortsRoutes.deleteRoute(r.routeId);
+        await loadData();
+        alert("Route deleted.");
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    // Manage Stops
+    window.openStops = async function(index) {
+      selectedRouteIndex = index;
+      const r = routes[index];
+      sRouteLabel.textContent = r.routeId + ' — ' + getPortName(r.startPortId) + ' → ' + getPortName(r.endPortId);
+      
+      // Populate port select for stops (exclude start/end ports if desired, or include all)
+      sPortSelect.innerHTML = '<option value="">Select port...</option>' + 
+        ports.map(p => `<option value="${p.portId}">${p.portName}</option>`).join('');
+      
+      await loadStops(r.routeId);
+      manageStopsModal.show();
+    }
+
+    async function loadStops(routeId) {
+      try {
+        const stops = await window.bangkagoPortsRoutes.getRouteStops(routeId);
+        stopsBody.innerHTML = "";
+        if (stops.length === 0) {
+          stopsBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No stops yet.</td></tr>';
+          return;
+        }
+        stops.forEach((stop, i) => {
+          stopsBody.innerHTML += `
+            <tr>
+              <td>${stop.stopOrder}</td>
+              <td>${stop.portName || stop.portId}</td>
+              <td>
+                <div class="d-flex gap-1">
+                  ${i > 0 ? `<button class="btn btn-sm btn-outline-secondary" onclick="moveStopUp('${stop.stopId}', ${stop.stopOrder})" title="Move up"><i class="bi bi-chevron-up"></i></button>` : ''}
+                  ${i < stops.length - 1 ? `<button class="btn btn-sm btn-outline-secondary" onclick="moveStopDown('${stop.stopId}', ${stop.stopOrder})" title="Move down"><i class="bi bi-chevron-down"></i></button>` : ''}
+                  <button class="btn btn-sm btn-outline-danger" onclick="removeStop('${stop.stopId}')">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+      } catch (e) {
+        console.error(e);
+        stopsBody.innerHTML = '<tr><td colspan="3" class="text-center text-danger">Error loading stops: ' + e.message + '</td></tr>';
+      }
+    }
+
+    window.moveStopUp = async function(stopId, currentOrder) {
+      if (!confirm('Move this stop up?')) return;
+      try {
+        // Get all stops for this route
+        const stops = await window.bangkagoPortsRoutes.getRouteStops(routes[selectedRouteIndex].routeId);
+        const currentIndex = stops.findIndex(s => s.stopId === stopId);
+        if (currentIndex <= 0) return;
+        
+        // Swap stop_order with previous stop
+        const prevStop = stops[currentIndex - 1];
+        await window.bangkagoPortsRoutes.reorderRouteStops(routes[selectedRouteIndex].routeId, 
+          stops.map((s, idx) => {
+            if (idx === currentIndex) return prevStop.stopId;
+            if (idx === currentIndex - 1) return stopId;
+            return s.stopId;
+          }));
+        await loadStops(routes[selectedRouteIndex].routeId);
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
+
+    window.moveStopDown = async function(stopId, currentOrder) {
+      if (!confirm('Move this stop down?')) return;
+      try {
+        const stops = await window.bangkagoPortsRoutes.getRouteStops(routes[selectedRouteIndex].routeId);
+        const currentIndex = stops.findIndex(s => s.stopId === stopId);
+        if (currentIndex >= stops.length - 1) return;
+        
+        const nextStop = stops[currentIndex + 1];
+        await window.bangkagoPortsRoutes.reorderRouteStops(routes[selectedRouteIndex].routeId, 
+          stops.map((s, idx) => {
+            if (idx === currentIndex) return nextStop.stopId;
+            if (idx === currentIndex + 1) return stopId;
+            return s.stopId;
+          }));
+        await loadStops(routes[selectedRouteIndex].routeId);
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    };
+
+    document.getElementById("addStopBtn").addEventListener("click", async () => {
+      if (selectedRouteIndex === null) return;
+      const r = routes[selectedRouteIndex];
+      const portId = sPortSelect.value;
+      const stopOrder = parseInt(sStopOrder.value);
+
+      if (!portId) {
+        alert('Please select a port.');
+        return;
+      }
+      if (isNaN(stopOrder) || stopOrder < 1) {
+        alert('Please enter a valid stop order (1, 2, 3...).');
+        return;
+      }
+
+      try {
+        await window.bangkagoPortsRoutes.addRouteStop(r.routeId, portId, stopOrder);
+        sPortSelect.value = '';
+        sStopOrder.value = '';
+        await loadStops(r.routeId);
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    });
+
+    window.removeStop = async function(stopId) {
+      if (!confirm('Remove this stop?')) return;
+      try {
+        await window.bangkagoPortsRoutes.deleteRouteStop(stopId);
+        if (selectedRouteIndex !== null) {
+          await loadStops(routes[selectedRouteIndex].routeId);
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('routes', null, function() {
+      loadData();
+    });
+    window.bangkagoRealtime.subscribe('ports', null, function() {
+      loadData();
+    });
+    window.bangkagoRealtime.subscribe('route_stops', null, function() {
+      if (selectedRouteIndex !== null) {
+        loadStops(routes[selectedRouteIndex].routeId);
+      }
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadData();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        showError('Authentication required. Redirecting...');
+        setTimeout(function () { location.href = '../../bangkaGo-access.html'; }, 1500);
+      }
+    })();
   </script>
 </body>
 </html>

@@ -1,13 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BangkaGo Admin — View Manifests</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
 </head>
 <body data-page="view-manifests">
 <div class="cg-shell"><div id="sidebarMount"></div><main class="cg-main"><div id="topbarMount"></div>
@@ -15,38 +16,227 @@
   <div class="cg-card p-3">
     <div class="panel-head"><h6 class="mb-0">View Manifests</h6><span class="muted-note">Search manifest, view passenger list, export manifest</span></div>
     <div class="row g-2 mb-3">
-      <div class="col-md-4"><input id="manifestSearch" class="form-control" placeholder="Search manifest ID or vessel"></div>
+      <div class="col-md-4"><input id="manifestSearch" class="form-control" placeholder="Search manifest ID, vessel, or route"></div>
+      <div class="col-md-3">
+        <select id="manifestStatusFilter" class="form-select">
+          <option value="">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="finalized">Finalized</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
       <div class="col-md-2 d-grid"><button id="manifestReset" class="btn btn-outline-secondary">Reset</button></div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-theme align-middle mb-0">
-        <thead><tr><th>Manifest ID</th><th>Vessel</th><th>Route</th><th>Date</th><th>Passengers</th><th>Actions</th></tr></thead>
-        <tbody id="manifestBody"></tbody>
-      </table>
+    <div class="cg-table-wrap has-scroll">
+      <div class="table-responsive" id="manifestTableWrap">
+        <table class="table table-theme align-middle mb-0" style="min-width:860px;">
+          <thead>
+            <tr>
+              <th>Manifest No.</th><th>Vessel</th><th>Bangkero</th><th>Route</th><th>Departure</th><th>Arrival</th><th>Passengers</th><th>Parcels</th><th>Status</th><th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="manifestTableBody"></tbody>
+        </table>
+      </div>
+      <div class="cg-table-hint"><i class="bi bi-arrows-expand"></i> Drag / swipe horizontally to see more — Status is on the right <i class="bi bi-arrow-right"></i></div>
     </div>
+    <p id="emptyState" class="cg-empty d-none">No manifests matched your filters.</p>
   </div>
-</section>
-</main></div>
-
-<div class="modal fade" id="manifestModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-  <div class="modal-header"><h5 class="modal-title" id="manifestTitle">Manifest</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
-  <div class="modal-body" id="manifestContent"></div>
+</div>
+</section></main></div>
+<div class="modal fade" id="manifestModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title" id="manifestTitle">Manifest</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal-body" id="manifestContent"></div>
 </div></div></div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/admin-theme.js"></script>
+<script src="../assets/js/layout-loader.js"></script>
+<!-- Service scripts -->
+<script src="../../assets/js/services/supabase.js"></script>
+<script src="../../assets/js/services/manifests.js"></script>
+<script src="../../assets/js/services/realtime.js"></script>
 <script>
-const manifests=[
-  {id:'MN-201',vessel:'Boat 03',route:'Mactan Port → Olango',date:'2026-04-20',passengers:['Amploy A. Cruz','Buddy B. Lim','Christian C. Tan']},
-  {id:'MN-202',vessel:'Boat 08',route:'Marigondon Port → Olango',date:'2026-04-21',passengers:['D. Reyes','E. Lopez']},
-  {id:'MN-203',vessel:'Boat 15',route:'Olango Port → Caohagan',date:'2026-04-22',passengers:['F. Dela Cruz','G. Yap','H. Co']}
-];
-const body=document.getElementById('manifestBody'); const modal=new bootstrap.Modal('#manifestModal');
-function render(data){body.innerHTML=''; data.forEach((m,i)=>body.innerHTML+=`<tr><td>${m.id}</td><td>${m.vessel}</td><td>${m.route}</td><td>${m.date}</td><td>${m.passengers.length}</td><td><div class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPassengers(${i})">Passenger List</button><button class="btn btn-sm btn-outline-dark action-btn" onclick="exportManifest(${i})">Export</button></div></td></tr>`)}
-window.viewPassengers=i=>{const m=manifests[i];document.getElementById('manifestTitle').textContent='View Passenger List';document.getElementById('manifestContent').innerHTML=`<p><strong>${m.id}</strong> - ${m.vessel}</p><ul class="list-group">${m.passengers.map(p=>`<li class="list-group-item">${p}</li>`).join('')}</ul>`;modal.show();}
-window.exportManifest=i=>{const m=manifests[i];document.getElementById('manifestTitle').textContent='Export Manifest';document.getElementById('manifestContent').innerHTML=`<div class="alert alert-success mb-0">Manifest <strong>${m.id}</strong> exported successfully.</div>`;modal.show();}
-document.getElementById('manifestSearch').addEventListener('input',()=>{const q=manifestSearch.value.toLowerCase().trim();render(manifests.filter(m=>m.id.toLowerCase().includes(q)||m.vessel.toLowerCase().includes(q)));});
-document.getElementById('manifestReset').addEventListener('click',()=>{manifestSearch.value='';render(manifests);});
-render(manifests);
+let manifests = [];
+const tableBody = document.getElementById('manifestTableBody');
+const emptyState = document.getElementById("emptyState");
+const searchInput = document.getElementById("manifestSearch");
+const statusFilter = document.getElementById("manifestStatusFilter");
+const resetBtn = document.getElementById("manifestReset");
+const manifestTitle = document.getElementById("manifestTitle");
+const manifestContent = document.getElementById("manifestContent");
+const manifestModal = new bootstrap.Modal(document.getElementById("manifestModal"));
+function formatDate(dateStr) {
+  if (!dateStr) return 'N/A';
+  try {
+    return new Date(dateStr).toLocaleString('en-PH', { 
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+    });
+  } catch {
+    return dateStr;
+  }
+}
+function mapStatus(status) {
+  const map = {
+    'draft': 'Draft',
+    'finalized': 'Finalized',
+    'completed': 'Completed',
+    'cancelled': 'Cancelled'
+  };
+  return map[status] || status;
+}
+function statusBadge(status){
+  if (status === 'completed' || status === 'finalized') return "text-bg-success";
+  if (status === 'draft') return "text-bg-warning";
+  return "text-bg-info";
+}
+async function renderManifestDetails(manifestId) {
+  const manifest = manifests.find(m => m.manifestId === manifestId);
+  if (!manifest) return;
+
+  manifestTitle.textContent = `Manifest ${manifest.manifestId.slice(0, 12)}...`;
+  manifestContent.replaceChildren();
+  const summary = document.createElement('p');
+  summary.textContent = `${manifest.bangkaName || 'Unassigned'} | ${manifest.departurePortName || 'Unknown'} to ${manifest.arrivalPortName || 'Unknown'} | ${mapStatus(manifest.status)}`;
+  manifestContent.appendChild(summary);
+  const loading = document.createElement('p');
+  loading.textContent = 'Loading passengers and parcels...';
+  manifestContent.appendChild(loading);
+  manifestModal.show();
+
+  try {
+    const [passengers, parcels] = await Promise.all([
+      window.bangkagoManifests.getPassengers(manifest.manifestId),
+      window.bangkagoManifests.getParcels(manifest.manifestId)
+    ]);
+    manifestContent.replaceChildren(summary);
+
+    function appendSection(title, items, getLabel, emptyText) {
+      const heading = document.createElement('h6');
+      heading.textContent = title;
+      manifestContent.appendChild(heading);
+      if (items.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'text-muted';
+        empty.textContent = emptyText;
+        manifestContent.appendChild(empty);
+        return;
+      }
+      const list = document.createElement('ul');
+      items.forEach(item => {
+        const entry = document.createElement('li');
+        entry.textContent = getLabel(item);
+        list.appendChild(entry);
+      });
+      manifestContent.appendChild(list);
+    }
+
+    appendSection('Passengers', passengers, p => `${p.passengerName} | Weight: ${p.actualWeightKg ?? 'N/A'} kg | ${p.boardedAt ? 'Boarded' : 'Not boarded'}`, 'No passengers on this manifest.');
+    appendSection('Parcels', parcels, p => `${p.parcelDescription} | Weight: ${p.weightKg ?? 'N/A'} kg`, 'No parcels on this manifest.');
+  } catch(e) {
+    console.error(e);
+    manifestContent.replaceChildren(summary);
+    const error = document.createElement('p');
+    error.className = 'text-danger';
+    error.textContent = 'Failed to load manifest details: ' + e.message;
+    manifestContent.appendChild(error);
+  }
+}
+function renderManifests(data){
+  tableBody.innerHTML = "";
+  if (data.length === 0) emptyState.classList.remove("d-none");
+  else emptyState.classList.add("d-none");
+  data.forEach(m => {
+    const route = `${m.departurePortName || 'Unknown'} â†’ ${m.arrivalPortName || 'Unknown'}`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${m.manifestId.slice(0,12)}...</td>
+      <td>${m.bangkaName || 'Unassigned'}</td>
+      <td>${m.bangkeroName || '—'}</td>
+      <td>${route}</td>
+      <td>${formatDate(m.actualDepartureTime)}</td>
+      <td>${formatDate(m.actualArrivalTime)}</td>
+      <td>${m.totalPassengersOnBoard}</td>
+      <td>${m.totalParcelsOnBoard}</td>
+      <td><span class="badge ${statusBadge(m.status)}">${mapStatus(m.status)}</span></td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary action-btn" data-manifest="${m.manifestId}" >View</button>
+      </td>
+    `;
+    tableBody.appendChild(tr);
+  });
+  tableBody.querySelectorAll("button[data-manifest]").forEach(btn => {
+    btn.addEventListener("click", () => renderManifestDetails(btn.dataset.manifest));
+  });
+}
+function runFilters(){
+  const q = searchInput.value.trim().toLowerCase();
+  const status = statusFilter.value;
+  const filtered = manifests.filter(m => {
+    const textMatch =
+      m.manifestId.toLowerCase().includes(q) ||
+      (m.bangkaName || '').toLowerCase().includes(q) ||
+      (m.departurePortName || '').toLowerCase().includes(q) ||
+      (m.arrivalPortName || '').toLowerCase().includes(q) ||
+      (m.bangkeroName || '').toLowerCase().includes(q);
+    const statusMatch = status ? m.status === status : true;
+    return textMatch && statusMatch;
+  });
+  renderManifests(filtered);
+}
+searchInput.addEventListener("input", runFilters);
+statusFilter.addEventListener("change", runFilters);
+resetBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  statusFilter.value = "";
+  renderManifests(manifests);
+});
+async function loadManifests() {
+  try {
+    manifests = await window.bangkagoManifests.listAll({ limit: 100, includeCompleted: true });
+    renderManifests(manifests);
+  } catch(e) {
+    console.error(e);
+    emptyState.textContent = 'Error loading manifests: ' + e.message;
+    emptyState.classList.remove("d-none");
+  }
+}
+// Initial load — wait for auth guard to complete and session to restore
+(async function () {
+  try {
+    const role = await window.bangkagoAuthReady;
+    if (role !== 'admin') return;
+    window.bangkagoRealtime.subscribe('trip_manifest', null, loadManifests);
+    window.bangkagoRealtime.subscribe('manifest_passengers', null, loadManifests);
+    window.bangkagoRealtime.subscribe('manifest_parcels', null, loadManifests);
+    await loadManifests();
+  } catch (e) {
+    console.error('Auth guard failed:', e);
+    // Guard handles redirect
+  }
+})();
+(function(){
+  const wrap = document.getElementById('manifestTableWrap');
+  const parent = wrap ? wrap.closest('.cg-table-wrap') : null;
+  if(!wrap) return;
+  let isDown=false, startX, scrollLeft;
+  wrap.addEventListener('mousedown', e=>{ isDown=true; wrap.classList.add('dragging'); startX=e.pageX - wrap.offsetLeft; scrollLeft=wrap.scrollLeft; });
+  wrap.addEventListener('mouseleave', ()=>{ isDown=false; wrap.classList.remove('dragging'); });
+  wrap.addEventListener('mouseup', ()=>{ isDown=false; wrap.classList.remove('dragging'); });
+  wrap.addEventListener('mousemove', e=>{ if(!isDown) return; e.preventDefault(); const x=e.pageX - wrap.offsetLeft; const walk=(x - startX)*1.5; wrap.scrollLeft=scrollLeft - walk; updateFade(); });
+  let tStartX=0, tScroll=0;
+  wrap.addEventListener('touchstart', e=>{ tStartX=e.touches[0].pageX - wrap.offsetLeft; tScroll=wrap.scrollLeft; }, {passive:true});
+  wrap.addEventListener('touchmove', e=>{ const x=e.touches[0].pageX - wrap.offsetLeft; wrap.scrollLeft=tScroll - (x - tStartX); updateFade(); }, {passive:true});
+  wrap.addEventListener('scroll', updateFade);
+  function updateFade(){
+    if(!parent) return;
+    const max = wrap.scrollWidth - wrap.clientWidth;
+    if(max <= 10){ parent.classList.remove('has-scroll'); return; }
+    if(wrap.scrollLeft >= max - 8) parent.classList.remove('has-scroll');
+    else parent.classList.add('has-scroll');
+  }
+  setTimeout(updateFade, 300);
+  window.addEventListener('resize', updateFade);
+})();
 </script>
 </body>
 </html>

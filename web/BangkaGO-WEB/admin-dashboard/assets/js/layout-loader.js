@@ -8,34 +8,73 @@
         var s = document.createElement('script');
         s.src = src;
         s.onload = resolve;
-        s.onerror = resolve; // failed load -> role() returns null -> redirect
+        s.onerror = function () {
+          console.error('Failed to load script:', src);
+          resolve(); // failed load -> role() returns null -> redirect
+        };
         document.head.appendChild(s);
       });
     }
-    await load('../../config.js');
-    await load('../../assets/js/supabase.js'); // vendored UMD — no CDN
-    await load('../../supabase-client.js');
+    try {
+      await load('../../config.js');
+      await load('../../assets/js/supabase.js'); // vendored UMD — no CDN
+      await load('../../supabase-client.js');
+    } catch (e) {
+      console.error('Failed to load guard scripts:', e);
+    }
     var role = window.bangkago ? await window.bangkago.role() : null;
-    if (roles.indexOf(role) === -1) location.replace('../../bangkaGo-access.html');
+    console.log('User role:', role);
+    if (roles.indexOf(role) === -1) {
+      console.warn('Access denied: user role', role, 'not in allowed roles', roles);
+      location.replace('../../bangkaGo-access.html');
+    }
   }
-  await guard(['admin']);
+  try {
+    await guard(['admin']);
+  } catch (e) {
+    console.error('Guard failed:', e);
+    location.replace('../../bangkaGo-access.html');
+    return;
+  }
 
   const sidebarMount = document.getElementById('sidebarMount');
   const topbarMount = document.getElementById('topbarMount');
 
-  async function loadPartial(path, mountEl) {
-    if(!mountEl) return;
-    try{
-      const res = await fetch(path);
-      const html = await res.text();
-      mountEl.innerHTML = html;
-    }catch(e){ console.warn('partial load failed', path, e); }
+  if (!sidebarMount) {
+    console.error('sidebarMount element not found');
+  }
+  if (!topbarMount) {
+    console.error('topbarMount element not found');
   }
 
-  await Promise.all([
-    loadPartial('partials/sidebar.html', sidebarMount),
-    loadPartial('partials/topbar.html', topbarMount),
-  ]);
+  async function loadPartial(path, mountEl) {
+    if (!mountEl) {
+      console.warn('Mount element not provided for', path);
+      return;
+    }
+    try {
+      console.log('Loading partial:', path);
+      const res = await fetch(path);
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+      }
+      const html = await res.text();
+      mountEl.innerHTML = html;
+      console.log('Loaded partial:', path);
+    } catch (e) {
+      console.error('Partial load failed:', path, e);
+    }
+  }
+
+  try {
+    await Promise.all([
+      loadPartial('partials/sidebar.html', sidebarMount),
+      loadPartial('partials/topbar.html', topbarMount),
+    ]);
+    console.log('All partials loaded successfully');
+  } catch (e) {
+    console.error('Failed to load partials:', e);
+  }
 
   const topbarMeta = {
     'admin-dashboard': { title: 'Dashboard', subtitle: 'Admin operations overview and live system snapshot' },
@@ -53,7 +92,12 @@
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
     'view-weather': { title: 'View Weather', subtitle: 'Weather data and route safety status' },
-    'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents with evidence' }
+    'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents with evidence' },
+    'suspend-user': { title: 'Suspend User', subtitle: 'Confirm user suspension' },
+    'document-review': { title: 'Document Review', subtitle: 'Review bangkero verification documents' },
+    'boat-rentals': { title: 'Boat Rentals', subtitle: 'View all boat charter bookings' },
+    'system-alerts': { title: 'System Alerts', subtitle: 'System-wide alerts and notifications' },
+    'profile': { title: 'Profile', subtitle: 'Admin account settings' }
   };
 
   const currentFile = location.pathname.split('/').pop() || 'admin-dashboard.html';
@@ -86,7 +130,7 @@
         const nr = nav.getBoundingClientRect();
         if(r.top < nr.top || r.bottom > nr.bottom) active.scrollIntoView({ block:'nearest', inline:'nearest' });
       }
-    }catch(e){}
+    }catch(e){ console.warn('Sidebar scroll restore failed:', e); }
   })();
 
   // init theme after partials injected
@@ -94,9 +138,9 @@
     window.AdminTheme.init();
   }
   // ensure script present for direct loads without prior include
-  if (!document.querySelector('script[src="assets/js/admin-theme.js"]')){
-    const script = document.createElement('script');
-    script.src = 'assets/js/admin-theme.js';
+  if (!document.querySelector('script[src="../../assets/js/admin-theme.js"]')){
+    var script = document.createElement('script');
+    script.src = '../../assets/js/admin-theme.js';
     script.onload = function(){ if(window.AdminTheme) window.AdminTheme.init(); };
     document.body.appendChild(script);
   }

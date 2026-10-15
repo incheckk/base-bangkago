@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="export-manifest">
   <div class="cg-shell">
@@ -25,47 +25,54 @@
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
+              <!-- Filters -->
+              <div class="row g-2 mb-3 align-items-end filter-row">
+                <div class="col-12 col-md-4">
+                  <label class="form-label visually-hidden" for="expSearchInput">Search</label>
+                  <input id="expSearchInput" class="form-control w-100" type="text" placeholder="Search manifest, vessel, route">
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label visually-hidden" for="expStatusFilter">Status</label>
+                  <select id="expStatusFilter" class="form-select w-100">
+                    <option value="">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="finalized">Finalized</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-3">
+                  <label class="form-label visually-hidden" for="expDateFilter">Date</label>
+                  <input id="expDateFilter" type="date" class="form-control w-100">
+                </div>
+                <div class="col-12 col-md-2 d-grid">
+                  <button id="expResetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                </div>
+              </div>
+
+              <div id="expResultCount" class="small text-secondary mb-2"></div>
+
               <div class="table-responsive">
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
                       <th>Manifest ID</th>
                       <th>Vessel</th>
+                      <th>Bangkero</th>
                       <th>Date</th>
-                      <th>Passengers</th>
                       <th>Route</th>
-                      <th>File</th>
+                      <th>Passengers</th>
+                      <th>Parcels</th>
+                      <th>Status</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td>MF-190</td>
-                      <td>Boat 08</td>
-                      <td>2026-04-09</td>
-                      <td>46</td>
-                      <td>Marigondon Port → Olango</td>
-                      <td><button class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-download"></i> Download PDF</button></td>
-                    </tr>
-                    <tr>
-                      <td>MF-188</td>
-                      <td>Boat 03</td>
-                      <td>2026-04-09</td>
-                      <td>31</td>
-                      <td>Olango Port → Engano Port</td>
-                      <td><button class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-download"></i> Download PDF</button></td>
-                    </tr>
-                    <tr>
-                      <td>MF-184</td>
-                      <td>Boat 11</td>
-                      <td>2026-04-08</td>
-                      <td>27</td>
-                      <td>Mactan Port → Sulpa</td>
-                      <td><button class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-download"></i> Download PDF</button></td>
-                    </tr>
-                  </tbody>
+                  <tbody id="expTableBody"></tbody>
                 </table>
               </div>
-              
+
+              <p id="expEmptyState" class="cg-empty d-none">
+                No manifests found for export.
+              </p>
             </div>
           </div>
         </div>
@@ -74,7 +81,235 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/manifests.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
+  <script>
+    let manifests = [];
+
+    const tableBody = document.getElementById("expTableBody");
+    const searchInput = document.getElementById("expSearchInput");
+    const statusFilter = document.getElementById("expStatusFilter");
+    const dateFilter = document.getElementById("expDateFilter");
+    const resetBtn = document.getElementById("expResetBtn");
+    const resultCount = document.getElementById("expResultCount");
+    const emptyState = document.getElementById("expEmptyState");
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function statusBadge(status) {
+      if (status === 'completed' || status === 'finalized') return "text-bg-success";
+      if (status === 'draft') return "text-bg-warning";
+      return "text-bg-info";
+    }
+
+    function statusText(status) {
+      const map = {
+        'draft': 'Draft',
+        'finalized': 'Finalized',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled'
+      };
+      return map[status] || status;
+    }
+
+    function csvEscape(str) {
+      if (!str) return '';
+      const s = String(str);
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    function generateCSV(manifest) {
+      const rows = [];
+
+      // Header info
+      rows.push(['MANIFEST EXPORT']);
+      rows.push(['Manifest ID', manifest.manifestId]);
+      rows.push(['Vessel', manifest.bangkaName || 'Unassigned']);
+      rows.push(['Bangkero', manifest.bangkeroName || 'Unknown']);
+      rows.push(['Route', `${manifest.departurePortName || 'Unknown'} â†’ ${manifest.arrivalPortName || 'Unknown'}`]);
+      rows.push(['Departure', formatDate(manifest.actualDepartureTime)]);
+      rows.push(['Arrival', formatDate(manifest.actualArrivalTime)]);
+      rows.push(['Status', statusText(manifest.status)]);
+      rows.push(['Passengers', manifest.totalPassengersOnBoard]);
+      rows.push(['Parcels', manifest.totalParcelsOnBoard]);
+      rows.push(['Generated', formatDate(manifest.generatedAt)]);
+      rows.push([]);
+
+      // Passenger list
+      rows.push(['PASSENGER LIST']);
+      rows.push(['Name', 'Weight (kg)', 'Boarded', 'Booking ID']);
+
+      return rows.map(r => r.map(csvEscape).join(',')).join('\n');
+    }
+
+    async function downloadCSV(manifestId) {
+      try {
+        // Fetch passengers for this manifest
+        const pax = await window.bangkagoManifests.getPassengers(manifestId);
+        const manifest = manifests.find(m => m.manifestId === manifestId);
+
+        if (!manifest) {
+          alert('Manifest not found');
+          return;
+        }
+
+        let csv = 'MANIFEST EXPORT\n';
+        csv += `Manifest ID,${manifest.manifestId}\n`;
+        csv += `Vessel,${manifest.bangkaName || 'Unassigned'}\n`;
+        csv += `Bangkero,${manifest.bangkeroName || 'Unknown'}\n`;
+        csv += `Route,${manifest.departurePortName || 'Unknown'} â†’ ${manifest.arrivalPortName || 'Unknown'}\n`;
+        csv += `Departure,${formatDate(manifest.actualDepartureTime)}\n`;
+        csv += `Arrival,${formatDate(manifest.actualArrivalTime)}\n`;
+        csv += `Status,${statusText(manifest.status)}\n`;
+        csv += `Passengers,${manifest.totalPassengersOnBoard}\n`;
+        csv += `Parcels,${manifest.totalParcelsOnBoard}\n`;
+        csv += `Generated,${formatDate(manifest.generatedAt)}\n`;
+        csv += '\n';
+
+        csv += 'PASSENGER LIST\n';
+        csv += 'Name,Weight (kg),Boarded,Booking ID\n';
+        pax.forEach(p => {
+          csv += `${csvEscape(p.passengerName)},${p.actualWeightKg ?? ''},${p.boardedAt ? 'Yes' : 'No'},${p.bookingId}\n`;
+        });
+
+        csv += '\nPARCEL LIST\n';
+        csv += 'Description,Weight (kg),Loaded\n';
+        const parcels = await window.bangkagoManifests.getParcels(manifestId);
+        parcels.forEach(p => {
+          csv += `${csvEscape(p.parcelDescription)},${p.weightKg ?? ''},${p.loadedAt ? 'Yes' : 'No'}\n`;
+        });
+
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `manifest_${manifest.manifestId.slice(0,8)}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      } catch (e) {
+        console.error(e);
+        alert('Error generating CSV: ' + e.message);
+      }
+    }
+
+    async function downloadPDF(manifestId) {
+      alert('PDF export requires a PDF library (e.g., jsPDF). CSV export is available.');
+      // For production, integrate jsPDF here
+    }
+
+    function renderManifests(data) {
+      tableBody.innerHTML = "";
+
+      if (data.length === 0) emptyState.classList.remove("d-none");
+      else emptyState.classList.add("d-none");
+
+      data.forEach(m => {
+        const route = `${m.departurePortName || 'Unknown'} â†’ ${m.arrivalPortName || 'Unknown'}`;
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${m.manifestId.slice(0, 12)}...</td>
+          <td>${m.bangkaName || 'Unassigned'}</td>
+          <td>${m.bangkeroName || 'Unknown'}</td>
+          <td>${formatDate(m.generatedAt)}</td>
+          <td>${route}</td>
+          <td>${m.totalPassengersOnBoard}</td>
+          <td>${m.totalParcelsOnBoard}</td>
+          <td><span class="badge ${statusBadge(m.status)}">${statusText(m.status)}</span></td>
+          <td>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-primary action-btn" onclick="downloadCSV('${m.manifestId}')" title="Export CSV">
+                <i class="bi bi-file-earmark-spreadsheet"></i> CSV
+              </button>
+              <button class="btn btn-sm btn-outline-danger action-btn" onclick="downloadPDF('${m.manifestId}')" title="Export PDF">
+                <i class="bi bi-file-earmark-pdf"></i> PDF
+              </button>
+            </div>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      resultCount.textContent = `Showing ${data.length} manifest record(s)`;
+    }
+
+    function runFilters() {
+      const q = searchInput.value.trim().toLowerCase();
+      const status = statusFilter.value;
+      const date = dateFilter.value;
+
+      const filtered = manifests.filter(m => {
+        const textMatch =
+          m.manifestId.toLowerCase().includes(q) ||
+          (m.bangkaName || '').toLowerCase().includes(q) ||
+          (m.bangkeroName || '').toLowerCase().includes(q) ||
+          (m.departurePortName || '').toLowerCase().includes(q) ||
+          (m.arrivalPortName || '').toLowerCase().includes(q);
+
+        const statusMatch = status ? m.status === status : true;
+        const dateMatch = date ? (m.generatedAt?.split('T')[0] === date) : true;
+
+        return textMatch && statusMatch && dateMatch;
+      });
+
+      renderManifests(filtered);
+    }
+
+    async function loadManifests() {
+      try {
+        manifests = await window.bangkagoManifests.listAll({ limit: 100, includeCompleted: true });
+        renderManifests(manifests);
+      } catch (e) {
+        console.error(e);
+        emptyState.textContent = 'Error loading manifests: ' + e.message;
+        emptyState.classList.remove("d-none");
+      }
+    }
+
+    searchInput.addEventListener("input", runFilters);
+    statusFilter.addEventListener("change", runFilters);
+    dateFilter.addEventListener("change", runFilters);
+
+    resetBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      statusFilter.value = "";
+      dateFilter.value = "";
+      renderManifests(manifests);
+    });
+
+    // Make functions global for onclick
+    window.downloadCSV = downloadCSV;
+    window.downloadPDF = downloadPDF;
+
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+
+      window.bangkagoRealtime.subscribe('trip_manifest', null, loadManifests);
+      window.bangkagoRealtime.subscribe('manifest_passengers', null, loadManifests);
+      window.bangkagoRealtime.subscribe('manifest_parcels', null, loadManifests);
+      loadManifests();
+    }).catch(function(e) {
+      console.error('Failed to initialize manifest export:', e);
+      emptyState.textContent = 'Failed to initialize manifests: ' + e.message;
+      emptyState.classList.remove('d-none');
+    });
+  </script>
 </body>
 </html>
+

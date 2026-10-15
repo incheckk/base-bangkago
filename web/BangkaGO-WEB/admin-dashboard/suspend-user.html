@@ -1,0 +1,193 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Suspend User</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+</head>
+<body data-page="suspend-user">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Suspend User</h6>
+          </div>
+
+          <div id="loadingState" class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading user details...</p>
+          </div>
+
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+
+          <div id="content" class="d-none">
+            <!-- Warning Card -->
+            <div class="alert alert-warning mb-4" role="alert">
+              <div class="d-flex align-items-start">
+                <i class="bi bi-exclamation-triangle-fill me-3 fs-3"></i>
+                <div>
+                  <h6 class="mb-1">Warning</h6>
+                  <p class="mb-0">Suspending this user will prevent them from logging in and using BangkaGo services. This action can be reversed by an admin.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- User Info Card -->
+            <div class="cg-card mb-4">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Name</label>
+                  <div id="userName" class="fw-bold fs-5">-</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Role</label>
+                  <div id="userRole" class="fw-bold">-</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Email</label>
+                  <div id="userEmail" class="text-break">-</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Phone</label>
+                  <div id="userPhone">-</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Status</label>
+                  <div id="userStatus"><span class="badge text-bg-success">Active</span></div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">Joined</label>
+                  <div id="userJoined">-</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label text-muted mb-1">User ID</label>
+                  <div id="userId" class="font-monospace text-break text-muted small">-</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Suspend Button -->
+            <div class="d-grid">
+              <button class="btn btn-danger btn-lg" id="suspendBtn">
+                <i class="bi bi-person-x me-2"></i> Suspend User
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/users.js"></script>
+
+  <script>
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+    const content = document.getElementById('content');
+    const suspendBtn = document.getElementById('suspendBtn');
+
+    // Get userId from URL params
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('userId');
+
+    if (!userId) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = 'No user ID provided. Please access this page from the Manage Users list.';
+      errorState.classList.remove('d-none');
+    } else {
+      loadUser();
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleDateString('en-PH', {
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function roleBadge(role) {
+      const badges = {
+        'admin': 'text-bg-dark',
+        'lgu': 'text-bg-info',
+        'coastguard': 'text-bg-primary',
+        'bangkero': 'text-bg-warning',
+        'passenger': 'text-bg-success'
+      };
+      return badges[role] || 'text-bg-secondary';
+    }
+
+    async function loadUser() {
+      try {
+        const user = await window.bangkagoUsers.getById(userId);
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        document.getElementById('userName').textContent = (user.firstName || '') + ' ' + (user.lastName || '');
+        document.getElementById('userRole').innerHTML = '<span class="badge ' + roleBadge(user.role) + '">' + (user.role || 'Unknown').charAt(0).toUpperCase() + (user.role || 'Unknown').slice(1) + '</span>';
+        document.getElementById('userEmail').textContent = user.email || 'N/A';
+        document.getElementById('userPhone').textContent = user.phone || 'N/A';
+        document.getElementById('userStatus').innerHTML = user.isVerified ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-danger">Suspended</span>';
+        document.getElementById('userJoined').textContent = formatDate(user.createdAt);
+        document.getElementById('userId').textContent = user.uid;
+
+        // Disable button if already suspended
+        if (!user.isVerified) {
+          suspendBtn.disabled = true;
+          suspendBtn.innerHTML = '<i class="bi bi-person-x me-2"></i> Already Suspended';
+          suspendBtn.classList.replace('btn-danger', 'btn-secondary');
+        }
+
+        loadingState.classList.add('d-none');
+        content.classList.remove('d-none');
+      } catch (e) {
+        console.error(e);
+        loadingState.classList.add('d-none');
+        errorState.textContent = 'Failed to load user: ' + e.message;
+        errorState.classList.remove('d-none');
+      }
+    }
+
+    suspendBtn.addEventListener('click', async function() {
+      if (!userId) return;
+      if (!confirm('Are you sure you want to suspend this user? They will be unable to log in.')) return;
+
+      const originalText = suspendBtn.innerHTML;
+      suspendBtn.disabled = true;
+      suspendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Suspending...';
+
+      try {
+        await window.bangkagoUsers.suspend(userId);
+        
+        // Show success and redirect
+        alert('User suspended successfully.');
+        window.location.href = 'manage-users.html';
+      } catch (e) {
+        console.error(e);
+        suspendBtn.disabled = false;
+        suspendBtn.innerHTML = originalText;
+        alert('Error: ' + e.message);
+      }
+    });
+  </script>
+</body>
+</html>

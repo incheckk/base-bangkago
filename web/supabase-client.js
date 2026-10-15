@@ -2,14 +2,21 @@
    Load order: config.js -> supabase UMD (CDN) -> this file.
    Exposes window.bangkago with the client, phone->auth-email helpers
    (mirror of src/utils/phone.ts), and the role lookup used by the
-   login page and the dashboard route guards. */
+   login page and the dashboard route guards.
+   This is the CANONICAL client — all dashboard services must reuse it. */
 (function () {
   'use strict';
 
   var cfg = window.BANGKAGO_WEB || {};
   var client =
     window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY
-      ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY)
+      ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false
+          }
+        })
       : null;
 
   /* Mirror of src/utils/phone.ts — PH mobile in any common format -> E.164. */

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="view-manifests">
   <div class="cg-shell">
@@ -35,9 +35,9 @@
                   <label class="form-label visually-hidden" for="statusFilter">Status</label>
                   <select id="statusFilter" class="form-select w-100">
                     <option value="">All Status</option>
-                    <option value="Boarding">Boarding</option>
-                    <option value="Departed">Departed</option>
-                    <option value="Docked">Docked</option>
+                    <option value="draft">Draft</option>
+                    <option value="finalized">Finalized</option>
+                    <option value="completed">Completed</option>
                   </select>
                 </div>
                 <div class="col-6 col-sm-6 col-lg-3 col-xl-3">
@@ -60,7 +60,9 @@
                         <th>Vessel</th>
                         <th>Route</th>
                         <th>Departure</th>
+                        <th>Arrival</th>
                         <th>Passengers</th>
+                        <th>Parcels</th>
                         <th>Status</th>
                         <th>Action</th>
                       </tr>
@@ -85,7 +87,7 @@
               </div>
 
               <div class="mb-2 small text-secondary">
-                Selected Manifest: <strong id="selectedManifestLabel">MF-190</strong>
+                Selected Manifest: <strong id="selectedManifestLabel">-</strong>
               </div>
 
               <div class="table-responsive">
@@ -93,8 +95,9 @@
                   <thead>
                     <tr>
                       <th>Name</th>
-                      <th>Seat</th>
-                      <th>Type</th>
+                      <th>Weight (kg)</th>
+                      <th>Boarded</th>
+                      <th>Booking ID</th>
                     </tr>
                   </thead>
                   <tbody id="passengerTableBody"></tbody>
@@ -131,44 +134,17 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/manifests.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
   <script>
-    // ---------------------------
-    // Demo manifest + passengers
-    // ---------------------------
-    const manifests = [
-      { no: "MF-190", vessel: "Boat 08", route: "Marigondon Port → Olango", departure: "2026-04-15 14:30", pax: 24, status: "Departed", date: "2026-04-15" },
-      { no: "MF-188", vessel: "Boat 03", route: "Mactan Port → Olango", departure: "2026-04-15 13:55", pax: 19, status: "Boarding", date: "2026-04-15" },
-      { no: "MF-184", vessel: "Boat 11", route: "Mactan Port → Caohagan", departure: "2026-04-14 17:10", pax: 28, status: "Docked", date: "2026-04-14" },
-      { no: "MF-179", vessel: "Boat 15", route: "Olango Port → Sulpa", departure: "2026-04-14 15:40", pax: 21, status: "Departed", date: "2026-04-14" }
-    ];
+    let manifests = [];
+    let selectedManifestNo = null;
 
-    const passengerMap = {
-      "MF-190": [
-        { name: "Ana Cruz", seat: "A-01", type: "Adult" },
-        { name: "Leo Santos", seat: "A-02", type: "Adult" },
-        { name: "Mia Ramos", seat: "A-03", type: "Minor" },
-        { name: "Noel Dizon", seat: "B-01", type: "Adult" }
-      ],
-      "MF-188": [
-        { name: "Paolo Lim", seat: "C-02", type: "Adult" },
-        { name: "Rica Yu", seat: "C-03", type: "Adult" },
-        { name: "Tom Reyes", seat: "C-04", type: "Adult" }
-      ],
-      "MF-184": [
-        { name: "Gina Perez", seat: "D-01", type: "Adult" },
-        { name: "Ben Dela Peña", seat: "D-02", type: "Senior" }
-      ],
-      "MF-179": [
-        { name: "Nina Flores", seat: "E-06", type: "Adult" },
-        { name: "Omar Velasco", seat: "E-07", type: "Adult" }
-      ]
-    };
-
-    // ---------------------------
-    // Elements
-    // ---------------------------
     const tableBody = document.getElementById("manifestTableBody");
     const passengerBody = document.getElementById("passengerTableBody");
     const selectedManifestLabel = document.getElementById("selectedManifestLabel");
@@ -184,25 +160,75 @@
     const exportCsvBtn = document.getElementById("exportCsvBtn");
     const exportPdfBtn = document.getElementById("exportPdfBtn");
 
-    let selectedManifestNo = "MF-190";
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', { 
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function mapStatus(status) {
+      const map = {
+        'draft': 'Draft',
+        'finalized': 'Finalized',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled'
+      };
+      return map[status] || status;
+    }
 
     function statusBadge(status){
-      if (status === "Departed") return "text-bg-success";
-      if (status === "Boarding") return "text-bg-warning";
+      if (status === 'completed' || status === 'finalized') return "text-bg-success";
+      if (status === 'draft') return "text-bg-warning";
       return "text-bg-info";
     }
 
-    function renderPassengers(manifestNo){
+    function showExportMessage(type){
+      exportMsg.textContent = `${type} export prepared for ${selectedManifestNo}.`;
+      exportMsg.classList.remove("d-none");
+      setTimeout(() => exportMsg.classList.add("d-none"), 2200);
+    }
+
+    async function renderPassengers(manifestNo) {
       selectedManifestNo = manifestNo;
       selectedManifestLabel.textContent = manifestNo;
-      const list = passengerMap[manifestNo] || [];
-
-      passengerBody.innerHTML = "";
-      list.forEach(p => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${p.name}</td><td>${p.seat}</td><td>${p.type}</td>`;
-        passengerBody.appendChild(tr);
-      });
+      
+      passengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>';
+      
+      try {
+        // Find the manifest by ID
+        const manifest = manifests.find(m => m.manifestId === manifestNo);
+        if (!manifest) {
+          passengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Manifest not found</td></tr>';
+          return;
+        }
+        
+        const pax = await window.bangkagoManifests.getPassengers(manifest.manifestId);
+        
+        passengerBody.innerHTML = "";
+        if (pax.length === 0) {
+          passengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No passengers</td></tr>';
+          return;
+        }
+        
+        pax.forEach(p => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${p.passengerName}</td>
+            <td>${p.actualWeightKg ?? 'N/A'}</td>
+            <td>${p.boardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
+            <td>${p.bookingId}</td>
+          `;
+          passengerBody.appendChild(tr);
+        });
+      } catch(e) {
+        console.error(e);
+        passengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Error loading passengers</td></tr>';
+      }
     }
 
     function renderManifests(data){
@@ -212,18 +238,19 @@
       else emptyState.classList.add("d-none");
 
       data.forEach(m => {
+        const route = `${m.departurePortName || 'Unknown'} → ${m.arrivalPortName || 'Unknown'}`;
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${m.no}</td>
-          <td>${m.vessel}</td>
-          <td>${m.route}</td>
-          <td>${m.departure}</td>
-          <td>${m.pax}</td>
-          <td><span class="badge ${statusBadge(m.status)}">${m.status}</span></td>
+          <td>${m.manifestId.slice(0,12)}...</td>
+          <td>${m.bangkaName || 'Unassigned'}</td>
+          <td>${route}</td>
+          <td>${formatDate(m.actualDepartureTime)}</td>
+          <td>${formatDate(m.actualArrivalTime)}</td>
+          <td>${m.totalPassengersOnBoard}</td>
+          <td>${m.totalParcelsOnBoard}</td>
+          <td><span class="badge ${statusBadge(m.status)}">${mapStatus(m.status)}</span></td>
           <td>
-            <button class="btn btn-sm btn-outline-primary action-btn" data-manifest="${m.no}" >
-              View
-            </button>
+            <button class="btn btn-sm btn-outline-primary action-btn" data-manifest="${m.manifestId}" >View</button>
           </td>
         `;
         tableBody.appendChild(tr);
@@ -244,23 +271,19 @@
 
       const filtered = manifests.filter(m => {
         const textMatch =
-          m.no.toLowerCase().includes(q) ||
-          m.vessel.toLowerCase().includes(q) ||
-          m.route.toLowerCase().includes(q);
+          m.manifestId.toLowerCase().includes(q) ||
+          (m.bangkaName || '').toLowerCase().includes(q) ||
+          (m.departurePortName || '').toLowerCase().includes(q) ||
+          (m.arrivalPortName || '').toLowerCase().includes(q) ||
+          (m.bangkeroName || '').toLowerCase().includes(q);
 
         const statusMatch = status ? m.status === status : true;
-        const dateMatch = date ? m.date === date : true;
+        const dateMatch = date ? (m.generatedAt?.split('T')[0] === date) : true;
 
         return textMatch && statusMatch && dateMatch;
       });
 
       renderManifests(filtered);
-    }
-
-    function showExportMessage(type){
-      exportMsg.textContent = `${type} export prepared for ${selectedManifestNo}.`;
-      exportMsg.classList.remove("d-none");
-      setTimeout(() => exportMsg.classList.add("d-none"), 2200);
     }
 
     searchInput.addEventListener("input", runFilters);
@@ -274,12 +297,48 @@
       renderManifests(manifests);
     });
 
-    exportCsvBtn.addEventListener("click", () => showExportMessage("CSV"));
-    exportPdfBtn.addEventListener("click", () => showExportMessage("PDF"));
+    exportCsvBtn.addEventListener("click", () => {
+      if (!selectedManifestNo) { alert('Select a manifest first'); return; }
+      showExportMessage("CSV");
+    });
 
-    // init
-    renderManifests(manifests);
-    renderPassengers(selectedManifestNo);
+    exportPdfBtn.addEventListener("click", () => {
+      if (!selectedManifestNo) { alert('Select a manifest first'); return; }
+      showExportMessage("PDF");
+    });
+
+    async function loadManifests() {
+      try {
+        manifests = await window.bangkagoManifests.listAll({ limit: 100 });
+        renderManifests(manifests);
+      } catch(e) {
+        console.error(e);
+        emptyState.textContent = 'Error loading manifests: ' + e.message;
+        emptyState.classList.remove("d-none");
+      }
+    }
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('trip_manifest', null, function() {
+      loadManifests();
+    });
+    window.bangkagoRealtime.subscribe('manifest_passengers', null, function() {
+      loadManifests();
+    });
+    window.bangkagoRealtime.subscribe('manifest_parcels', null, function() {
+      loadManifests();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadManifests();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Guard handles redirect
+      }
+    })();
 
     // Drag to scroll for manifest table + update fade/hint
     (function(){
@@ -291,7 +350,6 @@
       wrap.addEventListener('mouseleave', ()=>{ isDown=false; wrap.classList.remove('dragging'); });
       wrap.addEventListener('mouseup', ()=>{ isDown=false; wrap.classList.remove('dragging'); });
       wrap.addEventListener('mousemove', e=>{ if(!isDown) return; e.preventDefault(); const x=e.pageX - wrap.offsetLeft; const walk=(x - startX)*1.5; wrap.scrollLeft=scrollLeft - walk; updateFade(); });
-      // touch
       let tStartX=0, tScroll=0;
       wrap.addEventListener('touchstart', e=>{ tStartX=e.touches[0].pageX - wrap.offsetLeft; tScroll=wrap.scrollLeft; }, {passive:true});
       wrap.addEventListener('touchmove', e=>{ const x=e.touches[0].pageX - wrap.offsetLeft; wrap.scrollLeft=tScroll - (x - tStartX); updateFade(); }, {passive:true});
@@ -300,14 +358,13 @@
         if(!parent) return;
         const max = wrap.scrollWidth - wrap.clientWidth;
         if(max <= 10){ parent.classList.remove('has-scroll'); return; }
-        // hide fade when scrolled near end
         if(wrap.scrollLeft >= max - 8) parent.classList.remove('has-scroll');
         else parent.classList.add('has-scroll');
       }
-      // init fade state
       setTimeout(updateFade, 300);
       window.addEventListener('resize', updateFade);
     })();
   </script>
 </body>
 </html>
+

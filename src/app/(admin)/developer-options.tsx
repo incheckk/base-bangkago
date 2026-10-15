@@ -61,7 +61,7 @@ export default function DeveloperOptions() {
       <AdminScreenHeader
         eyebrow="ADMIN"
         title="Developer Options"
-        subtitle="Demo tools"
+        subtitle="Developer Tools"
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.banner, on ? styles.bannerOn : styles.bannerOff]}>

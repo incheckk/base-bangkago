@@ -90,17 +90,42 @@ export const radii = {
  */
 export const touchTarget = 44;
 
+/**
+ * Six sizes: 12 / 14 / 16 / 20 / 26 / 34.
+ *
+ * The old scale had nine tokens spread over 11–32, with body 15, title 16,
+ * caption 13 and label 11 — four tiers inside a 5px band. At that spacing size
+ * stops signalling anything, which is why screens had started leaning on colour
+ * and weight to fake hierarchy (and why 422 one-off `fontSize` overrides crept
+ * in to compensate).
+ *
+ * Nine tokens remain, but they now land on six sizes and let WEIGHT do the
+ * fine-grain work: `title` and `h2` share 20pt and differ by weight, as do
+ * `body`/`bodyStrong` and `label`/`micro`. Each step is a visible jump
+ * (~1.15–1.3x), so a glance is enough to rank two pieces of text.
+ *
+ * `lineHeight` is new. Without it RN picks a tight platform default, which is
+ * most of why dense cards read as cramped.
+ */
 export const typography = {
-  display: { fontSize: 32, fontWeight: '800' as const, color: colors.text },
-  h1: { fontSize: 28, fontWeight: '700' as const, color: colors.text },
-  h2: { fontSize: 20, fontWeight: '700' as const, color: colors.text },
-  title: { fontSize: 16, fontWeight: '600' as const, color: colors.text },
-  body: { fontSize: 15, fontWeight: '400' as const, color: colors.text },
-  bodyStrong: { fontSize: 15, fontWeight: '600' as const, color: colors.text },
-  caption: { fontSize: 13, fontWeight: '400' as const, color: colors.textSecondary },
-  label: { fontSize: 11, fontWeight: '600' as const, color: colors.textMuted, letterSpacing: 1 },
-  micro: { fontSize: 11, fontWeight: '700' as const, color: colors.text },
+  display: { fontSize: 34, lineHeight: 40, fontWeight: '800' as const, color: colors.text },
+  h1: { fontSize: 26, lineHeight: 32, fontWeight: '700' as const, color: colors.text },
+  h2: { fontSize: 20, lineHeight: 26, fontWeight: '700' as const, color: colors.text },
+  title: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const, color: colors.text },
+  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' as const, color: colors.text },
+  bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' as const, color: colors.text },
+  caption: { fontSize: 14, lineHeight: 20, fontWeight: '400' as const, color: colors.textSecondary },
+  label: { fontSize: 12, lineHeight: 16, fontWeight: '600' as const, color: colors.textMuted, letterSpacing: 0.8 },
+  micro: { fontSize: 12, lineHeight: 16, fontWeight: '700' as const, color: colors.text },
 } as const;
+
+/**
+ * Tabular figures, for anything that sits in a column or ticks upward: fares,
+ * passenger counts, booking refs, times, coordinates. Proportional digits make
+ * a stack of peso amounts look ragged and make a live counter jitter as the
+ * glyph widths change.
+ */
+export const numeric: TextStyle = { fontVariant: ['tabular-nums'] };
 
 /**
  * Depth. On a near-black ground a shadow alone is nearly invisible, so each

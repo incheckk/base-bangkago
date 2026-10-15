@@ -123,7 +123,7 @@ export default function RentalFormScreen() {
   async function submit() {
     if (busy || !profile) return;
     if (!params.bangkaId) {
-      setError('Missing boat. Go back and pick one again.');
+      setError('No boat selected. Go back and choose one.');
       return;
     }
     if (!date) {
@@ -205,7 +205,7 @@ export default function RentalFormScreen() {
     return (
       <ScreenContainer>
         <PassengerScreenHeader title="Rent a Boat" />
-        <ErrorState message="Missing boat. Go back and pick one again." />
+        <ErrorState message="No boat selected. Go back and choose one." />
       </ScreenContainer>
     );
   }

@@ -356,7 +356,7 @@ export default function BookingDetail() {
   if (!booking) {
     return (
       <ScreenContainer>
-        <EmptyState icon="🔍" title="Booking not found" message="It may have been removed." />
+        <EmptyState icon="🔍" title="Booking not found" message="It may have been cancelled or removed." />
         <PrimaryButton
           label="Back to home"
           variant="secondary"

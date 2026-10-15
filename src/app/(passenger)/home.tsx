@@ -19,7 +19,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings } from '@/hooks/useSupabase';
 import { scheduleLocalNotification } from '@/services/notification.service';
 import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
-import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
+import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, PortDoc } from '@/types/models';
 
 const SCREEN_H = Dimensions.get('window').height;
@@ -31,8 +31,8 @@ const SCREEN_H = Dimensions.get('window').height;
  * `translateY` — animating a transform runs on the UI thread, whereas animating
  * `height` would relayout every frame.
  *
- * COLLAPSED shows the service tiles and the CTA only, leaving the map dominant.
- * EXPANDED brings Recent Trips into view.
+ * COLLAPSED shows the primary action and the service tiles only, leaving the
+ * map dominant. EXPANDED brings Recent Trips into view.
  */
 const SHEET_EXPANDED = Math.round(SCREEN_H * 0.72);
 const SHEET_COLLAPSED = 232;
@@ -41,8 +41,15 @@ const DRAG_RANGE = SHEET_EXPANDED - SHEET_COLLAPSED;
 /** Fixed height of the floating active-booking banner; the port callout stacks over it. */
 const ACTIVE_BANNER_H = 64;
 
-const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; route?: string }[] = [
-  { key: 'ride', icon: 'boat', label: 'Boat Ride', enabled: true },
+/**
+ * Secondary services only.
+ *
+ * "Boat Ride" used to lead this row while the primary CTA directly below it
+ * pointed at the same route — two controls, one destination, competing for the
+ * same glance. The CTA keeps that job; the tiles are now strictly the other
+ * three things a passenger can book.
+ */
+const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; route: string }[] = [
   { key: 'island', icon: 'island', label: 'Island Hop', enabled: true, route: '/(passenger)/island-packages' },
   { key: 'padala', icon: 'parcel', label: 'Padala', enabled: true, route: '/(passenger)/book-delivery' },
   { key: 'rental', icon: 'rental', label: 'Boat Rental', enabled: true, route: '/(passenger)/boat-rental' },
@@ -69,7 +76,7 @@ export default function PassengerHome() {
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         if (alive) setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       } catch {
-        // no fix — the waiting card stays hidden
+        // no fix — the waiting segment stays hidden
       }
     })();
     return () => {
@@ -218,6 +225,8 @@ export default function PassengerHome() {
     return 'Magandang gabi';
   })();
 
+  const showQueue = !!nearPort && !nearQueue.loading;
+
   return (
     <View style={styles.root}>
       {/* Map is the page, not a card on it. Everything else floats above. */}
@@ -245,9 +254,9 @@ export default function PassengerHome() {
       {/* ---------- floating header ---------- */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.greetCard}>
-          <Text style={styles.greeting}>{greetingTime},</Text>
+          <Text style={styles.greeting} numberOfLines={1}>{greetingTime}</Text>
           <Text style={styles.name} numberOfLines={1}>
-            {profile?.firstName ?? 'Traveler'} 👋
+            {profile?.firstName ?? 'Traveler'}
           </Text>
         </View>
 
@@ -282,33 +291,40 @@ export default function PassengerHome() {
         </View>
       </View>
 
-      {/* ---------- boats-online pill ---------- */}
-      <View style={[styles.statusPill, { top: insets.top + 78 }]}>
-        <View style={[styles.dot, bangkeros.data === 0 && styles.dotOff]} />
-        <Text style={styles.statusText} numberOfLines={1}>
-          {bangkeros.loading
-            ? 'Checking…'
-            : bangkeros.data === 0
-              ? 'No boats online'
-              : `${bangkeros.data} boat${bangkeros.data === 1 ? '' : 's'} nearby`}
-        </Text>
-      </View>
-
-      {/* ---------- nearest port queue pill (008) ----------
-          Only with a GPS fix — shows how many boats are actually lined
-          up at the closest port, and how far away the nearest one is. */}
-      {nearPort && !nearQueue.loading && (
-        <View style={[styles.statusPill, { top: insets.top + 114 }]}>
-          <View style={[styles.dot, nearQueue.data.length === 0 && styles.dotOff]} />
+      {/* ---------- live status bar ----------
+          Boats online and the nearest port's waiting line used to be two
+          separate pills stacked down the left edge, which read as two
+          unrelated alerts and ate 36pt more of the map than they needed to.
+          They are one fact — "what's available near me" — so they share one
+          bar, split by a rule. The queue segment only exists with a GPS fix. */}
+      <View style={[styles.statusBar, { top: insets.top + 76 }]}>
+        <View style={styles.statusSeg}>
+          <View style={[styles.dot, bangkeros.data === 0 && styles.dotOff]} />
           <Text style={styles.statusText} numberOfLines={1}>
-            {nearQueue.data.length === 0
-              ? `No boats waiting at ${nearPort.portName}`
-              : `${nearQueue.data.length} waiting at ${nearPort.portName}${
-                  nearestBoatDistance != null ? ` · ${formatDistance(nearestBoatDistance)}` : ''
-                }`}
+            {bangkeros.loading
+              ? 'Checking…'
+              : bangkeros.data === 0
+                ? 'No boats online'
+                : `${bangkeros.data} boat${bangkeros.data === 1 ? '' : 's'} nearby`}
           </Text>
         </View>
-      )}
+
+        {showQueue && (
+          <>
+            <View style={styles.statusRule} />
+            <View style={styles.statusSeg}>
+              <View style={[styles.dot, nearQueue.data.length === 0 && styles.dotOff]} />
+              <Text style={styles.statusText} numberOfLines={1}>
+                {nearQueue.data.length === 0
+                  ? `None waiting at ${nearPort!.portName}`
+                  : `${nearQueue.data.length} waiting at ${nearPort!.portName}${
+                      nearestBoatDistance != null ? ` · ${formatDistance(nearestBoatDistance)}` : ''
+                    }`}
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
 
       {/* ---------- active booking banner ----------
           Sits just above the collapsed sheet and rides the same translateY as
@@ -384,6 +400,25 @@ export default function PassengerHome() {
             { paddingBottom: insets.bottom + spacing.xl },
           ]}
         >
+          {/* Primary action leads the sheet. It used to sit below the tile row,
+              so the one thing 90% of passengers open this app to do was the
+              second thing they saw. */}
+          <Pressable
+            onPress={() => router.push('/(passenger)/quick-ride')}
+            accessibilityRole="button"
+            accessibilityLabel="Book a ride"
+            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
+          >
+            <View style={styles.ctaIconWrap}>
+              <Icon name="ride" size={20} color={colors.primaryText} />
+            </View>
+            <View style={styles.ctaTextWrap}>
+              <Text style={styles.ctaTitle}>Book a ride</Text>
+              <Text style={styles.ctaSub} numberOfLines={1}>Find available boats near you</Text>
+            </View>
+            <Icon name="forward" size={20} color={colors.primaryText} />
+          </Pressable>
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -393,7 +428,7 @@ export default function PassengerHome() {
               <Pressable
                 key={s.key}
                 disabled={!s.enabled}
-                onPress={() => router.push((s.route ?? '/(passenger)/quick-ride') as any)}
+                onPress={() => router.push(s.route as any)}
                 style={({ pressed }) => [
                   styles.tile,
                   !s.enabled && styles.tileDisabled,
@@ -416,20 +451,6 @@ export default function PassengerHome() {
             ))}
           </ScrollView>
 
-          <Pressable
-            onPress={() => router.push('/(passenger)/quick-ride')}
-            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
-          >
-            <View style={styles.ctaIconWrap}>
-              <Icon name="ride" size={20} color={colors.primaryText} />
-            </View>
-            <View style={styles.ctaTextWrap}>
-              <Text style={styles.ctaTitle}>BOOK A RIDE</Text>
-              <Text style={styles.ctaSub}>Find available boats near you</Text>
-            </View>
-            <Icon name="forward" size={20} color={colors.primaryText} />
-          </Pressable>
-
           <View style={styles.sectionHead}>
             <Text style={styles.sectionLabel}>RECENT TRIPS</Text>
             {bookings.data.length > 0 && (
@@ -444,9 +465,9 @@ export default function PassengerHome() {
           ) : bookings.data.length === 0 ? (
             <View style={styles.stateBox}>
               <EmptyState
-                icon="⚓"
+                icon="anchor"
                 title="No trips yet"
-                message="Book a ride and it'll show up here."
+                message="Your bookings will appear here."
               />
             </View>
           ) : (
@@ -551,8 +572,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     ...elevation.e1,
   },
-  greeting: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11 },
-  name: { flexShrink: 1, ...typography.title, marginTop: spacing.xxs },
+  // The greeting is the overline and the name is the headline — the two were
+  // 11pt and 16pt before, close enough that neither led.
+  greeting: { flexShrink: 1, ...typography.label },
+  name: { flexShrink: 1, ...typography.title },
 
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   iconBtn: {
@@ -572,16 +595,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderWidth: 2, borderColor: colors.bg,
   },
-  notifBadgeText: { flexShrink: 1, ...typography.micro, fontSize: 10 },
+  notifBadgeText: { flexShrink: 1, ...typography.micro, ...numeric, lineHeight: 14 },
 
-  // ---------- floating status pill ----------
-  statusPill: {
-    position: 'absolute', left: spacing.lg,
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+  // ---------- live status bar ----------
+  statusBar: {
+    position: 'absolute', left: spacing.lg, right: spacing.lg,
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.scrim, borderRadius: radii.pill,
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm - 1,
     borderWidth: 1, borderColor: colors.borderSubtle,
     ...elevation.e1,
+  },
+  statusSeg: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    flexShrink: 1,
+  },
+  // A hairline rule, not a dot or a bullet: it separates two readings without
+  // adding a third thing that looks like a status indicator.
+  statusRule: {
+    width: 1, alignSelf: 'stretch',
+    marginHorizontal: spacing.md,
+    backgroundColor: colors.border,
   },
   dot: { width: 7, height: 7, borderRadius: radii.pill, backgroundColor: colors.primary },
   dotOff: { backgroundColor: colors.textMuted },
@@ -603,10 +637,10 @@ const styles = StyleSheet.create({
   bannerPressed: { backgroundColor: colors.surfaceAlt },
   bannerDot: { width: 8, height: 8, borderRadius: radii.pill, backgroundColor: colors.primary },
   bannerBody: { flex: 1, minWidth: 0 },
-  bannerRoute: { flexShrink: 1, ...typography.bodyStrong },
+  bannerRoute: { flexShrink: 1, ...typography.bodyStrong, lineHeight: 20 },
   bannerMeta: {
-    flexShrink: 1, ...typography.caption, color: colors.textMuted,
-    fontSize: 11, marginTop: 2,
+    flexShrink: 1, ...typography.label, ...numeric,
+    color: colors.textMuted, fontWeight: '400', letterSpacing: 0,
   },
 
   // ---------- port callout ----------
@@ -623,7 +657,7 @@ const styles = StyleSheet.create({
   calloutBody: { flex: 1 },
   calloutLabel: { ...typography.label, color: colors.primary },
   calloutName: { flexShrink: 1, ...typography.bodyStrong, marginTop: spacing.xxs },
-  calloutMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
+  calloutMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted },
   calloutBtn: {
     backgroundColor: colors.primary,
     borderRadius: radii.pill,
@@ -663,28 +697,11 @@ const styles = StyleSheet.create({
   },
   sheetScroll: {},
 
-  // ---------- compact service tiles ----------
-  tiles: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.xxs },
-  tile: {
-    width: 80,
-    backgroundColor: colors.surface, borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.xs,
-    alignItems: 'center', justifyContent: 'center',
-    ...elevation.e1,
-  },
-  tileDisabled: { opacity: 0.4, shadowOpacity: 0, elevation: 0 },
-  tilePressed: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
-  tileIcon: { fontSize: 18, marginBottom: spacing.xs },
-  tileLabel: { ...typography.label, color: colors.text, letterSpacing: 0, fontSize: 10 },
-  tileLabelDisabled: { color: colors.textMuted },
-
   // ---------- CTA ----------
   cta: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.primary, borderRadius: radii.lg,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
-    marginTop: spacing.md,
     minHeight: 60,
     ...elevation.e2,
   },
@@ -694,15 +711,39 @@ const styles = StyleSheet.create({
     backgroundColor: colors.onPrimaryWash,
     alignItems: 'center', justifyContent: 'center',
   },
-  ctaTextWrap: { flex: 1 },
-  ctaTitle: {
-    ...typography.bodyStrong, color: colors.primaryText,
-    fontWeight: '800', letterSpacing: 0.3,
-  },
+  ctaTextWrap: { flex: 1, minWidth: 0 },
+  // Sentence case, not SHOUTING. All-caps was doing the job 20pt now does.
+  ctaTitle: { ...typography.title, color: colors.primaryText, lineHeight: 24 },
   ctaSub: {
-    ...typography.caption, color: colors.primaryText,
-    opacity: 0.75, marginTop: spacing.xxs, fontSize: 12,
+    flexShrink: 1, ...typography.label,
+    color: colors.primaryText, opacity: 0.75,
+    fontWeight: '400', letterSpacing: 0,
   },
+
+  // ---------- secondary service tiles ----------
+  // Three tiles no longer fill the width, so left-aligning them left a gap on
+  // the right that read as a missing fourth tile. `flexGrow` makes the content
+  // container at least as wide as the viewport so `justifyContent` has room to
+  // centre — and the ScrollView still scrolls on a narrow phone where the row
+  // genuinely overflows.
+  tiles: {
+    flexDirection: 'row', gap: spacing.sm,
+    paddingTop: spacing.md, paddingBottom: spacing.xxs,
+    flexGrow: 1, justifyContent: 'center',
+  },
+  tile: {
+    width: 92,
+    backgroundColor: colors.surface, borderRadius: radii.md,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.xs,
+    alignItems: 'center', justifyContent: 'center',
+    ...elevation.e1,
+  },
+  tileDisabled: { opacity: 0.4, shadowOpacity: 0, elevation: 0 },
+  tilePressed: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
+  tileIcon: { marginBottom: spacing.xs },
+  tileLabel: { ...typography.label, color: colors.text, letterSpacing: 0 },
+  tileLabelDisabled: { color: colors.textMuted },
 
   // ---------- recent trips ----------
   sectionHead: {
@@ -722,15 +763,17 @@ const styles = StyleSheet.create({
     ...elevation.e1,
   },
   tripPressed: { borderColor: colors.primary, backgroundColor: colors.surfaceAlt },
-  tripTop: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
-  tripRoute: { ...typography.caption, color: colors.text, fontWeight: '600', flex: 1 },
-  tripFare: { flexShrink: 1, ...typography.caption, color: colors.primary, fontWeight: '700' },
-  tripDate: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.xxs },
+  tripTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  // The route is the content of this card, so it gets body weight — it was
+  // 13pt caption, the same size as its own timestamp.
+  tripRoute: { ...typography.bodyStrong, lineHeight: 20, flex: 1 },
+  tripFare: { flexShrink: 1, ...typography.bodyStrong, ...numeric, color: colors.primary, lineHeight: 20 },
+  tripDate: { flexShrink: 1, ...typography.label, fontWeight: '400', letterSpacing: 0 },
 
   // ---------- accepted-trip notice ----------
   noticeBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.backdrop,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
@@ -759,7 +802,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
     marginBottom: spacing.xl,
   },
   noticeActions: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch' },

@@ -130,7 +130,7 @@ export default function BookDelivery() {
       <PassengerScreenHeader title="Book Delivery" subtitle="Send parcels and cargo between ports" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.sectionLabel}>FROM PORT</Text>
+        <Text style={styles.sectionLabel}>DEPARTURE</Text>
         <View style={styles.chips}>
           {ports.data.map((p) => (
             <Pressable
@@ -144,7 +144,7 @@ export default function BookDelivery() {
           ))}
         </View>
 
-        <Text style={[styles.sectionLabel, styles.mt]}>TO PORT</Text>
+        <Text style={[styles.sectionLabel, styles.mt]}>DESTINATION</Text>
         <View style={styles.chips}>
           {ports.data.map((p) => {
             const blocked = !!fromId && p.portId !== fromId && !routeFor(fromId, p.portId);

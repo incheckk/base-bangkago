@@ -85,7 +85,7 @@ export default function SignUp() {
           <Text style={styles.title}>Create account</Text>
           <Text style={styles.subtitle}>Your mobile number is your BangkaGo login.</Text>
 
-          <Text style={styles.groupLabel}>I AM A</Text>
+          <Text style={styles.groupLabel}>ACCOUNT TYPE</Text>
           <View style={styles.roleRow}>
             {ROLES.map((r) => {
               const active = role === r.value;

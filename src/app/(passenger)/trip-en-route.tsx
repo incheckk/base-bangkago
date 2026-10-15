@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
@@ -15,9 +16,23 @@ import { getActiveBooking } from '@/services/booking.service';
 import { fetchUserDoc } from '@/services/auth.service';
 import { getAverageRating } from '@/services/rating.service';
 import { getBangkaIdForBangkero } from '@/services/tracking.service';
-import { colors, radii, spacing, touchTarget } from '@/theme/tokens';
+import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
-const STEPS = ['Boarded', 'En Route', 'Arriving', 'Arrived'];
+/**
+ * Three steps, not four.
+ *
+ * This read `['Boarded', 'En Route', 'Arriving', 'Arrived']`, but the booking
+ * row only distinguishes three states — waiting, onboarded, completed — so
+ * index 2 was unreachable and "Arriving" could never light up. A step that
+ * never activates teaches passengers to distrust the whole rail.
+ *
+ * The labels are also written from the passenger's side now: what you do, not
+ * what the record says.
+ */
+const STEPS = ['Meet at port', 'On the way', 'Arrived'];
+
+/** Half a step's width, as a percentage — where the connector track starts. */
+const TRACK_INSET = `${100 / (STEPS.length * 2)}%` as const;
 
 /**
  * The live trip screen. The map shows the bangka's latest GPS fix in
@@ -126,121 +141,165 @@ export default function TripEnRoute() {
       <ScreenContainer>
         <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
         <EmptyState
-          icon="⛵"
+          icon="boat"
           title="No trip in progress"
-          message="You have no active booking right now. Book a ride and it will show up here."
+          message="You have no active booking. New bookings will appear here."
         />
-        <Pressable
-          style={styles.sosButton}
-          onPress={() => router.replace('/(passenger)/home')}
-        >
-          <Text style={styles.sosText}>Back to Home</Text>
-        </Pressable>
+        {/* This used to reuse the SOS button's style, so the empty state
+            offered a danger-red "Back to Home". Going home is not an
+            emergency. */}
+        <View style={styles.emptyAction}>
+          <Pressable
+            onPress={() => router.replace('/(passenger)/home')}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
+          >
+            <Text style={styles.secondaryBtnText}>Back to Home</Text>
+          </Pressable>
+        </View>
       </ScreenContainer>
     );
   }
 
-  // Real progress from the booking row — boarding, then underway.
-  const currentStep = booking.completedAt
-    ? 3
-    : booking.onboardedAt
-      ? 1
-      : 0;
+  // Real progress from the booking row — boarding, then underway, then done.
+  const currentStep = booking.completedAt ? 2 : booking.onboardedAt ? 1 : 0;
   const initials = initialsOf(booking.operatorName ?? '');
 
   return (
     <ScreenContainer>
       <PassengerScreenHeader title="Trip En Route" showDrawer={false} />
-      <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Map area — live vessel marker when a fix has been reported. */}
-        <View style={styles.mapArea}>
-          <MapContainer
-            ports={ports.data}
-            height={260}
-            vessels={
-              vessel
-                ? [{
-                    latitude: vessel.latitude,
-                    longitude: vessel.longitude,
-                    speed: vessel.speed,
-                    bangkaId: vessel.bangkaId,
-                  }]
-                : []
-            }
-          />
-        </View>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Map runs full-bleed. It used to sit in a wrapper that restated its
+            height and painted a surface behind it — two containers, one job. */}
+        <MapContainer
+          ports={ports.data}
+          height={260}
+          vessels={
+            vessel
+              ? [{
+                  latitude: vessel.latitude,
+                  longitude: vessel.longitude,
+                  speed: vessel.speed,
+                  bangkaId: vessel.bangkaId,
+                }]
+              : []
+          }
+        />
 
         <View style={styles.content}>
-          {/* Status pill */}
-          <View style={styles.statusRow}>
-            <StatusPill status={booking.status} />
-            <Text style={styles.eta}>
-              {booking.completedAt
-                ? 'Trip completed'
-                : booking.onboardedAt
-                  ? 'On the way'
-                  : `Meet at ${booking.fromPortName}`}
-            </Text>
-          </View>
-
-          {/* Bangkero info card */}
+          {/* One card for one trip.
+              Status, progress and crew were three separate cards stacked down
+              the page, which read as three unrelated things — they are three
+              facts about the same journey, so they share a card and are split
+              by rules instead of by gaps. */}
           <View style={styles.card}>
+            <View style={styles.statusRow}>
+              <StatusPill status={booking.status} />
+              <Text style={styles.eta} numberOfLines={1}>
+                {booking.completedAt
+                  ? 'Trip completed'
+                  : booking.onboardedAt
+                    ? 'On the way'
+                    : `Meet at ${booking.fromPortName}`}
+              </Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Progress rail. The connector is one track inset by half a step
+                either side, rather than a per-step absolute segment at
+                `right: -60%` — that overflowed the card on long labels. */}
+            <View style={styles.steps}>
+              <View style={styles.stepTrack} />
+              <View
+                style={[
+                  styles.stepTrackFill,
+                  { width: `${(currentStep / STEPS.length) * 100}%` },
+                ]}
+              />
+              {STEPS.map((step, i) => {
+                const done = i < currentStep;
+                const active = i <= currentStep;
+                return (
+                  <View key={step} style={styles.stepItem}>
+                    <View style={[styles.stepDot, active && styles.stepDotActive]}>
+                      {done ? (
+                        <Icon name="check" size={16} color={colors.primaryText} />
+                      ) : (
+                        <Text style={[styles.stepDotText, active && styles.stepDotTextActive]}>
+                          {i + 1}
+                        </Text>
+                      )}
+                    </View>
+                    <Text
+                      style={[styles.stepLabel, active && styles.stepLabelActive]}
+                      numberOfLines={2}
+                    >
+                      {step}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.divider} />
+
             <View style={styles.bangkeroRow}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{initials}</Text>
               </View>
               <View style={styles.bangkeroInfo}>
-                <Text style={styles.bangkeroName}>{booking.operatorName ?? 'Unassigned bangkero'}</Text>
+                <Text style={styles.bangkeroName} numberOfLines={1}>
+                  {booking.operatorName ?? 'Unassigned bangkero'}
+                </Text>
                 {!!booking.operatorBoatName && (
-                  <Text style={styles.boatName}>Boat: {booking.operatorBoatName}</Text>
+                  <Text style={styles.boatName} numberOfLines={1}>
+                    {booking.operatorBoatName}
+                  </Text>
                 )}
                 {avgRating !== null && <StarRating rating={avgRating} />}
               </View>
             </View>
           </View>
 
-          {/* Trip progress */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Trip Progress</Text>
-            <View style={styles.stepsContainer}>
-              {STEPS.map((step, i) => (
-                <View key={step} style={styles.stepItem}>
-                  <View style={[styles.stepDot, i <= currentStep && styles.stepDotActive]}>
-                    <Text style={[styles.stepDotText, i <= currentStep && styles.stepDotTextActive]}>
-                      {i < currentStep ? '✓' : i + 1}
-                    </Text>
-                  </View>
-                  <Text style={[styles.stepLabel, i <= currentStep && styles.stepLabelActive]}>
-                    {step}
-                  </Text>
-                  {i < STEPS.length - 1 && (
-                    <View style={[styles.stepLine, i < currentStep && styles.stepLineActive]} />
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* Action buttons */}
+          {/* Contact is the primary action and SOS is the exception.
+              SOS was a filled danger-red bar sitting ABOVE Contact, making the
+              emergency control the biggest, highest target on a screen you
+              open to reach your bangkero. It keeps full width so it is still
+              easy to hit under pressure, but it no longer outranks the thing
+              you actually came here to do. */}
           <View style={styles.actions}>
             <Pressable
-              style={styles.sosButton}
-              onPress={() => router.push('/(passenger)/report-issue')}
-            >
-              <Text style={styles.sosText}>SOS — Emergency</Text>
-            </Pressable>
-
-            <Pressable
-              style={[styles.contactButton, !operatorPhone && styles.contactDisabled]}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                !operatorPhone && styles.primaryBtnOff,
+                pressed && !!operatorPhone && styles.primaryBtnPressed,
+              ]}
               disabled={!operatorPhone}
+              accessibilityRole="button"
               onPress={() => {
                 if (!operatorPhone) return;
                 void router.push(`tel:${operatorPhone.replace('+', '')}`);
               }}
             >
-              <Text style={styles.contactText}>
-                {operatorPhone ? 'Contact Bangkero' : 'Contact unavailable'}
+              <Icon
+                name="bell"
+                size={18}
+                color={operatorPhone ? colors.primaryText : colors.textOnDisabled}
+              />
+              <Text style={[styles.primaryBtnText, !operatorPhone && styles.btnTextOff]}>
+                {operatorPhone ? 'Contact bangkero' : 'Contact unavailable'}
               </Text>
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [styles.sosBtn, pressed && styles.sosBtnPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Report an emergency"
+              onPress={() => router.push('/(passenger)/report-issue')}
+            >
+              <Icon name="sos" size={18} color={colors.danger} />
+              <Text style={styles.sosText}>SOS — Emergency</Text>
             </Pressable>
           </View>
         </View>
@@ -256,79 +315,67 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+/** Dot diameter, and the track's vertical centre derived from it. */
+const DOT = 30;
+
 const styles = StyleSheet.create({
   scroll: { paddingBottom: spacing.xxl },
-  mapArea: {
-    height: 260,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomLeftRadius: radii.lg,
-    borderBottomRightRadius: radii.lg,
-  },
   content: { padding: spacing.lg, gap: spacing.lg },
+
+  card: {
+    backgroundColor: colors.bgElevated,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+    ...elevation.e1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+    marginVertical: spacing.lg,
+  },
+
+  // ---------- status ----------
   statusRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: spacing.md,
   },
-  eta: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-    flexShrink: 1,
-    textAlign: 'right',
-  },
-  card: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radii.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  bangkeroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: colors.primaryText,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  bangkeroInfo: { gap: 2 },
-  bangkeroName: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  boatName: {
-    color: colors.textSecondary,
-    fontSize: 11,
-  },
-  cardTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: spacing.md,
-  },
-  stepsContainer: {
+  // Neutral on purpose. The StatusPill beside it already carries the colour;
+  // a second teal string next to it just dilutes what teal means.
+  eta: { flexShrink: 1, ...typography.caption, textAlign: 'right' },
+
+  // ---------- progress rail ----------
+  steps: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  stepTrack: {
+    position: 'absolute',
+    top: DOT / 2 - 1,
+    left: TRACK_INSET,
+    right: TRACK_INSET,
+    height: 2,
+    backgroundColor: colors.border,
+  },
+  stepTrackFill: {
+    position: 'absolute',
+    top: DOT / 2 - 1,
+    left: TRACK_INSET,
+    height: 2,
+    backgroundColor: colors.primary,
   },
   stepItem: {
-    alignItems: 'center',
     flex: 1,
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: DOT,
+    height: DOT,
+    borderRadius: radii.pill,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 2,
     borderColor: colors.border,
@@ -339,57 +386,72 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  stepDotText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
+  stepDotText: { ...typography.micro, color: colors.textMuted },
+  stepDotTextActive: { color: colors.primaryText },
+  stepLabel: {
+    flexShrink: 1,
+    ...typography.label,
+    letterSpacing: 0,
+    textAlign: 'center',
   },
-  stepDotTextActive: {
-    color: colors.primaryText,
-  },
-  stepLabel: { flexShrink: 1,
-    color: colors.textMuted,
-    fontSize: 10,
-    marginTop: spacing.xs,
-  },
-  stepLabelActive: {
-    color: colors.primary,
-  },
-  stepLine: {
-    position: 'absolute',
-    top: 14,
-    left: '60%',
-    right: '-60%',
-    height: 2,
-    backgroundColor: colors.border,
-  },
-  stepLineActive: {
-    backgroundColor: colors.primary,
-  },
-  actions: { gap: spacing.md },
-  sosButton: { minHeight: touchTarget, justifyContent: 'center',
-    backgroundColor: colors.danger,
+  stepLabelActive: { color: colors.primary },
+
+  // ---------- bangkero ----------
+  bangkeroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  avatar: {
+    width: 48,
+    height: 48,
     borderRadius: radii.pill,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  sosText: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
+  avatarText: { ...typography.bodyStrong, color: colors.primaryText, fontWeight: '700' },
+  bangkeroInfo: { flex: 1, minWidth: 0, gap: spacing.xxs },
+  bangkeroName: { flexShrink: 1, ...typography.bodyStrong, lineHeight: 20 },
+  boatName: { flexShrink: 1, ...typography.label, fontWeight: '400', letterSpacing: 0 },
+
+  // ---------- actions ----------
+  actions: { gap: spacing.md },
+
+  primaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget + 8,
+    backgroundColor: colors.primary,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.lg,
   },
-  contactButton: { minHeight: touchTarget, justifyContent: 'center',
+  primaryBtnPressed: { backgroundColor: colors.primaryDark },
+  primaryBtnOff: { backgroundColor: colors.surfaceAlt },
+  primaryBtnText: { ...typography.bodyStrong, color: colors.primaryText, fontWeight: '700' },
+  btnTextOff: { color: colors.textOnDisabled },
+
+  // Outlined, not filled: unmistakably the danger control without being the
+  // loudest thing on the screen.
+  sosBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget,
+    backgroundColor: colors.dangerTintSoft,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    paddingHorizontal: spacing.lg,
+  },
+  sosBtnPressed: { backgroundColor: colors.dangerTint, borderColor: colors.danger },
+  sosText: { ...typography.bodyStrong, color: colors.danger, fontWeight: '700' },
+
+  // ---------- empty state ----------
+  emptyAction: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  secondaryBtn: {
+    minHeight: touchTarget,
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.surfaceAlt,
     borderRadius: radii.pill,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.borderSubtle,
   },
-  contactDisabled: { opacity: 0.5 },
-  contactText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  secondaryBtnPressed: { borderColor: colors.primary, backgroundColor: colors.surface },
+  secondaryBtnText: { ...typography.bodyStrong, color: colors.textSecondary },
 });

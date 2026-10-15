@@ -86,7 +86,7 @@ export default function AdminBoatRentalsScreen() {
         ) : visible.length === 0 ? (
           <EmptyState
             icon="🛥️"
-            title="Nothing here"
+            title="No rentals found"
             message={`No ${filter === 'all' ? '' : filter.replace('_', ' ')} rentals yet.`}
           />
         ) : (

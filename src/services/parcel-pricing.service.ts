@@ -1,22 +1,21 @@
 /**
- * Parcel Padala — Phase 0 placeholder pricing.
+ * Parcel Padala — Phase 0 pricing service.
  *
- * All rate values below are PLACEHOLDERS gated on the PM rate decision.
- * Every numeric rate carries a `// PM-CONFIRM` comment. Change the numbers
- * on those lines only — do not restructure the shapes (033 + fare
- * recompute will consume them as-is).
+ * Rate values mirror the parcel_rates DB seed (migration 035) and
+ * PM-confirmed numbers (2026-10-15). The DB is the source of truth;
+ * this constant is the offline fallback + default.
  */
-// TODO(Phase 1): Replace PLACEHOLDER_RATES with DB lookup from parcel_rates table.
+// TODO(Phase 1): Replace PARCEL_RATES with a DB fetch from parcel_rates table.
 // TODO(Phase 1): Add server-side fare recompute in booking.service.ts:createBooking.
 import type { PortDoc } from '../types/models';
 
-export type DeliveryType = 'standard' | 'express';
-export type DeliverySpeed = 'same-day' | 'next-day';
+export type DeliveryType = 'accompanied' | 'piggyback' | 'batched' | 'solo';
 
 export interface ParcelFareInput {
   fromPort: Pick<PortDoc, 'portId' | 'islandGroup'>;
   toPort: Pick<PortDoc, 'portId' | 'islandGroup'>;
   totalKg: number;
+  deliveryType: DeliveryType;
 }
 
 export interface ParcelFareResult {
@@ -26,11 +25,17 @@ export interface ParcelFareResult {
   blockedReason: string | null;
 }
 
-/** PLACEHOLDER rates — PM has not confirmed. One-line editable. */
-export const PLACEHOLDER_RATES = {
-  basePer10KgSlab: 0, // PM-CONFIRM: placeholder — ₱ per 10-kg slab
-  crossIslandSurcharge: 0, // PM-CONFIRM: placeholder — flat ₱ added when zones differ
-  maxKg: 50, // PM-CONFIRM: placeholder — per-item cap enforced in book-delivery
+/** PM-CONFIRM 2026-10-15 — mirrors migration 035 seed values. */
+export const PARCEL_RATES = {
+  baseFeeAccompanied: 120,
+  baseFeePiggyback: 120,
+  baseFeeBatched: 150,
+  soloSurcharge: 150,
+  includedKg: 10,
+  excessRatePerKg: 10,
+  minKg: 1,
+  maxKg: 50,
+  bangkeroApprovalMinutes: 15,
 } as const;
 
 /** Zone = island group. Cross-island <=> groups differ (locked decision). */
@@ -40,29 +45,56 @@ export function getParcelZone(port: Pick<PortDoc, 'islandGroup'>): 'mactan' | 'o
 
 /** Phase 0: every port pair is allowed; only weight gates. Returns reason or null. */
 export function isParcelAllowed(input: ParcelFareInput): string | null {
-  if (!Number.isFinite(input.totalKg) || input.totalKg <= 0) return 'Enter a valid weight.';
-  if (input.totalKg > PLACEHOLDER_RATES.maxKg) return `Max ${PLACEHOLDER_RATES.maxKg} kg per item in Phase 0.`;
+  if (!Number.isFinite(input.totalKg) || input.totalKg < PARCEL_RATES.minKg) {
+    return `Minimum weight is ${PARCEL_RATES.minKg} kg.`;
+  }
+  if (input.totalKg > PARCEL_RATES.maxKg) {
+    return `Max ${PARCEL_RATES.maxKg} kg per parcel.`;
+  }
   return null;
 }
 
+/** Pick base fee by delivery mode. */
+function baseFeeFor(type: DeliveryType): number {
+  switch (type) {
+    case 'accompanied': return PARCEL_RATES.baseFeeAccompanied;
+    case 'piggyback':   return PARCEL_RATES.baseFeePiggyback;
+    case 'batched':     return PARCEL_RATES.baseFeeBatched;
+    case 'solo':        return PARCEL_RATES.baseFeeBatched;
+  }
+}
+
 /**
- * Phase 0 fare: mirrors the legacy book-delivery shape
- * (base × slabs + surcharge) so the fare-card breakdown renders,
- * but routes through the placeholder table for the PM swap.
+ * Phase 0 fare calculation.
+ *   fare = baseFee[type] + excessKg × excessRatePerKg + (type === 'solo' ? soloSurcharge : 0)
+ * Where excessKg = max(0, ceil(kg) − includedKg).
  */
 export function calculateParcelFare(input: ParcelFareInput): ParcelFareResult {
   const isCrossIsland = input.fromPort.islandGroup !== input.toPort.islandGroup;
   const blockedReason = isParcelAllowed(input);
+
   if (blockedReason) {
     return { fare: 0, isCrossIsland, breakdown: [], blockedReason };
   }
-  const slabs = Math.max(1, Math.ceil(input.totalKg / 10));
-  const slabFare = PLACEHOLDER_RATES.basePer10KgSlab * slabs;
-  const surcharge = isCrossIsland ? PLACEHOLDER_RATES.crossIslandSurcharge : 0;
-  const fare = Math.round(slabFare + surcharge);
-  const breakdown = [
-    `₱${PLACEHOLDER_RATES.basePer10KgSlab} × ${slabs} slab${slabs === 1 ? '' : 's'}`,
-    ...(isCrossIsland ? [`Cross-island +₱${PLACEHOLDER_RATES.crossIslandSurcharge}`] : []),
+
+  const billedKg = Math.ceil(input.totalKg);
+  const excessKg = Math.max(0, billedKg - PARCEL_RATES.includedKg);
+  const baseFee = baseFeeFor(input.deliveryType);
+  const excessFee = excessKg * PARCEL_RATES.excessRatePerKg;
+  const solo = input.deliveryType === 'solo' ? PARCEL_RATES.soloSurcharge : 0;
+  const fare = baseFee + excessFee + solo;
+
+  const breakdown: string[] = [
+    `Base fee (${input.deliveryType}): ₱${baseFee}`,
+    `Included weight: ${PARCEL_RATES.includedKg} kg`,
   ];
+  if (excessKg > 0) {
+    breakdown.push(`Excess ${excessKg} kg × ₱${PARCEL_RATES.excessRatePerKg} = ₱${excessFee}`);
+  }
+  if (solo > 0) {
+    breakdown.push(`Solo surcharge: ₱${solo}`);
+  }
+  breakdown.push(`Total: ₱${fare}`);
+
   return { fare, isCrossIsland, breakdown, blockedReason: null };
 }

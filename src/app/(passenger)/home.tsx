@@ -238,6 +238,9 @@ export default function PassengerHome() {
         <MapContainer
           ports={ports.data}
           fill
+          // The sheet covers the bottom of the map, so the zoom controls sit
+          // above its collapsed height rather than underneath it.
+          controlsOffset={SHEET_COLLAPSED}
           onPortPress={(p) => setSelectedPort((cur) => (cur?.portId === p.portId ? null : p))}
           selectedPortId={selectedPort?.portId ?? null}
         />

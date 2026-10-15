@@ -20,7 +20,7 @@ import {
   getPaymentsForBookings, markBookingPaid,
 } from '@/services/payment.service';
 import { supabase } from '@/services/supabase';
-import { manilaTodayIso } from '@/utils/date';
+import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
 
@@ -42,8 +42,8 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 export default function DepartureScreen() {
   const { user } = useAuth();
   const bangkeroId = user?.id ?? null;
-  const { manifest, passengers, parcels, loading, finalizeManifest } = useTripManifest(bangkeroId);
-  const { data: weather, loading: weatherLoading } = useWeatherData(manifest?.departurePortId ?? 'p1');
+  const { manifest, passengers, parcels, loading, error: manifestError, finalizeManifest } = useTripManifest(bangkeroId);
+  const { data: weather, loading: weatherLoading } = useWeatherData(manifest?.departurePortId ?? null);
   // Live working set: accepted only, no 10-row cap — older-created accepted
   // bookings used to fall outside the slice and split silently.
   // Future-dated (advance) bookings are excluded — today's departure list
@@ -77,10 +77,10 @@ export default function DepartureScreen() {
   const [actedNoShow, setActedNoShow] = useState<Set<string>>(new Set());
 
   // No-shows scoped to this trip: everything since the draft manifest was
-  // generated (start of today before that) so yesterday's no-shows never
-  // bleed into this departure.
+  // generated (start of the Manila day before that) so yesterday's
+  // no-shows never bleed into this departure.
   const noShowSince = manifest?.generatedAt
-    ?? new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    ?? new Date(manilaDayStartMs(manilaTodayIso())).toISOString();
   const noShows = useNoShowTrips(bangkeroId, noShowSince);
   const noShowedTrips = noShows.data;
   const freedSeats = noShowedTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
@@ -90,7 +90,9 @@ export default function DepartureScreen() {
   // "Mark as paid" per trip once everyone is aboard.
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
-  const [payReference, setPayReference] = useState('');
+  // Reference drafts keyed by booking — one shared input mixed refs
+  // across rows when several trips were unpaid at once.
+  const [payReferences, setPayReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
   const loadPayments = useCallback(async () => {
     const ids = accepted.data.map((t) => t.bookingId);
@@ -112,7 +114,7 @@ export default function DepartureScreen() {
     setPayingId(t.bookingId);
     setPayError(null);
     try {
-      await markBookingPaid(t.bookingId, payReference.trim() || undefined);
+      await markBookingPaid(t.bookingId, payReferences[t.bookingId]?.trim() || undefined);
       await loadPayments();
     } catch (e) {
       setPayError(friendlyError(e));
@@ -137,6 +139,9 @@ export default function DepartureScreen() {
           .select('route_id')
           .eq('operator_id', bangkeroId)
           .eq('trip_stat', 'accepted')
+          // Same today-only scope as the working set above: an advance
+          // route must not seed today's manifest/departure context.
+          .or(`scheduled_date.is.null,scheduled_date.lte.${todayIso}`)
           .order('accepted_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
@@ -149,7 +154,7 @@ export default function DepartureScreen() {
     } catch {
       setHasBangka(false);
     }
-  }, [bangkeroId]);
+  }, [bangkeroId, todayIso]);
 
   useEffect(() => { void load(); }, [load]);
   useRefetchOnFocus(load);
@@ -214,8 +219,14 @@ export default function DepartureScreen() {
   }
 
   async function handleFinalize() {
+    if (finalizing) return;
     setFinalizing(true);
-    await finalizeManifest();
+    setGenError(null);
+    try {
+      await finalizeManifest();
+    } catch (e) {
+      setGenError(friendlyError(e));
+    }
     setFinalizing(false);
   }
 
@@ -409,13 +420,20 @@ export default function DepartureScreen() {
             </View>
 
             {!manifestFinalized && (
-              <PrimaryButton
-                label="Finalize Manifest"
-                onPress={handleFinalize}
-                loading={finalizing}
-                disabled={finalizing}
-                style={styles.mt}
-              />
+              <>
+                {!!manifestError && (
+                  <View style={styles.banner}>
+                    <Text style={styles.bannerText}>{manifestError}</Text>
+                  </View>
+                )}
+                <PrimaryButton
+                  label="Finalize Manifest"
+                  onPress={handleFinalize}
+                  loading={finalizing}
+                  disabled={finalizing}
+                  style={styles.mt}
+                />
+              </>
             )}
 
             {manifestFinalized && (
@@ -505,29 +523,29 @@ export default function DepartureScreen() {
                           </Text>
                         </View>
                         {canMark && (
-                          <PrimaryButton
-                            label="Mark as paid"
-                            onPress={() => void markPaid(t)}
-                            loading={payingId === t.bookingId}
-                            disabled={payingId !== null}
-                            style={styles.payBtn}
-                          />
+                          <>
+                            <TextInput
+                              style={styles.payRefInput}
+                              placeholder="GCash / receipt reference (optional)"
+                              placeholderTextColor={colors.textMuted}
+                              value={payReferences[t.bookingId] ?? ''}
+                              onChangeText={(v) =>
+                                setPayReferences((prev) => ({ ...prev, [t.bookingId]: v }))
+                              }
+                              autoCapitalize="characters"
+                            />
+                            <PrimaryButton
+                              label="Mark as paid"
+                              onPress={() => void markPaid(t)}
+                              loading={payingId === t.bookingId}
+                              disabled={payingId !== null}
+                              style={styles.payBtn}
+                            />
+                          </>
                         )}
                       </View>
                     );
                   })}
-
-                  {allBoarded && anyoneAboard &&
-                    acceptedTrips.some((t) => payments[t.bookingId]?.paymentStatus !== 'completed') && (
-                      <TextInput
-                        style={styles.payRefInput}
-                        placeholder="GCash / receipt reference (optional)"
-                        placeholderTextColor={colors.textMuted}
-                        value={payReference}
-                        onChangeText={setPayReference}
-                        autoCapitalize="characters"
-                      />
-                  )}
 
                   {!allBoarded && (
                     <Text style={styles.payHint}>

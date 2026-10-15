@@ -54,18 +54,16 @@ export function useWallet(bangkeroId: string | null): Result {
       : [],
   );
 
+  // Throws on failure so the caller can toast it inline — swallowing it
+  // into the load error would flip the whole screen to ErrorState.
   const topUp = async (amount: number) => {
     if (!wallet) return;
-    try {
-      await topUpWallet(wallet.walletId, amount);
-      const w = await getWallet(bangkeroId!);
-      setWallet(w);
-      if (w) {
-        const txs = await getWalletTransactions(w.walletId);
-        setTransactions(txs);
-      }
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to top up');
+    await topUpWallet(wallet.walletId, amount);
+    const w = await getWallet(bangkeroId!);
+    setWallet(w);
+    if (w) {
+      const txs = await getWalletTransactions(w.walletId);
+      setTransactions(txs);
     }
   };
 

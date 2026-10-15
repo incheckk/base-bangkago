@@ -126,6 +126,10 @@ export default function BangkeroProfileScreen() {
     if (!profile || !uid) return;
     setSavingProfile(true);
     setError(null);
+    // Two writes, no shared transaction (RPC change deferred): if the boat
+    // half fails after the name half landed, say exactly that and stay in
+    // edit mode so retry only re-runs the boat write.
+    let nameSaved = false;
     try {
       await updateName({
         uid,
@@ -133,6 +137,7 @@ export default function BangkeroProfileScreen() {
         lastName,
         isBangkero: true,
       });
+      nameSaved = true;
       await updateBoat({
         uid,
         boatName,
@@ -143,7 +148,11 @@ export default function BangkeroProfileScreen() {
       if (capacity.trim()) setBangkaCapacity(capacity.trim());
       setEditing(false);
     } catch (e) {
-      setError(profileFriendlyError(e));
+      setError(
+        nameSaved
+          ? `Name saved, but the boat update failed: ${profileFriendlyError(e)} Fix the boat fields and save again — your name is safe.`
+          : profileFriendlyError(e)
+      );
     }
     setSavingProfile(false);
   }

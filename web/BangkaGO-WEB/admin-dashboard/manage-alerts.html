@@ -63,6 +63,7 @@
                 <tr>
                   <th>ID</th>
                   <th>Message</th>
+                  <th>Evidence</th>
                   <th>Level</th>
                   <th>Location</th>
                   <th>Status</th>
@@ -295,6 +296,9 @@
           <tr>
             <td>${alert.alertId.slice(0, 8)}...</td>
             <td>${alert.message}</td>
+            <td>${alert.evidencePaths.length
+              ? alert.evidencePaths.map((path, index) => `<button class="btn btn-sm btn-outline-secondary mb-1" onclick="openAlertEvidence('${alert.alertId}', ${index})">View ${index + 1}</button>`).join(' ')
+              : 'None'}</td>
             <td><span class="badge ${lvlBadge(alert.severity)}">${lvlText(alert.severity)}</span></td>
             <td>${getLocation(alert)}</td>
             <td><span class="badge ${stBadge(alert.isResolved)}">${stText(alert.isResolved)}</span></td>
@@ -312,6 +316,26 @@
           </tr>
       `).join('');
     }
+
+    window.openAlertEvidence = async function(alertId, index) {
+      const alertRecord = alerts.find(item => item.alertId === alertId);
+      const path = alertRecord?.evidencePaths?.[index];
+      if (!path) return;
+
+      const preview = window.open('about:blank', '_blank');
+      if (!preview) {
+        alert('Allow pop-ups to view this evidence file.');
+        return;
+      }
+
+      try {
+        const url = await window.bangkagoAlerts.getEvidenceUrl(path);
+        preview.location.href = url;
+      } catch (e) {
+        preview.close();
+        alert('Could not open evidence: ' + e.message);
+      }
+    };
 
     function runFilter() {
       const q = alertSearch.value.toLowerCase().trim();

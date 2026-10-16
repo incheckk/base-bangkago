@@ -122,6 +122,7 @@ Safety alerts tied to a bangka or port.
 | `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | `bangka_id` | UUID | FK → bangkas | |
 | `port_id` | TEXT | FK → ports | |
+| `evidence_paths` | TEXT[] | NOT NULL DEFAULT '{}' | Private evidence object paths; Coast Guard uploader and admins can view |
 
 ### 7. BOAT_RENTALS
 Boat rental bookings.

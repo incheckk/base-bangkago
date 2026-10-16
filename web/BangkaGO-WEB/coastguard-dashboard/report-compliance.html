@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -89,7 +89,7 @@
               <input id="evidenceInput" class="form-control mb-2" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.mp4">
 
               <div class="small text-secondary mb-2">
-                Accepted: JPG, PNG, PDF, MP4
+                Accepted: JPG, PNG, PDF, MP4. Up to 5 files, 20 MB each.
               </div>
 
               <ul class="activity-list mb-3" id="fileList">
@@ -102,7 +102,7 @@
 
               <div class="alert alert-info mt-3 small">
                 <i class="bi bi-info-circle me-1"></i>
-                Files are stored locally in this session. Evidence upload to server requires additional backend implementation.
+                Evidence is securely uploaded with the report and can be viewed by Admin.
               </div>
             </div>
           </div>
@@ -142,7 +142,11 @@
 
       [...files].forEach(file => {
         const li = document.createElement("li");
-        li.innerHTML = `<span>${file.name}</span><small>${Math.ceil(file.size / 1024)} KB</small>`;
+        const name = document.createElement('span');
+        name.textContent = file.name;
+        const size = document.createElement('small');
+        size.textContent = Math.ceil(file.size / 1024) + ' KB';
+        li.append(name, size);
         fileList.appendChild(li);
       });
     }
@@ -202,38 +206,52 @@
 
       const message = `Zone: ${zone}\n\n${details}`;
 
+      const submitBtn = form.querySelector('button[type="submit"]');
+      let uploadedPaths = [];
+
       try {
-        // Disable submit button
-        const submitBtn = form.querySelector('button[type="submit"]');
         submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading and submitting...';
 
-        // Create safety alert
+        if (selectedFiles.length) {
+          uploadedPaths = await window.bangkagoAlerts.uploadEvidence(selectedFiles);
+        }
+
         await window.bangkagoAlerts.create({
-          message: message,
-          severity: severity,
+          message,
+          severity,
           bangkaId: vesselId,
-          portId: portId
+          portId,
+          evidencePaths: uploadedPaths
         });
+        uploadedPaths = [];
 
+        submitMsg.textContent = selectedFiles.length
+          ? 'Compliance report and evidence submitted successfully.'
+          : 'Compliance report submitted successfully.';
         submitMsg.classList.remove("d-none");
         submitError.classList.add("d-none");
         form.reset();
+        evidenceInput.value = '';
         selectedFiles = [];
         renderFiles([]);
         vesselSelect.value = '';
         portSelect.value = '';
 
         setTimeout(() => submitMsg.classList.add("d-none"), 3000);
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="bi bi-send-fill"></i> Submit Report';
       } catch (err) {
         console.error(err);
+        if (uploadedPaths.length) {
+          try {
+            await window.bangkagoAlerts.removeEvidence(uploadedPaths);
+          } catch (cleanupError) {
+            console.error('Failed to remove orphaned evidence:', cleanupError);
+          }
+        }
         submitError.textContent = 'Failed to submit: ' + err.message;
         submitError.classList.remove("d-none");
         submitMsg.classList.add("d-none");
-
-        const submitBtn = form.querySelector('button[type="submit"]');
+      } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="bi bi-send-fill"></i> Submit Report';
       }

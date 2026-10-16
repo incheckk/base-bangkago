@@ -71,6 +71,12 @@ export default function RateTripScreen() {
       setActionError('You already rated this trip.');
       return;
     }
+    // Only the MAIN BOOKER rates — companions ride under their name
+    // and have no account (036 also enforces this in RLS).
+    if (booking.userId !== user.id) {
+      setActionError('Only the main booker can rate this trip.');
+      return;
+    }
     if (rating === 0) {
       setActionError('Pick a star rating first.');
       return;

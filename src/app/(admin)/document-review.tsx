@@ -58,14 +58,21 @@ export default function DocumentReviewScreen() {
     );
   }
 
+  // Queue = real submissions only: 'incomplete' bangkeros (037, nothing
+  // uploaded yet) are never reviewable. Without an id there is no
+  // target unless someone actually submitted.
   const operator = id
     ? data.find((o) => o.uid === id)
-    : data.find((o) => o.verificationStat === 'pending') ?? data[0];
+    : data.find((o) => o.verificationStat === 'pending');
 
   if (!operator) {
     return (
       <View style={styles.center}>
-        <EmptyState icon="👤" title="Not found" message="Operator not found." />
+        <EmptyState
+          icon="📄"
+          title="No submissions"
+          message="No bangkero has submitted documents for review yet."
+        />
       </View>
     );
   }

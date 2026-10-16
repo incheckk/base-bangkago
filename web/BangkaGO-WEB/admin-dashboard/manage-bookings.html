@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Admin — Manage Bookings</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .info-box{border:1px solid var(--gray-200);border-radius:12px;padding:.65rem .8rem;background:var(--gray-50);}
   </style>
@@ -27,11 +27,11 @@
             <span class="muted-note">View details, update booking status, cancel booking, view manifest</span>
           </div>
 
-          <div class="row g-2 mb-3">
-            <div class="col-md-4">
+          <div class="row g-2 mb-3 align-items-end">
+            <div class="col-md-3">
               <input id="bookingSearch" class="form-control" placeholder="Search booking ID, customer, route">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <select id="bookingStatusFilter" class="form-select">
                 <option value="">All Status</option>
                 <option value="Confirmed">Confirmed</option>
@@ -39,6 +39,14 @@
                 <option value="Cancelled">Cancelled</option>
                 <option value="Completed">Completed</option>
               </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1" for="bookingDateFrom">Trip date from</label>
+              <input type="date" id="bookingDateFrom" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1" for="bookingDateTo">Trip date to</label>
+              <input type="date" id="bookingDateTo" class="form-control">
             </div>
             <div class="col-md-2 d-grid">
               <button id="bookingReset" class="btn btn-outline-secondary">Reset</button>
@@ -60,6 +68,13 @@
               <tbody id="bookingBody"></tbody>
             </table>
           </div>
+          
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading bookings...</p>
+          </div>
+          
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
     </main>
@@ -84,17 +99,18 @@
       <form class="modal-content" id="bookingStatusForm">
         <div class="modal-header">
           <h5 class="modal-title">Update Booking Status</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="mb-2"><strong>Booking:</strong> <span id="statusBookingRef">-</span></div>
           <div class="mb-3">
             <label class="form-label">New Status</label>
             <select id="newBookingStatus" class="form-select">
-              <option value="Confirmed">Confirmed</option>
-              <option value="Pending">Pending</option>
-              <option value="Cancelled">Cancelled</option>
-              <option value="Completed">Completed</option>
+              <option value="open">Open</option>
+              <option value="pending">Pending</option>
+              <option value="accepted">Accepted</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
             </select>
           </div>
           <div class="mb-0">
@@ -121,228 +137,537 @@
         <div class="modal-body">
           <div id="manifestDetails"></div>
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" id="manifestExportPdf" disabled>
+            <i class="bi bi-file-earmark-pdf"></i> Export PDF
+          </button>
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
+        </div>
       </div>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/bookings.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    const bookings = [
-      {
-        id:'BKG-101',
-        customer:'Maria Lopez',
-        email:'maria.lopez@email.com',
-        phone:'+63 917 123 4567',
-        route:'Marigondon Port → Olango',
-        date:'2026-04-20',
-        status:'Confirmed',
-        remarks:'',
-        passengers:[
-          {name:'Maria Lopez', type:'Adult'},
-          {name:'Carlo Cruz', type:'Adult'}
-        ],
-        totalCost:900
-      },
-      {
-        id:'BKG-102',
-        customer:'John Reyes',
-        email:'john.reyes@email.com',
-        phone:'+63 928 555 1022',
-        route:'Mactan Port → Olango',
-        date:'2026-04-21',
-        status:'Pending',
-        remarks:'',
-        passengers:[
-          {name:'John Reyes', type:'Adult'}
-        ],
-        totalCost:300
-      },
-      {
-        id:'BKG-103',
-        customer:'Ella Tan',
-        email:'ella.tan@email.com',
-        phone:'+63 939 222 3344',
-        route:'Olango Port → Caohagan',
-        date:'2026-04-22',
-        status:'Confirmed',
-        remarks:'',
-        passengers:[
-          {name:'Ella Tan', type:'Adult'},
-          {name:'Nina Lim', type:'Child'},
-          {name:'Paolo Lim', type:'Adult'}
-        ],
-        totalCost:1200
-      }
-    ];
-
+    let bookings = [];
     let selectedIndex = null;
 
     const bookingBody = document.getElementById('bookingBody');
     const bookingSearch = document.getElementById('bookingSearch');
     const bookingStatusFilter = document.getElementById('bookingStatusFilter');
+    const bookingDateFrom = document.getElementById('bookingDateFrom');
+    const bookingDateTo = document.getElementById('bookingDateTo');
+    const newBookingStatus = document.getElementById('newBookingStatus');
+    const statusRemarks = document.getElementById('statusRemarks');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
 
     const detailsModal = new bootstrap.Modal('#bookingDetailsModal');
     const statusModal = new bootstrap.Modal('#bookingStatusModal');
     const manifestModal = new bootstrap.Modal('#manifestModal');
 
+    // Escape user-supplied text before it goes into innerHTML (manifest
+    // shows passenger names/addresses typed by end users).
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+
     function peso(n){
       return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     }
 
-    function statusBadge(status){
-      if(status === 'Confirmed') return 'text-bg-success';
-      if(status === 'Pending') return 'text-bg-warning';
-      if(status === 'Cancelled') return 'text-bg-danger';
-      return 'text-bg-info';
+    function mapStatusToBadge(status){
+      if(status === 'open') return 'text-bg-warning';
+      if(status === 'pending') return 'text-bg-info';
+      if(status === 'accepted') return 'text-bg-primary';
+      if(status === 'completed') return 'text-bg-success';
+      if(status === 'cancelled') return 'text-bg-danger';
+      return 'text-bg-secondary';
+    }
+
+    function mapStatusToDisplay(status){
+      const map = {
+        'open': 'Confirmed',
+        'pending': 'Pending',
+        'accepted': 'Accepted',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled'
+      };
+      return map[status] || status;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleDateString('en-PH');
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
     }
 
     function renderTable(data){
-      bookingBody.innerHTML = '';
-      data.forEach((b) => {
-        const i = bookings.findIndex(x => x.id === b.id);
-
-        bookingBody.innerHTML += `
+      bookingBody.innerHTML = data.map((b, idx) => `
           <tr>
-            <td>${b.id}</td>
-            <td>${b.customer}</td>
-            <td>${b.route}</td>
-            <td>${b.date}</td>
-            <td><span class="badge ${statusBadge(b.status)}">${b.status}</span></td>
+            <td>${b.ref}</td>
+            <td>${b.passengerName || 'Unknown'}</td>
+            <td>${b.fromPortName || ''} → ${b.toPortName || ''}</td>
+            <td>${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}</td>
+            <td><span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openDetails(${i})">
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openDetails('${b.bookingId}')">
                   <i class="bi bi-eye"></i> Details
                 </button>
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatus(${i})">
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatus('${b.bookingId}')">
                   <i class="bi bi-arrow-repeat"></i> Status
                 </button>
-                <button class="btn btn-sm btn-outline-secondary action-btn" onclick="openManifest(${i})">
+                <button class="btn btn-sm btn-outline-secondary action-btn" onclick="openManifest('${b.bookingId}')">
                   <i class="bi bi-card-list"></i> Manifest
                 </button>
-                <button class="btn btn-sm btn-outline-danger action-btn" onclick="cancelBooking(${i})">
+                <button class="btn btn-sm btn-outline-danger action-btn" onclick="cancelBooking('${b.bookingId}')">
                   <i class="bi bi-x-circle"></i> Cancel
                 </button>
               </div>
             </td>
           </tr>
-        `;
-      });
+      `).join('');
     }
+
+    // Rows are rendered from the FILTERED list, so every row action is
+    // keyed by bookingId — an index would hit a different booking.
+    function bookingIndex(id){ return bookings.findIndex(b => b.bookingId === id); }
 
     function runFilter(){
       const q = bookingSearch.value.toLowerCase().trim();
       const s = bookingStatusFilter.value;
+      const from = bookingDateFrom.value; // yyyy-mm-dd
+      const to = bookingDateTo.value;
 
       const filtered = bookings.filter(b => {
         const textMatch =
-          b.id.toLowerCase().includes(q) ||
-          b.customer.toLowerCase().includes(q) ||
-          b.route.toLowerCase().includes(q);
+          b.ref.toLowerCase().includes(q) ||
+          (b.passengerName || '').toLowerCase().includes(q) ||
+          (b.fromPortName || '').toLowerCase().includes(q) ||
+          (b.toPortName || '').toLowerCase().includes(q);
 
-        const statusMatch = s ? b.status === s : true;
-        return textMatch && statusMatch;
+        const statusMatch = s ? mapStatusToDisplay(b.status) === s : true;
+
+        // Trip date falls back to created date when no schedule is set.
+        const day = String(b.scheduledDate || b.createdAt || '').slice(0, 10);
+        const dateMatch = (!from || day >= from) && (!to || day <= to);
+
+        return textMatch && statusMatch && dateMatch;
       });
 
       renderTable(filtered);
     }
 
-    window.openDetails = function(i){
-      const b = bookings[i];
+    window.openDetails = function(id){
+      const idx = bookingIndex(id);
+      if (idx === -1) return;
+      const b = bookings[idx];
       document.getElementById('bookingDetailsBox').innerHTML = `
-        <div class="info-box mb-2"><strong>Booking ID:</strong> ${b.id}</div>
-        <div class="info-box mb-2"><strong>Customer:</strong> ${b.customer}</div>
-        <div class="info-box mb-2"><strong>Email:</strong> ${b.email}</div>
-        <div class="info-box mb-2"><strong>Contact Number:</strong> ${b.phone}</div>
-        <div class="info-box mb-2"><strong>Route:</strong> ${b.route}</div>
-        <div class="info-box mb-2"><strong>Trip Date:</strong> ${b.date}</div>
-        <div class="info-box mb-2"><strong>Status:</strong> ${b.status}</div>
-        <div class="info-box mb-0"><strong>Total Cost:</strong> ${peso(b.totalCost)}</div>
+        <div class="info-box mb-2"><strong>Booking ID:</strong> ${b.bookingId}</div>
+        <div class="info-box mb-2"><strong>Reference:</strong> ${b.ref}</div>
+        <div class="info-box mb-2"><strong>Customer:</strong> ${b.passengerName || 'Unknown'}</div>
+        <div class="info-box mb-2"><strong>Contact:</strong> ${b.passengerPhone || 'N/A'}</div>
+        <div class="info-box mb-2"><strong>Route:</strong> ${b.fromPortName || ''} → ${b.toPortName || ''}</div>
+        <div class="info-box mb-2"><strong>Trip Date:</strong> ${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}</div>
+        <div class="info-box mb-2"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></div>
+        <div class="info-box mb-2"><strong>Passengers:</strong> ${b.passengerCount}</div>
+        <div class="info-box mb-2"><strong>Total Cost:</strong> ${peso(b.totalPrice)}</div>
+        <div class="info-box mb-2"><strong>Operator:</strong> ${b.operatorName || 'Unassigned'}</div>
+        <div class="info-box mb-2"><strong>Boat:</strong> ${b.operatorBoatName || 'N/A'}</div>
+        <div class="info-box mb-0"><strong>Created:</strong> ${formatDate(b.createdAt)}</div>
       `;
       detailsModal.show();
     }
 
-    window.openStatus = function(i){
-      selectedIndex = i;
-      const b = bookings[i];
-      document.getElementById('statusBookingRef').textContent = `${b.id} — ${b.customer}`;
-      document.getElementById('newBookingStatus').value = b.status;
-      document.getElementById('statusRemarks').value = b.remarks || '';
+    // ---- Status modal: dirty tracking so the X / Cancel can't silently
+    // discard edits (and the X can't submit the form anymore).
+    let statusDirty = false;
+    newBookingStatus.addEventListener('change', () => { statusDirty = true; });
+    statusRemarks.addEventListener('input', () => { statusDirty = true; });
+    document.getElementById('bookingStatusModal').addEventListener('hide.bs.modal', function(ev) {
+      if (!statusDirty) return;
+      if (confirm('You have unsaved changes to this booking status. Discard them?')) {
+        statusDirty = false;
+      } else {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    });
+
+    window.openStatus = function(id){
+      selectedIndex = bookingIndex(id);
+      if (selectedIndex === -1) return;
+      const b = bookings[selectedIndex];
+      document.getElementById('statusBookingRef').textContent = `${b.ref} — ${b.passengerName || 'Unknown'}`;
+      newBookingStatus.value = b.status;
+      statusRemarks.value = b.cancelReason || '';
+      statusDirty = false; // set programmatically, not user edits
       statusModal.show();
     }
 
-    document.getElementById('bookingStatusForm').addEventListener('submit', function(e){
+    document.getElementById('bookingStatusForm').addEventListener('submit', async function(e){
       e.preventDefault();
       if(selectedIndex === null) return;
 
-      bookings[selectedIndex].status = document.getElementById('newBookingStatus').value;
-      bookings[selectedIndex].remarks = document.getElementById('statusRemarks').value.trim();
+      const b = bookings[selectedIndex];
+      const newStatus = newBookingStatus.value;
+      const remarks = statusRemarks.value.trim();
 
-      runFilter();
-      statusModal.hide();
-      alert('Booking status updated.');
+      try {
+        await window.bangkagoBookings.updateStatus(b.bookingId, newStatus, remarks);
+        b.status = newStatus;
+        b.cancelReason = remarks;
+        runFilter();
+        statusDirty = false;
+        statusModal.hide();
+        alert('Booking status updated.');
+      } catch(e) {
+        alert('Error: ' + e.message);
+      }
     });
 
-    window.openManifest = function(i){
-      const b = bookings[i];
-      const paxCount = b.passengers.length;
-      const manifestDetails = document.getElementById('manifestDetails');
+    // ---- Manifest: built from THIS booking (booker + companions from
+    // passenger_details + parcels), not from a guessed trip_manifest row.
+    let manifestBooking = null;
 
-      manifestDetails.innerHTML = `
+    function renderManifestHtml(b, companions, parcels, items) {
+      const itemsByParcel = {};
+      items.forEach(it => { (itemsByParcel[it.parcel_id] = itemsByParcel[it.parcel_id] || []).push(it); });
+
+      const paxRows = [
+        `<tr>
+           <td>1</td>
+           <td>${esc(b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
+           <td>${esc(b.passengerPhone || '—')}</td>
+           <td>—</td>
+           <td>—</td>
+           <td>—</td>
+           <td>${b.onboardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
+         </tr>`,
+        ...companions.map((p, i) => `
+         <tr>
+           <td>${i + 2}</td>
+           <td>${esc((p.first_name || '') + ' ' + (p.last_name || ''))}</td>
+           <td>${esc(p.contact_number || '—')}</td>
+           <td>${p.age ?? '—'}</td>
+           <td>${esc(p.passenger_type || 'regular')}</td>
+           <td>${esc(p.address || '—')}</td>
+           <td>${p.boarded_at ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
+         </tr>`)
+      ].join('');
+
+      const parcelRows = parcels.map((p, i) => {
+        const list = itemsByParcel[p.id] || [];
+        const desc = list.map(it => `${it.item_name}${it.quantity > 1 ? ' ×' + it.quantity : ''}`).join(', ') || '—';
+        const kg = list.reduce((s, it) => s + Number(it.kilogram || 0), 0);
+        return `<tr>
+           <td>${i + 1}</td>
+           <td>${esc(p.receiver_name || '—')}</td>
+           <td>${esc(p.receiver_contact || '—')}</td>
+           <td>${esc(desc)}</td>
+           <td>${kg ? kg.toFixed(1) : '—'}</td>
+           <td>${esc(p.status || 'pending')}</td>
+           <td>${peso(p.total_price || 0)}</td>
+         </tr>`;
+      }).join('');
+
+      return `
         <div class="row g-2 mb-3">
-          <div class="col-md-6"><div class="info-box"><strong>Booking ID:</strong> ${b.id}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Status:</strong> ${b.status}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Customer:</strong> ${b.customer}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Email:</strong> ${b.email}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Contact Number:</strong> ${b.phone}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${b.route}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${b.date}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>No. of Passengers:</strong> ${paxCount}</div></div>
-          <div class="col-md-12"><div class="info-box"><strong>Total Booking Cost:</strong> ${peso(b.totalCost)}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Booking Ref:</strong> ${esc(b.ref)}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Booker:</strong> ${esc(b.passengerName || 'Unknown')} (${esc(b.passengerPhone || 'no number')})</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${esc(b.fromPortName || '')} → ${esc(b.toPortName || '')}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}${b.scheduledTime ? ' — ' + esc(b.scheduledTime) : ''}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Passengers:</strong> ${b.passengerCount} booked, ${companions.length} companion${companions.length === 1 ? '' : 's'} listed</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'N/A')}</div></div>
         </div>
 
-        <h6 class="mb-2">Passenger List</h6>
+        <h6 class="mb-2">Passenger List (${companions.length + 1})</h6>
         <div class="table-responsive">
           <table class="table table-theme align-middle mb-0">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Passenger Name</th>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Age</th>
                 <th>Type</th>
+                <th>Address</th>
+                <th>Boarded</th>
               </tr>
             </thead>
-            <tbody>
-              ${b.passengers.map((p, idx) => `
-                <tr>
-                  <td>${idx + 1}</td>
-                  <td>${p.name}</td>
-                  <td>${p.type}</td>
-                </tr>
-              `).join('')}
-            </tbody>
+            <tbody>${paxRows}</tbody>
+          </table>
+        </div>
+
+        <h6 class="mb-2 mt-3">Parcel List (${parcels.length})</h6>
+        <div class="table-responsive">
+          <table class="table table-theme align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Receiver</th>
+                <th>Contact</th>
+                <th>Items</th>
+                <th>Weight (kg)</th>
+                <th>Status</th>
+                <th>Price</th>
+              </tr>
+            </thead>
+            <tbody>${parcelRows || '<tr><td colspan="7" class="text-center text-muted">No parcels</td></tr>'}</tbody>
           </table>
         </div>
       `;
-
-      manifestModal.show();
     }
 
-    window.cancelBooking = function(i){
-      bookings[i].status = 'Cancelled';
-      runFilter();
-      alert(`Booking ${bookings[i].id} cancelled.`);
+    window.openManifest = async function(id){
+      const idx = bookingIndex(id);
+      if (idx === -1) return;
+      const b = bookings[idx];
+      manifestBooking = null;
+      const box = document.getElementById('manifestDetails');
+      const exportBtn = document.getElementById('manifestExportPdf');
+      exportBtn.disabled = true;
+
+      box.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Loading manifest...</p></div>';
+      manifestModal.show();
+
+      try {
+        const c = window.bangkagoServices.getClient();
+        const [pdRes, pcRes] = await Promise.all([
+          c.from('passenger_details').select('*').eq('booking_id', b.bookingId).order('first_name'),
+          c.from('parcels').select('*').eq('booking_id', b.bookingId).order('created_at')
+        ]);
+        if (pdRes.error) throw pdRes.error;
+        if (pcRes.error) throw pcRes.error;
+        const companions = pdRes.data || [];
+        const parcels = pcRes.data || [];
+
+        let items = [];
+        if (parcels.length) {
+          const itRes = await c.from('parcel_items').select('*').in('parcel_id', parcels.map(p => p.id));
+          if (itRes.error) throw itRes.error;
+          items = itRes.data || [];
+        }
+
+        box.innerHTML = renderManifestHtml(b, companions, parcels, items);
+        manifestBooking = { booking: b, companions: companions, parcels: parcels, items: items };
+        exportBtn.disabled = false;
+      } catch(e) {
+        console.error(e);
+        box.innerHTML = '<div class="alert alert-danger">Error loading manifest: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    // ---- PDF export (jsPDF + autoTable vendored, loaded on first use
+    // so the400KB never hits this page unless someone exports).
+    function loadScript(src) {
+      return new Promise(function(resolve, reject) {
+        const s = document.createElement('script');
+        s.src = src; s.onload = resolve; s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    }
+
+    async function ensureJsPdf() {
+      if (window.jspdf && window.jspdf.jsPDF) return;
+      await loadScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
+      await loadScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+    }
+
+    document.getElementById('manifestExportPdf').addEventListener('click', async function() {
+      const data = manifestBooking;
+      if (!data) return;
+      const btn = this;
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+      try {
+        await ensureJsPdf();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const b = data.booking;
+
+        // Header band
+        doc.setFillColor(23, 42, 66);
+        doc.rect(0, 0, pageW, 22, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('BangkaGo — Trip Manifest', 14, 11);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text('Generated ' + new Date().toLocaleString('en-PH'), 14, 17);
+        doc.text('Ref ' + b.ref, pageW - 14, 11, { align: 'right' });
+        doc.setTextColor(40, 40, 40);
+
+        // Trip summary block
+        const info = [
+          ['Booking Ref', b.ref, 'Trip Date', (b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)) + (b.scheduledTime ? ' ' + b.scheduledTime : '')],
+          ['Route', (b.fromPortName || '') + ' -> ' + (b.toPortName || ''), 'Status', mapStatusToDisplay(b.status)],
+          ['Booker', (b.passengerName || 'Unknown') + ' (' + (b.passengerPhone || 'no number') + ')', 'Passengers', String(b.passengerCount)],
+          ['Operator', b.operatorName || 'Unassigned', 'Boat', b.operatorBoatName || 'N/A']
+        ];
+        doc.setFontSize(9);
+        let y = 30;
+        info.forEach(function(row) {
+          doc.setFont('helvetica', 'bold'); doc.text(row[0] + ':', 14, y);
+          doc.setFont('helvetica', 'normal'); doc.text(String(row[1]), 40, y);
+          doc.setFont('helvetica', 'bold'); doc.text(row[2] + ':', 110, y);
+          doc.setFont('helvetica', 'normal'); doc.text(String(row[3]), 135, y);
+          y += 6;
+        });
+
+        // Passengers table
+        const paxBody = [
+          [1, b.passengerName || 'Unknown', b.passengerPhone || '—', '—', 'Booker', '—', b.onboardedAt ? 'Yes' : 'No']
+        ].concat(data.companions.map(function(p, i) {
+          return [
+            i + 2,
+            ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
+            p.contact_number || '—',
+            p.age != null ? String(p.age) : '—',
+            p.passenger_type || 'regular',
+            p.address || '—',
+            p.boarded_at ? 'Yes' : 'No'
+          ];
+        }));
+        doc.autoTable({
+          startY: y + 3,
+          head: [['#', 'Name', 'Contact', 'Age', 'Type', 'Address', 'Boarded']],
+          body: paxBody,
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: 14, right: 14 }
+        });
+
+        // Parcels table
+        if (data.parcels.length) {
+          const itemsByParcel = {};
+          data.items.forEach(function(it) { (itemsByParcel[it.parcel_id] = itemsByParcel[it.parcel_id] || []).push(it); });
+          const parcelBody = data.parcels.map(function(p, i) {
+            const list = itemsByParcel[p.id] || [];
+            const desc = list.map(function(it) { return it.item_name + (it.quantity > 1 ? ' x' + it.quantity : ''); }).join(', ') || '—';
+            const kg = list.reduce(function(s, it) { return s + Number(it.kilogram || 0); }, 0);
+            return [i + 1, p.receiver_name || '—', p.receiver_contact || '—', desc, kg ? kg.toFixed(1) : '—', p.status || 'pending', 'PHP ' + Number(p.total_price || 0).toFixed(2)];
+          });
+          doc.autoTable({
+            startY: doc.lastAutoTable.finalY + 8,
+            head: [['#', 'Receiver', 'Contact', 'Items', 'Weight (kg)', 'Status', 'Price']],
+            body: parcelBody,
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+            headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [242, 246, 250] },
+            margin: { left: 14, right: 14 }
+          });
+        }
+
+        // Footer with page numbers on every page
+        const pages = doc.internal.getNumberOfPages();
+        for (let pg = 1; pg <= pages; pg++) {
+          doc.setPage(pg);
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text('BangkaGo manifest — ' + b.ref + '   |   Page ' + pg + ' of ' + pages, 14, doc.internal.pageSize.getHeight() - 8);
+        }
+
+        doc.save('BangkaGo-manifest-' + b.ref + '.pdf');
+      } catch (e) {
+        console.error(e);
+        alert('PDF export failed: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+
+    window.cancelBooking = async function(id){
+      const idx = bookingIndex(id);
+      if (idx === -1) return;
+      const b = bookings[idx];
+      if (!confirm(`Cancel booking ${b.ref}?`)) return;
+      
+      try {
+        await window.bangkagoBookings.updateStatus(b.bookingId, 'cancelled', 'Cancelled by admin');
+        b.status = 'cancelled';
+        runFilter();
+        alert(`Booking ${b.ref} cancelled.`);
+      } catch(e) {
+        alert('Error: ' + e.message);
+      }
     }
 
     bookingSearch.addEventListener('input', runFilter);
     bookingStatusFilter.addEventListener('change', runFilter);
+    bookingDateFrom.addEventListener('change', runFilter);
+    bookingDateTo.addEventListener('change', runFilter);
 
     document.getElementById('bookingReset').addEventListener('click', () => {
       bookingSearch.value = '';
       bookingStatusFilter.value = '';
-      renderTable(bookings);
+      bookingDateFrom.value = '';
+      bookingDateTo.value = '';
+      runFilter();
     });
 
-    renderTable(bookings);
+    async function loadBookings() {
+      showLoading(true);
+      try {
+        bookings = await window.bangkagoBookings.listAll({ limit: 200 });
+        runFilter(); // keep the admin's active search/status/date filters
+        showLoading(false);
+      } catch(e) {
+        console.error(e);
+        showError('Failed to load bookings: ' + e.message);
+      }
+    }
+
+    // Real-time updates (the manifest re-fetches every time it opens,
+    // so a passenger_details subscription would add nothing here).
+    window.bangkagoRealtime.subscribe('bookings', null, function() {
+      loadBookings();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadBookings();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+        
+      }
+    })();
   </script>
 </body>
 </html>

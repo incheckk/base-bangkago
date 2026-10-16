@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Coast Guard — Search Vessel</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="search-vessel">
   <div class="cg-shell">
@@ -30,15 +30,15 @@
               <div class="row g-2 mb-3 align-items-end filter-row">
                 <div class="col-12 col-md-5">
                   <label class="form-label visually-hidden" for="searchInput">Search</label>
-                  <input id="searchInput" class="form-control w-100" type="text" placeholder="Search by Vessel ID, name, operator, or route">
+                  <input id="searchInput" class="form-control w-100" type="text" placeholder="Search by Vessel name, permit, operator">
                 </div>
                 <div class="col-6 col-md-3">
-                  <label class="form-label visually-hidden" for="statusFilter">Status</label>
+                  <label class="form-label visually-hidden" for="statusFilter">Tracking Status</label>
                   <select id="statusFilter" class="form-select w-100">
                     <option value="">All Status</option>
-                    <option value="On Track">On Track</option>
-                    <option value="Delayed">Delayed</option>
-                    <option value="Docking">Docking</option>
+                    <option value="online">Online (Recent Ping)</option>
+                    <option value="stale">Stale Signal</option>
+                    <option value="offline">Offline</option>
                   </select>
                 </div>
                 <div class="col-6 col-md-4 d-flex gap-2">
@@ -60,9 +60,11 @@
                     <tr>
                       <th>Vessel ID</th>
                       <th>Name</th>
+                      <th>Type</th>
+                      <th>Capacity</th>
                       <th>Operator</th>
-                      <th>Current Route</th>
                       <th>Last Ping</th>
+                      <th>Location</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -80,18 +82,19 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/bangkas.js"></script>
+  <script src="../../../assets/js/services/vessels.js"></script>
+  <script src="../../../assets/js/services/bangkeros.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
   <script>
-    // Demo vessel data (frontend-only)
-    const vessels = [
-      { id: "VSL-008", name: "Boat 08", operator: "OP-21", route: "Marigondon Port -> Olango", ping: "14:43", status: "On Track" },
-      { id: "VSL-003", name: "Boat 03", operator: "OP-09", route: "Engano Port -> Caohagan", ping: "14:39", status: "Delayed" },
-      { id: "VSL-011", name: "Boat 11", operator: "OP-14", route: "Marigondon Port -> Olango", ping: "14:37", status: "Docking" },
-      { id: "VSL-006", name: "Boat 06", operator: "OP-18", route: "Olango Port -> Marigondon", ping: "14:35", status: "On Track" },
-      { id: "VSL-015", name: "Boat 15", operator: "OP-04", route: "Mactan Port -> Caohagan", ping: "14:31", status: "Delayed" }
-    ];
+    let vessels = [];
+    let vesselLocations = new Map();
 
     const tbody = document.getElementById("vesselTableBody");
     const searchInput = document.getElementById("searchInput");
@@ -101,29 +104,52 @@
     const resultCount = document.getElementById("resultCount");
     const emptyState = document.getElementById("emptyState");
 
-    function badgeClass(status){
-      if(status === "On Track") return "text-bg-success";
-      if(status === "Delayed") return "text-bg-warning";
-      return "text-bg-info";
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
     }
 
-    function renderRows(data){
+    function badgeClass(status) {
+      if (status === "Online") return "text-bg-success";
+      if (status === "Stale") return "text-bg-warning";
+      return "text-bg-secondary";
+    }
+
+    function computeStatus(vessel, location) {
+      if (!location) return 'Offline';
+      const age = Date.now() - new Date(location.recordedAt).getTime();
+      if (age < 60000) return 'Online';       // < 1 min
+      if (age < 300000) return 'Stale';       // < 5 min
+      return 'Offline';
+    }
+
+    function renderRows(data) {
       tbody.innerHTML = "";
-      if(data.length === 0){
+      if (data.length === 0) {
         emptyState.classList.remove("d-none");
       } else {
         emptyState.classList.add("d-none");
       }
 
       data.forEach(v => {
+        const location = vesselLocations.get(v.bangkaId);
+        const status = computeStatus(v, location);
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${v.id}</td>
-          <td>${v.name}</td>
-          <td>${v.operator}</td>
-          <td>${v.route}</td>
-          <td>${v.ping}</td>
-          <td><span class="badge ${badgeClass(v.status)}">${v.status}</span></td>
+          <td>${v.bangkaId.slice(0, 8)}</td>
+          <td><strong>${v.bangkaName}</strong></td>
+          <td>${v.bangkaType || '—'}</td>
+          <td>${v.capacity || '—'}</td>
+          <td>${v.bangkeroName || 'Unassigned'}</td>
+          <td>${location ? formatDate(location.recordedAt) : 'Never'}</td>
+          <td>${location ? (location.latitude.toFixed(4) + ', ' + location.longitude.toFixed(4)) : 'Unknown'}</td>
+          <td><span class="badge ${badgeClass(status)}">${status}</span></td>
         `;
         tbody.appendChild(tr);
       });
@@ -131,22 +157,42 @@
       resultCount.textContent = `Showing ${data.length} vessel(s)`;
     }
 
-    function runSearch(){
+    function runSearch() {
       const q = searchInput.value.trim().toLowerCase();
       const status = statusFilter.value;
 
       const filtered = vessels.filter(v => {
         const textMatch =
-          v.id.toLowerCase().includes(q) ||
-          v.name.toLowerCase().includes(q) ||
-          v.operator.toLowerCase().includes(q) ||
-          v.route.toLowerCase().includes(q);
+          v.bangkaId.toLowerCase().includes(q) ||
+          v.bangkaName.toLowerCase().includes(q) ||
+          v.bangkaType?.toLowerCase().includes(q) ||
+          v.bangkeroName?.toLowerCase().includes(q) ||
+          v.permitNumber?.toLowerCase().includes(q);
 
-        const statusMatch = status ? v.status === status : true;
+        const location = vesselLocations.get(v.bangkaId);
+        const computedStatus = computeStatus(v, location);
+        const statusMatch = status ? computedStatus === status : true;
         return textMatch && statusMatch;
       });
 
       renderRows(filtered);
+    }
+
+    async function loadVessels() {
+      try {
+        const [bangkas, locations] = await Promise.all([
+          window.bangkagoBangkas.listAll({}),
+          window.bangkagoVessels.getAllLatestPositions()
+        ]);
+        vessels = bangkas;
+        vesselLocations.clear();
+        locations.forEach(loc => vesselLocations.set(loc.bangkaId, loc));
+        renderRows(vessels);
+      } catch (e) {
+        console.error(e);
+        emptyState.textContent = 'Error loading vessels: ' + e.message;
+        emptyState.classList.remove("d-none");
+      }
     }
 
     searchBtn.addEventListener("click", runSearch);
@@ -156,10 +202,22 @@
       renderRows(vessels);
     });
     searchInput.addEventListener("keydown", (e) => {
-      if(e.key === "Enter") runSearch();
+      if (e.key === "Enter") runSearch();
     });
 
-    renderRows(vessels);
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+
+      window.bangkagoRealtime.subscribe('bangkas', null, loadVessels);
+      window.bangkagoRealtime.subscribe('vessel_tracking', null, loadVessels);
+      window.bangkagoRealtime.subscribe('bangkeros', null, loadVessels);
+      loadVessels();
+    }).catch(function(e) {
+      console.error('Failed to initialize vessel search:', e);
+      emptyState.textContent = 'Failed to initialize vessel data: ' + e.message;
+      emptyState.classList.remove('d-none');
+    });
   </script>
 </body>
 </html>
+

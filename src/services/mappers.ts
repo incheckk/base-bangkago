@@ -66,6 +66,9 @@ export function mapPortRow(row: any): PortDoc {
     longitude: row.longitude,
     sortOrder: row.sort_order,
     isActive: row.is_active,
+    // 032 adds these columns; ?? fallbacks keep pre-032 DBs working.
+    islandGroup: row.island_group ?? 'mactan',
+    islandName: row.island_name ?? 'Mactan',
     // ?? 300 keeps this working before migration 008 adds the column
     geofenceRadiusM: row.geofence_radius_m ?? 300,
   };

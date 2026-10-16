@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BangkaGo Admin — Manage Payments</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .summary-box{border:1px solid var(--gray-200);border-radius:12px;background:var(--gray-50);padding:.7rem .85rem;}
   </style>
@@ -34,10 +34,9 @@
             <div class="col-md-3">
               <select id="paymentStatusFilter" class="form-select">
                 <option value="">All Status</option>
-                <option value="Paid">Paid</option>
-                <option value="Pending">Pending</option>
-                <option value="Failed">Failed</option>
-                <option value="Refunded">Refunded</option>
+                <option value="completed">Completed</option>
+                <option value="pending">Pending</option>
+                <option value="failed">Failed</option>
               </select>
             </div>
             <div class="col-md-2 d-grid">
@@ -61,6 +60,13 @@
               <tbody id="payBody"></tbody>
             </table>
           </div>
+          
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading payments...</p>
+          </div>
+          
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
     </main>
@@ -141,22 +147,26 @@
       </div>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>`n  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/payments.js"></script>
+  <script src="../../assets/js/services/bookings.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    const pays = [
-      {id:'PAY-01', bid:'BKG-101', payer:'Maria Lopez', amt:450, method:'GCash', status:'Paid', date:'2026-04-15', ref:'GC-928371'},
-      {id:'PAY-02', bid:'BKG-102', payer:'John Reyes', amt:300, method:'Cash', status:'Pending', date:'2026-04-16', ref:'CSH-00129'},
-      {id:'PAY-03', bid:'BKG-103', payer:'Ella Tan', amt:750, method:'Card', status:'Paid', date:'2026-04-16', ref:'CRD-762510'},
-      {id:'PAY-04', bid:'BKG-104', payer:'Nina Lim', amt:300, method:'GCash', status:'Failed', date:'2026-04-17', ref:'GC-771002'}
-    ];
-
+    let payments = [];
     let selectedIndex = null;
+    let generatedPaymentReport = null;
 
     const tbody = document.getElementById('payBody');
     const paymentSearch = document.getElementById('paymentSearch');
     const paymentStatusFilter = document.getElementById('paymentStatusFilter');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
 
     const viewPaymentModal = new bootstrap.Modal('#viewPaymentModal');
     const reportModal = new bootstrap.Modal('#reportModal');
@@ -167,81 +177,97 @@
     }
 
     function badge(status){
-      if(status === 'Paid') return 'text-bg-success';
-      if(status === 'Pending') return 'text-bg-warning';
-      if(status === 'Failed') return 'text-bg-danger';
+      if(status === 'completed') return 'text-bg-success';
+      if(status === 'pending') return 'text-bg-warning';
+      if(status === 'failed') return 'text-bg-danger';
       return 'text-bg-info';
     }
 
+    function displayStatus(status){
+      const map = { completed: 'Paid', pending: 'Pending', failed: 'Failed' };
+      return map[status] || status;
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
     function render(data){
-      tbody.innerHTML = '';
-      data.forEach(p => {
-        const i = pays.findIndex(x => x.id === p.id);
-        tbody.innerHTML += `
+      tbody.innerHTML = data.map((p) => `
           <tr>
-            <td>${p.id}</td>
-            <td>${p.bid}</td>
-            <td>${p.payer}</td>
-            <td>${peso(p.amt)}</td>
-            <td>${p.method}</td>
-            <td><span class="badge ${badge(p.status)}">${p.status}</span></td>
+            <td>${p.paymentId.slice(0,12)}...</td>
+            <td>${p.bookingId ? p.bookingId.slice(0,12)+'...' : 'N/A'}</td>
+            <td>${p.payerName || 'Unknown'}</td>
+            <td>${peso(p.amount)}</td>
+            <td>${p.paymentMethod}</td>
+            <td><span class="badge ${badge(p.paymentStatus)}">${displayStatus(p.paymentStatus)}</span></td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPayment(${i})">
-                  <i class="bi bi-eye"></i> View Payment
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPayment('${p.paymentId}')">
+                  <i class="bi bi-eye"></i> View
                 </button>
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openReport(${i})">
-                  <i class="bi bi-file-earmark-text"></i> Generate Report
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openReport('${p.paymentId}')">
+                  <i class="bi bi-file-earmark-text"></i> Report
                 </button>
               </div>
             </td>
           </tr>
-        `;
-      });
+      `).join('');
     }
 
     function runFilter(){
       const q = paymentSearch.value.toLowerCase().trim();
       const s = paymentStatusFilter.value;
 
-      const filtered = pays.filter(p => {
+      const filtered = payments.filter(p => {
         const textMatch =
-          p.id.toLowerCase().includes(q) ||
-          p.bid.toLowerCase().includes(q) ||
-          p.payer.toLowerCase().includes(q);
+          p.paymentId.toLowerCase().includes(q) ||
+          (p.bookingId || '').toLowerCase().includes(q) ||
+          (p.payerName || '').toLowerCase().includes(q);
 
-        const statusMatch = s ? p.status === s : true;
+        const statusMatch = s ? p.paymentStatus === s : true;
         return textMatch && statusMatch;
       });
 
       render(filtered);
     }
 
-    window.viewPayment = function(i){
-      const p = pays[i];
+    // By id: the table renders the FILTERED list, so a row index here
+    // would open a different payment whenever a search is active.
+    window.viewPayment = function(paymentId){
+      const p = payments.find(x => x.paymentId === paymentId);
+      if (!p) return;
       document.getElementById('paymentDetailsBox').innerHTML = `
-        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.id}</div>
-        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bid}</div>
-        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payer}</div>
-        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amt)}</div>
-        <div class="summary-box mb-2"><strong>Method:</strong> ${p.method}</div>
-        <div class="summary-box mb-2"><strong>Status:</strong> ${p.status}</div>
-        <div class="summary-box mb-0"><strong>Reference:</strong> ${p.ref}</div>
+        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.paymentId}</div>
+        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bookingId || 'N/A'}</div>
+        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payerName || 'Unknown'}</div>
+        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amount)}</div>
+        <div class="summary-box mb-2"><strong>Method:</strong> ${p.paymentMethod}</div>
+        <div class="summary-box mb-2"><strong>Status:</strong> <span class="badge ${badge(p.paymentStatus)}">${displayStatus(p.paymentStatus)}</span></div>
+        <div class="summary-box mb-0"><strong>Reference:</strong> ${p.referenceNum || 'N/A'}</div>
+        <div class="summary-box mb-0"><strong>Created:</strong> ${new Date(p.createdAt).toLocaleString()}</div>
       `;
       viewPaymentModal.show();
     }
 
-    window.openReport = function(i){
-      selectedIndex = i;
-      const p = pays[i];
+    window.openReport = function(paymentId){
+      selectedIndex = payments.findIndex(x => x.paymentId === paymentId);
+      if (selectedIndex === -1) return;
+      const p = payments[selectedIndex];
 
-      document.getElementById('rPaymentId').textContent = p.id;
-      document.getElementById('rPayer').textContent = p.payer;
-      document.getElementById('rAmount').textContent = peso(p.amt);
+      document.getElementById('rPaymentId').textContent = p.paymentId;
+      document.getElementById('rPayer').textContent = p.payerName || 'Unknown';
+      document.getElementById('rAmount').textContent = peso(p.amount);
 
-      // default date range
-      document.getElementById('rFrom').value = p.date;
-      document.getElementById('rTo').value = p.date;
+      document.getElementById('rFrom').value = p.createdAt.split('T')[0];
+      document.getElementById('rTo').value = p.createdAt.split('T')[0];
       document.getElementById('rType').value = 'Transaction Summary';
       document.getElementById('rNotes').value = '';
 
@@ -252,7 +278,7 @@
       e.preventDefault();
       if(selectedIndex === null) return;
 
-      const p = pays[selectedIndex];
+      const p = payments[selectedIndex];
       const from = document.getElementById('rFrom').value;
       const to = document.getElementById('rTo').value;
       const type = document.getElementById('rType').value;
@@ -263,29 +289,140 @@
         return;
       }
 
+      generatedPaymentReport = {
+        paymentId: p.paymentId,
+        payerName: p.payerName || 'Unknown',
+        bookingId: p.bookingId || 'N/A',
+        amount: Number(p.amount) || 0,
+        paymentMethod: p.paymentMethod || 'N/A',
+        paymentStatus: p.paymentStatus || 'unknown',
+        referenceNum: p.referenceNum || 'N/A',
+        createdAt: p.createdAt,
+        from: from,
+        to: to,
+        type: type,
+        notes: notes || 'None'
+      };
+
       reportModal.hide();
 
       document.getElementById('reportResultBox').innerHTML = `
         <div class="alert alert-success">
-          <strong>${type}</strong> generated successfully.
+          <strong>${type}</strong> receipt generated successfully.
         </div>
 
-        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.id}</div>
-        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payer}</div>
-        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bid}</div>
-        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amt)}</div>
+        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.paymentId}</div>
+        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payerName || 'Unknown'}</div>
+        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bookingId || 'N/A'}</div>
+        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amount)}</div>
         <div class="summary-box mb-2"><strong>Date Range:</strong> ${from} to ${to}</div>
         <div class="summary-box mb-0"><strong>Notes:</strong> ${notes || '-'}</div>
 
         <div class="mt-3 d-grid">
-          <button class="btn btn-outline-dark" onclick="alert('Download started (demo).')">
-            <i class="bi bi-download me-1"></i> Download Report
+          <button class="btn btn-outline-dark" id="downloadReportBtn" type="button">
+            <i class="bi bi-file-earmark-pdf me-1"></i> View / Download Receipt
           </button>
         </div>
       `;
 
+      const downloadButton = document.getElementById('downloadReportBtn');
+      downloadButton.addEventListener('click', function() {
+        downloadPaymentReport(generatedPaymentReport, downloadButton);
+      });
+
       reportResultModal.show();
     });
+
+    function loadPdfScript(src) {
+      return new Promise(function(resolve, reject) {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF library.'));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensurePdfLibrary() {
+      if (window.jspdf?.jsPDF) return;
+      await loadPdfScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
+      await loadPdfScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      if (!window.jspdf?.jsPDF) throw new Error('PDF library did not initialize.');
+    }
+
+    async function downloadPaymentReport(report, button) {
+      if (!report) return;
+      const preview = window.open('about:blank', '_blank');
+      const originalText = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating receipt...';
+
+      try {
+        await ensurePdfLibrary();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const reportDate = new Date().toLocaleString('en-PH');
+
+        doc.setFillColor(23, 42, 66);
+        doc.rect(0, 0, pageWidth, 27, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('BangkaGo Payment Receipt', margin, 12);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(report.type, margin, 20);
+        doc.text('Generated ' + reportDate, pageWidth - margin, 20, { align: 'right' });
+        doc.setTextColor(40, 40, 40);
+
+        doc.autoTable({
+          startY: 34,
+          head: [['Payment Details', 'Value']],
+          body: [
+            ['Payment ID', report.paymentId],
+            ['Payer', report.payerName],
+            ['Booking ID', report.bookingId],
+            ['Amount', 'PHP ' + report.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })],
+            ['Payment Method', report.paymentMethod],
+            ['Payment Status', displayStatus(report.paymentStatus)],
+            ['Reference Number', report.referenceNum],
+            ['Payment Date', report.createdAt ? new Date(report.createdAt).toLocaleString('en-PH') : 'N/A'],
+            ['Report Date Range', report.from + ' to ' + report.to],
+            ['Report Type', report.type],
+            ['Notes', report.notes]
+          ],
+          styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin }
+        });
+
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page++) {
+          doc.setPage(page);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text('BangkaGo payment receipt | Page ' + page + ' of ' + pageCount, margin, doc.internal.pageSize.getHeight() - 8);
+        }
+
+        const pdfUrl = doc.output('bloburl');
+        if (preview) {
+          preview.location.href = pdfUrl;
+        } else {
+          doc.save('BangkaGo-payment-receipt-' + report.paymentId.slice(0, 8) + '.pdf');
+        }
+      } catch (error) {
+        console.error(error);
+        if (preview) preview.close();
+        alert('Could not generate payment receipt: ' + error.message);
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+      }
+    }
 
     paymentSearch.addEventListener('input', runFilter);
     paymentStatusFilter.addEventListener('change', runFilter);
@@ -293,10 +430,64 @@
     document.getElementById('paymentReset').addEventListener('click', () => {
       paymentSearch.value = '';
       paymentStatusFilter.value = '';
-      render(pays);
+      render(payments);
     });
 
-    render(pays);
+    async function loadPayments() {
+      showLoading(true);
+      try {
+        const [pays, downs] = await Promise.all([
+          window.bangkagoPayments.listPayments({ limit: 100 }),
+          window.bangkagoPayments.listDownpayments({ limit: 100 })
+        ]);
+        
+        // Normalize payments
+        payments = pays.map(p => ({
+          ...p,
+          payerName: p.booking?.passenger_name || p.user?.first_name + ' ' + p.user?.last_name || 'Unknown'
+        })).concat(
+          downs.map(d => ({
+            paymentId: d.downpaymentId,
+            bookingId: d.bookingId || d.boatRentalId,
+            payerName: d.user?.first_name + ' ' + d.user?.last_name || 'Unknown',
+            amount: d.amount,
+            paymentMethod: 'GCash',
+            paymentStatus: d.status,
+            referenceNum: d.referenceNum,
+            createdAt: d.createdAt,
+            type: 'downpayment'
+          }))
+        ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        render(payments);
+        showLoading(false);
+      } catch(e) {
+        console.error(e);
+        showError('Failed to load payments: ' + e.message);
+      }
+    }
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('payments', null, function() {
+      loadPayments();
+    });
+    window.bangkagoRealtime.subscribe('downpayments', null, function() {
+      loadPayments();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadPayments();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+        
+      }
+    })();
   </script>
 </body>
 </html>

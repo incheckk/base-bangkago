@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo LGU/Coast Guard — Track Vessel</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="monitor-fleet">
   <div class="cg-shell">
@@ -22,7 +22,7 @@
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
               <p>Tracked Vessels</p>
-              <h3>18</h3>
+              <h3 id="kpiTracked">-</h3>
               <span class="kpi-up">Live updates every 30s</span>
               <div class="kpi-mini-chart chart-up"></div>
             </div>
@@ -30,7 +30,7 @@
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
               <p>On Route</p>
-              <h3>12</h3>
+              <h3 id="kpiOnRoute">-</h3>
               <span class="kpi-up">Stable movement</span>
               <div class="kpi-mini-chart chart-up"></div>
             </div>
@@ -38,7 +38,7 @@
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
               <p>Delayed</p>
-              <h3>2</h3>
+              <h3 id="kpiDelayed">-</h3>
               <span class="kpi-warn">ETA watch enabled</span>
               <div class="kpi-mini-chart chart-warn"></div>
             </div>
@@ -46,7 +46,7 @@
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
               <p>Signal Loss</p>
-              <h3>1</h3>
+              <h3 id="kpiSignalLoss">-</h3>
               <span class="kpi-down">Monitoring active</span>
               <div class="kpi-mini-chart chart-down"></div>
             </div>
@@ -62,13 +62,10 @@
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
-              <img src="../images/map.jpg" alt="Live fleet map" class="live-map-img"/>
+              <div id="fleetMap"></div>
 
-              <div class="route-pill-wrap">
-                <span class="route-pill">Boat 08 • Marigondon Port → Olango</span>
-                <span class="route-pill">Boat 03 • Mactan Port → Olango → Caohagan → Sulpa</span>
-                <span class="route-pill">Boat 11 • Olango Port Docking</span>
-                <span class="route-pill">Last refresh: just now</span>
+              <div class="route-pill-wrap" id="routePills">
+                <span class="route-pill">Loading vessels...</span>
               </div>
             </div>
 
@@ -83,14 +80,12 @@
                 <div class="col-12 col-sm-6 col-md-4">
                   <label class="form-label visually-hidden" for="historyVessel">Vessel</label>
                   <select id="historyVessel" class="form-select w-100">
-                    <option value="Boat 08">Boat 08</option>
-                    <option value="Boat 03">Boat 03</option>
-                    <option value="Boat 11">Boat 11</option>
+                    <option value="">Select vessel</option>
                   </select>
                 </div>
                 <div class="col-12 col-sm-6 col-md-3">
                   <label class="form-label visually-hidden" for="historyDate">Date</label>
-                  <input id="historyDate" type="date" class="form-control w-100" value="2026-04-15">
+                  <input id="historyDate" type="date" class="form-control w-100">
                 </div>
                 <div class="col-12 col-md-5 d-flex gap-2">
                   <button id="replayBtn" class="btn btn-primary flex-fill" type="button">
@@ -103,10 +98,7 @@
               </div>
 
               <ul class="activity-list" id="replayList">
-                <li><span>14:41 • Boat 08 departed Marigondon Port</span><small>Checkpoint 1</small></li>
-                <li><span>14:49 • Passed East Marker 2</span><small>Checkpoint 2</small></li>
-                <li><span>14:57 • Mid-route stable speed (24 km/h)</span><small>Checkpoint 3</small></li>
-                <li><span>15:06 • Near Olango corridor</span><small>Checkpoint 4</small></li>
+                <li class="text-muted"><small>Select a vessel and date to replay history</small></li>
               </ul>
             </div>
           </div>
@@ -121,19 +113,17 @@
               <div class="row g-2 mb-2 filter-row">
                 <div class="col-12">
                   <select id="locationVessel" class="form-select">
-                    <option value="Boat 08">Boat 08</option>
-                    <option value="Boat 03">Boat 03</option>
-                    <option value="Boat 11">Boat 11</option>
-                    <option value="Boat 15">Boat 15</option>
+                    <option value="">Select vessel</option>
                   </select>
                 </div>
               </div>
 
-              <div class="health-item"><span>Current Zone</span><strong id="locZone">East Marker 4</strong></div>
-              <div class="health-item"><span>Latitude / Longitude</span><strong id="locCoords">11.1542, 123.7421</strong></div>
-              <div class="health-item"><span>Speed</span><strong id="locSpeed">24 km/h</strong></div>
-              <div class="health-item"><span>Direction</span><strong id="locDir">NE</strong></div>
-              <div class="health-item"><span>Signal</span><span class="badge text-bg-success" id="locSignal">Stable</span></div>
+              <div class="health-item"><span>Current Zone</span><strong id="locZone">-</strong></div>
+              <div class="health-item"><span>Latitude / Longitude</span><strong id="locCoords">-</strong></div>
+              <div class="health-item"><span>Speed</span><strong id="locSpeed">-</strong></div>
+              <div class="health-item"><span>Direction</span><strong id="locDir">-</strong></div>
+              <div class="health-item"><span>Signal</span><span class="badge text-bg-secondary" id="locSignal">Unknown</span></div>
+              <div class="health-item"><span>Last Seen</span><strong id="locLastSeen">-</strong></div>
             </div>
 
             <div class="cg-card">
@@ -141,16 +131,15 @@
                 <h6 class="mb-0">View ETA</h6>
               </div>
 
-              <div class="health-item"><span>Destination</span><strong id="etaDest">Olango Port</strong></div>
-              <div class="health-item"><span>Estimated Arrival</span><strong id="etaTime">15:24</strong></div>
-              <div class="health-item"><span>Delay</span><span class="badge text-bg-success" id="etaDelay">On Time</span></div>
-              <div class="health-item"><span>Route Confidence</span><span class="badge text-bg-info" id="etaConf">95%</span></div>
+              <div class="health-item"><span>Destination</span><strong id="etaDest">-</strong></div>
+              <div class="health-item"><span>Estimated Arrival</span><strong id="etaTime">-</strong></div>
+              <div class="health-item"><span>Delay</span><span class="badge text-bg-secondary" id="etaDelay">Unknown</span></div>
+              <div class="health-item"><span>Route Confidence</span><span class="badge text-bg-info" id="etaConf">-</span></div>
 
               <hr>
               <h6 class="mb-2">ETA Notes</h6>
               <ul class="activity-list mb-0" id="etaNotes">
-                <li><span>Sea state moderate, no reroute required</span><small>now</small></li>
-                <li><span>Wind within safe operating range</span><small>5m ago</small></li>
+                <li class="text-muted"><small>Select a vessel to view ETA</small></li>
               </ul>
             </div>
           </div>
@@ -159,135 +148,312 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/vessels.js"></script>
+  <script src="../../../assets/js/services/bookings.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+  <script src="../../../assets/js/fleet-map.js"></script>
+
   <script>
-    // Demo data for View Vessel Location + View ETA
-    const vesselData = {
-      "Boat 08": {
-        zone: "East Marker 4",
-        coords: "11.1542, 123.7421",
-        speed: "24 km/h",
-        dir: "NE",
-        signal: "Stable",
-        destination: "Olango Port",
-        eta: "15:24",
-        delay: "On Time",
-        confidence: "95%"
-      },
-      "Boat 03": {
-        zone: "South Entry",
-        coords: "11.0971, 123.6934",
-        speed: "14 km/h",
-        dir: "E",
-        signal: "Intermittent",
-        destination: "Sulpa Port",
-        eta: "15:38",
-        delay: "+8 mins",
-        confidence: "82%"
-      },
-      "Boat 11": {
-        zone: "Olango Port Dock Zone",
-        coords: "11.2033, 123.8105",
-        speed: "7 km/h",
-        dir: "N",
-        signal: "Stable",
-        destination: "Olango Port",
-        eta: "15:12",
-        delay: "On Time",
-        confidence: "97%"
-      },
-      "Boat 15": {
-        zone: "North Midpoint",
-        coords: "11.2440, 123.6550",
-        speed: "20 km/h",
-        dir: "NW",
-        signal: "Stable",
-        destination: "Caohagan Port",
-        eta: "15:31",
-        delay: "+3 mins",
-        confidence: "88%"
-      }
-    };
+    let vesselData = {};
+    let allBangkas = [];
+    let allPositions = [];
+    let fleetMap = null;
+    let replayTimer = null;
+    let replayIndex = 0;
 
     const locationVessel = document.getElementById("locationVessel");
+    const historyVessel = document.getElementById("historyVessel");
+    const historyDate = document.getElementById("historyDate");
     const locZone = document.getElementById("locZone");
     const locCoords = document.getElementById("locCoords");
     const locSpeed = document.getElementById("locSpeed");
     const locDir = document.getElementById("locDir");
     const locSignal = document.getElementById("locSignal");
+    const locLastSeen = document.getElementById("locLastSeen");
     const etaDest = document.getElementById("etaDest");
     const etaTime = document.getElementById("etaTime");
     const etaDelay = document.getElementById("etaDelay");
     const etaConf = document.getElementById("etaConf");
+    const routePills = document.getElementById("routePills");
+    const replayList = document.getElementById("replayList");
+    const replayBtn = document.getElementById("replayBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+
+    // Set default date to today
+    historyDate.valueAsDate = new Date();
 
     function setDelayBadge(value){
-      if (value === "On Time") {
-        etaDelay.className = "badge text-bg-success";
-      } else {
-        etaDelay.className = "badge text-bg-warning";
-      }
+      etaDelay.className = value === "On Time" ? "badge text-bg-success" : "badge text-bg-warning";
       etaDelay.textContent = value;
     }
 
     function setSignalBadge(value){
       if (value === "Stable") {
         locSignal.className = "badge text-bg-success";
-      } else {
+      } else if (value === "Intermittent") {
         locSignal.className = "badge text-bg-warning";
+      } else {
+        locSignal.className = "badge text-bg-danger";
       }
       locSignal.textContent = value;
     }
 
+    function calculateDirection(pos) {
+      if (!pos || pos.latitude === undefined) return 'N/A';
+      if (pos.latitude > 11.2) return 'NE';
+      if (pos.latitude < 11.1) return 'SE';
+      return 'E';
+    }
+
+    function determineZone(pos) {
+      if (!pos) return 'Unknown';
+      if (pos.latitude > 11.15) return 'North Channel';
+      if (pos.latitude > 11.05) return 'East Marker 4';
+      return 'South Entry';
+    }
+
+    function determineDestination(pos, bangkeroId) {
+      // In real app, would check active booking for this bangkero
+      if (!pos) return 'Docked';
+      if (bangkeroId) return 'En route';
+      return 'Docked';
+    }
+
     function updateVesselPanel(name){
       const v = vesselData[name];
+      if (!v) {
+        locZone.textContent = '-';
+        locCoords.textContent = '-';
+        locSpeed.textContent = '-';
+        locDir.textContent = '-';
+        setSignalBadge('Unknown');
+        locLastSeen.textContent = '-';
+        etaDest.textContent = '-';
+        etaTime.textContent = '-';
+        setDelayBadge('Unknown');
+        etaConf.textContent = '-';
+        return;
+      }
+      
       locZone.textContent = v.zone;
       locCoords.textContent = v.coords;
       locSpeed.textContent = v.speed;
       locDir.textContent = v.dir;
       setSignalBadge(v.signal);
+      locLastSeen.textContent = v.last;
 
-      etaDest.textContent = v.destination;
+      etaDest.textContent = v.dest;
       etaTime.textContent = v.eta;
       setDelayBadge(v.delay);
-      etaConf.textContent = v.confidence;
+      etaConf.textContent = v.conf;
     }
 
-    locationVessel.addEventListener("change", (e) => updateVesselPanel(e.target.value));
-    updateVesselPanel(locationVessel.value);
+    function populateVesselSelects() {
+      const vesselNames = Object.keys(vesselData).sort();
+      [locationVessel, historyVessel].forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Select vessel</option>';
+        vesselNames.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+        if (vesselNames.includes(currentValue)) select.value = currentValue;
+      });
+    }
 
-    // Simple replay simulation
-    const replayBtn = document.getElementById("replayBtn");
-    const pauseBtn = document.getElementById("pauseBtn");
-    const replayList = document.getElementById("replayList");
+    function updateRoutePills() {
+      const activeVessels = Object.entries(vesselData).filter(([_, v]) => v.signal !== 'Lost');
+      if (activeVessels.length === 0) {
+        routePills.innerHTML = '<span class="route-pill">No active vessels</span>';
+        return;
+      }
+      routePills.innerHTML = activeVessels.map(([name, v]) => 
+        `<span class="route-pill">${name} • ${v.dest} (${v.signal})</span>`
+      ).join('') + `<span class="route-pill">Last refresh: ${new Date().toLocaleTimeString()}</span>`;
+    }
 
-    const replayFrames = [
-      "14:41 • departed Marigondon Port",
-      "14:49 • passed East Marker 2",
-      "14:57 • mid-route stable speed",
-      "15:06 • near destination corridor"
-    ];
+    function updateKPIs() {
+      const total = Object.keys(vesselData).length;
+      const onRoute = Object.values(vesselData).filter(v => v.signal === 'Stable').length;
+      const delayed = Object.values(vesselData).filter(v => v.delay && v.delay !== 'On Time' && v.delay !== 'Unknown').length;
+      const signalLoss = Object.values(vesselData).filter(v => v.signal === 'Lost' || v.signal === 'Intermittent').length;
 
-    let replayIndex = 0;
-    let replayTimer = null;
+      document.getElementById('kpiTracked').textContent = total;
+      document.getElementById('kpiOnRoute').textContent = onRoute;
+      document.getElementById('kpiDelayed').textContent = delayed;
+      document.getElementById('kpiSignalLoss').textContent = signalLoss;
+    }
 
-    function startReplay() {
+    async function loadVesselData() {
+      try {
+        const [bangkas, positions] = await Promise.all([
+          window.bangkagoVessels.getAllBangkas(),
+          window.bangkagoVessels.getAllLatestPositions()
+        ]);
+
+        allBangkas = bangkas;
+        allPositions = positions;
+
+        vesselData = {};
+        
+        for (const bangka of bangkas) {
+          const pos = positions.find(p => p.bangkaId === bangka.bangkaId);
+          
+          let zone = 'Unknown';
+          let coords = 'N/A';
+          let speed = 'N/A';
+          let dir = 'N/A';
+          let signal = 'Lost';
+          let last = 'Never';
+          let dest = 'Docked';
+          
+          if (pos) {
+            coords = `${pos.latitude.toFixed(4)}, ${pos.longitude.toFixed(4)}`;
+            speed = pos.speed ? `${pos.speed} km/h` : 'Unknown';
+            dir = calculateDirection(pos);
+            const age = Date.now() - new Date(pos.recordedAt).getTime();
+            signal = age < 60000 ? 'Stable' : (age < 300000 ? 'Intermittent' : 'Lost');
+            last = new Date(pos.recordedAt).toLocaleTimeString();
+            zone = determineZone(pos);
+            dest = determineDestination(pos, bangka.bangkeroId);
+          }
+
+          vesselData[bangka.bangkaName] = {
+            zone,
+            coords,
+            speed,
+            dir,
+            signal,
+            last,
+            dest,
+            eta: pos ? 'Calculating...' : 'N/A',
+            delay: pos ? 'Unknown' : 'N/A',
+            conf: pos ? '50%' : '0%',
+            bangkaId: bangka.bangkaId,
+            bangkeroId: bangka.bangkeroId
+          };
+        }
+
+        populateVesselSelects();
+        updateRoutePills();
+        updateKPIs();
+        pushMapMarkers();
+
+        if (locationVessel.value) updateVesselPanel(locationVessel.value);
+        if (historyVessel.value) loadReplayData(historyVessel.value);
+        
+      } catch(e) {
+        console.error('Error loading vessel data:', e);
+        routePills.innerHTML = '<span class="route-pill text-danger">Error loading vessels</span>';
+      }
+    }
+
+    // Feed every vessel with a real fix to the live Leaflet map.
+    function pushMapMarkers() {
+      if (!fleetMap) return;
+      fleetMap.update(allBangkas.map(b => {
+        const pos = allPositions.find(p => p.bangkaId === b.bangkaId);
+        if (!pos) return null;
+        const v = vesselData[b.bangkaName] || {};
+        return {
+          id: b.bangkaId,
+          name: b.bangkaName,
+          lat: pos.latitude,
+          lng: pos.longitude,
+          signal: v.signal,
+          speed: v.speed,
+          last: v.last,
+          dest: v.dest
+        };
+      }).filter(Boolean));
+    }
+
+    function loadReplayData(vesselName) {
+      const v = vesselData[vesselName];
+      if (!v) {
+        replayList.innerHTML = '<li class="text-muted"><small>No data for this vessel</small></li>';
+        return;
+      }
+      
+      replayList.innerHTML = `
+        <li><span>${new Date().toLocaleTimeString()} • ${vesselName} at ${v.zone}</span><small>Current</small></li>
+        <li><span>${new Date(Date.now() - 300000).toLocaleTimeString()} • Position update received</span><small>5 min ago</small></li>
+        <li><span>${new Date(Date.now() - 600000).toLocaleTimeString()} • ${v.dest === 'En route' ? 'Departed port' : 'At dock'}</span><small>10 min ago</small></li>
+      `;
+    }
+
+    // Event listeners
+    locationVessel.addEventListener("change", (e) => {
+      updateVesselPanel(e.target.value);
+      const v = vesselData[e.target.value];
+      if (fleetMap && v && v.bangkaId) fleetMap.panTo(v.bangkaId);
+    });
+
+    historyVessel.addEventListener("change", (e) => {
+      loadReplayData(e.target.value);
+    });
+
+    historyDate.addEventListener("change", () => {
+      if (historyVessel.value) loadReplayData(historyVessel.value);
+    });
+
+    replayBtn.addEventListener("click", () => {
+      const vessel = historyVessel.value;
+      if (!vessel) { alert('Select a vessel first'); return; }
+      
       clearInterval(replayTimer);
+      replayIndex = 0;
+      const frames = [
+        `Departed port heading to ${vesselData[vessel]?.dest || 'destination'}`,
+        `Passed waypoint 1`,
+        `Mid-route stable speed`,
+        `Approaching destination`
+      ];
+      
       replayTimer = setInterval(() => {
-        const vessel = document.getElementById("historyVessel").value;
         const li = document.createElement("li");
-        li.innerHTML = `<span>${replayFrames[replayIndex].replace("•", "• " + vessel + " •")}</span><small>Replay</small>`;
+        li.innerHTML = `<span>${new Date().toLocaleTimeString()} • ${vessel} ${frames[replayIndex]}</span><small>Replay</small>`;
         replayList.prepend(li);
-        replayIndex = (replayIndex + 1) % replayFrames.length;
-
+        replayIndex = (replayIndex + 1) % frames.length;
         const items = replayList.querySelectorAll("li");
-        if (items.length > 7) items[items.length - 1].remove();
-      }, 1500);
-    }
+        if (items.length > 10) items[items.length - 1].remove();
+      }, 2000);
+    });
 
-    replayBtn.addEventListener("click", startReplay);
     pauseBtn.addEventListener("click", () => clearInterval(replayTimer));
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('vessel_tracking', null, function() {
+      loadVesselData();
+    });
+    
+    window.bangkagoRealtime.subscribe('bangkas', null, function() {
+      loadVesselData();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        try {
+          fleetMap = await window.bangkagoFleetMap.mount('fleetMap');
+        } catch (err) {
+          console.error('Fleet map failed to load:', err); // page still works without it
+        }
+        loadVesselData();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Guard handles redirect
+      }
+    })();
   </script>
 </body>
 </html>
+

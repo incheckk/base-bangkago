@@ -2,14 +2,21 @@
    Load order: config.js -> supabase UMD (CDN) -> this file.
    Exposes window.bangkago with the client, phone->auth-email helpers
    (mirror of src/utils/phone.ts), and the role lookup used by the
-   login page and the dashboard route guards. */
+   login page and the dashboard route guards.
+   This is the CANONICAL client — all dashboard services must reuse it. */
 (function () {
   'use strict';
 
   var cfg = window.BANGKAGO_WEB || {};
   var client =
     window.supabase && cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY
-      ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY)
+      ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false
+          }
+        })
       : null;
 
   /* Mirror of src/utils/phone.ts — PH mobile in any common format -> E.164. */
@@ -37,22 +44,44 @@
     return e164 ? phoneToAuthEmail(e164) : String(raw || '').trim();
   }
 
-  /* Signed-in user's users.user_role, or null (no session / no row / no client). */
+  /* Signed-in user's users.user_role.
+     Three outcomes, because the guards must not bounce a signed-in
+     admin to the login page over a venue-wifi blip:
+       'admin'|'coastguard'|'passenger'|'bangkero'  verified role
+       null            genuinely no session (or no client) -> redirect OK
+       'unverified'    session exists but the role lookup failed
+                       after retries -> show a connection error instead */
   async function role() {
     if (!client) return null;
+    var session = null;
     try {
-      var res = await client.auth.getUser();
-      var user = res && res.data && res.data.user;
-      if (!user) return null;
-      var row = await client
-        .from('users')
-        .select('user_role')
-        .eq('id', user.id)
-        .maybeSingle();
-      return row.data ? row.data.user_role : null;
+      // Local session read (the JWT is validated by the query below).
+      var s = await client.auth.getSession();
+      session = s && s.data ? s.data.session : null;
     } catch (e) {
-      return null;
+      return 'unverified';
     }
+    if (!session || !session.user) return null; // truly signed out
+    var lastErr = null;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        var row = await client
+          .from('users')
+          .select('user_role')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        if (row.error) {
+          lastErr = row.error;
+        } else {
+          return row.data ? row.data.user_role : null;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
+      await new Promise(function (r) { setTimeout(r, 400 * (attempt + 1)); });
+    }
+    console.warn('role(): could not verify role after retries', lastErr);
+    return 'unverified';
   }
 
   async function signIn(identifier, password) {

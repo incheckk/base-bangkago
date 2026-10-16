@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Admin — Report Compliance Issue</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/admin-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .panel-card{
       border:1px solid #d8dee8;
@@ -101,7 +101,7 @@
           <div class="panel-card p-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <h5 class="mb-0">Compliance Reports</h5>
-              <span class="badge text-bg-info">Admin • LGU • Coast Guard</span>
+              <span class="badge text-bg-info">Admin • Coast Guard</span>
             </div>
             <div class="table-responsive">
               <table class="table table-theme align-middle mb-0">
@@ -119,6 +119,7 @@
                 <tbody id="complianceBody"></tbody>
               </table>
             </div>
+            <div id="complianceState" class="small text-secondary mt-3">Loading compliance reports...</div>
           </div>
         </div>
       </section>
@@ -154,7 +155,17 @@
               </select>
             </div>
 
-            <div class="col-md-12">
+            <div class="col-md-6">
+              <label class="form-label">Severity</label>
+              <select id="issueSeverity" class="form-select" required>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
               <label class="form-label">Subject</label>
               <input id="issueSubject" class="form-control" placeholder="Short issue title" required>
             </div>
@@ -176,7 +187,7 @@
 
             <div class="col-md-8">
               <label class="form-label">Upload File (optional)</label>
-              <input type="file" class="form-control" id="evidenceFile">
+              <input type="file" class="form-control" id="evidenceFile" accept=".jpg,.jpeg,.png,.pdf,.mp4">
             </div>
 
             <div class="col-md-12">
@@ -184,6 +195,7 @@
               <textarea id="evidenceRemarks" class="form-control" rows="2" placeholder="Add context for the attachment..."></textarea>
             </div>
           </div>
+          <div id="submitError" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
         </div>
 
         <div class="modal-footer d-flex justify-content-end gap-2">
@@ -210,99 +222,171 @@
       </div>
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/admin-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/alerts.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
-    const reports = [
-      {id:'CI-001',by:'Admin',cat:'Safety',subject:'Missing life jackets on Boat 15',evidence:'Photo',status:'Open',date:'2026-04-16'},
-      {id:'CI-002',by:'LGU Batangas',cat:'Documentation',subject:'Expired operator license',evidence:'Document',status:'Under Review',date:'2026-04-16'}
-    ];
-
+    let reports = [];
     const tbody = document.getElementById('complianceBody');
+    const complianceState = document.getElementById('complianceState');
+    const submitForm = document.getElementById('submitReportForm');
+    const submitError = document.getElementById('submitError');
+    const evidenceFile = document.getElementById('evidenceFile');
     const submitModal = new bootstrap.Modal('#submitReportModal');
     const resultModal = new bootstrap.Modal('#resultModal');
 
     document.getElementById('btnSubmitReport').addEventListener('click', () => submitModal.show());
 
-    function statusBadge(status){
-      if(status === 'Resolved') return 'text-bg-success';
-      if(status === 'Under Review') return 'text-bg-warning';
-      return 'text-bg-danger';
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[char]);
     }
 
-    function evidenceBadge(ev){
-      if(!ev || ev === 'None') return '<span class="badge text-bg-secondary">None</span>';
-      if(ev === 'Photo') return '<span class="badge text-bg-info">Photo</span>';
-      if(ev === 'Video') return '<span class="badge text-bg-primary">Video</span>';
-      return '<span class="badge text-bg-dark">Document</span>';
+    function reportFields(alert) {
+      const message = alert.message || '';
+      const value = label => {
+        const match = message.match(new RegExp('(?:^|\\n)' + label + ': ([^\\n]*)'));
+        return match ? match[1].trim() : '';
+      };
+      const isAdminReport = message.startsWith('[Compliance Report]');
+      const zone = value('Zone');
+      return {
+        by: value('Filed By') || (isAdminReport ? 'Admin' : 'Coast Guard'),
+        category: value('Category') || (isAdminReport ? 'Compliance' : 'Safety'),
+        subject: value('Subject') || zone || message.split('\n').find(line => line && !line.startsWith('[')) || 'Compliance report',
+        date: alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('en-PH') : 'N/A'
+      };
     }
 
     function renderTable(){
-      tbody.innerHTML = '';
-      reports.forEach(r => {
-        tbody.innerHTML += `
+      tbody.innerHTML = reports.map(alert => {
+        const report = reportFields(alert);
+        const evidence = alert.evidencePaths.length
+          ? alert.evidencePaths.map((path, index) => `<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1" data-evidence-alert="${escapeHtml(alert.alertId)}" data-evidence-index="${index}">View ${index + 1}</button>`).join('')
+          : '<span class="badge text-bg-secondary">None</span>';
+        const severity = escapeHtml(alert.severity || 'low');
+        const reportStatus = alert.isResolved ? 'Resolved' : 'Open';
+        return `
           <tr>
-            <td>${r.id}</td>
-            <td>${r.by}</td>
-            <td>${r.cat}</td>
-            <td>${r.subject}</td>
-            <td>${evidenceBadge(r.evidence)}</td>
-            <td><span class="badge ${statusBadge(r.status)}">${r.status}</span></td>
-            <td>${r.date}</td>
+            <td>${escapeHtml(alert.alertId.slice(0, 8))}...</td>
+            <td>${escapeHtml(report.by)}</td>
+            <td>${escapeHtml(report.category)} <span class="badge ${severity === 'critical' || severity === 'high' ? 'text-bg-danger' : severity === 'medium' ? 'text-bg-warning' : 'text-bg-info'}">${severity}</span></td>
+            <td title="${escapeHtml(alert.message)}">${escapeHtml(report.subject)}</td>
+            <td>${evidence}</td>
+            <td><span class="badge ${alert.isResolved ? 'text-bg-success' : 'text-bg-warning'}">${reportStatus}</span></td>
+            <td>${escapeHtml(report.date)}</td>
           </tr>
         `;
+      }).join('');
+
+      tbody.querySelectorAll('[data-evidence-alert]').forEach(button => {
+        button.addEventListener('click', () => viewEvidence(button.dataset.evidenceAlert, Number(button.dataset.evidenceIndex)));
       });
+
+      complianceState.textContent = reports.length ? `${reports.length} compliance report(s)` : 'No compliance reports found.';
     }
 
-    document.getElementById('submitReportForm').addEventListener('submit', function(e){
-      e.preventDefault();
+    async function loadReports() {
+      complianceState.textContent = 'Loading compliance reports...';
+      try {
+        const alerts = await window.bangkagoAlerts.listAll({ limit: 200 });
+        reports = alerts.filter(alert => alert.message?.startsWith('[Compliance Report]') || alert.message?.startsWith('Zone:'));
+        renderTable();
+      } catch (error) {
+        console.error(error);
+        complianceState.textContent = 'Failed to load compliance reports: ' + error.message;
+      }
+    }
 
-      const nextId = `CI-${String(reports.length + 1).padStart(3,'0')}`;
-      const today = new Date().toISOString().slice(0,10);
+    async function viewEvidence(alertId, index) {
+      const report = reports.find(item => item.alertId === alertId);
+      const path = report?.evidencePaths?.[index];
+      if (!path) return;
+      const preview = window.open('about:blank', '_blank');
+      if (!preview) {
+        alert('Allow pop-ups to view evidence.');
+        return;
+      }
+      try {
+        preview.location.href = await window.bangkagoAlerts.getEvidenceUrl(path);
+      } catch (error) {
+        preview.close();
+        alert('Could not open evidence: ' + error.message);
+      }
+    }
 
-      const by = document.getElementById('filedBy').value.trim();
-      const cat = document.getElementById('issueCategory').value;
+    submitForm.addEventListener('submit', async function(event) {
+      event.preventDefault();
+      submitError.classList.add('d-none');
+
+      const filedBy = document.getElementById('filedBy').value.trim();
+      const category = document.getElementById('issueCategory').value;
+      const severity = document.getElementById('issueSeverity').value;
       const subject = document.getElementById('issueSubject').value.trim();
       const details = document.getElementById('issueDetails').value.trim();
-
       const evidenceType = document.getElementById('evidenceType').value || 'None';
-      const fileInput = document.getElementById('evidenceFile');
-      const fileName = fileInput.files[0] ? fileInput.files[0].name : '';
       const evidenceRemarks = document.getElementById('evidenceRemarks').value.trim();
+      const file = evidenceFile.files[0] || null;
+      const submitButton = submitForm.querySelector('button[type="submit"]');
+      let uploadedPaths = [];
 
-      reports.unshift({
-        id: nextId,
-        by,
-        cat,
-        subject,
-        evidence: evidenceType,
-        status: 'Open',
-        date: today
-      });
+      const message = [
+        '[Compliance Report]',
+        'Filed By: ' + filedBy,
+        'Category: ' + category,
+        'Subject: ' + subject,
+        'Details:',
+        details,
+        'Evidence Type: ' + (file ? evidenceType : 'None'),
+        'Evidence Remarks: ' + (evidenceRemarks || 'None')
+      ].join('\n');
 
-      renderTable();
-      submitModal.hide();
-
-      document.getElementById('resultBox').innerHTML = `
-        <div class="alert alert-success mb-2">
-          Report <strong>${nextId}</strong> submitted successfully.
-        </div>
-        <div class="summary-box mb-2"><strong>Filed By:</strong> ${by}</div>
-        <div class="summary-box mb-2"><strong>Category:</strong> ${cat}</div>
-        <div class="summary-box mb-2"><strong>Subject:</strong> ${subject}</div>
-        <div class="summary-box mb-2"><strong>Details:</strong> ${details}</div>
-        <div class="summary-box mb-2"><strong>Evidence Type:</strong> ${evidenceType}</div>
-        <div class="summary-box mb-2"><strong>File:</strong> ${fileName || '-'}</div>
-        <div class="summary-box mb-0"><strong>Evidence Remarks:</strong> ${evidenceRemarks || '-'}</div>
-      `;
-      resultModal.show();
-
-      e.target.reset();
+      submitButton.disabled = true;
+      submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+      try {
+        if (file) uploadedPaths = await window.bangkagoAlerts.uploadEvidence([file]);
+        const created = await window.bangkagoAlerts.create({
+          message,
+          severity,
+          evidencePaths: uploadedPaths
+        });
+        uploadedPaths = [];
+        await loadReports();
+        submitModal.hide();
+        document.getElementById('resultBox').textContent = 'Report ' + created.alertId.slice(0, 8) + ' submitted successfully.';
+        resultModal.show();
+        submitForm.reset();
+      } catch (error) {
+        console.error(error);
+        if (uploadedPaths.length) {
+          try {
+            await window.bangkagoAlerts.removeEvidence(uploadedPaths);
+          } catch (cleanupError) {
+            console.error('Failed to remove orphaned evidence:', cleanupError);
+          }
+        }
+        submitError.textContent = 'Failed to submit report: ' + error.message;
+        submitError.classList.remove('d-none');
+      } finally {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i class="bi bi-send-check me-2"></i>Submit Report';
+      }
     });
 
-    renderTable();
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'admin') return;
+      window.bangkagoRealtime.subscribe('safety_alerts', null, loadReports);
+      loadReports();
+    }).catch(function(error) {
+      console.error('Failed to initialize compliance reports:', error);
+      complianceState.textContent = 'Failed to initialize compliance reports: ' + error.message;
+    });
   </script>
 </body>
 </html>

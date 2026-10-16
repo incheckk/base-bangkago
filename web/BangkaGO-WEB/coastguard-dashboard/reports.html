@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo LGU/Coast Guard — View Operator Records</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="reports">
   <div class="cg-shell">
@@ -17,38 +17,38 @@
       <div id="topbarMount"></div>
 
       <section class="cg-content container-fluid">
-        <!-- KPI row — same border, little gap -->
-        <div class="row g-2 mb-3 kpi-strip">
+        <!-- KPI row -->
+        <div class="row g-2 mb-3 kpi-strip" id="kpiRow">
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Operators Logged</p>
-              <h3>24</h3>
-              <span class="kpi-up">All records synced</span>
+              <p>Verified Bangkeros</p>
+              <h3 id="kpiVerified">-</h3>
+              <span class="kpi-up">Active operators</span>
               <div class="kpi-mini-chart chart-up"></div>
             </div>
           </div>
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Departures Verified</p>
-              <h3>17</h3>
-              <span class="kpi-up">Today</span>
+              <p>Trips Today</p>
+              <h3 id="kpiTripsToday">-</h3>
+              <span class="kpi-up">All routes</span>
               <div class="kpi-mini-chart chart-up"></div>
             </div>
           </div>
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Conditional Trips</p>
-              <h3>3</h3>
+              <p>Active Alerts</p>
+              <h3 id="kpiAlerts">-</h3>
               <span class="kpi-warn">Need monitoring</span>
               <div class="kpi-mini-chart chart-warn"></div>
             </div>
           </div>
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Compliance Flags</p>
-              <h3>2</h3>
-              <span class="kpi-down">For admin review</span>
-              <div class="kpi-mini-chart chart-down"></div>
+              <p>Vessels Tracked</p>
+              <h3 id="kpiVessels">-</h3>
+              <span class="kpi-up">Live positions</span>
+              <div class="kpi-mini-chart chart-up"></div>
             </div>
           </div>
         </div>
@@ -71,8 +71,9 @@
                   <label class="form-label visually-hidden" for="opStatusFilter">Status</label>
                   <select id="opStatusFilter" class="form-select w-100">
                     <option value="">All Status</option>
-                    <option value="Active">Active</option>
                     <option value="On Duty">On Duty</option>
+                    <option value="Active">Active</option>
+                    <option value="Pending Verification">Pending Verification</option>
                     <option value="Suspended">Suspended</option>
                   </select>
                 </div>
@@ -87,11 +88,12 @@
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
-                      <th>Operator ID</th>
+                      <th>Bangkero ID</th>
                       <th>Name</th>
                       <th>Assigned Vessel</th>
-                      <th>Trips (7d)</th>
-                      <th>Last Activity</th>
+                      <th>License</th>
+                      <th>Verification</th>
+                      <th>Availability</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -104,25 +106,25 @@
               </p>
             </div>
 
-            <!-- Cleaned Departure Verification Log -->
+            <!-- Departure Verification Log -->
             <div class="cg-card">
               <div class="panel-head">
-                <h6 class="mb-0">Departure Verification Log </h6>
+                <h6 class="mb-0">Departure Verification Log</h6>
                 <span class="muted-note">Read-only monitoring</span>
               </div>
 
               <div class="row g-2 mb-3 align-items-end filter-row">
                 <div class="col-12 col-sm-6 col-md-5">
                   <label class="form-label visually-hidden" for="depSearchInput">Search</label>
-                  <input id="depSearchInput" class="form-control w-100" type="text" placeholder="Search vessel or verifier">
+                  <input id="depSearchInput" class="form-control w-100" type="text" placeholder="Search vessel or bangkero">
                 </div>
                 <div class="col-6 col-sm-6 col-md-3">
-                  <label class="form-label visually-hidden" for="depResultFilter">Result</label>
-                  <select id="depResultFilter" class="form-select w-100">
-                    <option value="">All Results</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Conditional">Conditional</option>
-                    <option value="Rejected">Rejected</option>
+                  <label class="form-label visually-hidden" for="depStatusFilter">Manifest Status</label>
+                  <select id="depStatusFilter" class="form-select w-100">
+                    <option value="">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="finalized">Finalized</option>
+                    <option value="completed">Completed</option>
                   </select>
                 </div>
                 <div class="col-12 col-sm-6 col-md-2 d-grid">
@@ -136,10 +138,13 @@
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
+                      <th>Manifest ID</th>
                       <th>Vessel</th>
-                      <th>Verifier</th>
-                      <th>Time</th>
-                      <th>Result</th>
+                      <th>Bangkero</th>
+                      <th>Route</th>
+                      <th>Departure</th>
+                      <th>Arrival</th>
+                      <th>Status</th>
                     </tr>
                   </thead>
                   <tbody id="departureTableBody"></tbody>
@@ -160,17 +165,14 @@
               </div>
 
               <ul class="activity-list mb-3" id="complianceFeed">
-                <li><span>Boat 03 flagged: route deviation (South Passage)</span><small>12m ago</small></li>
-                <li><span>Boat 11 departure marked conditional</span><small>25m ago</small></li>
-                <li><span>Operator BK-004 set to suspended status</span><small>44m ago</small></li>
-                <li><span>Station 2 submitted compliance report</span><small>2h ago</small></li>
+                <li><span>Loading...</span><small></small></li>
               </ul>
 
               <hr>
               <h6 class="mb-2">Review Queue</h6>
-              <div class="health-item"><span>New Reports</span><span class="badge text-bg-warning">3</span></div>
-              <div class="health-item"><span>For Admin Action</span><span class="badge text-bg-danger">2</span></div>
-              <div class="health-item"><span>Closed Today</span><span class="badge text-bg-success">5</span></div>
+              <div class="health-item"><span>Open Alerts</span><span class="badge text-bg-warning" id="queueOpen">-</span></div>
+              <div class="health-item"><span>Resolved Today</span><span class="badge text-bg-success" id="queueResolved">-</span></div>
+              <div class="health-item"><span>Pending Bangkeros</span><span class="badge text-bg-info" id="queuePending">-</span></div>
             </div>
           </div>
         </div>
@@ -178,20 +180,20 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/bangkeros.js"></script>
+  <script src="../../../assets/js/services/manifests.js"></script>
+  <script src="../../../assets/js/services/alerts.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
   <script>
-    // -----------------------------
-    // Operator records data/filter
-    // -----------------------------
-    const operators = [
-      { id: "BK-001", name: "Juan Dela Cruz", vessel: "Boat 08", trips: 9, last: "14:40", status: "On Duty" },
-      { id: "BK-002", name: "Mario Santos", vessel: "Boat 03", trips: 7, last: "14:22", status: "Active" },
-      { id: "BK-003", name: "Rogelio Navarro", vessel: "Boat 11", trips: 6, last: "13:58", status: "Active" },
-      { id: "BK-004", name: "Pedro Alonzo", vessel: "Boat 15", trips: 2, last: "12:47", status: "Suspended" },
-      { id: "BK-005", name: "Nilo Ramos", vessel: "Boat 06", trips: 8, last: "14:31", status: "On Duty" }
-    ];
+    let bangkeros = [];
+    let manifests = [];
+    let alerts = [];
 
     const opTableBody = document.getElementById("operatorTableBody");
     const opSearchInput = document.getElementById("opSearchInput");
@@ -200,27 +202,79 @@
     const opResultCount = document.getElementById("opResultCount");
     const opEmptyState = document.getElementById("opEmptyState");
 
-    function opBadge(status){
+    const depTableBody = document.getElementById("departureTableBody");
+    const depSearchInput = document.getElementById("depSearchInput");
+    const depStatusFilter = document.getElementById("depStatusFilter");
+    const depResetBtn = document.getElementById("depResetBtn");
+    const depResultCount = document.getElementById("depResultCount");
+    const depEmptyState = document.getElementById("depEmptyState");
+
+    const complianceFeed = document.getElementById("complianceFeed");
+    const queueOpen = document.getElementById("queueOpen");
+    const queueResolved = document.getElementById("queueResolved");
+    const queuePending = document.getElementById("queuePending");
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    function mapStatus(b) {
+      if (!b.isAvailable) return 'Suspended';
+      if (b.verificationStat !== 'verified') return 'Pending Verification';
+      return 'On Duty';
+    }
+
+    function opBadge(status) {
       if (status === "On Duty") return "text-bg-info";
       if (status === "Active") return "text-bg-success";
+      if (status === "Pending Verification") return "text-bg-warning";
       return "text-bg-danger";
     }
 
-    function renderOperators(data){
+    function statusBadge(status) {
+      const map = {
+        'draft': 'text-bg-warning',
+        'finalized': 'text-bg-info',
+        'completed': 'text-bg-success',
+        'cancelled': 'text-bg-danger'
+      };
+      return map[status] || 'text-bg-secondary';
+    }
+
+    function statusText(status) {
+      const map = {
+        'draft': 'Draft',
+        'finalized': 'Finalized',
+        'completed': 'Completed',
+        'cancelled': 'Cancelled'
+      };
+      return map[status] || status;
+    }
+
+    function renderOperators(data) {
       opTableBody.innerHTML = "";
 
       if (data.length === 0) opEmptyState.classList.remove("d-none");
       else opEmptyState.classList.add("d-none");
 
-      data.forEach(o => {
+      data.forEach(b => {
+        const status = mapStatus(b);
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${o.id}</td>
-          <td>${o.name}</td>
-          <td>${o.vessel}</td>
-          <td>${o.trips}</td>
-          <td>${o.last}</td>
-          <td><span class="badge ${opBadge(o.status)}">${o.status}</span></td>
+          <td>${b.uid.slice(0, 8)}</td>
+          <td>${b.displayName}</td>
+          <td>${b.boatName || 'Unassigned'}</td>
+          <td>${b.permitNumber || 'N/A'}</td>
+          <td><span class="badge ${status === 'verified' ? 'text-bg-success' : (status === 'pending' ? 'text-bg-warning' : 'text-bg-danger')}">${b.verificationStat}</span></td>
+          <td>${b.isAvailable ? '<span class="badge text-bg-success">Online</span>' : '<span class="badge text-bg-secondary">Offline</span>'}</td>
+          <td><span class="badge ${opBadge(status)}">${status}</span></td>
         `;
         opTableBody.appendChild(tr);
       });
@@ -228,21 +282,138 @@
       opResultCount.textContent = `Showing ${data.length} operator record(s)`;
     }
 
-    function filterOperators(){
+    function filterOperators() {
       const q = opSearchInput.value.trim().toLowerCase();
       const status = opStatusFilter.value;
 
-      const filtered = operators.filter(o => {
+      const filtered = bangkeros.filter(b => {
+        const derivedStatus = mapStatus(b);
         const textMatch =
-          o.id.toLowerCase().includes(q) ||
-          o.name.toLowerCase().includes(q) ||
-          o.vessel.toLowerCase().includes(q);
+          b.uid.toLowerCase().includes(q) ||
+          b.displayName.toLowerCase().includes(q) ||
+          (b.permitNumber || '').toLowerCase().includes(q) ||
+          (b.boatName || '').toLowerCase().includes(q) ||
+          (b.phoneNumber || '').toLowerCase().includes(q);
 
-        const statusMatch = status ? o.status === status : true;
+        const statusMatch = status ? derivedStatus === status : true;
         return textMatch && statusMatch;
       });
 
       renderOperators(filtered);
+    }
+
+    function renderDepartures(data) {
+      depTableBody.innerHTML = "";
+
+      if (data.length === 0) depEmptyState.classList.remove("d-none");
+      else depEmptyState.classList.add("d-none");
+
+      data.forEach(m => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${m.manifestId.slice(0, 12)}...</td>
+          <td>${m.bangkaName || 'Unassigned'}</td>
+          <td>${m.bangkeroName || 'Unknown'}</td>
+          <td>${m.departurePortName || 'Unknown'} â†’ ${m.arrivalPortName || 'Unknown'}</td>
+          <td>${formatDate(m.actualDepartureTime)}</td>
+          <td>${formatDate(m.actualArrivalTime)}</td>
+          <td><span class="badge ${statusBadge(m.status)}">${statusText(m.status)}</span></td>
+        `;
+        depTableBody.appendChild(tr);
+      });
+
+      depResultCount.textContent = `Showing ${data.length} departure log(s)`;
+    }
+
+    function filterDepartures() {
+      const q = depSearchInput.value.trim().toLowerCase();
+      const status = depStatusFilter.value;
+
+      const filtered = manifests.filter(m => {
+        const textMatch =
+          m.manifestId.toLowerCase().includes(q) ||
+          (m.bangkaName || '').toLowerCase().includes(q) ||
+          (m.bangkeroName || '').toLowerCase().includes(q) ||
+          (m.departurePortName || '').toLowerCase().includes(q);
+
+        const statusMatch = status ? m.status === status : true;
+        return textMatch && statusMatch;
+      });
+
+      renderDepartures(filtered);
+    }
+
+    function renderComplianceFeed() {
+      // Combine alerts and bangkero status changes
+      const feed = [];
+
+      // Add safety alerts
+      alerts.forEach(a => {
+        if (!a.isResolved) {
+          feed.push({
+            time: a.createdAt,
+            text: `${a.bangkaName ? 'Vessel ' + a.bangkaName : a.portName ? 'Port ' + a.portName : 'System'}: ${a.message} (${a.severity})`,
+            type: 'alert'
+          });
+        }
+      });
+
+      // Add pending bangkeros
+      bangkeros.filter(b => b.verificationStat === 'pending').forEach(b => {
+        feed.push({
+          time: b.updatedAt,
+          text: `Bangkero ${b.displayName} (${b.uid.slice(0,8)}) awaiting verification`,
+          type: 'compliance'
+        });
+      });
+
+      // Sort by time
+      feed.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+      complianceFeed.innerHTML = feed.slice(0, 10).map(f => `
+        <li><span>${f.text}</span><small>${formatDate(f.time)}</small></li>
+      `).join('') || '<li><span>No compliance activity</span><small></small></li>';
+    }
+
+    function renderKPIs() {
+      const verified = bangkeros.filter(b => b.verificationStat === 'verified').length;
+      const tripsToday = manifests.filter(m => m.generatedAt?.split('T')[0] === new Date().toISOString().split('T')[0]).length;
+      const activeAlerts = alerts.filter(a => !a.isResolved).length;
+      const vesselsTracked = new Set(manifests.map(m => m.bangkaId).filter(Boolean)).size;
+
+      document.getElementById('kpiVerified').textContent = verified;
+      document.getElementById('kpiTripsToday').textContent = tripsToday;
+      document.getElementById('kpiAlerts').textContent = activeAlerts;
+      document.getElementById('kpiVessels').textContent = vesselsTracked;
+    }
+
+    function renderQueueCounts() {
+      queueOpen.textContent = alerts.filter(a => !a.isResolved).length;
+      queueResolved.textContent = alerts.filter(a => a.isResolved && a.createdAt?.split('T')[0] === new Date().toISOString().split('T')[0]).length;
+      queuePending.textContent = bangkeros.filter(b => b.verificationStat === 'pending').length;
+    }
+
+    async function loadData() {
+      try {
+        const [bks, mfsts, alts] = await Promise.all([
+          window.bangkagoBangkeros.listAll({}),
+          window.bangkagoManifests.listAll({ limit: 100, includeCompleted: true }),
+          window.bangkagoAlerts.listAll({ limit: 50 })
+        ]);
+        // Enrich bangkeros with boat and user data for UI display
+        bangkeros = await window.bangkagoBangkeros.enrichBangkeros(bks);
+        manifests = mfsts;
+        alerts = alts;
+
+        filterOperators();
+        filterDepartures();
+        renderComplianceFeed();
+        renderKPIs();
+        renderQueueCounts();
+      } catch (e) {
+        console.error(e);
+        complianceFeed.innerHTML = '<li><span>Error loading data: ' + e.message + '</span><small></small></li>';
+      }
     }
 
     opSearchInput.addEventListener("input", filterOperators);
@@ -250,79 +421,29 @@
     opResetBtn.addEventListener("click", () => {
       opSearchInput.value = "";
       opStatusFilter.value = "";
-      renderOperators(operators);
+      renderOperators(bangkeros);
     });
-
-    // -----------------------------
-    // Departure logs data/filter (cleaner)
-    // -----------------------------
-    const departures = [
-      { vessel: "Boat 08", verifier: "Office", time: "13:18", result: "Approved" },
-      { vessel: "Boat 03", verifier: "Office", time: "13:00", result: "Conditional" },
-      { vessel: "Boat 11", verifier: "Office", time: "12:39", result: "Approved" },
-      { vessel: "Boat 15", verifier: "Office", time: "11:49", result: "Rejected" }
-    ];
-
-    const depTableBody = document.getElementById("departureTableBody");
-    const depSearchInput = document.getElementById("depSearchInput");
-    const depResultFilter = document.getElementById("depResultFilter");
-    const depResetBtn = document.getElementById("depResetBtn");
-    const depResultCount = document.getElementById("depResultCount");
-    const depEmptyState = document.getElementById("depEmptyState");
-
-    function depBadge(result){
-      if (result === "Approved") return "text-bg-success";
-      if (result === "Conditional") return "text-bg-warning";
-      return "text-bg-danger";
-    }
-
-    function renderDepartures(data){
-      depTableBody.innerHTML = "";
-
-      if (data.length === 0) depEmptyState.classList.remove("d-none");
-      else depEmptyState.classList.add("d-none");
-
-      data.forEach(d => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${d.vessel}</td>
-          <td>${d.verifier}</td>
-          <td>${d.time}</td>
-          <td><span class="badge ${depBadge(d.result)}">${d.result}</span></td>
-        `;
-        depTableBody.appendChild(tr);
-      });
-
-      depResultCount.textContent = `Showing ${data.length} departure verification log(s)`;
-    }
-
-    function filterDepartures(){
-      const q = depSearchInput.value.trim().toLowerCase();
-      const result = depResultFilter.value;
-
-      const filtered = departures.filter(d => {
-        const textMatch =
-          d.vessel.toLowerCase().includes(q) ||
-          d.verifier.toLowerCase().includes(q);
-
-        const resultMatch = result ? d.result === result : true;
-        return textMatch && resultMatch;
-      });
-
-      renderDepartures(filtered);
-    }
 
     depSearchInput.addEventListener("input", filterDepartures);
-    depResultFilter.addEventListener("change", filterDepartures);
+    depStatusFilter.addEventListener("change", filterDepartures);
     depResetBtn.addEventListener("click", () => {
       depSearchInput.value = "";
-      depResultFilter.value = "";
-      renderDepartures(departures);
+      depStatusFilter.value = "";
+      renderDepartures(manifests);
     });
 
-    // initial render
-    renderOperators(operators);
-    renderDepartures(departures);
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+
+      window.bangkagoRealtime.subscribe('bangkeros', null, loadData);
+      window.bangkagoRealtime.subscribe('trip_manifest', null, loadData);
+      window.bangkagoRealtime.subscribe('safety_alerts', null, loadData);
+      loadData();
+    }).catch(function(e) {
+      console.error('Failed to initialize Coast Guard reports:', e);
+      complianceFeed.innerHTML = '<li><span>Failed to initialize reports: ' + e.message + '</span><small></small></li>';
+    });
   </script>
 </body>
 </html>
+

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Downpayments</title>
+
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+</head>
+<body data-page="downpayments">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Downpayments (Escrow)</h6>
+            <span class="muted-note">Confirm GCash downpayments before trips are released to bangkeros</span>
+          </div>
+
+          <!-- Numbered checklist the money check happens against -->
+          <div class="alert alert-primary">
+            <h6 class="alert-heading mb-2"><i class="bi bi-list-ol me-1"></i>How to confirm this downpayment</h6>
+            <ol class="mb-0 ps-3">
+              <li>Open the passenger&apos;s receipt image below and read the GCash <strong>Ref No.</strong></li>
+              <li>In your GCash app open <strong>Transactions</strong> and search that Ref No. (or match the amount + date).</li>
+              <li>Confirm the money landed in <strong>your</strong> GCash number (Admin &rarr; GCash QR) and the amount matches the row.</li>
+              <li>Money found &rarr; <strong>Approve</strong>. Not found / wrong amount &rarr; <strong>Refund</strong>.</li>
+            </ol>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <select id="dpStatusFilter" class="form-select">
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="refunded">Refunded</option>
+                <option value="">All Status</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <input id="dpSearch" class="form-control" placeholder="Search payer, trip, rental">
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Payer</th>
+                  <th>Trip / Rental</th>
+                  <th>Amount</th>
+                  <th>Receipt</th>
+                  <th>Filed</th>
+                  <th>Status</th>
+                  <th style="min-width: 150px;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="dpBody"></tbody>
+            </table>
+          </div>
+
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading downpayments...</p>
+          </div>
+
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- REVIEW DECISION MODAL -->
+  <div class="modal fade" id="dpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Downpayment Review</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="summary-box mb-2"><strong>Payer:</strong> <span id="mPayer">-</span></div>
+              <div class="summary-box mb-2"><strong>Trip / Rental:</strong> <span id="mLabel">-</span></div>
+              <div class="summary-box mb-2"><strong>Details:</strong> <span id="mService">-</span></div>
+              <div class="summary-box mb-2"><strong>Amount:</strong> <span id="mAmount">-</span></div>
+              <div class="summary-box mb-0"><strong>Filed:</strong> <span id="mFiled">-</span></div>
+              <div class="summary-box mb-0 mt-2" id="mRefBox"><strong>GCash ref:</strong> <span id="mRef">-</span></div>
+            </div>
+            <div class="col-md-6 text-center">
+              <div class="fw-medium mb-2">Passenger receipt</div>
+              <div id="mReceiptBox"></div>
+            </div>
+          </div>
+
+          <div class="alert alert-primary mt-3 mb-0">
+            <ol class="mb-0 ps-3">
+              <li>Read the <strong>Ref No.</strong> off the receipt.</li>
+              <li>Search it in your GCash &rarr; Transactions.</li>
+              <li>Money in with the right amount &rarr; Approve; otherwise &rarr; Refund.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-outline-danger" id="mRefundBtn">
+            <i class="bi bi-arrow-counterclockwise me-1"></i>Refund
+          </button>
+          <button type="button" class="btn btn-bangkago" id="mApproveBtn">
+            <i class="bi bi-check2-circle me-1"></i>Approve
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/payments.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+
+  <style>
+    .summary-box{border:1px solid var(--gray-200);border-radius:12px;background:var(--gray-50);padding:.7rem .85rem;}
+    .dp-receipt{width:100%;max-height:320px;object-fit:contain;border-radius:10px;border:1px solid var(--gray-200);background:#fff;}
+  </style>
+
+  <script>
+    let downpayments = [];
+    let selectedIndex = null;
+
+    const dpBody = document.getElementById('dpBody');
+    const dpSearch = document.getElementById('dpSearch');
+    const dpStatusFilter = document.getElementById('dpStatusFilter');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+
+    const dpModal = new bootstrap.Modal(document.getElementById('dpModal'));
+    const mApproveBtn = document.getElementById('mApproveBtn');
+    const mRefundBtn = document.getElementById('mRefundBtn');
+
+    function peso(n){ return `₱${Number(n).toLocaleString('en-PH')}`; }
+
+    function dpBadge(status){
+      if(status === 'approved') return 'text-bg-success';
+      if(status === 'refunded') return 'text-bg-secondary';
+      return 'text-bg-warning';
+    }
+    function dpStatusLabel(status){
+      return status === 'approved' ? 'Approved'
+        : status === 'refunded' ? 'Refunded'
+        : 'Awaiting review';
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function shortDate(iso){
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+    }
+
+    function payerName(d){
+      if (d.payerName) return d.payerName;
+      if (d.user) return `${d.user.first_name || ''} ${d.user.last_name || ''}`.trim() || 'Unknown';
+      return 'Unknown';
+    }
+
+    function runFilter(){
+      const q = dpSearch.value.toLowerCase().trim();
+      const s = dpStatusFilter.value;
+      const rows = downpayments.filter(d => {
+        const hay = `${payerName(d)} ${d.label || ''} ${d.serviceLabel || ''}`.toLowerCase();
+        return (!s || d.status === s) && (!q || hay.includes(q));
+      });
+      render(rows);
+    }
+
+    function render(rows){
+      if (!rows.length) {
+        dpBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No downpayments match.</td></tr>';
+        return;
+      }
+      dpBody.innerHTML = rows.map(d => {
+        const i = downpayments.indexOf(d); // same object references — safe under filters
+        const label = d.bookingId ? `Booking ${d.label}` : `Rental · ${d.label}`;
+        return `
+          <tr>
+            <td>${payerName(d)}</td>
+            <td>${label}<div class="small text-muted">${d.serviceLabel || ''}</div></td>
+            <td>${peso(d.amount)}</td>
+            <td>${d.proofUrl
+              ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openReview(${i})" aria-label="View receipt photo for ${payerName(d)}"><i class="bi bi-image me-1"></i>View photo</button>`
+              : '<span class="badge text-bg-danger">Missing</span>'}</td>
+            <td>${shortDate(d.createdAt)}</td>
+            <td><span class="badge ${dpBadge(d.status)}">${dpStatusLabel(d.status)}</span></td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" onclick="openReview(${i})">
+                <i class="bi bi-eye"></i> Review
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.openReview = function(index){
+      selectedIndex = index;
+      const d = downpayments[index];
+
+      document.getElementById('mPayer').textContent = payerName(d);
+      document.getElementById('mLabel').textContent = d.bookingId ? `Booking ${d.label}` : `Rental · ${d.label}`;
+      document.getElementById('mService').textContent = d.serviceLabel || '—';
+      document.getElementById('mAmount').textContent = peso(d.amount);
+      document.getElementById('mFiled').textContent = shortDate(d.createdAt);
+      document.getElementById('mRef').textContent = d.referenceNum || 'read it off the receipt';
+
+      const box = document.getElementById('mReceiptBox');
+      if (d.proofUrl) {
+        const c = window.bangkagoServices.getClient();
+        const { data } = c.storage.from('docs').getPublicUrl(d.proofUrl);
+        box.innerHTML = `<a href="${data.publicUrl}" target="_blank" rel="noopener">
+            <img src="${data.publicUrl}" class="dp-receipt" alt="GCash receipt">
+          </a>
+          <small class="text-muted d-block mt-1">Click to open full size</small>`;
+      } else {
+        box.innerHTML = '<div class="alert alert-danger mb-0">No receipt was attached to this downpayment.</div>';
+      }
+
+      const pending = d.status === 'pending';
+      mApproveBtn.disabled = !pending;
+      mRefundBtn.disabled = !pending;
+      dpModal.show();
+    };
+
+    async function decide(action){
+      if (selectedIndex === null) return;
+      const d = downpayments[selectedIndex];
+      mApproveBtn.disabled = true;
+      mRefundBtn.disabled = true;
+      try {
+        if (action === 'approve') await window.bangkagoPayments.approveDownpayment(d);
+        else await window.bangkagoPayments.refundDownpayment(d);
+        dpModal.hide();
+        await loadDownpayments();
+      } catch(e) {
+        alert('Error: ' + e.message);
+        mApproveBtn.disabled = false;
+        mRefundBtn.disabled = false;
+      }
+    }
+
+    mApproveBtn.addEventListener('click', () => decide('approve'));
+    mRefundBtn.addEventListener('click', () => decide('refund'));
+
+    dpSearch.addEventListener('input', runFilter);
+    dpStatusFilter.addEventListener('change', runFilter);
+
+    async function loadDownpayments() {
+      showLoading(true);
+      try {
+        downpayments = await window.bangkagoPayments.listDownpayments({ limit: 200 });
+        showLoading(false);
+        runFilter();
+      } catch(e) {
+        console.error(e);
+        showError('Failed to load downpayments: ' + e.message);
+      }
+    }
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('downpayments', null, function() {
+      loadDownpayments();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadDownpayments();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+        
+      }
+    })();
+  </script>
+</body>
+</html>

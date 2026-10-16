@@ -60,15 +60,8 @@ export function CompanionForm({
   hint,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
-  /**
-   * Which companion the modal is editing, or null when adding a new one.
-   *
-   * Everything here was add-only: a typo in a name or a wrong contact number
-   * meant removing the passenger and re-entering all six fields, and since
-   * this block IS the manifest, a wrong number is the one the bangkero
-   * actually calls.
-   */
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  /** Which row the modal is editing — null = adding a new passenger. */
+  const [editIndex, setEditIndex] = useState<number | null>(null);
   const [draftFirst, setDraftFirst] = useState('');
   const [draftLast, setDraftLast] = useState('');
   const [draftAge, setDraftAge] = useState('');
@@ -92,36 +85,14 @@ export function CompanionForm({
       setErrors({});
     };
 
-  function fillDrafts(c: Companion | null) {
-    setDraftFirst(c?.firstName ?? '');
-    setDraftLast(c?.lastName ?? '');
-    setDraftAge(c ? String(c.age) : '');
-    setDraftSex(c?.sex ?? '');
-    setDraftContact(c?.contact ?? '');
-    setDraftAddress(c?.address ?? '');
-    setErrors({});
-  }
-
-  /** Blank while adding; back to the saved values while editing. */
   function resetDrafts() {
-    fillDrafts(editingIndex === null ? null : companions[editingIndex]);
-  }
-
-  function openAdd() {
-    setEditingIndex(null);
-    fillDrafts(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(index: number) {
-    setEditingIndex(index);
-    fillDrafts(companions[index]);
-    setModalOpen(true);
-  }
-
-  function closeModal() {
-    setModalOpen(false);
-    setEditingIndex(null);
+    setDraftFirst('');
+    setDraftLast('');
+    setDraftAge('');
+    setDraftSex('');
+    setDraftContact('');
+    setDraftAddress('');
+    setErrors({});
   }
 
   function removeCompanion(index: number) {
@@ -140,6 +111,26 @@ export function CompanionForm({
     );
   }
 
+  /** Row ✕ became an edit pencil — open the modal prefilled. */
+  function openEdit(index: number) {
+    const c = companions[index];
+    setEditIndex(index);
+    setDraftFirst(c.firstName);
+    setDraftLast(c.lastName);
+    setDraftAge(String(c.age));
+    setDraftSex(c.sex);
+    setDraftContact(c.contact);
+    setDraftAddress(c.address);
+    setErrors({});
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    resetDrafts();
+    setEditIndex(null);
+    setModalOpen(false);
+  }
+
   function validate(): boolean {
     const next: FieldErrors = {};
     const first = draftFirst.trim();
@@ -153,13 +144,10 @@ export function CompanionForm({
     return Object.keys(next).length === 0;
   }
 
+  /** Adds a new companion, or saves the one being edited (editIndex). */
   function saveCompanion() {
-    // The seat cap only blocks a NEW passenger — editing one already counted
-    // cannot push the manifest over the boat's capacity.
-    if (editingIndex === null && atCap) return;
-    if (!allPresent || !validate()) return;
-
-    const next: Companion = {
+    if ((editIndex === null && atCap) || !allPresent || !validate()) return;
+    const entry: Companion = {
       firstName: draftFirst.trim(),
       lastName: draftLast.trim(),
       age: parseInt(draftAge.trim(), 10),
@@ -167,11 +155,10 @@ export function CompanionForm({
       contact: draftContact.trim(),
       address: draftAddress.trim(),
     };
-
     onChange(
-      editingIndex === null
-        ? [...companions, next]
-        : companions.map((c, i) => (i === editingIndex ? next : c))
+      editIndex === null
+        ? [...companions, entry]
+        : companions.map((c, i) => (i === editIndex ? entry : c))
     );
     closeModal();
   }
@@ -200,42 +187,35 @@ export function CompanionForm({
 
         {companions.map((c, i) => (
           <View key={`${c.lastName}-${c.firstName}-${i}`} style={[styles.paxRow, styles.paxRowDivided]}>
-            {/* The whole row opens the editor. The pencil is there to say so —
-                an avatar and a name read as a label, not a control. */}
+            <View style={[styles.paxAvatar, styles.paxAvatarAlt]}>
+              <Text style={[styles.paxAvatarText, styles.paxAvatarTextAlt]}>
+                {initialsOf(`${c.firstName} ${c.lastName}`)}
+              </Text>
+            </View>
+            <View style={styles.paxInfo}>
+              <Text style={styles.paxName} numberOfLines={1}>{c.firstName} {c.lastName}</Text>
+              <Text style={styles.paxMeta} numberOfLines={1}>
+                {`${c.age} yrs old · ${c.sex.charAt(0).toUpperCase() + c.sex.slice(1)}`}
+              </Text>
+            </View>
             <Pressable
               onPress={() => openEdit(i)}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
-              style={({ pressed }) => [styles.paxEditZone, pressed && styles.pressed]}
-            >
-              <View style={[styles.paxAvatar, styles.paxAvatarAlt]}>
-                <Text style={[styles.paxAvatarText, styles.paxAvatarTextAlt]}>
-                  {initialsOf(`${c.firstName} ${c.lastName}`)}
-                </Text>
-              </View>
-              <View style={styles.paxInfo}>
-                <Text style={styles.paxName} numberOfLines={1}>{c.firstName} {c.lastName}</Text>
-                <Text style={styles.paxMeta} numberOfLines={1}>
-                  {`${c.age} yrs old · ${c.sex.charAt(0).toUpperCase() + c.sex.slice(1)}`}
-                </Text>
-              </View>
-              <Icon name="edit" size={15} color={colors.textMuted} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => removeCompanion(i)}
               hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${c.firstName}`}
-              style={({ pressed }) => [styles.paxRemove, pressed && styles.pressed]}
+              accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+              style={({ pressed }) => [styles.paxEdit, pressed && styles.pressed]}
             >
-              <Icon name="close" size={16} color={colors.danger} />
+              <Icon name="edit" size={16} color={colors.textMuted} />
             </Pressable>
           </View>
         ))}
 
         <Pressable
-          onPress={openAdd}
+          onPress={() => {
+            setEditIndex(null);
+            resetDrafts();
+            setModalOpen(true);
+          }}
           disabled={atCap}
           accessibilityRole="button"
           style={({ pressed }) => [
@@ -272,9 +252,7 @@ export function CompanionForm({
           >
             <View style={styles.modalCard}>
               <Pressable onPress={Keyboard.dismiss}>
-                <Text style={styles.modalTitle}>
-                  {editingIndex === null ? 'Passenger information' : 'Edit passenger'}
-                </Text>
+                <Text style={styles.modalTitle}>Passenger information</Text>
                 <Text style={styles.modalHint}>
                   They ride under your name — the bangkero checks IDs for discounts on board.
                 </Text>
@@ -353,9 +331,7 @@ export function CompanionForm({
               </View>
 
               <Pressable onPress={resetDrafts} hitSlop={8} style={styles.resetBtn} accessibilityRole="button">
-                <Text style={styles.resetText}>
-                  {editingIndex === null ? 'Reset' : 'Undo changes'}
-                </Text>
+                <Text style={styles.resetText}>Reset</Text>
               </Pressable>
 
               <View style={styles.modalActions}>
@@ -368,12 +344,29 @@ export function CompanionForm({
                 </View>
                 <View style={styles.modalActionBtn}>
                   <PrimaryButton
-                    label={editingIndex === null ? 'Add passenger' : 'Save changes'}
+                    label={editIndex === null ? 'Add passenger' : 'Save changes'}
                     onPress={saveCompanion}
                     disabled={!allPresent}
                   />
                 </View>
               </View>
+
+              {/* Removal lives INSIDE the edit screen — the row's ✕ is now
+                  this pencil, so this is the only way to drop a companion. */}
+              {editIndex !== null && (
+                <Pressable
+                  onPress={() => {
+                    const index = editIndex;
+                    closeModal();
+                    removeCompanion(index);
+                  }}
+                  hitSlop={8}
+                  style={styles.removeBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.removeBtnText}>Remove passenger</Text>
+                </Pressable>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -390,15 +383,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   paxRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-  },
-  // Carries the row's height so the tap target covers the whole name, not
-  // just the text's own bounding box.
-  paxEditZone: {
-    flex: 1, minWidth: 0,
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    minHeight: touchTarget + 8,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
   },
   paxRowDivided: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
   paxAvatar: {
@@ -412,9 +398,9 @@ const styles = StyleSheet.create({
   paxInfo: { flex: 1, minWidth: 0 },
   paxName: { flexShrink: 1, ...typography.bodyStrong },
   paxMeta: { flexShrink: 1, ...typography.label, fontWeight: '400', letterSpacing: 0 },
-  // Was a bare 'x' glyph with hitSlop 8 — about 31pt of target. Now a real
-  // square that clears the minimum on its own.
-  paxRemove: {
+  // Was a bare glyph with hitSlop 8 — about 33pt of target, under the 44pt
+  // minimum. A real square clears it without the hitSlop doing the work.
+  paxEdit: {
     width: 36, height: 36, borderRadius: radii.pill,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -466,4 +452,6 @@ const styles = StyleSheet.create({
   resetText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalActionBtn: { flex: 1 },
+  removeBtn: { marginTop: spacing.md, alignSelf: 'center' },
+  removeBtnText: { ...typography.bodyStrong, color: colors.danger, fontWeight: '700' },
 });

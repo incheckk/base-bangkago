@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo LGU/Coast Guard — View Weather</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="view-weather">
   <div class="cg-shell">
@@ -30,17 +30,12 @@
                 <div class="col-12 col-sm-6 col-md-4">
                   <label class="form-label visually-hidden" for="areaSelect">Area</label>
                   <select id="areaSelect" class="form-select w-100">
-                    <option value="Marigondon Port">Marigondon Port</option>
-                    <option value="Mactan Port">Mactan Port</option>
-                    <option value="Olango Port">Olango Port</option>
-                    <option value="Caohagan Port">Caohagan Port</option>
-                    <option value="Sulpa Port">Sulpa Port</option>
-                    <option value="Engano Port">Engano Port</option>
+                    <option value="">Select area...</option>
                   </select>
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                   <label class="form-label visually-hidden" for="weatherDate">Date</label>
-                  <input id="weatherDate" type="date" class="form-control w-100" value="2026-04-15">
+                  <input id="weatherDate" type="date" class="form-control w-100">
                 </div>
                 <div class="col-12 col-md-4 d-grid">
                   <button id="refreshWeatherBtn" class="btn btn-outline-secondary w-100" type="button">
@@ -55,7 +50,7 @@
                     <div class="wx-icon"><i id="wConditionIcon" class="bi bi-cloud-sun"></i></div>
                     <div class="wx-body">
                       <p>Condition</p>
-                      <h3 id="wCondition" class="wx-value">Partly Cloudy</h3>
+                      <h3 id="wCondition" class="wx-value">Loading...</h3>
                     </div>
                   </div>
                 </div>
@@ -64,7 +59,7 @@
                     <div class="wx-icon"><i class="bi bi-wind"></i></div>
                     <div class="wx-body">
                       <p>Wind</p>
-                      <h3 id="wWind" class="wx-value">18 km/h NE</h3>
+                      <h3 id="wWind" class="wx-value">Loading...</h3>
                     </div>
                   </div>
                 </div>
@@ -73,7 +68,7 @@
                     <div class="wx-icon"><i class="bi bi-water"></i></div>
                     <div class="wx-body">
                       <p>Wave Height</p>
-                      <h3 id="wWave" class="wx-value">0.9 m</h3>
+                      <h3 id="wWave" class="wx-value">Loading...</h3>
                     </div>
                   </div>
                 </div>
@@ -82,7 +77,7 @@
                     <div class="wx-icon"><i class="bi bi-eye"></i></div>
                     <div class="wx-body">
                       <p>Visibility</p>
-                      <h3 id="wVis" class="wx-value">8 km</h3>
+                      <h3 id="wVis" class="wx-value">Loading...</h3>
                     </div>
                   </div>
                 </div>
@@ -91,9 +86,7 @@
               <hr>
               <h6 class="mb-2">Marine Advisory Feed</h6>
               <ul class="activity-list mb-0" id="advisoryFeed">
-                <li><span>Moderate winds expected by late afternoon.</span><small>10m ago</small></li>
-                <li><span>No storm cell detected in monitored corridor.</span><small>22m ago</small></li>
-                <li><span>Tide shift expected at 16:10.</span><small>35m ago</small></li>
+                <li><span>Loading weather data...</span><small></small></li>
               </ul>
             </div>
           </div>
@@ -105,16 +98,15 @@
                 <h6 class="mb-0">Check Safety Status</h6>
               </div>
 
-              <div class="health-item"><span>Overall Route Safety</span><span class="badge text-bg-success" id="safeOverall">SAFE</span></div>
-              <div class="health-item"><span>Small Craft Advisory</span><span class="badge text-bg-warning" id="safeCraft">CAUTION</span></div>
-              <div class="health-item"><span>Thunderstorm Risk</span><span class="badge text-bg-success" id="safeStorm">LOW</span></div>
-              <div class="health-item"><span>Departure Recommendation</span><strong id="safeReco">Proceed with monitoring</strong></div>
+              <div class="health-item"><span>Overall Route Safety</span><span class="badge text-bg-success" id="safeOverall">Loading...</span></div>
+              <div class="health-item"><span>Small Craft Advisory</span><span class="badge text-bg-warning" id="safeCraft">Loading...</span></div>
+              <div class="health-item"><span>Thunderstorm Risk</span><span class="badge text-bg-success" id="safeStorm">Loading...</span></div>
+              <div class="health-item"><span>Departure Recommendation</span><strong id="safeReco">Loading...</strong></div>
 
               <hr>
               <h6 class="mb-2">Safety Notes</h6>
-              <ul class="activity-list mb-0">
-                <li><span>Require life vest check before departure.</span><small>policy</small></li>
-                <li><span>Reduce speed on East corridor if wind increases.</span><small>advice</small></li>
+              <ul class="activity-list mb-0" id="safetyNotes">
+                <li><span>Loading...</span><small></small></li>
               </ul>
             </div>
           </div>
@@ -123,20 +115,18 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
-  <script>
-    const weatherByArea = {
-      "Marigondon Port": { condition: "Partly Cloudy", wind: "18 km/h NE", wave: "0.9 m", vis: "8 km", overall: "SAFE", craft: "CAUTION", storm: "LOW", reco: "Proceed with monitoring" },
-      "Mactan Port": { condition: "Light Rain", wind: "24 km/h E", wave: "1.3 m", vis: "5 km", overall: "CAUTION", craft: "CAUTION", storm: "MED", reco: "Allow departure with caution" },
-      "Olango Port": { condition: "Cloudy", wind: "14 km/h N", wave: "0.7 m", vis: "9 km", overall: "SAFE", craft: "NORMAL", storm: "LOW", reco: "Safe for regular trip" },
-      "Caohagan Port": { condition: "Rain Showers", wind: "30 km/h NE", wave: "1.8 m", vis: "4 km", overall: "CAUTION", craft: "ALERT", storm: "MED", reco: "Delay small vessels if worsening" },
-      "Sulpa Port": { condition: "Partly Cloudy", wind: "16 km/h SW", wave: "0.8 m", vis: "9 km", overall: "SAFE", craft: "NORMAL", storm: "LOW", reco: "Ideal for island-hopping — flexible routing via Olango → Caohagan" },
-      "Engano Port": { condition: "Cloudy", wind: "22 km/h NE", wave: "1.4 m", vis: "6 km", overall: "CAUTION", craft: "CAUTION", storm: "MED", reco: "Monitor channel; Engano link may reroute via Olango" }
-    };
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/weather.js"></script>
+  <script src="../../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
 
+  <script>
     const areaSelect = document.getElementById("areaSelect");
+    const weatherDate = document.getElementById("weatherDate");
     const refreshBtn = document.getElementById("refreshWeatherBtn");
 
     const wCondition = document.getElementById("wCondition");
@@ -149,41 +139,169 @@
     const safeCraft = document.getElementById("safeCraft");
     const safeStorm = document.getElementById("safeStorm");
     const safeReco = document.getElementById("safeReco");
+    const advisoryFeed = document.getElementById("advisoryFeed");
+    const safetyNotes = document.getElementById("safetyNotes");
 
-    function setBadge(el, value){
+    let ports = [];
+    let currentWeather = null;
+
+    function setBadge(el, value) {
       el.textContent = value;
       if (["SAFE", "LOW", "NORMAL"].includes(value)) el.className = "badge text-bg-success";
-      else if (["CAUTION", "MED"].includes(value)) el.className = "badge text-bg-warning";
+      else if (["CAUTION", "MED", "MEDIUM"].includes(value)) el.className = "badge text-bg-warning";
       else el.className = "badge text-bg-danger";
     }
 
     const iconByCondition = {
-      "Partly Cloudy": "bi-cloud-sun",
-      "Cloudy": "bi-cloud-fill",
-      "Light Rain": "bi-cloud-drizzle",
-      "Rain Showers": "bi-cloud-rain-fill"
+      "clear": "bi-sun-fill",
+      "partly cloudy": "bi-cloud-sun",
+      "cloudy": "bi-cloud-fill",
+      "overcast": "bi-cloud-fill",
+      "light rain": "bi-cloud-drizzle",
+      "rain": "bi-cloud-rain-fill",
+      "heavy rain": "bi-cloud-rain-heavy-fill",
+      "thunderstorm": "bi-cloud-lightning-fill",
+      "storm": "bi-cloud-lightning-fill"
     };
 
-    function renderWeather(area){
-      const w = weatherByArea[area];
-      wCondition.textContent = w.condition;
-      if(wConditionIcon){
-        const ic = iconByCondition[w.condition] || "bi-cloud-fill";
+    function renderWeather(weather) {
+      if (!weather) {
+        wCondition.textContent = 'No data';
+        wWind.textContent = '—';
+        wWave.textContent = '—';
+        wVis.textContent = '—';
+        return;
+      }
+
+      const condition = (weather.weatherCondition || 'clear').toLowerCase();
+      wCondition.textContent = condition.charAt(0).toUpperCase() + condition.slice(1);
+      if (wConditionIcon) {
+        const ic = iconByCondition[condition] || "bi-cloud-fill";
         wConditionIcon.className = "bi " + ic;
       }
-      wWind.textContent = w.wind;
-      wWave.textContent = w.wave;
-      wVis.textContent = w.vis;
+      wWind.textContent = weather.windSpeed ? weather.windSpeed + ' km/h' : 'N/A';
+      wWave.textContent = weather.waveHeight ? weather.waveHeight + ' m' : 'N/A';
+      wVis.textContent = 'N/A'; // Not in schema
 
-      setBadge(safeOverall, w.overall);
-      setBadge(safeCraft, w.craft);
-      setBadge(safeStorm, w.storm);
-      safeReco.textContent = w.reco;
+      // Safety assessment based on weather
+      const wave = parseFloat(weather.waveHeight) || 0;
+      const wind = parseFloat(weather.windSpeed) || 0;
+      const safe = weather.isSafe !== false;
+
+      let overall = safe ? 'SAFE' : 'CAUTION';
+      let craft = wave > 1.5 || wind > 25 ? 'ALERT' : (wave > 1.0 || wind > 20 ? 'CAUTION' : 'NORMAL');
+      let storm = condition.includes('thunder') || condition.includes('storm') ? 'HIGH' : (condition.includes('rain') ? 'MED' : 'LOW');
+      let reco = safe ? 'Proceed with monitoring' : 'Delay small vessels if worsening';
+
+      setBadge(safeOverall, overall);
+      setBadge(safeCraft, craft);
+      setBadge(safeStorm, storm);
+      safeReco.textContent = reco;
     }
 
-    areaSelect.addEventListener("change", () => renderWeather(areaSelect.value));
-    refreshBtn.addEventListener("click", () => renderWeather(areaSelect.value));
-    renderWeather(areaSelect.value);
+    function renderAdvisories(weatherList) {
+      advisoryFeed.innerHTML = '';
+      if (!weatherList || weatherList.length === 0) {
+        advisoryFeed.innerHTML = '<li><span>No weather data available</span><small></small></li>';
+        return;
+      }
+      weatherList.slice(0, 5).forEach(w => {
+        const li = document.createElement('li');
+        const time = w.recordedAt ? new Date(w.recordedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : '';
+        const condition = (w.weatherCondition || 'clear').charAt(0).toUpperCase() + (w.weatherCondition || 'clear').slice(1);
+        li.innerHTML = `<span>${w.portName || w.portId}: ${condition}, ${w.windSpeed || '?'} km/h, ${w.waveHeight || '?'} m</span><small>${time}</small>`;
+        advisoryFeed.appendChild(li);
+      });
+    }
+
+    function renderSafetyNotes(weather) {
+      safetyNotes.innerHTML = '';
+      if (!weather) return;
+      const notes = [];
+      if (parseFloat(weather.waveHeight) > 1.5) notes.push('High waves — small craft exercise caution');
+      if (parseFloat(weather.windSpeed) > 25) notes.push('Strong winds — reduce speed on exposed corridors');
+      if (weather.weatherCondition?.toLowerCase().includes('rain')) notes.push('Rain expected — require life vest check before departure');
+      if (weather.weatherCondition?.toLowerCase().includes('thunder')) notes.push('Thunderstorm risk — delay departure if lightning observed');
+      if (notes.length === 0) notes.push('Conditions favorable for regular operations');
+      notes.forEach(note => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${note}</span><small>advisory</small>`;
+        safetyNotes.appendChild(li);
+      });
+    }
+
+    async function loadPorts() {
+      try {
+        ports = await window.bangkagoPortsRoutes.listPorts(true);
+        areaSelect.innerHTML = '<option value="">Select area...</option>';
+        ports.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.portId;
+          opt.textContent = p.portName;
+          areaSelect.appendChild(opt);
+        });
+        // Default to first port
+        if (ports.length > 0) areaSelect.value = ports[0].portId;
+      } catch (e) {
+        console.error('Failed to load ports:', e);
+      }
+    }
+
+    async function loadWeather() {
+      const portId = areaSelect.value;
+      const date = weatherDate.value;
+      if (!portId) return;
+
+      try {
+        let weather;
+        if (date) {
+          // Load weather for specific date
+          const weathers = await window.bangkagoWeather.listAll({ portId, limit: 50 });
+          weather = weathers.find(w => w.recordedAt?.split('T')[0] === date) || weathers[0];
+        } else {
+          weather = await window.bangkagoWeather.getLatestByPort(portId);
+        }
+        currentWeather = weather;
+        renderWeather(weather);
+        renderSafetyNotes(weather);
+      } catch (e) {
+        console.error('Failed to load weather:', e);
+      }
+    }
+
+    async function loadAllWeather() {
+      try {
+        const weathers = await window.bangkagoWeather.getAllLatest();
+        renderAdvisories(weathers);
+      } catch (e) {
+        console.error('Failed to load advisories:', e);
+      }
+    }
+
+    areaSelect.addEventListener("change", loadWeather);
+    weatherDate.addEventListener("change", loadWeather);
+    refreshBtn.addEventListener("click", () => {
+      loadWeather();
+      loadAllWeather();
+    });
+
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+
+      window.bangkagoRealtime.subscribe('weather_data', null, function() {
+        loadWeather();
+        loadAllWeather();
+      });
+
+      weatherDate.valueAsDate = new Date();
+      loadPorts().then(() => {
+        loadWeather();
+        loadAllWeather();
+      });
+    }).catch(function(e) {
+      console.error('Failed to initialize weather page:', e);
+    });
   </script>
 </body>
 </html>
+

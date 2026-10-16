@@ -10,14 +10,14 @@ import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
   getAverageRating, getEffectiveRating, getRatingsByBangkero,
 } from '@/services/rating.service';
-import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { RatingDoc } from '@/types/models';
 
 /**
- * What passengers said about you: the average the accept gate uses
- * (010 floors it at 3.0★), the effective number after penalties, and
- * every comment — previously only a hidden number on the profile.
+ * What passengers said about you: the average, the effective number
+ * the accept gate uses (rule v2, 036: smoothed with a 5★ prior,
+ * floor at 1.0★, penalties and 2-day recovery stars), and every
+ * comment — previously only a hidden number on the profile.
  */
 export default function BangkeroRatingsScreen() {
   const { user } = useAuth();
@@ -26,7 +26,6 @@ export default function BangkeroRatingsScreen() {
   const [rows, setRows] = useState<RatingDoc[]>([]);
   const [avg, setAvg] = useState<number | null>(null);
   const [effective, setEffective] = useState<number | null>(null);
-  const [penalty, setPenalty] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,16 +35,14 @@ export default function BangkeroRatingsScreen() {
       return;
     }
     try {
-      const [list, average, eff, bangkeroRow] = await Promise.all([
+      const [list, average, eff] = await Promise.all([
         getRatingsByBangkero(uid),
         getAverageRating(uid),
         getEffectiveRating(uid),
-        supabase.from('bangkeros').select('rating_penalty').eq('id', uid).maybeSingle(),
       ]);
       setRows(list);
       setAvg(average);
       setEffective(eff);
-      setPenalty(Number(bangkeroRow.data?.rating_penalty ?? 0) || 0);
       setLoading(false);
       setError(null);
     } catch (e) {
@@ -92,9 +89,10 @@ export default function BangkeroRatingsScreen() {
               ? 'No ratings yet'
               : `${rows.length} rating${rows.length === 1 ? '' : 's'} from passengers`}
           </Text>
-          {penalty > 0 && effective !== null && avg !== null && avg !== effective && (
+          {effective !== null && avg !== null && Math.abs(avg - effective) > 0.05 && (
             <Text style={styles.effectiveNote}>
-              Effective rating {effective.toFixed(1)} ★ after penalties — this is what the accept gate uses.
+              Effective rating {effective.toFixed(1)} ★ (smoothed, after penalties/recovery)
+              — this is what the accept gate uses; floor 1.0 ★.
             </Text>
           )}
         </View>

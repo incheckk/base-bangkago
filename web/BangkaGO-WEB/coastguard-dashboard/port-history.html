@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Coast Guard — Port History</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="port-history">
   <div class="cg-shell">
@@ -26,76 +26,45 @@
               </div>
 
               <div class="row g-2 mb-3 align-items-end filter-row">
-                  <div class="col-12 col-sm-6 col-md-5">
-                    <label class="form-label visually-hidden" for="portSearchInput">Search</label>
-                    <input id="portSearchInput" class="form-control w-100" type="text" placeholder="Search vessel, port, event">
-                  </div>
-                  <div class="col-6 col-sm-6 col-md-3">
-                    <label class="form-label visually-hidden" for="portEventFilter">Event</label>
-                    <select id="portEventFilter" class="form-select w-100">
-                      <option value="">All Events</option>
-                      <option value="Departure">Departure</option>
-                      <option value="Arrival">Arrival</option>
-                    </select>
-                  </div>
-                  <div class="col-6 col-sm-6 col-md-2 d-grid">
-                    <button id="portResetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
-                  </div>
+                <div class="col-12 col-sm-6 col-md-5">
+                  <label class="form-label visually-hidden" for="portSearchInput">Search</label>
+                  <input id="portSearchInput" class="form-control w-100" type="text" placeholder="Search vessel, port, event">
                 </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                  <label class="form-label visually-hidden" for="portEventFilter">Event Type</label>
+                  <select id="portEventFilter" class="form-select w-100">
+                    <option value="">All Events</option>
+                    <option value="departure">Departure</option>
+                    <option value="arrival">Arrival</option>
+                    <option value="docking">Docking</option>
+                    <option value="queue_entry">Queue Entry</option>
+                    <option value="queue_exit">Queue Exit</option>
+                  </select>
+                </div>
+                <div class="col-6 col-sm-6 col-md-2 d-grid">
+                  <button id="portResetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                </div>
+              </div>
 
-                <div id="portResultCount" class="small text-secondary mb-2"></div>
+              <div id="portResultCount" class="small text-secondary mb-2"></div>
 
-                <div class="table-responsive">
+              <div class="table-responsive">
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
-                      <th>Date</th>
+                      <th>Date/Time</th>
                       <th>Vessel</th>
                       <th>Port</th>
                       <th>Event</th>
-                      <th>Time</th>
+                      <th>Bangkero</th>
                       <th>Condition</th>
                     </tr>
                   </thead>
-                  <tbody id="portTableBody">
-                    <tr>
-                      <td>2026-04-09</td>
-                      <td>Boat 08</td>
-                      <td>Marigondon Port</td>
-                      <td><span class="badge text-bg-primary">Departure</span></td>
-                      <td>13:20</td>
-                      <td>Clear</td>
-                    </tr>
-                    <tr>
-                      <td>2026-04-09</td>
-                      <td>Boat 11</td>
-                      <td>Mactan Port</td>
-                      <td><span class="badge text-bg-success">Arrival</span></td>
-                      <td>13:58</td>
-                      <td>Moderate</td>
-                    </tr>
-                    <tr>
-                      <td>2026-04-08</td>
-                      <td>Boat 03</td>
-                      <td>Olango Port</td>
-                      <td><span class="badge text-bg-primary">Departure</span></td>
-                      <td>16:12</td>
-                      <td>Rain</td>
-                    </tr>
-                    <tr>
-                      <td>2026-04-08</td>
-                      <td>Boat 06</td>
-                      <td>Olango Port</td>
-                      <td><span class="badge text-bg-success">Arrival</span></td>
-                      <td>17:01</td>
-                      <td>Clear</td>
-                    </tr>
-                  </tbody>
+                  <tbody id="portTableBody"></tbody>
                 </table>
               </div>
 
-                <p id="portEmptyState" class="cg-empty d-none">No port records matched your filters.</p>
-              </div>
+              <p id="portEmptyState" class="cg-empty d-none">No port records matched your filters.</p>
             </div>
           </div>
         </div>
@@ -103,48 +72,240 @@
     </main>
   </div>
 
-  
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
-<script>
-    (function(){
-      const rows = [
-        {date:"2026-04-09", vessel:"Boat 08", port:"Marigondon Port", event:"Departure", time:"13:20", condition:"Clear"},
-        {date:"2026-04-09", vessel:"Boat 11", port:"Mactan Port", event:"Arrival", time:"13:58", condition:"Moderate"},
-        {date:"2026-04-08", vessel:"Boat 03", port:"Olango Port", event:"Departure", time:"16:12", condition:"Rain"},
-        {date:"2026-04-08", vessel:"Boat 06", port:"Olango Port", event:"Arrival", time:"17:01", condition:"Clear"}
-      ];
-      const tbody = document.getElementById("portTableBody");
-      const searchInput = document.getElementById("portSearchInput");
-      const eventFilter = document.getElementById("portEventFilter");
-      const resetBtn = document.getElementById("portResetBtn");
-      const countEl = document.getElementById("portResultCount");
-      const emptyEl = document.getElementById("portEmptyState");
-      function badge(e){ return e==="Departure" ? "text-bg-primary" : "text-bg-success"; }
-      function render(data){
-        tbody.innerHTML="";
-        if(data.length===0) emptyEl.classList.remove("d-none"); else emptyEl.classList.add("d-none");
-        data.forEach(r=>{
-          const tr=document.createElement("tr");
-          tr.innerHTML=`<td>${r.date}</td><td>${r.vessel}</td><td>${r.port}</td><td><span class="badge ${badge(r.event)}">${r.event}</span></td><td>${r.time}</td><td>${r.condition}</td>`;
-          tbody.appendChild(tr);
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../../assets/js/services/bangkas.js"></script>
+  <script src="../../../assets/js/services/bangkeros.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
+  <script>
+    let portEvents = [];
+    let ports = [];
+    let bangkas = [];
+
+    const tbody = document.getElementById("portTableBody");
+    const searchInput = document.getElementById("portSearchInput");
+    const eventFilter = document.getElementById("portEventFilter");
+    const resetBtn = document.getElementById("portResetBtn");
+    const countEl = document.getElementById("portResultCount");
+    const emptyEl = document.getElementById("portEmptyState");
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      try {
+        return new Date(dateStr).toLocaleString('en-PH', {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
         });
-        countEl.textContent=`Showing ${data.length} port record(s)`;
+      } catch {
+        return dateStr;
       }
-      function run(){
-        const q=(searchInput.value||"").trim().toLowerCase();
-        const ev=eventFilter.value;
-        render(rows.filter(r=>{
-          const text=(r.vessel+" "+r.port+" "+r.event+" "+r.date).toLowerCase();
-          return text.includes(q) && (ev? r.event===ev : true);
-        }));
+    }
+
+    function badgeClass(event) {
+      const map = {
+        'departure': 'text-bg-primary',
+        'arrival': 'text-bg-success',
+        'docking': 'text-bg-info',
+        'queue_entry': 'text-bg-warning',
+        'queue_exit': 'text-bg-secondary'
+      };
+      return map[event] || 'text-bg-secondary';
+    }
+
+    function eventLabel(event) {
+      const map = {
+        'departure': 'Departure',
+        'arrival': 'Arrival',
+        'docking': 'Docking',
+        'queue_entry': 'Queue Entry',
+        'queue_exit': 'Queue Exit'
+      };
+      return map[event] || event;
+    }
+
+    function render(data) {
+      tbody.innerHTML = "";
+      if (data.length === 0) emptyEl.classList.remove("d-none");
+      else emptyEl.classList.add("d-none");
+
+      data.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatDate(r.timestamp)}</td>
+          <td>${r.bangkaName || r.vesselId || 'Unknown'}</td>
+          <td>${r.portName || r.portId || 'Unknown'}</td>
+          <td><span class="badge ${badgeClass(r.eventType)}">${eventLabel(r.eventType)}</span></td>
+          <td>${r.bangkeroName || 'Unknown'}</td>
+          <td>${r.condition || '—'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      countEl.textContent = `Showing ${data.length} port record(s)`;
+    }
+
+    function runFilter() {
+      const q = (searchInput.value || "").trim().toLowerCase();
+      const ev = eventFilter.value;
+
+      const filtered = portEvents.filter(r => {
+        const text = (r.bangkaName + ' ' + r.portName + ' ' + r.eventType + ' ' + (r.bangkeroName || '') + ' ' + r.timestamp).toLowerCase();
+        return text.includes(q) && (ev ? r.eventType === ev : true);
+      });
+
+      render(filtered);
+    }
+
+    async function loadReferenceData() {
+      try {
+        const [p, b, bk] = await Promise.all([
+          window.bangkagoPortsRoutes.listPorts(false),
+          window.bangkagoBangkas.listAll({}),
+          window.bangkagoBangkeros.listAll({})
+        ]);
+        ports = p;
+        bangkas = b;
+        // bangkeros = bk; // available if needed
+      } catch (e) {
+        console.error('Failed to load reference data:', e);
       }
-      if(searchInput) searchInput.addEventListener("input", run);
-      if(eventFilter) eventFilter.addEventListener("change", run);
-      if(resetBtn) resetBtn.addEventListener("click", ()=>{ searchInput.value=""; eventFilter.value=""; render(rows); });
-      render(rows);
-    })();
+    }
+
+    async function loadPortHistory() {
+      const c = window.bangkagoServices.getClient();
+      if (!c) return;
+
+      try {
+        // Queue rows track bangkeros; vessels are associated through bangkero_id.
+        const { data: queues, error: queueError } = await c
+          .from('port_queue')
+          .select(`
+            *,
+            ports(port_name),
+            bangkeros(display_name, is_available)
+          `)
+          .order('entered_at', { ascending: false })
+          .limit(200);
+
+        if (queueError) throw queueError;
+
+        // Also load from trip_manifest for departures/arrivals
+        const { data: manifests, error: manifestError } = await c
+          .from('trip_manifest')
+          .select(`
+            *,
+            ports_departure:ports!trip_manifest_departure_port_id_fkey(port_name),
+            ports_arrival:ports!trip_manifest_arrival_port_id_fkey(port_name),
+            bangkas(bangka_name, bangkero_id),
+            bangkeros(display_name)
+          `)
+          .order('generated_at', { ascending: false })
+          .limit(200);
+
+        if (manifestError) throw manifestError;
+
+        const events = [];
+
+        // Process queue events
+        (queues || []).forEach(q => {
+          const bangkaName = bangkas
+            .filter(b => b.bangkeroId === q.bangkero_id)
+            .map(b => b.bangkaName)
+            .join(', ') || 'Unassigned';
+          const condition = q.bangkeros?.is_available ? 'Online' : 'Offline';
+
+          // Queue entry
+          events.push({
+            timestamp: q.entered_at,
+            eventType: 'queue_entry',
+            portId: q.port_id,
+            portName: q.ports?.port_name,
+            bangkeroId: q.bangkero_id,
+            bangkaName,
+            bangkeroName: q.bangkeros?.display_name,
+            condition
+          });
+
+          // Queue exit (if left)
+          if (q.left_at) {
+            events.push({
+              timestamp: q.left_at,
+              eventType: 'queue_exit',
+              portId: q.port_id,
+              portName: q.ports?.port_name,
+              bangkeroId: q.bangkero_id,
+              bangkaName,
+              bangkeroName: q.bangkeros?.display_name,
+              condition
+            });
+          }
+        });
+
+        // Process manifest events (departures/arrivals)
+        (manifests || []).forEach(m => {
+          if (m.actual_departure_time) {
+            events.push({
+              timestamp: m.actual_departure_time,
+              eventType: 'departure',
+              portId: m.departure_port_id,
+              portName: m.ports_departure?.port_name,
+              bangkaId: m.bangka_id,
+              bangkaName: m.bangkas?.bangka_name,
+              bangkeroId: m.bangkero_id,
+              bangkeroName: m.bangkeros?.display_name,
+              condition: 'Departed'
+            });
+          }
+          if (m.actual_arrival_time) {
+            events.push({
+              timestamp: m.actual_arrival_time,
+              eventType: 'arrival',
+              portId: m.arrival_port_id,
+              portName: m.ports_arrival?.port_name,
+              bangkaId: m.bangka_id,
+              bangkaName: m.bangkas?.bangka_name,
+              bangkeroId: m.bangkero_id,
+              bangkeroName: m.bangkeros?.display_name,
+              condition: 'Arrived'
+            });
+          }
+        });
+
+        // Sort by timestamp descending
+        events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        portEvents = events;
+        render(portEvents);
+      } catch (e) {
+        console.error('Failed to load port history:', e);
+        emptyEl.textContent = 'Error loading port history: ' + e.message;
+        emptyEl.classList.remove("d-none");
+      }
+    }
+
+    searchInput.addEventListener("input", runFilter);
+    eventFilter.addEventListener("change", runFilter);
+    resetBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      eventFilter.value = "";
+      render(portEvents);
+    });
+
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+
+      window.bangkagoRealtime.subscribe('port_queue', null, loadPortHistory);
+      window.bangkagoRealtime.subscribe('trip_manifest', null, loadPortHistory);
+      loadReferenceData().then(loadPortHistory);
+    }).catch(function(e) {
+      console.error('Failed to initialize port history:', e);
+      emptyEl.textContent = 'Failed to initialize port history: ' + e.message;
+      emptyEl.classList.remove('d-none');
+    });
   </script>
 </body>
 </html>
+

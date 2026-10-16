@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -84,7 +84,6 @@ export default function PaymentScreen() {
     : Math.max(0, fare - downAmount);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoaded, setQrLoaded] = useState(false);
-  const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
 
@@ -129,8 +128,7 @@ export default function PaymentScreen() {
       // without the screenshot that documents its downpayment.
       let proofPath: string | null = null;
       if (isEscrow) {
-        if (!reference.trim()) throw new Error('Enter your GCash reference number.');
-        if (!proofUri) throw new Error('Attach your payment screenshot.');
+        if (!proofUri) throw new Error('Attach your GCash receipt screenshot.');
         setProofUploading(true);
         try {
           proofPath = await uploadDownpaymentProof(proofUri);
@@ -244,7 +242,9 @@ export default function PaymentScreen() {
         try {
           await createDownpayment({
             amount: downAmount,
-            referenceNum: reference,
+            // No manual ref input (prof's rule): the admin reads the
+            // Ref No. off the attached receipt while verifying in GCash.
+            referenceNum: '',
             proofUrl: proofPath,
             bookingId,
           });
@@ -355,17 +355,11 @@ export default function PaymentScreen() {
                 </View>
               )}
 
-              <Text style={styles.inputLabel}>GCASH REFERENCE NUMBER</Text>
-              <TextInput
-                value={reference}
-                onChangeText={setReference}
-                placeholder="e.g. 123456789012"
-                placeholderTextColor={colors.textMuted}
-                autoCapitalize="characters"
-                style={styles.input}
-              />
-
-              <Text style={styles.inputLabel}>PAYMENT SCREENSHOT</Text>
+              <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
+              <Text style={styles.proofHint}>
+                Attach the digital receipt of your Express Send — the admin reads the
+                Ref No. straight from this image.
+              </Text>
               <View style={styles.proofRow}>
                 <Pressable
                   onPress={() => void chooseProof('gallery')}
@@ -445,7 +439,7 @@ export default function PaymentScreen() {
                 proofUploading ||
                 profileLoading ||
                 !profile ||
-                (isEscrow && (!reference.trim() || !proofUri))
+                (isEscrow && !proofUri)
               }
             />
           </View>
@@ -509,16 +503,7 @@ const styles = StyleSheet.create({
   escrowRemainder: { color: colors.text, fontSize: 16, fontWeight: '700' },
 
   inputLabel: { ...typography.label, marginTop: spacing.lg, marginBottom: spacing.sm },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    minHeight: 46,
-    color: colors.text,
-    fontSize: 15,
-  },
+  proofHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
   qrImage: {
     width: '100%',
     height: 200,

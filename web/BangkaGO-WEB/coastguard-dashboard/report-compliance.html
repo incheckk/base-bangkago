@@ -1,14 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo LGU/Coast Guard — Report Compliance Issue</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/coastguard-theme.css"/>
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 </head>
 <body data-page="report-compliance">
   <div class="cg-shell">
@@ -22,32 +22,32 @@
           <div class="col-xl-8">
             <div class="cg-card">
               <div class="panel-head">
-                <h6 class="mb-0">Submit Report</h6>
+                <h6 class="mb-0">Submit Compliance Report</h6>
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
-              <form id="complianceForm" class="row g-3 filter-row">
+              <form id="complianceForm" class="row g-3">
                 <div class="col-md-6">
-                  <label class="form-label">Vessel</label>
-                  <select class="form-select" id="vessel" required>
-                    <option value="">Select vessel</option>
-                    <option>Boat 03</option>
-                    <option>Boat 06</option>
-                    <option>Boat 08</option>
-                    <option>Boat 11</option>
-                    <option>Boat 15</option>
+                  <label class="form-label">Vessel (optional)</label>
+                  <select class="form-select" id="vesselSelect">
+                    <option value="">None — General Report</option>
                   </select>
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label">Issue Type</label>
-                  <select class="form-select" id="issueType" required>
-                    <option value="">Select issue</option>
-                    <option>Overcapacity Risk</option>
-                    <option>Route Deviation</option>
-                    <option>Missing Safety Gear</option>
-                    <option>Manifest Mismatch</option>
-                    <option>Unauthorized Stop</option>
+                  <label class="form-label">Port (optional)</label>
+                  <select class="form-select" id="portSelect">
+                    <option value="">None</option>
+                  </select>
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Severity</label>
+                  <select class="form-select" id="severity" required>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
                   </select>
                 </div>
 
@@ -56,14 +56,9 @@
                   <input type="text" class="form-control" id="zone" placeholder="e.g. East Marker 4" required>
                 </div>
 
-                <div class="col-md-6">
-                  <label class="form-label">Observed Time</label>
-                  <input type="datetime-local" class="form-control" id="obsTime" required>
-                </div>
-
                 <div class="col-12">
                   <label class="form-label">Report Details</label>
-                  <textarea class="form-control" id="details" rows="5" placeholder="Describe what happened..." required></textarea>
+                  <textarea class="form-control" id="details" rows="5" placeholder="Describe the compliance issue..." required></textarea>
                 </div>
 
                 <div class="col-12 d-flex gap-2 flex-wrap">
@@ -79,6 +74,7 @@
               <div id="submitMsg" class="alert alert-success mt-3 d-none mb-0">
                 Compliance report submitted successfully.
               </div>
+              <div id="submitError" class="alert alert-danger mt-3 d-none mb-0"></div>
             </div>
           </div>
 
@@ -93,7 +89,7 @@
               <input id="evidenceInput" class="form-control mb-2" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.mp4">
 
               <div class="small text-secondary mb-2">
-                Accepted: JPG, PNG, PDF, MP4
+                Accepted: JPG, PNG, PDF, MP4. Up to 5 files, 20 MB each.
               </div>
 
               <ul class="activity-list mb-3" id="fileList">
@@ -104,6 +100,10 @@
                 <i class="bi bi-trash3"></i> Clear Attachments
               </button>
 
+              <div class="alert alert-info mt-3 small">
+                <i class="bi bi-info-circle me-1"></i>
+                Evidence is securely uploaded with the report and can be viewed by Admin.
+              </div>
             </div>
           </div>
         </div>
@@ -111,44 +111,161 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/coastguard-theme.js"></script>
-  <script src="assets/js/layout-loader.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../../assets/js/services/supabase.js"></script>
+  <script src="../../../assets/js/services/alerts.js"></script>
+  <script src="../../../assets/js/services/bangkas.js"></script>
+  <script src="../../../assets/js/services/portsRoutes.js"></script>
+  <script src="../../../assets/js/services/realtime.js"></script>
+
   <script>
     const evidenceInput = document.getElementById("evidenceInput");
     const fileList = document.getElementById("fileList");
     const clearFilesBtn = document.getElementById("clearFilesBtn");
     const form = document.getElementById("complianceForm");
     const submitMsg = document.getElementById("submitMsg");
+    const submitError = document.getElementById("submitError");
+    const vesselSelect = document.getElementById("vesselSelect");
+    const portSelect = document.getElementById("portSelect");
 
-    function renderFiles(files){
+    let selectedFiles = [];
+
+    function renderFiles(files) {
       fileList.innerHTML = "";
-      if (!files.length){
+      if (!files.length) {
         fileList.innerHTML = `<li><span>No files attached yet.</span><small>waiting</small></li>`;
         return;
       }
 
       [...files].forEach(file => {
         const li = document.createElement("li");
-        li.innerHTML = `<span>${file.name}</span><small>${Math.ceil(file.size / 1024)} KB</small>`;
+        const name = document.createElement('span');
+        name.textContent = file.name;
+        const size = document.createElement('small');
+        size.textContent = Math.ceil(file.size / 1024) + ' KB';
+        li.append(name, size);
         fileList.appendChild(li);
       });
     }
 
-    evidenceInput.addEventListener("change", () => renderFiles(evidenceInput.files));
+    evidenceInput.addEventListener("change", () => {
+      selectedFiles = [...evidenceInput.files];
+      renderFiles(selectedFiles);
+    });
 
     clearFilesBtn.addEventListener("click", () => {
       evidenceInput.value = "";
+      selectedFiles = [];
       renderFiles([]);
     });
 
-    form.addEventListener("submit", (e) => {
+    async function loadDropdowns() {
+      try {
+        const [bangkas, ports] = await Promise.all([
+          window.bangkagoBangkas.listAll({}),
+          window.bangkagoPortsRoutes.listPorts(true)
+        ]);
+
+        // Vessel dropdown
+        bangkas.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.bangkaId;
+          opt.textContent = b.bangkaName + (b.bangkeroName ? ' (' + b.bangkeroName + ')' : '');
+          vesselSelect.appendChild(opt);
+        });
+
+        // Port dropdown
+        ports.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.portId;
+          opt.textContent = p.portName;
+          portSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load dropdowns:', e);
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      submitMsg.classList.remove("d-none");
-      setTimeout(() => submitMsg.classList.add("d-none"), 2500);
-      form.reset();
-      renderFiles([]);
+
+      const vesselId = vesselSelect.value || null;
+      const portId = portSelect.value || null;
+      const severity = document.getElementById("severity").value;
+      const zone = document.getElementById("zone").value.trim();
+      const details = document.getElementById("details").value.trim();
+
+      if (!details) {
+        submitError.textContent = 'Please enter report details.';
+        submitError.classList.remove("d-none");
+        return;
+      }
+
+      const message = `Zone: ${zone}\n\n${details}`;
+
+      const submitBtn = form.querySelector('button[type="submit"]');
+      let uploadedPaths = [];
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading and submitting...';
+
+        if (selectedFiles.length) {
+          uploadedPaths = await window.bangkagoAlerts.uploadEvidence(selectedFiles);
+        }
+
+        await window.bangkagoAlerts.create({
+          message,
+          severity,
+          bangkaId: vesselId,
+          portId,
+          evidencePaths: uploadedPaths
+        });
+        uploadedPaths = [];
+
+        submitMsg.textContent = selectedFiles.length
+          ? 'Compliance report and evidence submitted successfully.'
+          : 'Compliance report submitted successfully.';
+        submitMsg.classList.remove("d-none");
+        submitError.classList.add("d-none");
+        form.reset();
+        evidenceInput.value = '';
+        selectedFiles = [];
+        renderFiles([]);
+        vesselSelect.value = '';
+        portSelect.value = '';
+
+        setTimeout(() => submitMsg.classList.add("d-none"), 3000);
+      } catch (err) {
+        console.error(err);
+        if (uploadedPaths.length) {
+          try {
+            await window.bangkagoAlerts.removeEvidence(uploadedPaths);
+          } catch (cleanupError) {
+            console.error('Failed to remove orphaned evidence:', cleanupError);
+          }
+        }
+        submitError.textContent = 'Failed to submit: ' + err.message;
+        submitError.classList.remove("d-none");
+        submitMsg.classList.add("d-none");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-send-fill"></i> Submit Report';
+      }
+    });
+
+    window.bangkagoAuthReady.then(function(role) {
+      if (role !== 'coastguard') return;
+      loadDropdowns();
+    }).catch(function(e) {
+      console.error('Failed to initialize compliance report:', e);
+      submitError.textContent = 'Failed to initialize dropdowns: ' + e.message;
+      submitError.classList.remove('d-none');
     });
   </script>
 </body>
 </html>
+

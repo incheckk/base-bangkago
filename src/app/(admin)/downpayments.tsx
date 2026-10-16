@@ -42,12 +42,21 @@ function createdLabel(iso: string): string {
 }
 
 /**
- * Escrow review (migration 015/020): passengers file GCash reference +
- * screenshot when they book an island hop or boat rental; approve or
- * refund it here. Approval RELEASES the trip — advance booking
- * pending → open, rental awaiting_payment → pending — so payer and
- * (for rentals) the bangkero are notified either way.
+ * Escrow review (migration 015/020): passengers file a GCash RECEIPT
+ * screenshot when they book an island hop or boat rental (no manual
+ * reference number — the admin reads the Ref No. off the image and
+ * confirms the money in their own GCash before approving); refund
+ * here if it never arrived. Approval RELEASES the trip — advance
+ * booking pending → open, rental awaiting_payment → pending — so
+ * payer and (for rentals) the bangkero are notified either way.
  */
+
+const STEPS = [
+  'Open your GCash app → Transaction History.',
+  'Read the Ref No. on the attached receipt (e.g. 0045749610827) and search it — or match the amount and date/time.',
+  'Confirm the money landed in YOUR GCash number (the one on Admin → GCash QR) and the sender matches this passenger.',
+  'Money found with the right amount → tap Approve. Not found, wrong amount, or a reused screenshot → tap Mark as refunded.',
+];
 export default function AdminDownpaymentsScreen() {
   const [rows, setRows] = useState<AdminDownpaymentRow[]>([]);
   const [filter, setFilter] = useState('pending');
@@ -127,6 +136,17 @@ export default function AdminDownpaymentsScreen() {
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* The checklist the money check happens against — always visible,
+            restated in the modal right where Approve is tapped. */}
+        <View style={styles.stepsCard}>
+          <Text style={styles.stepsTitle}>HOW TO CONFIRM THE MONEY IS IN YOUR GCASH</Text>
+          {STEPS.map((s, i) => (
+            <Text key={i} style={styles.stepsText}>
+              {i + 1}. {s}
+            </Text>
+          ))}
+        </View>
+
         {!!actionError && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{actionError}</Text>
@@ -167,7 +187,7 @@ export default function AdminDownpaymentsScreen() {
               </Text>
               <View style={styles.cardBottom}>
                 <Text style={styles.cardRef} numberOfLines={1}>
-                  GCash ref: {row.referenceNum || '—'}
+                  {row.proofUrl ? 'GCash receipt attached — open to verify' : 'No receipt attached'}
                 </Text>
                 <View
                   style={[
@@ -217,7 +237,8 @@ export default function AdminDownpaymentsScreen() {
             </Text>
             <Text style={styles.modalSub}>{detail?.serviceLabel}</Text>
             <Text style={styles.modalSub}>
-              GCash ref: {detail?.referenceNum || '—'} · filed {detail ? createdLabel(detail.createdAt) : ''}
+              {detail?.referenceNum ? `GCash ref: ${detail.referenceNum} · ` : ''}
+              filed {detail ? createdLabel(detail.createdAt) : ''}
             </Text>
 
             {proofUrl && !proofFailed ? (
@@ -235,6 +256,11 @@ export default function AdminDownpaymentsScreen() {
 
             {detail?.status === 'pending' ? (
               <>
+                <Text style={styles.modalSteps}>
+                  Check the Ref No. on this receipt in your GCash → Transaction History
+                  first: money in, right amount, right date — then Approve. Not found →
+                  Refund.
+                </Text>
                 <PrimaryButton
                   label="Approve downpayment"
                   onPress={() => void doApprove(detail)}
@@ -276,6 +302,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
+
+  stepsCard: {
+    backgroundColor: colors.primaryTint,
+    borderColor: colors.primary,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  stepsTitle: { ...typography.label, color: colors.primary, marginBottom: spacing.sm },
+  stepsText: { color: colors.text, fontSize: 13, lineHeight: 20, marginBottom: 2 },
 
   card: {
     backgroundColor: colors.surface,
@@ -355,6 +392,12 @@ const styles = StyleSheet.create({
   },
   modalImgMissingText: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
   modalBtn: { marginTop: spacing.lg },
+  modalSteps: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 18,
+    marginTop: spacing.md,
+  },
   modalDone: {
     ...typography.caption,
     color: 'rgba(255,255,255,0.85)',

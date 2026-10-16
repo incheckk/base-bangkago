@@ -11,7 +11,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useAuth } from '@/hooks/useAuth';
 import { useBooking, usePortQueue, usePorts } from '@/hooks/useSupabase';
-import { cancelBooking, disputeBoarding, friendlyError } from '@/services/booking.service';
+import { cancelBooking, disputeBoarding, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import { getDownpaymentByBooking } from '@/services/downpayment.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
@@ -448,10 +448,12 @@ export default function BookingDetail() {
               }`}
             />
           ) : (
-            (booking.packageId || booking.scheduledDate) && (
+            // Escrow only exists for FUTURE sailings (020) — same-day
+            // bookings pay onboard, so they never show this row.
+            isAdvanceDate(booking.scheduledDate) && (
               <Row
                 label="Downpayment (50%)"
-                value="Not recorded — keep your GCash reference and contact support."
+                value="Not recorded — contact support."
               />
             )
           )}

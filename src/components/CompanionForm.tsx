@@ -4,6 +4,7 @@ import {
   StyleSheet, Text, View,
 } from 'react-native';
 
+import { Icon } from './Icon';
 import { PrimaryButton } from './PrimaryButton';
 import { TextField } from './TextField';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
@@ -199,11 +200,12 @@ export function CompanionForm({
             </View>
             <Pressable
               onPress={() => openEdit(i)}
-              hitSlop={8}
+              hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+              style={({ pressed }) => [styles.paxEdit, pressed && styles.pressed]}
             >
-              <Text style={styles.paxEdit}>✎</Text>
+              <Icon name="edit" size={16} color={colors.textMuted} />
             </Pressable>
           </View>
         ))}
@@ -391,26 +393,31 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   paxAvatarAlt: { backgroundColor: colors.surfaceAlt },
-  paxAvatarText: { ...typography.caption, color: colors.primary, fontWeight: '700', fontSize: 12 },
+  paxAvatarText: { ...typography.label, color: colors.primary, fontWeight: '700', letterSpacing: 0 },
   paxAvatarTextAlt: { color: colors.textSecondary },
   paxInfo: { flex: 1, minWidth: 0 },
   paxName: { flexShrink: 1, ...typography.bodyStrong },
-  paxMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  paxEdit: { flexShrink: 1, color: colors.textMuted, fontSize: 17, fontWeight: '700', paddingHorizontal: spacing.xs },
+  paxMeta: { flexShrink: 1, ...typography.label, fontWeight: '400', letterSpacing: 0 },
+  // Was a bare glyph with hitSlop 8 — about 33pt of target, under the 44pt
+  // minimum. A real square clears it without the hitSlop doing the work.
+  paxEdit: {
+    width: 36, height: 36, borderRadius: radii.pill,
+    alignItems: 'center', justifyContent: 'center',
+  },
   paxAdd: {
     minHeight: touchTarget, alignItems: 'center', justifyContent: 'center',
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
     borderStyle: 'dashed',
   },
   paxAddOff: { opacity: 0.4 },
-  paxAddText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  paxAddText: { ...typography.bodyStrong, color: colors.primary },
   paxAddTextOff: { color: colors.textMuted },
-  paxHint: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
+  paxHint: { ...typography.label, fontWeight: '400', letterSpacing: 0, marginTop: spacing.sm, lineHeight: 17 },
   pressed: { opacity: 0.75 },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.backdrop,
   },
   modalScroll: {
     flexGrow: 1,
@@ -442,9 +449,9 @@ const styles = StyleSheet.create({
   sexChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   sexChipTextActive: { color: colors.primary },
   resetBtn: { alignSelf: 'flex-start', marginBottom: spacing.md },
-  resetText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  resetText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalActionBtn: { flex: 1 },
   removeBtn: { marginTop: spacing.md, alignSelf: 'center' },
-  removeBtnText: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+  removeBtnText: { ...typography.bodyStrong, color: colors.danger, fontWeight: '700' },
 });

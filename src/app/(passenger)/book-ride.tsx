@@ -186,14 +186,17 @@ export default function BookRide() {
             gives the choice a shape — you can see the crossing you just picked. */}
         <View style={styles.routeCard}>
           <View style={styles.mapWrap}>
-            {/* Inside a ScrollView, so one-finger drag stays with the page.
-                Pinch and the zoom buttons still work. */}
+            {/* Pannable, despite sitting in a ScrollView.
+                The trade is real: a drag that starts on the map moves the map
+                rather than the page. It is 150pt at the very top of a long
+                form, so there is always somewhere below it to scroll from,
+                and being able to look around the crossing you are booking is
+                worth more than scrolling from this one strip. */}
             <MapContainer
               ports={ports.data}
               fromPortId={fromId}
               toPortId={toId}
-              height={150}
-              draggable={false}
+              height={180}
             />
           </View>
 

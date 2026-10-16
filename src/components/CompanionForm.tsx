@@ -4,6 +4,7 @@ import {
   StyleSheet, Text, View,
 } from 'react-native';
 
+import { Icon } from './Icon';
 import { PrimaryButton } from './PrimaryButton';
 import { TextField } from './TextField';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
@@ -59,6 +60,15 @@ export function CompanionForm({
   hint,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
+  /**
+   * Which companion the modal is editing, or null when adding a new one.
+   *
+   * Everything here was add-only: a typo in a name or a wrong contact number
+   * meant removing the passenger and re-entering all six fields, and since
+   * this block IS the manifest, a wrong number is the one the bangkero
+   * actually calls.
+   */
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draftFirst, setDraftFirst] = useState('');
   const [draftLast, setDraftLast] = useState('');
   const [draftAge, setDraftAge] = useState('');
@@ -82,14 +92,36 @@ export function CompanionForm({
       setErrors({});
     };
 
-  function resetDrafts() {
-    setDraftFirst('');
-    setDraftLast('');
-    setDraftAge('');
-    setDraftSex('');
-    setDraftContact('');
-    setDraftAddress('');
+  function fillDrafts(c: Companion | null) {
+    setDraftFirst(c?.firstName ?? '');
+    setDraftLast(c?.lastName ?? '');
+    setDraftAge(c ? String(c.age) : '');
+    setDraftSex(c?.sex ?? '');
+    setDraftContact(c?.contact ?? '');
+    setDraftAddress(c?.address ?? '');
     setErrors({});
+  }
+
+  /** Blank while adding; back to the saved values while editing. */
+  function resetDrafts() {
+    fillDrafts(editingIndex === null ? null : companions[editingIndex]);
+  }
+
+  function openAdd() {
+    setEditingIndex(null);
+    fillDrafts(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(index: number) {
+    setEditingIndex(index);
+    fillDrafts(companions[index]);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    setModalOpen(false);
+    setEditingIndex(null);
   }
 
   function removeCompanion(index: number) {
@@ -121,21 +153,27 @@ export function CompanionForm({
     return Object.keys(next).length === 0;
   }
 
-  function addCompanion() {
-    if (atCap || !allPresent || !validate()) return;
-    onChange([
-      ...companions,
-      {
-        firstName: draftFirst.trim(),
-        lastName: draftLast.trim(),
-        age: parseInt(draftAge.trim(), 10),
-        sex: draftSex,
-        contact: draftContact.trim(),
-        address: draftAddress.trim(),
-      },
-    ]);
-    resetDrafts();
-    setModalOpen(false);
+  function saveCompanion() {
+    // The seat cap only blocks a NEW passenger — editing one already counted
+    // cannot push the manifest over the boat's capacity.
+    if (editingIndex === null && atCap) return;
+    if (!allPresent || !validate()) return;
+
+    const next: Companion = {
+      firstName: draftFirst.trim(),
+      lastName: draftLast.trim(),
+      age: parseInt(draftAge.trim(), 10),
+      sex: draftSex,
+      contact: draftContact.trim(),
+      address: draftAddress.trim(),
+    };
+
+    onChange(
+      editingIndex === null
+        ? [...companions, next]
+        : companions.map((c, i) => (i === editingIndex ? next : c))
+    );
+    closeModal();
   }
 
   function backdropPress() {
@@ -144,7 +182,7 @@ export function CompanionForm({
       Keyboard.dismiss();
       return;
     }
-    setModalOpen(false);
+    closeModal();
   }
 
   return (
@@ -162,30 +200,42 @@ export function CompanionForm({
 
         {companions.map((c, i) => (
           <View key={`${c.lastName}-${c.firstName}-${i}`} style={[styles.paxRow, styles.paxRowDivided]}>
-            <View style={[styles.paxAvatar, styles.paxAvatarAlt]}>
-              <Text style={[styles.paxAvatarText, styles.paxAvatarTextAlt]}>
-                {initialsOf(`${c.firstName} ${c.lastName}`)}
-              </Text>
-            </View>
-            <View style={styles.paxInfo}>
-              <Text style={styles.paxName} numberOfLines={1}>{c.firstName} {c.lastName}</Text>
-              <Text style={styles.paxMeta} numberOfLines={1}>
-                {`${c.age} yrs old · ${c.sex.charAt(0).toUpperCase() + c.sex.slice(1)}`}
-              </Text>
-            </View>
+            {/* The whole row opens the editor. The pencil is there to say so —
+                an avatar and a name read as a label, not a control. */}
+            <Pressable
+              onPress={() => openEdit(i)}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+              style={({ pressed }) => [styles.paxEditZone, pressed && styles.pressed]}
+            >
+              <View style={[styles.paxAvatar, styles.paxAvatarAlt]}>
+                <Text style={[styles.paxAvatarText, styles.paxAvatarTextAlt]}>
+                  {initialsOf(`${c.firstName} ${c.lastName}`)}
+                </Text>
+              </View>
+              <View style={styles.paxInfo}>
+                <Text style={styles.paxName} numberOfLines={1}>{c.firstName} {c.lastName}</Text>
+                <Text style={styles.paxMeta} numberOfLines={1}>
+                  {`${c.age} yrs old · ${c.sex.charAt(0).toUpperCase() + c.sex.slice(1)}`}
+                </Text>
+              </View>
+              <Icon name="edit" size={15} color={colors.textMuted} />
+            </Pressable>
+
             <Pressable
               onPress={() => removeCompanion(i)}
-              hitSlop={8}
+              hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel={`Remove ${c.firstName}`}
+              style={({ pressed }) => [styles.paxRemove, pressed && styles.pressed]}
             >
-              <Text style={styles.paxRemove}>✕</Text>
+              <Icon name="close" size={16} color={colors.danger} />
             </Pressable>
           </View>
         ))}
 
         <Pressable
-          onPress={() => setModalOpen(true)}
+          onPress={openAdd}
           disabled={atCap}
           accessibilityRole="button"
           style={({ pressed }) => [
@@ -203,7 +253,7 @@ export function CompanionForm({
         visible={modalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
+        onRequestClose={closeModal}
       >
         <KeyboardAvoidingView
           style={styles.modalBackdrop}
@@ -222,7 +272,9 @@ export function CompanionForm({
           >
             <View style={styles.modalCard}>
               <Pressable onPress={Keyboard.dismiss}>
-                <Text style={styles.modalTitle}>Passenger information</Text>
+                <Text style={styles.modalTitle}>
+                  {editingIndex === null ? 'Passenger information' : 'Edit passenger'}
+                </Text>
                 <Text style={styles.modalHint}>
                   They ride under your name — the bangkero checks IDs for discounts on board.
                 </Text>
@@ -301,7 +353,9 @@ export function CompanionForm({
               </View>
 
               <Pressable onPress={resetDrafts} hitSlop={8} style={styles.resetBtn} accessibilityRole="button">
-                <Text style={styles.resetText}>Reset</Text>
+                <Text style={styles.resetText}>
+                  {editingIndex === null ? 'Reset' : 'Undo changes'}
+                </Text>
               </Pressable>
 
               <View style={styles.modalActions}>
@@ -309,13 +363,13 @@ export function CompanionForm({
                   <PrimaryButton
                     label="Cancel"
                     variant="secondary"
-                    onPress={() => setModalOpen(false)}
+                    onPress={closeModal}
                   />
                 </View>
                 <View style={styles.modalActionBtn}>
                   <PrimaryButton
-                    label="Add passenger"
-                    onPress={addCompanion}
+                    label={editingIndex === null ? 'Add passenger' : 'Save changes'}
+                    onPress={saveCompanion}
                     disabled={!allPresent}
                   />
                 </View>
@@ -336,8 +390,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   paxRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+  },
+  // Carries the row's height so the tap target covers the whole name, not
+  // just the text's own bounding box.
+  paxEditZone: {
+    flex: 1, minWidth: 0,
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    paddingVertical: spacing.md,
+    minHeight: touchTarget + 8,
+    paddingVertical: spacing.sm,
   },
   paxRowDivided: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
   paxAvatar: {
@@ -346,26 +407,31 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   paxAvatarAlt: { backgroundColor: colors.surfaceAlt },
-  paxAvatarText: { ...typography.caption, color: colors.primary, fontWeight: '700', fontSize: 12 },
+  paxAvatarText: { ...typography.label, color: colors.primary, fontWeight: '700', letterSpacing: 0 },
   paxAvatarTextAlt: { color: colors.textSecondary },
   paxInfo: { flex: 1, minWidth: 0 },
   paxName: { flexShrink: 1, ...typography.bodyStrong },
-  paxMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  paxRemove: { flexShrink: 1, color: colors.danger, fontSize: 15, fontWeight: '700', paddingHorizontal: spacing.xs },
+  paxMeta: { flexShrink: 1, ...typography.label, fontWeight: '400', letterSpacing: 0 },
+  // Was a bare 'x' glyph with hitSlop 8 — about 31pt of target. Now a real
+  // square that clears the minimum on its own.
+  paxRemove: {
+    width: 36, height: 36, borderRadius: radii.pill,
+    alignItems: 'center', justifyContent: 'center',
+  },
   paxAdd: {
     minHeight: touchTarget, alignItems: 'center', justifyContent: 'center',
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
     borderStyle: 'dashed',
   },
   paxAddOff: { opacity: 0.4 },
-  paxAddText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
+  paxAddText: { ...typography.bodyStrong, color: colors.primary },
   paxAddTextOff: { color: colors.textMuted },
-  paxHint: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: spacing.sm },
+  paxHint: { ...typography.label, fontWeight: '400', letterSpacing: 0, marginTop: spacing.sm, lineHeight: 17 },
   pressed: { opacity: 0.75 },
 
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: colors.backdrop,
   },
   modalScroll: {
     flexGrow: 1,
@@ -397,7 +463,7 @@ const styles = StyleSheet.create({
   sexChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
   sexChipTextActive: { color: colors.primary },
   resetBtn: { alignSelf: 'flex-start', marginBottom: spacing.md },
-  resetText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  resetText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalActionBtn: { flex: 1 },
 });

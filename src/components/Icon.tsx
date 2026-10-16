@@ -28,6 +28,9 @@ export const ICONS = {
   settings: 'settings',
   logout: 'log-out',
 
+  edit: 'create',
+  trash: 'trash',
+
   // domain
   boat: 'boat',
   ride: 'navigate',

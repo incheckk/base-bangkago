@@ -20,6 +20,7 @@
       coastalPermit: row.coastal_permit,
       brgyClearance: row.brgy_clearance,
       ratingPenalty: row.rating_penalty ?? 0,
+      ratingRecoveryStars: row.rating_recovery_stars ?? 0,
       gcashQrUrl: row.gcash_qr_url ?? null,
       updatedAt: row.updated_at,
       // Related data fetched separately when needed
@@ -72,16 +73,42 @@
     } : { phoneNumber: null, firstName: null, lastName: null, email: null };
   }
 
-  // Enrich bangkero list with boat and user data (for pages that need it)
+  // Enrich bangkero list with boat and user data (for pages that need it).
+  // Two batched queries total (was 2 per row — 40 round-trips on a
+  // 20-bangkero list over venue wifi). One boat per bangkero: first by name.
   async function enrichBangkeros(bangkeros) {
-    var enriched = [];
-    for (var i = 0; i < bangkeros.length; i++) {
-      var b = bangkeros[i];
-      var bangka = await getBangkaForBangkero(b.uid);
-      var user = await getUserForBangkero(b.uid);
-      enriched.push(Object.assign({}, b, bangka, user));
-    }
-    return enriched;
+    var ids = bangkeros.map(function(b) { return b.uid; });
+    if (!ids.length) return [];
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var byId = {};
+    bangkeros.forEach(function(b) { byId[b.uid] = b; });
+
+    var boatsRes = await c.from('bangkas')
+      .select('bangka_name, capacity, bangkero_id')
+      .in('bangkero_id', ids)
+      .order('bangka_name');
+    var usersRes = await c.from('users')
+      .select('id, phone_number, first_name, last_name, email')
+      .in('id', ids);
+
+    (boatsRes.data || []).forEach(function(bk) {
+      var b = byId[bk.bangkero_id];
+      // First boat by name wins; don't overwrite an earlier one.
+      if (b && b.boatName === null) {
+        b.boatName = bk.bangka_name;
+        b.boatCapacity = bk.capacity;
+      }
+    });
+    (usersRes.data || []).forEach(function(u) {
+      var b = byId[u.id];
+      if (b) {
+        b.phoneNumber = u.phone_number;
+        b.firstName = u.first_name;
+        b.lastName = u.last_name;
+        b.email = u.email;
+      }
+    });
+    return bangkeros;
   }
 
   // Admin: approve/reject via RPC (update_bangkero_verification)

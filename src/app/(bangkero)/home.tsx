@@ -178,9 +178,10 @@ export default function BangkeroHome() {
   // Destinations of trips already accepted — the route lock (008).
   const activeDests = [...new Set(activeTrips.map((t) => endPortOf(t.routeId)))];
 
-  // Effective rating = passenger average minus penalties; the accept gate in
-  // acceptBooking enforces the same floor server-side. Re-read on focus so a
-  // fresh penalty never lingers on screen after navigating back.
+  // Effective rating = smoothed passenger average − penalties + recovery
+  // stars (rule v2, 036); the accept gate enforces the same floor
+  // server-side. Re-read on focus so a fresh penalty or a regained
+  // star never lingers on screen after navigating back.
   const [effectiveRating, setEffectiveRating] = useState<number | null>(null);
   const loadRating = useCallback(() => {
     if (!uid) return;
@@ -260,7 +261,7 @@ export default function BangkeroHome() {
     }
     if (ratingBlocked) {
       return {
-        text: 'Rating too low — must be above 3.0★',
+        text: 'Rating too low — must be above 1.0★',
         tone: 'block', canAccept: false, distance,
       };
     }
@@ -662,13 +663,28 @@ export default function BangkeroHome() {
         {ratingBlocked && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
-              Your rating is {effectiveRating?.toFixed(1)}★ — 3.0 or below. You cannot
-              accept new bookings until passengers rate your trips back up.
+              Your effective rating is {effectiveRating?.toFixed(1)}★ — 1.0 or below, so you
+              cannot accept new bookings right now. It lifts automatically after 2 days,
+              or sooner once passengers rate your trips back up.
             </Text>
           </View>
         )}
 
         {/* Document state banners — the practical face of the gates. */}
+        {!gatesBypass && bangkero.data?.verificationStat === 'incomplete' && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              Upload your four documents to start sailing — you stay offline until the
+              admin approves them.
+            </Text>
+            <PrimaryButton
+              label="Upload documents"
+              variant="secondary"
+              onPress={() => router.push('/(bangkero)/verify-boat')}
+              style={styles.bannerBtn}
+            />
+          </View>
+        )}
         {!gatesBypass && bangkero.data?.verificationStat === 'pending' && (
           <View style={styles.bannerInfo}>
             <Text style={styles.bannerInfoText}>
@@ -804,7 +820,7 @@ export default function BangkeroHome() {
 
         {topDemand.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>TODAY'S PREDICTION</Text>
+            <Text style={styles.sectionLabel}>TODAY&apos;S PREDICTION</Text>
             {topDemand.map((row) => (
               <View key={row.routeId} style={styles.demandRow}>
                 <Text style={styles.demandRoute} numberOfLines={1}>

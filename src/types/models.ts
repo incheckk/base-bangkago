@@ -18,7 +18,7 @@ export type BookingStatus = 'open' | 'pending' | 'accepted' | 'completed' | 'can
 
 export type ServiceType = 'passenger' | 'cargo' | 'rental';
 
-export type VerificationStatus = 'pending' | 'verified' | 'rejected';
+export type VerificationStatus = 'incomplete' | 'pending' | 'verified' | 'rejected';
 
 export type BangkaType = 'pump_boat' | 'banca' | 'speed_boat' | 'other';
 

@@ -23,7 +23,12 @@
 
   async function getAllLatestPositions() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('vessel_tracking').select('*').order('recorded_at', { ascending: false });
+    // vessel_tracking is an append-only GPS log that grows forever —
+    // never dump it. The last 1000 fixes (≈ hours of a full fleet
+    // pinging every 10s) always cover each boat's newest position.
+    var r = await c.from('vessel_tracking').select('*')
+      .order('recorded_at', { ascending: false })
+      .limit(1000);
     if (r.error) throw r.error;
     var seen = new Set(), latest = [];
     for (var row of r.data || []) {
@@ -35,7 +40,9 @@
   async function getPositionsForBangkas(bangkaIds) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     if (!bangkaIds?.length) return [];
-    var r = await c.from('vessel_tracking').select('*').in('bangka_id', bangkaIds).order('recorded_at', { ascending: false });
+    var r = await c.from('vessel_tracking').select('*').in('bangka_id', bangkaIds)
+      .order('recorded_at', { ascending: false })
+      .limit(500);
     if (r.error) throw r.error;
     var seen = new Set(), latest = [];
     for (var row of r.data || []) {

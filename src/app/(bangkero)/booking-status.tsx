@@ -99,9 +99,14 @@ export default function BookingStatus() {
           return Number.isFinite(ms) ? ms : NaN;
         })()
       : null;
-  const advanceLocked = scheduledAt === null
-    ? booking?.scheduledDate != null || booking?.scheduledTime != null
-    : now < scheduledAt;
+  // Same-day trips carry scheduledDate = today with NO time (the picker
+  // clears slots for today) — they must never lock. Only a FUTURE
+  // sailing slot gates Start Trip (020); the old date!=null fallback
+  // locked every same-day booking forever.
+  const advanceTrip =
+    !!booking?.scheduledDate && booking.scheduledDate > todayIso();
+  const advanceLocked =
+    advanceTrip && (scheduledAt === null || !(now < scheduledAt));
   const canStart = bookerResolved && companionsResolved && !advanceLocked;
 
   // QR scanner: one scan at a time — `scanLatch` releases ONLY when the

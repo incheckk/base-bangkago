@@ -1,13 +1,13 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Admin — Manage Users</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   
 </head>
@@ -27,13 +27,12 @@
 
           <div class="row g-2 mb-3">
             <div class="col-md-4">
-              <input id="userSearch" class="form-control" placeholder="Search name or email">
+              <input id="userSearch" class="form-control" placeholder="Search name or phone">
             </div>
             <div class="col-md-3">
               <select id="roleFilter" class="form-select">
                 <option value="">All Roles</option>
                 <option value="admin">Admin</option>
-                <option value="lgu">LGU</option>
                 <option value="coastguard">Coast Guard</option>
                 <option value="bangkero">Bangkero</option>
                 <option value="passenger">Passenger</option>
@@ -56,7 +55,7 @@
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Email</th>
+                  <th>Phone</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Joined</th>
@@ -122,7 +121,6 @@
             <label class="form-label">New Role</label>
             <select id="newRole" class="form-select" required>
               <option value="admin">Admin</option>
-              <option value="lgu">LGU</option>
               <option value="coastguard">Coast Guard</option>
               <option value="bangkero">Bangkero</option>
               <option value="passenger">Passenger</option>
@@ -141,7 +139,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
   <!-- Service scripts -->
@@ -173,7 +171,6 @@
     function roleBadge(role) {
       const badges = {
         'admin': 'text-bg-dark',
-        'lgu': 'text-bg-info',
         'coastguard': 'text-bg-primary',
         'bangkero': 'text-bg-warning',
         'passenger': 'text-bg-success'
@@ -199,8 +196,8 @@
     function mapUserForDisplay(u) {
       return {
         uid: u.uid,
-        name: (u.firstName || '') + ' ' + (u.lastName || ''),
-        email: u.email || 'N/A',
+        name: ((u.firstName || '') + ' ' + (u.lastName || '')).trim(),
+        phone: u.phone || 'N/A',
         role: u.role || 'Unknown',
         isVerified: u.isVerified !== false,
         createdAt: u.createdAt
@@ -219,21 +216,19 @@
     }
 
     function renderTable(data) {
-      usersBody.innerHTML = "";
-      data.forEach((u, i) => {
-        usersBody.innerHTML += `
+      usersBody.innerHTML = data.map((u, i) => `
           <tr>
             <td>${u.name}</td>
-            <td>${u.email}</td>
+            <td>${u.phone}</td>
             <td><span class="badge ${roleBadge(u.role)}">${u.role.charAt(0).toUpperCase() + u.role.slice(1)}</span></td>
             <td><span class="badge ${statusBadge(u.isVerified)}">${u.isVerified ? 'Active' : 'Suspended'}</span></td>
             <td>${formatDate(u.createdAt)}</td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal(${i})">
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal('${u.uid}')">
                   <i class="bi bi-toggle-on"></i> Status
                 </button>
-                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openRoleModal(${i})">
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="openRoleModal('${u.uid}')">
                   <i class="bi bi-person-gear"></i> Role
                 </button>
                 <a href="suspend-user.html?userId=${u.uid}" class="btn btn-sm btn-outline-danger action-btn">
@@ -242,8 +237,7 @@
               </div>
             </td>
           </tr>
-        `;
-      });
+      `).join("");
     }
 
     function runFilter() {
@@ -252,7 +246,7 @@
       const s = statusFilter.value;
 
       const filtered = users.filter(u => {
-        const match = u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+        const match = u.name.toLowerCase().includes(q) || u.phone.toLowerCase().includes(q);
         const roleMatch = r ? u.role === r : true;
         const statusMatch = s ? (s === 'verified' ? u.isVerified : !u.isVerified) : true;
         return match && roleMatch && statusMatch;
@@ -261,19 +255,23 @@
       renderTable(filtered);
     }
 
-    window.openStatusModal = function(index) {
-      selectedIndex = index;
-      const u = users[index];
-      statusUserLabel.textContent = `${u.name} (${u.email})`;
+    // Looked up by uid: the table renders the FILTERED list, so a row
+    // index would select a different user whenever a search is active.
+    window.openStatusModal = function(uid) {
+      selectedIndex = users.findIndex(u => u.uid === uid);
+      if (selectedIndex === -1) return;
+      const u = users[selectedIndex];
+      statusUserLabel.textContent = `${u.name} (${u.phone})`;
       newStatus.value = u.isVerified ? 'verified' : 'unverified';
       statusNotes.value = "";
       statusModal.show();
     }
 
-    window.openRoleModal = function(index) {
-      selectedIndex = index;
-      const u = users[index];
-      roleUserLabel.textContent = `${u.name} (${u.email})`;
+    window.openRoleModal = function(uid) {
+      selectedIndex = users.findIndex(u => u.uid === uid);
+      if (selectedIndex === -1) return;
+      const u = users[selectedIndex];
+      roleUserLabel.textContent = `${u.name} (${u.phone})`;
       newRole.value = u.role;
       roleNotes.value = "";
       roleModal.show();
@@ -341,6 +339,7 @@
         // Map for display
         users = users.map(mapUserForDisplay);
         renderTable(users);
+        showLoading(false);
       } catch(e) {
         console.error(e);
         showError('Failed to load users: ' + e.message);
@@ -359,8 +358,8 @@
         await loadUsers();
       } catch (e) {
         console.error('Auth guard failed:', e);
-        showError('Authentication required. Redirecting...');
-        setTimeout(function () { location.href = '../../bangkaGo-access.html'; }, 1500);
+        showError('Could not load users (connection problem). Retrying...');
+        setTimeout(loadUsers, 3000);
       }
     })();
   </script>

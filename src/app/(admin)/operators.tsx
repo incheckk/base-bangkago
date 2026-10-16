@@ -15,12 +15,14 @@ const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'verified', label: 'Verified' },
   { key: 'pending', label: 'Pending' },
+  { key: 'incomplete', label: 'Not submitted' },
   { key: 'rejected', label: 'Rejected' },
 ];
 
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
   verified: { fg: colors.primary, bg: colors.primaryTint },
   pending: { fg: colors.warning, bg: colors.warningTint },
+  incomplete: { fg: colors.textMuted, bg: colors.warningTint },
   rejected: { fg: colors.danger, bg: colors.dangerTint },
 };
 

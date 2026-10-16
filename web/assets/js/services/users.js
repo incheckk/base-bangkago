@@ -29,7 +29,9 @@
     if (options.isVerified !== undefined) q = q.eq('is_verified', options.isVerified);
     if (options.search) {
       var term = options.search.toLowerCase();
-      q = q.or('first_name.ilike.%' + term + '%,last_name.ilike.%' + term + '%,email.ilike.%' + term + '%,phone_number.ilike.%' + term + '%');
+      // Phone-first: identity is the PH mobile number (the "email" is a
+      // synthetic bangkago+<digits>@gmail.com copy of it) — don't search it.
+      q = q.or('first_name.ilike.%' + term + '%,last_name.ilike.%' + term + '%,phone_number.ilike.%' + term + '%');
     }
     var r = await q.order('created_at', { ascending: false });
     if (r.error) throw r.error;
@@ -53,7 +55,8 @@
   // Admin: assign role
   async function assignRole(uid, role) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var allowed = ['passenger', 'bangkero', 'admin', 'coastguard', 'lgu'];
+    // Matches the DB CHECK after 025 — 'lgu' is not a real role.
+    var allowed = ['passenger', 'bangkero', 'admin', 'coastguard'];
     if (!allowed.includes(role)) throw new Error('Invalid role');
     var r = await c.from('users').update({ user_role: role }).eq('id', uid);
     if (r.error) throw r.error;

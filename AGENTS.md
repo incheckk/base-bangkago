@@ -41,6 +41,131 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-16 — Web hardening batch: admin audit trail + rating-adjust
+  knob (migration 038, APPLIED same day), auto-logout fixed, live OSM
+  fleet maps, real manifest + PDF, phone-first users, perf pass
+  (gates green: tsc clean, lint 0 errors / 124 warnings, expo-doctor
+  21/21, `npm run web` smoke 34 URLs 200).**
+  - **Migration 038 (PENDING):** `audit_log` table (SECURITY DEFINER
+    trigger fn + triggers on 11 tables — users, bangkeros,
+    bangkero_verification, dev_flags, downpayments, bookings,
+    boat_rentals, ports, routes, safety_alerts, bangkas; actor id+role
+    snapshot, changed columns old→new; bangkero rating/verification
+    columns audited regardless of actor so passenger penalties are
+    blamed too), realtime publication, admin-only RLS (coastguards
+    cannot read audits), `admin_set_bangkero_rating(bangkero, penalty,
+    recovery)` RPC (admin-guarded, validated 0–5, returns
+    `bangkero_effective_rating()`, self-auditing), plus admin SELECT
+    policies on `passenger_details` AND `parcels` — without them the web
+    manifest reads 0 rows. SQL-editor writes (no JWT) are not audited —
+    accepted limit, see LAUNCH_DEFERRED A6.
+  - **Auto-logout root cause fixed:** `role()` (web/supabase-client.js)
+    now returns `'unverified'` for can't-verify vs `null` for
+    truly-signed-out (3 retries w/ backoff); layout-loader guard retries
+    4× and shows a connection banner + auto-retry instead of bouncing a
+    signed-in admin to bangkaGo-access.html on a wifi blip; parallel
+    config+UMD load. All 9 pages' "Authentication required. Redirecting…"
+    catch blocks replaced with connection-error messages.
+  - **Vendored, zero CDN:** bootstrap 5.3.3, bootstrap-icons (woff2),
+    Leaflet 1.9.4, jsPDF + autoTable, Sora/DM Sans under
+    `web/assets/vendor/` (venue-wifi reasoning, same as supabase UMD);
+    all 32 pages swapped.
+  - **Maps:** `web/assets/js/fleet-map.js` (lazy-loads vendored Leaflet,
+    divIcon dots colored by signal, debounced updates) wired to admin
+    monitor-fleet, coastguard monitor-fleet and coastguard index —
+    `map.jpg` replaced by live `vessel_tracking` data; route pills' ETA
+    math stays an age-based estimate (LAUNCH_DEFERRED A7).
+  - **Ratings + audit pages:** ratings.html gets the admin adjust knob
+    (target slider 0–5★ back-solving the penalty, penalty 0–5/0.1,
+    recovery 0–5, live before→after preview, MANDATORY confirm on every
+    change) calling `admin_set_bangkero_rating`; single ratings fetch
+    (was double). NEW `audit-log.html` + `services/audit.js` (actor/table
+    filters, old→new diff, detail modal, live) — sidebar entry added,
+    "View Manifest" sidebar entry removed (file kept).
+  - **Manage Bookings:** View Manifest now reads THIS booking's real
+    booker + `passenger_details` companions (incl. 028 address) +
+    parcels/items — not a guessed trip_manifest row; jsPDF A4 export
+    (lazy-loaded); trip-date from/to filter; status-modal X can no longer
+    submit (was falsely reporting success) and closing with unsaved
+    edits asks for confirmation; realtime keeps active filters.
+  - **Users/bangkeros:** manage-users phone-first (column, search,
+    modals — email was always N/A), LGU removed from role
+    dropdowns/badges/alert-recipient allowlist (branding text untouched);
+    manage-bangkeros "Applicant"→"Bangkero Name", "Assigned Bangka"→
+    "Bangka Name", real doc thumbnails with icon fallback, short IDs
+    with full-on-hover; manage-bangka "View"→"Details".
+  - **Data-integrity fix found on the way:** filtered-table row actions
+    on manage-users/alerts/payments/bookings indexed the UNFILTERED
+    array — Status/Resolve/Cancel could hit a different row during a
+    search. All keyed by id now.
+  - **Perf:** `enrichBangkeros` 2 queries total (was 2/row), bounded
+    vessel fetches (1000 global / 500 per-boat, newest-first),
+    realtime queue-until-ready + 400ms debounce, `innerHTML +=` →
+    `map/join` on every table render, all load spinners paired with
+    `showLoading(false)` (boat-rentals' script block was duplicated 7× —
+    deduplicated 523→196 lines).
+  - **app.json:** `ios.icon` removed — it pointed at the Expo template's
+    `assets/expo.icon` directory (expo-symbol art, not BangkaGo); iOS
+    falls back to the real `./assets/images/icon.png`. This is what
+    restored expo-doctor to 21/21 (doctor is unpinned; latest tightened
+    the `.icon`-directory check). The unreferenced `assets/expo.icon/`
+    dir is kept for now — deletable.
+  - **MIGRATIONS APPLIED 2026-10-16 (user, SQL editor, in order):**
+    `036` → `037` → `038_admin_audit_and_rating_adjust.sql`. 036 and 037
+    each carried a ⚠ DEMO RESET (036 wiped ALL ratings + penalties; 037
+    reset every bangkero to `incomplete` and nulled their 4 doc paths —
+    files stayed in storage, gcash_qr_url untouched). Web audit /
+    manifest / ratings all read live DB values now.
+- **2026-10-16 — Rating rule v2, bangkero `incomplete` status, booking-form
+  fixes, admin escrow steps, two new web pages (migrations 036 + 037,
+  applied same day — see the batch above).**
+  - **Ratings (036 + TS):** effective rating now comes from one SQL RPC
+    `bangkero_effective_rating` — smoothing with a four-5★ prior
+    (`(sum+20)/(count+4)`), − penalty, + recovery stars; floor 3.0 → 1.0
+    (gates_ok/bangkero_rating_ok recreated in 036, same name so
+    assign_next_hold/accept_booking_hold pick it up with no body patch);
+    while ≤1.0★ a clock runs and after 2 days the bangkero regains +1★
+    (`rating_low_since`/`rating_recovery_stars` columns, tick runs inside
+    the VOLATILE RPC); `ratings_insert_own` RLS tightened to the booking
+    owner + owner check in rate-trip; `getEffectiveRating` is now a thin
+    RPC call (local mirror deleted), `MIN_ACCEPT_RATING = 1.0`, copy
+    updated (auth friendlyError, home chip/banner, ratings screen).
+    `dev_flags.gates_bypass` still lifts everything — unchanged.
+  - **Bangkero documents (037 + TS):** new status `'incomplete'`
+    (CHECK widened, DEFAULT moved off 'pending'); signup writes it;
+    documentsRoute falls through to verify-boat so the upload screen can
+    never be skipped; admin document-review queue drops its `?? data[0]`
+    fallback (incomplete rows are unreviewable); operators filter chip +
+    STATUS_STYLE entries, profile badge "Upload documents", bangkero-home
+    "Upload documents" banner; web manage-bangkeros badge "Not submitted".
+  - **Mobile fixes:** Start Trip no longer permanently disabled on
+    same-day trips (advanceLocked now keys on `scheduledDate > todayIso()`
+    only — SchedulePicker clears slots for today); the "Downpayment not
+    recorded" fallback row now shows only for advance bookings
+    (`isAdvanceDate`); CompanionForm row ✕ → ✏️ edit (prefilled modal,
+    Save changes) with a Remove passenger button inside the modal.
+  - **Escrow UX:** numbered "How to confirm this downpayment" steps card
+    on mobile Admin → Downpayments (+ reminder in the decision modal);
+    GCash reference-number input REMOVED from payment.tsx and
+    rental-form.tsx (receipt image only, `referenceNum: ''` — admin reads
+    the Ref No. off the image; OCR deferred, researched: OCR.space free
+    25k/mo, see LAUNCH_DEFERRED B9a).
+  - **Web (new pages):** `admin-dashboard/downpayments.html` (escrow
+    review: steps card, receipt viewer, Approve/Refund) and
+    `admin-dashboard/ratings.html` + `assets/js/services/ratings.js`
+    (per-bangkero avg/count/penalty/recovery/effective, Locked pill ≤1.0★,
+    per-rating detail modal); sidebar entries (Operations → Downpayments,
+    Analytics → Ratings) + topbarMeta keys in the LIVE loader.
+    `payments.js` approve/reject rewritten to the REAL flow (row update +
+    `review_advance_escrow` RPC + best-effort notifications — the old
+    `approve_downpayment`/`reject_downpayment` RPCs never existed).
+  - **MIGRATIONS APPLIED 2026-10-16:** `migrations/036_rating_rule_v2.sql`
+    then `migrations/037_bangkero_documents_incomplete.sql` (both contain a
+    ⚠ DEMO RESET: 036 wiped ALL ratings + penalties; 037 reset every
+    bangkero to `incomplete` and nulled their 4 doc paths — files stay in
+    storage, gcash_qr_url untouched).
+  - **Stored, not built (user decision):** admin Approve guard on
+    missing files → LAUNCH_DEFERRED C9.
 - **2026-10-10 — Static web merged into `web/` + Supabase login wired.**
   - Source: `insik\BASE-WEB\BangkaGO-WEB` (incheckk/BangkaGO-WEB, PR #11)
     copied as-is into `web/` — layout preserved (relative links span

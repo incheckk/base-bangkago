@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Audit Log</title>
+
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+</head>
+<body data-page="audit-log">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Audit Log</h6>
+            <span class="muted-note">Every admin change with actor, timestamp and before → after values (admin view only)</span>
+          </div>
+
+          <div class="row g-2 mb-3 align-items-end">
+            <div class="col-md-3">
+              <input id="alSearch" class="form-control" placeholder="Search actor, table, or record ID">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small mb-1" for="alRole">Actor role</label>
+              <select id="alRole" class="form-select">
+                <option value="">All roles</option>
+                <option value="admin">Admin</option>
+                <option value="coastguard">Coast Guard</option>
+                <option value="bangkero">Bangkero</option>
+                <option value="passenger">Passenger</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small mb-1" for="alTable">Table</label>
+              <select id="alTable" class="form-select">
+                <option value="">All tables</option>
+                <option value="users">users</option>
+                <option value="bangkeros">bangkeros</option>
+                <option value="bangkero_verification">bangkero_verification</option>
+                <option value="dev_flags">dev_flags</option>
+                <option value="downpayments">downpayments</option>
+                <option value="bookings">bookings</option>
+                <option value="boat_rentals">boat_rentals</option>
+                <option value="ports">ports</option>
+                <option value="routes">routes</option>
+                <option value="safety_alerts">safety_alerts</option>
+                <option value="bangkas">bangkas</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-grid">
+              <button id="alReset" class="btn btn-outline-secondary">Reset</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="min-width:150px;">When</th>
+                  <th>Who</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Changes</th>
+                  <th style="width:70px;"></th>
+                </tr>
+              </thead>
+              <tbody id="alBody"></tbody>
+            </table>
+          </div>
+
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading audit log...</p>
+          </div>
+
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- AUDIT DETAIL MODAL -->
+  <div class="modal fade" id="alModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Audit Entry</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" id="alDetail"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/audit.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+
+  <style>
+    .al-json{font-size:.78rem;white-space:pre-wrap;word-break:break-word;background:var(--gray-50);
+      border:1px solid var(--gray-200);border-radius:8px;padding:.6rem .7rem;max-height:260px;overflow:auto;}
+  </style>
+
+  <script>
+    let entries = [];
+
+    const alBody = document.getElementById('alBody');
+    const alSearch = document.getElementById('alSearch');
+    const alRole = document.getElementById('alRole');
+    const alTable = document.getElementById('alTable');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+
+    const alModal = new bootstrap.Modal(document.getElementById('alModal'));
+
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, ch => (
+        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]
+      ));
+    }
+
+    function when(iso){
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleString('en-PH', {
+        month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
+      });
+    }
+
+    function actionBadge(action){
+      if (action === 'INSERT') return 'text-bg-success';
+      if (action === 'UPDATE') return 'text-bg-warning';
+      if (action === 'DELETE') return 'text-bg-danger';
+      return 'text-bg-secondary';
+    }
+
+    function roleBadge(role){
+      return {
+        'admin': 'text-bg-dark',
+        'coastguard': 'text-bg-primary',
+        'bangkero': 'text-bg-warning',
+        'passenger': 'text-bg-success'
+      }[role] || 'text-bg-secondary';
+    }
+
+    function shortId(id){
+      if (!id) return '—';
+      const s = String(id);
+      return s.length > 12 ? s.slice(0, 8) + '…' : s;
+    }
+
+    // UPDATE rows carry only the changed columns (old/new pairs).
+    function changeSummary(e){
+      if (e.action === 'INSERT') return '<span class="text-muted">created</span>';
+      if (e.action === 'DELETE') return '<span class="text-muted">row deleted</span>';
+      const oldV = e.oldData || {}, newV = e.newData || {};
+      const keys = Object.keys(newV);
+      if (!keys.length) return '<span class="text-muted">no field change</span>';
+      const shown = keys.slice(0, 3).map(k => {
+        const a = oldV[k], b = newV[k];
+        const fmt = v => v === null || v === undefined ? 'null'
+          : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+        const short = s => s.length > 24 ? s.slice(0, 24) + '…' : s;
+        return `<div><code>${esc(k)}</code>: <span class="text-decoration-line-through text-muted">${esc(short(fmt(a)))}</span> → <strong>${esc(short(fmt(b)))}</strong></div>`;
+      }).join('');
+      const more = keys.length > 3 ? `<div class="text-muted small">+${keys.length - 3} more…</div>` : '';
+      return shown + more;
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function runFilter(){
+      const q = alSearch.value.toLowerCase().trim();
+      const role = alRole.value;
+      const table = alTable.value;
+
+      const rows = entries.filter(e => {
+        if (role && e.actorRole !== role) return false;
+        if (table && e.targetTable !== table) return false;
+        if (q) {
+          const hay = ((e.actorName || '') + ' ' + e.targetTable + ' ' + (e.targetId || '')).toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+      render(rows);
+    }
+
+    function render(rows){
+      if (!rows.length) {
+        alBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No audit entries match.</td></tr>';
+        return;
+      }
+      alBody.innerHTML = rows.map(e => {
+        const i = entries.indexOf(e);
+        return `
+          <tr>
+            <td>${when(e.createdAt)}</td>
+            <td>${esc(e.actorName)}<br><span class="badge ${roleBadge(e.actorRole)}">${esc(e.actorRole)}</span></td>
+            <td><span class="badge ${actionBadge(e.action)}">${e.action}</span></td>
+            <td><code>${esc(e.targetTable)}</code><br><small class="text-muted" title="${esc(e.targetId || '')}">${esc(shortId(e.targetId))}</small></td>
+            <td class="small">${changeSummary(e)}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary" onclick="openEntry(${i})">
+                <i class="bi bi-zoom-in"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.openEntry = function(index){
+      const e = entries[index];
+      if (!e) return;
+      const json = v => v ? esc(JSON.stringify(v, null, 2)) : '<span class="text-muted">—</span>';
+      document.getElementById('alDetail').innerHTML = `
+        <div class="row g-2 mb-3">
+          <div class="col-md-6"><div class="info-box"><strong>When:</strong> ${when(e.createdAt)}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Action:</strong> <span class="badge ${actionBadge(e.action)}">${e.action}</span></div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Actor:</strong> ${esc(e.actorName)} (${esc(e.actorRole)})</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Target:</strong> <code>${esc(e.targetTable)}</code> · ${esc(e.targetId || '—')}</div></div>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <h6>Before</h6>
+            <div class="al-json">${json(e.oldData)}</div>
+          </div>
+          <div class="col-md-6">
+            <h6>After</h6>
+            <div class="al-json">${json(e.newData)}</div>
+          </div>
+        </div>
+      `;
+      alModal.show();
+    };
+
+    alSearch.addEventListener('input', runFilter);
+    alRole.addEventListener('change', runFilter);
+    alTable.addEventListener('change', runFilter);
+    document.getElementById('alReset').addEventListener('click', () => {
+      alSearch.value = '';
+      alRole.value = '';
+      alTable.value = '';
+      runFilter();
+    });
+
+    async function loadAudit() {
+      showLoading(true);
+      try {
+        entries = await window.bangkagoAudit.listAudit({ limit: 300 });
+        showLoading(false);
+        runFilter();
+      } catch(e) {
+        console.error(e);
+        const msg = /audit_log/i.test(e.message || '') && /does not exist|schema cache/i.test(e.message || '')
+          ? 'Audit table not found — run migrations/038_admin_audit_and_rating_adjust.sql in the SQL editor.'
+          : 'Failed to load audit log: ' + e.message;
+        showError(msg);
+      }
+    }
+
+    // Live updates — new admin actions appear without a refresh.
+    window.bangkagoRealtime.subscribe('audit_log', null, function() {
+      loadAudit();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadAudit();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+      }
+    })();
+  </script>
+</body>
+</html>

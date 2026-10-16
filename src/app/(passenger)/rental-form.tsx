@@ -34,7 +34,8 @@ function nextDays(count: number): { iso: string; label: string }[] {
 /**
  * Rental request + 50% GCash escrow in one screen (Phase 4C): pick a
  * date and hours (days the boat is already booked are crossed out —
- * 027), file the admin QR payment (reference + screenshot). The
+ * 027), file the admin QR payment (receipt screenshot — the admin
+ * reads the Ref No. off it; no manual reference input). The
  * request waits in awaiting_payment; the bangkero hears about it when
  * the admin approves the escrow. The remainder is collected in person
  * when the charter completes.
@@ -62,7 +63,6 @@ export default function RentalFormScreen() {
 
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoaded, setQrLoaded] = useState(false);
-  const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
@@ -130,12 +130,8 @@ export default function RentalFormScreen() {
       setError('Pick a rental date.');
       return;
     }
-    if (!reference.trim()) {
-      setError('Enter your GCash reference number.');
-      return;
-    }
     if (!proofUri) {
-      setError('Attach your payment screenshot.');
+      setError('Attach your GCash receipt screenshot.');
       return;
     }
 
@@ -177,7 +173,9 @@ export default function RentalFormScreen() {
       try {
         await createDownpayment({
           amount: down,
-          referenceNum: reference,
+          // No manual ref input (prof's rule): the admin reads the
+          // Ref No. off the attached receipt while verifying in GCash.
+          referenceNum: '',
           proofUrl: proofPath,
           boatRentalId: rental.rentalId,
         });
@@ -347,17 +345,11 @@ export default function RentalFormScreen() {
           </View>
         )}
 
-        <Text style={styles.inputLabel}>GCASH REFERENCE NUMBER</Text>
-        <TextInput
-          value={reference}
-          onChangeText={setReference}
-          placeholder="e.g. 123456789012"
-          placeholderTextColor={colors.textMuted}
-          autoCapitalize="characters"
-          style={styles.input}
-        />
-
-        <Text style={styles.inputLabel}>PAYMENT SCREENSHOT</Text>
+        <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
+        <Text style={styles.proofHint}>
+          Attach the digital receipt of your Express Send — the admin reads the
+          Ref No. straight from this image.
+        </Text>
         <View style={styles.proofRow}>
           <Pressable
             onPress={() => void chooseProof('gallery')}
@@ -392,7 +384,7 @@ export default function RentalFormScreen() {
             label={`Pay ₱${down} & request rental`}
             onPress={submit}
             loading={busy}
-            disabled={busy || !profile || !reference.trim() || !proofUri}
+            disabled={busy || !profile || !proofUri}
           />
         </View>
       </ScrollView>
@@ -501,6 +493,7 @@ const styles = StyleSheet.create({
   qrPlaceholderText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
 
   inputLabel: { ...typography.label, marginTop: spacing.lg, marginBottom: spacing.sm },
+  proofHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
 
   proofRow: { flexDirection: 'row', gap: spacing.md },
   proofBtn: {

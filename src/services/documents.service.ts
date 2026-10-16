@@ -35,6 +35,8 @@ export function documentsRoute(stat: VerificationStatus | undefined): Href {
   if (stat === 'verified') return '/(bangkero)/documents-approved';
   if (stat === 'pending') return '/(bangkero)/boat-under-review';
   if (stat === 'rejected') return '/(bangkero)/documents-rejected';
+  // 'incomplete' (037) and the initial undefined while loading: the
+  // upload screen is the only sensible default — you can't skip it.
   return '/(bangkero)/verify-boat';
 }
 

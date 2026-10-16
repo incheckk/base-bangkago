@@ -208,7 +208,7 @@
             <td>${label}<div class="small text-muted">${d.serviceLabel || ''}</div></td>
             <td>${peso(d.amount)}</td>
             <td>${d.proofUrl
-              ? '<span class="badge text-bg-success"><i class="bi bi-image me-1"></i>Attached</span>'
+              ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openReview(${i})" aria-label="View receipt photo for ${payerName(d)}"><i class="bi bi-image me-1"></i>View photo</button>`
               : '<span class="badge text-bg-danger">Missing</span>'}</td>
             <td>${shortDate(d.createdAt)}</td>
             <td><span class="badge ${dpBadge(d.status)}">${dpStatusLabel(d.status)}</span></td>

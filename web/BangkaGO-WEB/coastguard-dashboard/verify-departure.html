@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -148,7 +148,7 @@
           <td>${m.manifestId.slice(0, 12)}...</td>
           <td>${m.bangkaName || 'Unassigned'}</td>
           <td>${m.bangkeroName || 'Unknown'}</td>
-          <td>${m.departurePortName || 'Unknown'} â†’ ${m.arrivalPortName || 'Unknown'}</td>
+          <td>${m.departurePortName || 'Unknown'} to ${m.arrivalPortName || 'Unknown'}</td>
           <td>${formatDate(m.actualDepartureTime)}</td>
           <td>${formatDate(m.actualArrivalTime)}</td>
           <td><span class="badge ${statusBadge(m.status)}">${statusText(m.status)}</span></td>

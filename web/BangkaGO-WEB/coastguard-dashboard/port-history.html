@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -180,14 +180,13 @@
       if (!c) return;
 
       try {
-        // Load from port_queues table (entries/exits)
+        // Queue rows track bangkeros; vessels are associated through bangkero_id.
         const { data: queues, error: queueError } = await c
-          .from('port_queues')
+          .from('port_queue')
           .select(`
             *,
             ports(port_name),
-            bangkas(bangka_name, bangkero_id),
-            bangkeros(display_name)
+            bangkeros(display_name, is_available)
           `)
           .order('entered_at', { ascending: false })
           .limit(200);
@@ -213,17 +212,22 @@
 
         // Process queue events
         (queues || []).forEach(q => {
+          const bangkaName = bangkas
+            .filter(b => b.bangkeroId === q.bangkero_id)
+            .map(b => b.bangkaName)
+            .join(', ') || 'Unassigned';
+          const condition = q.bangkeros?.is_available ? 'Online' : 'Offline';
+
           // Queue entry
           events.push({
             timestamp: q.entered_at,
             eventType: 'queue_entry',
             portId: q.port_id,
             portName: q.ports?.port_name,
-            bangkaId: q.bangka_id,
-            bangkaName: q.bangkas?.bangka_name,
-            bangkeroId: q.bangkas?.bangkero_id,
+            bangkeroId: q.bangkero_id,
+            bangkaName,
             bangkeroName: q.bangkeros?.display_name,
-            condition: q.isAvailable ? 'Online' : 'Offline'
+            condition
           });
 
           // Queue exit (if left)
@@ -233,11 +237,10 @@
               eventType: 'queue_exit',
               portId: q.port_id,
               portName: q.ports?.port_name,
-              bangkaId: q.bangka_id,
-              bangkaName: q.bangkas?.bangka_name,
-              bangkeroId: q.bangkas?.bangkero_id,
+              bangkeroId: q.bangkero_id,
+              bangkaName,
               bangkeroName: q.bangkeros?.display_name,
-              condition: q.isAvailable ? 'Online' : 'Offline'
+              condition
             });
           }
         });
@@ -294,7 +297,7 @@
     window.bangkagoAuthReady.then(function(role) {
       if (role !== 'coastguard') return;
 
-      window.bangkagoRealtime.subscribe('port_queues', null, loadPortHistory);
+      window.bangkagoRealtime.subscribe('port_queue', null, loadPortHistory);
       window.bangkagoRealtime.subscribe('trip_manifest', null, loadPortHistory);
       loadReferenceData().then(loadPortHistory);
     }).catch(function(e) {

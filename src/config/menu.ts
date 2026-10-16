@@ -70,6 +70,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'cash', label: 'Downpayments', route: '/(admin)/downpayments', section: 'FINANCE' },
     { icon: 'card', label: 'GCash QR', route: '/(admin)/gcash-qr' },
     { icon: 'receipt', label: 'Reports', route: '/(admin)/reports' },
+    { icon: 'parcel', label: 'Parcel Rates', route: '/(admin)/manage-parcel-rates' },
 
     // Named for the screens they open. Both this and the home screen's quick
     // action read "System Alerts" while pointing at two different screens —

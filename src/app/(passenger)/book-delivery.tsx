@@ -13,7 +13,8 @@ import { usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
 import { getActiveBooking, getBookingBan, routeIdFor } from '@/services/booking.service';
 import { calculateParcelFare } from '@/services/parcel-pricing.service';
-import type { RouteDoc } from '@/types/models';
+import { findEligiblePiggybackBooking } from '@/services/parcel-piggyback.service';
+import type { PiggybackCandidate, RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 interface ParcelItem {
@@ -34,6 +35,9 @@ export default function BookDelivery() {
   const [checking, setChecking] = useState(false);
   const [blocked, setBlocked] = useState<{ bookingId: string; ref: string } | null>(null);
   const [ban, setBan] = useState<number | null>(null);
+  const [deliveryMode, setDeliveryMode] = useState<'accompanied' | 'piggyback' | 'batched' | 'solo'>('accompanied');
+  const [piggybackCandidate, setPiggybackCandidate] = useState<PiggybackCandidate | null>(null);
+  const [piggybackLoading, setPiggybackLoading] = useState(false);
 
   const activeRoutes = routes.filter((r) => r.isActive);
   const routeFor = (from: string | null, to: string | null): RouteDoc | null => {
@@ -52,6 +56,31 @@ export default function BookDelivery() {
   const toPort = ports.data.find((p) => p.portId === toId);
   const route = routeFor(fromId, toId);
 
+  useEffect(() => {
+    if (deliveryMode !== 'piggyback' || !fromPort || !toPort) {
+      setPiggybackCandidate(null);
+      return;
+    }
+    let alive = true;
+    setPiggybackLoading(true);
+    findEligiblePiggybackBooking({
+      fromPortId: fromPort.portId,
+      toPortId: toPort.portId,
+    })
+      .then((candidate) => {
+        if (alive) setPiggybackCandidate(candidate);
+      })
+      .catch(() => {
+        if (alive) setPiggybackCandidate(null);
+      })
+      .finally(() => {
+        if (alive) setPiggybackLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [deliveryMode, fromPort?.portId, toPort?.portId]);
+
   const totalKg = items.reduce((sum, i) => {
     const kg = parseFloat(i.kilogram);
     // 1-50 kg clamp per item; NaN/negative/zero contribute 0 (ready-gate blocks).
@@ -63,11 +92,14 @@ export default function BookDelivery() {
           fromPort,
           toPort,
           totalKg,
-          deliveryType: 'accompanied',
+          deliveryType: deliveryMode,
         })
       : null;
   const cargoFare =
     fareResult && !fareResult.blockedReason ? fareResult.fare : null;
+
+  // Piggyback gate: ready only if candidate exists
+  const piggybackReady = deliveryMode !== 'piggyback' || piggybackCandidate !== null;
 
   function addItem() {
     setItems((prev) => [...prev, { itemName: '', quantity: '1', kilogram: '1' }]);
@@ -89,7 +121,8 @@ export default function BookDelivery() {
     cargoFare !== null &&
     totalKg > 0 &&
     !!receiverName.trim() &&
-    items.some((i) => i.itemName.trim());
+    items.some((i) => i.itemName.trim()) &&
+    piggybackReady;
 
   if (ports.loading || routesLoading) {
     return <ScreenContainer><LoadingState label="Loading ports…" /></ScreenContainer>;
@@ -136,6 +169,10 @@ export default function BookDelivery() {
         receiverName,
         receiverContact,
         itemsJson: JSON.stringify(items),
+        deliveryMode,
+        piggybackBookingId: piggybackCandidate?.bookingId ?? '',
+        originIsland: fromPort?.islandGroup ?? '',
+        destinationIsland: toPort?.islandGroup ?? '',
       },
     });
   }
@@ -180,6 +217,57 @@ export default function BookDelivery() {
             return null;
           }}
         />
+
+        <Text style={[styles.sectionLabel, styles.mt]}>DELIVERY MODE</Text>
+        <View style={styles.fareRow}>
+          <Text style={styles.fareLabel}>Delivery mode</Text>
+          <View style={styles.modeRow}>
+            <Pressable
+              onPress={() => setDeliveryMode('accompanied')}
+              style={[styles.modeChip, deliveryMode === 'accompanied' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, deliveryMode === 'accompanied' && styles.modeChipTextActive]}>
+                I&apos;ll ride along
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDeliveryMode('piggyback')}
+              style={[styles.modeChip, deliveryMode === 'piggyback' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, deliveryMode === 'piggyback' && styles.modeChipTextActive]}>
+                Send with a passenger
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDeliveryMode('batched')}
+              style={[styles.modeChip, deliveryMode === 'batched' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, deliveryMode === 'batched' && styles.modeChipTextActive]}>
+                Batched (wait up to 1hr)
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDeliveryMode('solo')}
+              style={[styles.modeChip, deliveryMode === 'solo' && styles.modeChipActive]}
+            >
+              <Text style={[styles.modeChipText, deliveryMode === 'solo' && styles.modeChipTextActive]}>
+                Solo (immediate)
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {deliveryMode === 'piggyback' && (
+          <View style={styles.fareRow}>
+            <Text style={styles.fareLabel}>
+              {piggybackLoading
+                ? 'Finding an eligible trip…'
+                : piggybackCandidate
+                  ? `Trip found · ${piggybackCandidate.scheduledDate ?? ''} ${piggybackCandidate.scheduledTime ?? ''}`
+                  : 'No eligible passenger trip right now'}
+            </Text>
+          </View>
+        )}
 
         <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
         <TextField label="Receiver Name" value={receiverName} onChangeText={setReceiverName} placeholder="Juan Dela Cruz" />
@@ -363,6 +451,18 @@ const styles = StyleSheet.create({
   fareRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fareLabel: { ...typography.caption },
   fareValue: { flexShrink: 1, color: colors.primary, fontSize: 16, fontWeight: '700' },
+
+  modeRow: { flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' },
+  modeChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#2A3B44',
+  },
+  modeChipActive: { backgroundColor: '#34D6B0', borderColor: '#34D6B0' },
+  modeChipText: { color: '#8FA5B0', fontSize: 12 },
+  modeChipTextActive: { color: '#0A1620', fontWeight: '600' },
 
   // ---------- blocked modal (same pattern as book-ride) ----------
   modalBackdrop: {

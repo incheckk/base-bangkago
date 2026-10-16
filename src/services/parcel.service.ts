@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import type { ParcelDoc, ParcelStatus } from '../types/models';
 
-function mapRow(row: any): ParcelDoc {
+export function mapRow(row: any): ParcelDoc {
   return {
     parcelId: row.id,
     receiverName: row.receiver_name,
@@ -11,6 +11,27 @@ function mapRow(row: any): ParcelDoc {
     createdAt: row.created_at,
     userId: row.user_id,
     bookingId: row.booking_id,
+    deliveryType: row.delivery_type ?? null,
+    piggybackBookingId: row.piggyback_booking_id ?? null,
+    approvalStatus: row.approval_status ?? null,
+    approvalDeadlineAt: row.approval_deadline_at ?? null,
+    totalWeightKg: row.total_weight_kg ?? null,
+    originIsland: row.origin_island ?? null,
+    destinationIsland: row.destination_island ?? null,
+    quotedFare: row.quoted_fare ?? null,
+    finalFare: row.final_fare ?? null,
+    baseFee: row.base_fee ?? null,
+    excessKgFee: row.excess_kg_fee ?? null,
+    soloSurcharge: row.solo_surcharge ?? null,
+    batchingStatus: row.batching_status ?? null,
+    batchingStartedAt: row.batching_started_at ?? null,
+    batchingDeadlineAt: row.batching_deadline_at ?? null,
+    batchingCycleCount: row.batching_cycle_count ?? null,
+    batchingRouteKey: row.batching_route_key ?? null,
+    batchedCountAtSail: row.batched_count_at_sail ?? null,
+    scheduledDepartureAt: row.scheduled_departure_at ?? null,
+    estimatedArrivalAt: row.estimated_arrival_at ?? null,
+    actualArrivalAt: row.actual_arrival_at ?? null,
   };
 }
 
@@ -21,6 +42,14 @@ export async function createParcel(parcel: {
   userId: string;
   bookingId: string;
   items: { itemName: string; quantity: number; kilogram: number }[];
+  deliveryType?: 'accompanied' | 'piggyback' | 'batched' | 'solo';
+  piggybackBookingId?: string | null;
+  totalWeightKg?: number | null;
+  originIsland?: string | null;
+  destinationIsland?: string | null;
+  quotedFare?: number | null;
+  batchedDeadlineAt?: string | null;
+  batchingRouteKey?: string | null;
 }): Promise<ParcelDoc> {
   const { data, error } = await supabase
     .from('parcels')
@@ -30,6 +59,20 @@ export async function createParcel(parcel: {
       total_price: parcel.totalPrice,
       user_id: parcel.userId,
       booking_id: parcel.bookingId,
+      delivery_type: parcel.deliveryType ?? 'accompanied',
+      piggyback_booking_id: parcel.piggybackBookingId ?? null,
+      approval_status: parcel.deliveryType === 'piggyback' ? 'pending' : null,
+      approval_deadline_at: parcel.deliveryType === 'piggyback'
+        ? new Date(Date.now() + 15 * 60_000).toISOString()
+        : null,
+      total_weight_kg: parcel.totalWeightKg ?? null,
+      origin_island: parcel.originIsland ?? null,
+      destination_island: parcel.destinationIsland ?? null,
+      quoted_fare: parcel.quotedFare ?? null,
+      batching_status: parcel.deliveryType === 'batched' ? 'pending_batch' : null,
+      batching_deadline_at: parcel.batchedDeadlineAt ?? null,
+      batching_route_key: parcel.batchingRouteKey ?? null,
+      batching_started_at: parcel.deliveryType === 'batched' ? new Date().toISOString() : null,
     })
     .select()
     .single();

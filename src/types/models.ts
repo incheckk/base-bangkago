@@ -98,9 +98,9 @@ export interface PortDoc {
   longitude: number | null;
   sortOrder: number;
   isActive: boolean;
-  /** Parcel Padala Phase 0 (032): 'mactan' = mainland, 'olango' = island. NOT NULL in DB. */
+  /** Parcel Padala Phase 0 (034): 'mactan' = mainland, 'olango' = island. NOT NULL in DB. */
   islandGroup: 'mactan' | 'olango';
-  /** Parcel Padala Phase 0 (032): display island name. NOT NULL in DB. */
+  /** Parcel Padala Phase 0 (034): display island name. NOT NULL in DB. */
   islandName: string;
   /** GPS perimeter radius around the port, in meters (default 300, admin-tunable). */
   geofenceRadiusM: number;
@@ -240,6 +240,39 @@ export interface ParcelDoc {
   createdAt: string;
   userId: string;
   bookingId: string;
+  // Phase 1 (042): mode + batching lifecycle
+  deliveryType: 'accompanied' | 'piggyback' | 'batched' | 'solo' | null;
+  piggybackBookingId: string | null;
+  approvalStatus: 'pending' | 'accepted' | 'rejected' | 'timeout' | null;
+  approvalDeadlineAt: string | null;
+  totalWeightKg: number | null;
+  originIsland: string | null;
+  destinationIsland: string | null;
+  quotedFare: number | null;
+  finalFare: number | null;
+  baseFee: number | null;
+  excessKgFee: number | null;
+  soloSurcharge: number | null;
+  // Phase 1 (042): batching fields
+  batchingStatus: 'pending_batch' | 'batched' | 'solo' | 'in_transit' |
+                  'arrived' | 'delivered' | null;
+  batchingStartedAt: string | null;
+  batchingDeadlineAt: string | null;
+  batchingCycleCount: number | null;
+  batchingRouteKey: string | null;
+  batchedCountAtSail: number | null;
+  scheduledDepartureAt: string | null;
+  estimatedArrivalAt: string | null;
+  actualArrivalAt: string | null;
+}
+
+export interface PiggybackCandidate {
+  bookingId: string;
+  operatorId: string;
+  routeId: string;
+  scheduledDate: string | null;
+  scheduledTime: string | null;
+  status: string;
 }
 
 export interface ParcelItemDoc {

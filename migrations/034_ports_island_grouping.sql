@@ -70,9 +70,9 @@ CREATE INDEX IF NOT EXISTS ports_island_group_idx
   ON public.ports (island_group);
 
 COMMENT ON COLUMN public.ports.island_group IS
-  'Parcel Padala Phase 0 (034): mactan = mainland ports, olango = island ports. Seeded from ml/config/ports.json is_mainland.';
+  'Parcel Padala Phase 0 (032): mactan = mainland ports, olango = island ports. Seeded from ml/config/ports.json is_mainland.';
 COMMENT ON COLUMN public.ports.island_name IS
-  'Parcel Padala Phase 0 (034): display island name (Mactan / Caohagan / Sulpa / St. Vicente / Hilotongan / Nalusuan).';
+  'Parcel Padala Phase 0 (032): display island name (Mactan / Caohagan / Sulpa / St. Vicente / Hilotongan / Nalusuan).';
 
 -- =============================================================
 -- DOWN (commented — do NOT run unless rolling back Phase 0):

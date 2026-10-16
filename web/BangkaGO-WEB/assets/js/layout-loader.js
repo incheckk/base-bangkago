@@ -10,23 +10,62 @@
           var s = document.createElement('script');
           s.src = src;
           s.onload = resolve;
-          s.onerror = resolve; // failed load -> role() returns null -> redirect
+          s.onerror = resolve;
           document.head.appendChild(s);
         });
       }
-      await load('../../config.js');
-      await load('../../assets/js/supabase.js'); // vendored UMD — no CDN
+      // config + vendored UMD have no dependency on each other,
+      // so fetch them together; supabase-client needs both.
+      await Promise.all([
+        load('../../config.js'),
+        load('../../assets/js/supabase.js'), // vendored UMD — no CDN
+      ]);
       await load('../../supabase-client.js');
-      // Wait for Supabase client to restore session from localStorage
-      if (window.bangkago && window.bangkago.client) {
-        await window.bangkago.client.auth.getSession();
+      // role() restores the session itself; 'unverified' means the
+      // session exists but the network refused to confirm it — that
+      // is a connection problem, NOT a logout, so retry before deciding.
+      // A missing window.bangkago = the client file failed to load —
+      // also a connection problem, not "signed out".
+      var role = window.bangkago ? await window.bangkago.role() : 'unverified';
+      if (role === 'unverified') {
+        for (var i = 0; i < 4 && role === 'unverified'; i++) {
+          await new Promise(function (r) { setTimeout(r, 1500 * (i + 1)); });
+          role = window.bangkago ? await window.bangkago.role() : 'unverified';
+        }
       }
-      var role = window.bangkago ? await window.bangkago.role() : null;
+      if (role === 'unverified') {
+        showConnectionBanner();
+        return role;
+      }
       if (roles.indexOf(role) === -1) location.replace('../../bangkaGo-access.html');
       return role;
     }
+
+    // Signed in but unreachable: stay on the page and say so, instead
+    // of the old behaviour (bounce to the login portal over any blip).
+    function showConnectionBanner() {
+      if (document.getElementById('bgConnectionBanner')) return;
+      var el = document.createElement('div');
+      el.id = 'bgConnectionBanner';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2000;' +
+        'background:#b45309;color:#fff;padding:10px 16px;text-align:center;' +
+        'font:600 14px/1.4 Sora,system-ui,sans-serif;';
+      el.textContent =
+        'Connection problem — could not verify your session. ' +
+        'Check your internet; the page will keep retrying.';
+      document.body.appendChild(el);
+      setInterval(function () {
+        if (!window.bangkago) return;
+        window.bangkago.role().then(function (r) {
+          if (r && r !== 'unverified') location.reload();
+        });
+      }, 10000);
+    }
     const isCoastguardPage = location.pathname.indexOf('/coastguard-dashboard/') !== -1;
-    await guard(isCoastguardPage ? ['coastguard'] : ['admin']);
+    const verifiedRole = await guard(isCoastguardPage ? ['coastguard'] : ['admin']);
+    // Let realtime.js attach queued subscriptions now that the client exists.
+    window.dispatchEvent(new CustomEvent('bangkago-auth-ready', { detail: { role: verifiedRole } }));
+    return verifiedRole;
   })();
 
   const sidebarMount = document.getElementById('sidebarMount');
@@ -53,12 +92,15 @@
     'manage-bangka': { title: 'Manage Bangka', subtitle: 'Maintain vessel master list and availability' },
     'manage-routes': { title: 'Manage Routes', subtitle: 'Configure official routes and travel corridors' },
     'manage-bookings': { title: 'Manage Bookings', subtitle: 'Review booking flow, assignments, and status' },
+    'downpayments': { title: 'Downpayments', subtitle: 'Confirm GCash escrow before trips are released' },
     'monitor-fleet': { title: 'Monitor Fleet', subtitle: 'Live fleet monitoring and real-time vessel tracking' },
     'track-vessel': { title: 'Track Vessel', subtitle: 'Merged fleet monitoring and real-time vessel tracking' },
     'manage-payments': { title: 'Manage Payments', subtitle: 'Track transactions, verification, and settlements' },
     'manage-alerts': { title: 'Manage Alerts', subtitle: 'Create and monitor operational alert rules' },
     'view-reports': { title: 'View Reports', subtitle: 'Operations, compliance, and system reports' },
     'analyze-demand': { title: 'Analyze Demand', subtitle: 'Demand trends, peak windows, and forecast insights' },
+    'ratings': { title: 'Bangkero Ratings', subtitle: 'Effective ratings, penalties, and accept-gate locks' },
+    'audit-log': { title: 'Audit Log', subtitle: 'Every admin change, who made it, and what it was before' },
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
     'view-weather': { title: 'View Weather', subtitle: 'Weather data and route safety status' },

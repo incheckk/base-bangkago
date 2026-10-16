@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Ratings</title>
+
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+</head>
+<body data-page="ratings">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card p-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Bangkero Ratings</h6>
+            <span class="muted-note">Effective rating per bangkero — what the accept gate uses (floor 1.0★, 2-day recovery)</span>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-3">
+              <input id="rtSearch" class="form-control" placeholder="Search bangkero name">
+            </div>
+            <div class="col-md-3">
+              <select id="rtFilter" class="form-select">
+                <option value="">All bangkeros</option>
+                <option value="locked">Locked only (≤ 1.0★)</option>
+                <option value="unlocked">Unlocked only</option>
+                <option value="rated">With ratings</option>
+                <option value="unrated">No ratings yet</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Bangkero</th>
+                  <th>Average</th>
+                  <th>Ratings</th>
+                  <th>Penalty</th>
+                  <th>Recovery</th>
+                  <th>Effective</th>
+                  <th>Status</th>
+                  <th style="min-width: 140px;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="rtBody"></tbody>
+            </table>
+          </div>
+
+          <div id="loadingState" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p class="mt-2 text-muted">Loading ratings...</p>
+          </div>
+
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- PER-RATING DETAIL MODAL -->
+  <div class="modal fade" id="rtModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Ratings Detail</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <div><strong>Bangkero:</strong> <span id="rtName">-</span></div>
+            <div><strong>Effective rating:</strong> <span id="rtEffective">-</span></div>
+          </div>
+          <div id="rtList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADJUST RATING MODAL (admin knob — saved via migration 038 RPC) -->
+  <div class="modal fade" id="adjustModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="adjustForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Adjust Rating</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <div><strong>Bangkero:</strong> <span id="adjName">-</span></div>
+            <div><strong>Current effective:</strong> <span id="adjCurrent">-</span></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label mb-1" for="adjTarget">Target effective rating: <strong id="adjTargetVal">—</strong></label>
+            <input type="range" class="form-range" id="adjTarget" min="0" max="5" step="0.1">
+            <small class="text-muted">Moves the penalty to hit the target. Below 1.0★ keeps the accept gate locked.</small>
+          </div>
+
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label" for="adjPenalty">Penalty (0–5★, 0.1 steps)</label>
+              <input type="number" class="form-control" id="adjPenalty" min="0" max="5" step="0.1" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="adjRecovery">Recovery stars (0–5)</label>
+              <input type="number" class="form-control" id="adjRecovery" min="0" max="5" step="1" required>
+            </div>
+          </div>
+
+          <div class="alert alert-secondary mt-3 mb-0" id="adjPreview"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-bangkago">Save Adjustment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <!-- Service scripts -->
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/ratings.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+
+  <style>
+    .rt-list-item{border:1px solid var(--gray-200);border-radius:10px;background:var(--gray-50);padding:.7rem .85rem;margin-bottom:.5rem;}
+    .rt-stars{color:#f5a623;font-weight:700;}
+  </style>
+
+  <script>
+    let summaries = [];
+    let ratings = [];
+    let raterNames = {};
+
+    const rtBody = document.getElementById('rtBody');
+    const rtSearch = document.getElementById('rtSearch');
+    const rtFilter = document.getElementById('rtFilter');
+    const loadingState = document.getElementById('loadingState');
+    const errorState = document.getElementById('errorState');
+
+    const rtModal = new bootstrap.Modal(document.getElementById('rtModal'));
+
+    function stars(n) { return '★'.repeat(Math.round(n)) + '☆'.repeat(5 - Math.round(n)); }
+
+    function shortDate(iso){
+      const d = new Date(iso);
+      return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+    }
+
+    function showLoading(show) {
+      loadingState.classList.toggle('d-none', !show);
+      errorState.classList.add('d-none');
+    }
+
+    function showError(msg) {
+      loadingState.classList.add('d-none');
+      errorState.textContent = msg;
+      errorState.classList.remove('d-none');
+    }
+
+    function runFilter(){
+      const q = rtSearch.value.toLowerCase().trim();
+      const f = rtFilter.value;
+      const rows = summaries.filter(s => {
+        if (q && !s.displayName.toLowerCase().includes(q)) return false;
+        if (f === 'locked') return s.locked;
+        if (f === 'unlocked') return !s.locked;
+        if (f === 'rated') return s.count > 0;
+        if (f === 'unrated') return s.count === 0;
+        return true;
+      });
+      render(rows);
+    }
+
+    function render(rows){
+      if (!rows.length) {
+        rtBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No bangkeros match.</td></tr>';
+        return;
+      }
+      rtBody.innerHTML = rows.map(s => {
+        const i = summaries.indexOf(s);
+        return `
+          <tr>
+            <td>${s.displayName}</td>
+            <td>${s.count ? `<span class="rt-stars">${s.avg.toFixed(1)} ${stars(s.avg)}</span>` : '<span class="text-muted">—</span>'}</td>
+            <td>${s.count}</td>
+            <td>${s.penalty > 0 ? `−${s.penalty}★` : '<span class="text-muted">0</span>'}</td>
+            <td>${s.recovery > 0 ? `+${s.recovery}★` : '<span class="text-muted">0</span>'}</td>
+            <td><strong>${s.effective.toFixed(1)}★</strong></td>
+            <td>${s.locked
+              ? '<span class="badge text-bg-danger"><i class="bi bi-lock me-1"></i>Locked</span>'
+              : '<span class="badge text-bg-success"><i class="bi bi-unlock me-1"></i>Open</span>'}</td>
+            <td>
+              <div class="d-flex gap-1 flex-wrap">
+                <button class="btn btn-sm btn-outline-primary" onclick="openDetail(${i})">
+                  <i class="bi bi-star"></i> Ratings
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="openAdjust(${i})">
+                  <i class="bi bi-sliders"></i> Adjust
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    window.openDetail = function(index){
+      const s = summaries[index];
+      document.getElementById('rtName').textContent = s.displayName;
+      document.getElementById('rtEffective').textContent =
+        `${s.effective.toFixed(1)}★ ${s.locked ? '(LOCKED — accept gate blocked, recovers +1★ every 2 days)' : ''}`;
+
+      const rows = ratings.filter(r => r.bangkeroId === s.bangkeroId);
+      const list = document.getElementById('rtList');
+      if (!rows.length) {
+        list.innerHTML = '<div class="alert alert-info mb-0">No ratings yet — the smoothing prior keeps this bangkero at 5.0★.</div>';
+      } else {
+        list.innerHTML = rows.map(r => `
+          <div class="rt-list-item">
+            <div class="d-flex justify-content-between">
+              <span class="rt-stars">${r.score} ${stars(r.score)}</span>
+              <small class="text-muted">${shortDate(r.createdAt)} · ${raterNames[r.userId] || 'Passenger'}</small>
+            </div>
+            <div class="mt-1">${r.comment ? escapeHtml(r.comment) : '<span class="text-muted fst-italic">No comment</span>'}</div>
+          </div>
+        `).join('');
+      }
+      rtModal.show();
+    };
+
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, ch => (
+        { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]
+      ));
+    }
+
+    // ---- Rating adjust knob. Slider (target) and penalty are two views
+    // of the same value with recovery held; preview mirrors the SQL
+    // formula: eff = max(0, smoothed - penalty + recovery).
+    let adjSummary = null;
+    const adjustModal = new bootstrap.Modal(document.getElementById('adjustModal'));
+    const adjTarget = document.getElementById('adjTarget');
+    const adjTargetVal = document.getElementById('adjTargetVal');
+    const adjPenalty = document.getElementById('adjPenalty');
+    const adjRecovery = document.getElementById('adjRecovery');
+    const adjPreview = document.getElementById('adjPreview');
+
+    function adjSmooth(){ return window.bangkagoRatings.smoothedBase(adjSummary); }
+
+    function adjEff(penalty, recovery){
+      const v = adjSmooth() - Number(penalty) + Number(recovery);
+      return Math.max(0, Math.round(v * 10) / 10);
+    }
+
+    function adjSyncPreview(){
+      const p = Number(adjPenalty.value || 0);
+      const r = Number(adjRecovery.value || 0);
+      const target = Math.min(5, Math.max(0, Math.round((adjSmooth() + r - p) * 10) / 10));
+      adjTarget.value = target.toFixed(1);
+      adjTargetVal.textContent = target.toFixed(1) + '★';
+      const after = adjEff(p, r);
+      adjPreview.innerHTML =
+        `<strong>${adjSummary.effective.toFixed(1)}★ → ${after.toFixed(1)}★</strong> ` +
+        (after <= 1.0
+          ? '<span class="badge text-bg-danger ms-1"><i class="bi bi-lock"></i> Gate stays LOCKED</span>'
+          : '<span class="badge text-bg-success ms-1"><i class="bi bi-unlock"></i> Gate open</span>') +
+        `<br><small class="text-muted">Penalty ${p.toFixed(1)}★ · Recovery +${r}★ · ` +
+        `raw average ${adjSmooth().toFixed(1)}★ — you will be asked to confirm before saving.</small>`;
+    }
+
+    adjTarget.addEventListener('input', function(){
+      const t = Number(adjTarget.value);
+      adjTargetVal.textContent = t.toFixed(1) + '★';
+      const p = Math.min(5, Math.max(0, Math.round((adjSmooth() + Number(adjRecovery.value || 0) - t) * 10) / 10));
+      adjPenalty.value = p.toFixed(1);
+      adjSyncPreview();
+    });
+    adjPenalty.addEventListener('input', adjSyncPreview);
+    adjRecovery.addEventListener('input', adjSyncPreview);
+
+    window.openAdjust = function(index){
+      adjSummary = summaries[index];
+      if (!adjSummary) return;
+      document.getElementById('adjName').textContent = adjSummary.displayName;
+      document.getElementById('adjCurrent').textContent =
+        `${adjSummary.effective.toFixed(1)}★${adjSummary.locked ? ' (LOCKED)' : ''}`;
+      adjPenalty.value = Number(adjSummary.penalty).toFixed(1);
+      adjRecovery.value = adjSummary.recovery;
+      adjSyncPreview();
+      adjustModal.show();
+    };
+
+    document.getElementById('adjustForm').addEventListener('submit', async function(e){
+      e.preventDefault();
+      if (!adjSummary) return;
+
+      const p = Number(adjPenalty.value);
+      const r = Number(adjRecovery.value);
+      if (isNaN(p) || p < 0 || p > 5) { alert('Penalty must be between 0 and 5.'); return; }
+      if (isNaN(r) || r < 0 || r > 5) { alert('Recovery stars must be between 0 and 5.'); return; }
+
+      const after = adjEff(p, r);
+      // Mandatory confirmation on EVERY change — nothing saves silently.
+      const ok = confirm(
+        `Apply rating adjustment for ${adjSummary.displayName}?\n\n` +
+        `Effective: ${adjSummary.effective.toFixed(1)}★ → ${after.toFixed(1)}★\n` +
+        `Penalty:  ${Number(adjSummary.penalty).toFixed(1)}★ → ${p.toFixed(1)}★\n` +
+        `Recovery: +${adjSummary.recovery}★ → +${r}★\n\n` +
+        (after <= 1.0 ? 'This keeps/puts the accept gate LOCKED.\n' : 'Accept gate will be open.\n') +
+        'The change is written to the Audit Log.'
+      );
+      if (!ok) return;
+
+      try {
+        const newEff = await window.bangkagoRatings.adjustRating(adjSummary.bangkeroId, p, r);
+        adjustModal.hide();
+        await loadRatings();
+        alert(`Saved. ${adjSummary.displayName}'s effective rating is now ${newEff.toFixed(1)}★.`);
+      } catch(err) {
+        console.error(err);
+        alert('Error: ' + err.message);
+      }
+    });
+
+    rtSearch.addEventListener('input', runFilter);
+    rtFilter.addEventListener('change', runFilter);
+
+    async function loadRatings() {
+      showLoading(true);
+      try {
+        // One ratings fetch, shared with the summaries (the old code
+        // pulled the whole ratings table twice per load).
+        ratings = await window.bangkagoRatings.listRatings();
+        [summaries, raterNames] = await Promise.all([
+          window.bangkagoRatings.listSummaries(ratings),
+          window.bangkagoRatings.getRaterNames(ratings.map(r => r.userId))
+        ]);
+        showLoading(false);
+        runFilter();
+      } catch(e) {
+        console.error(e);
+        showError('Failed to load ratings: ' + e.message);
+      }
+    }
+
+    // Real-time updates
+    window.bangkagoRealtime.subscribe('ratings', null, function() {
+      loadRatings();
+    });
+    window.bangkagoRealtime.subscribe('bangkeros', null, function() {
+      loadRatings();
+    });
+
+    // Initial load — wait for auth guard to complete and session to restore
+    (async function () {
+      try {
+        await window.bangkagoAuthReady;
+        await loadRatings();
+      } catch (e) {
+        console.error('Auth guard failed:', e);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+        
+      }
+    })();
+  </script>
+</body>
+</html>

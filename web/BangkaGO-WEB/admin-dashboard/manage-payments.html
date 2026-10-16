@@ -1,13 +1,13 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BangkaGo Admin — Manage Payments</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .summary-box{border:1px solid var(--gray-200);border-radius:12px;background:var(--gray-50);padding:.7rem .85rem;}
@@ -148,7 +148,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
   <!-- Service scripts -->
@@ -199,9 +199,7 @@
     }
 
     function render(data){
-      tbody.innerHTML = '';
-      data.forEach((p, i) => {
-        tbody.innerHTML += `
+      tbody.innerHTML = data.map((p) => `
           <tr>
             <td>${p.paymentId.slice(0,12)}...</td>
             <td>${p.bookingId ? p.bookingId.slice(0,12)+'...' : 'N/A'}</td>
@@ -211,17 +209,16 @@
             <td><span class="badge ${badge(p.paymentStatus)}">${displayStatus(p.paymentStatus)}</span></td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPayment(${i})">
+                <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPayment('${p.paymentId}')">
                   <i class="bi bi-eye"></i> View
                 </button>
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openReport(${i})">
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openReport('${p.paymentId}')">
                   <i class="bi bi-file-earmark-text"></i> Report
                 </button>
               </div>
             </td>
           </tr>
-        `;
-      });
+      `).join('');
     }
 
     function runFilter(){
@@ -241,8 +238,11 @@
       render(filtered);
     }
 
-    window.viewPayment = function(i){
-      const p = payments[i];
+    // By id: the table renders the FILTERED list, so a row index here
+    // would open a different payment whenever a search is active.
+    window.viewPayment = function(paymentId){
+      const p = payments.find(x => x.paymentId === paymentId);
+      if (!p) return;
       document.getElementById('paymentDetailsBox').innerHTML = `
         <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.paymentId}</div>
         <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bookingId || 'N/A'}</div>
@@ -256,9 +256,10 @@
       viewPaymentModal.show();
     }
 
-    window.openReport = function(i){
-      selectedIndex = i;
-      const p = payments[i];
+    window.openReport = function(paymentId){
+      selectedIndex = payments.findIndex(x => x.paymentId === paymentId);
+      if (selectedIndex === -1) return;
+      const p = payments[selectedIndex];
 
       document.getElementById('rPaymentId').textContent = p.paymentId;
       document.getElementById('rPayer').textContent = p.payerName || 'Unknown';
@@ -347,6 +348,7 @@
         ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         render(payments);
+        showLoading(false);
       } catch(e) {
         console.error(e);
         showError('Failed to load payments: ' + e.message);
@@ -368,8 +370,10 @@
         await loadPayments();
       } catch (e) {
         console.error('Auth guard failed:', e);
-        showError('Authentication required. Redirecting...');
-        setTimeout(function () { location.href = '../../bangkaGo-access.html'; }, 1500);
+        // Never auto-redirect from here: the guard already distinguishes
+        // 'signed out' (bounces you) from 'can't verify' (stays put).
+        showError('Could not verify your session (connection problem). Refresh the page to retry.');
+        
       }
     })();
   </script>

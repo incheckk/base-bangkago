@@ -211,7 +211,11 @@ export default function BangkeroProfileScreen() {
                 styles.badgeText,
                 op?.verificationStat === 'verified' ? styles.badgeTextVerified : styles.badgeTextPending,
               ]}>
-                {op?.verificationStat === 'verified' ? '✓ Verified' : 'Pending Verification'}
+                {op?.verificationStat === 'verified'
+                  ? '✓ Verified'
+                  : op?.verificationStat === 'incomplete'
+                    ? 'Upload documents'
+                    : 'Pending Verification'}
               </Text>
             </View>
             {/* Always beside the verified badge — falls back to a

@@ -1,13 +1,13 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Admin — Track Vessel</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
 </head>
 <body data-page="track-vessel">
@@ -61,7 +61,7 @@
                 <span class="muted-note">Merged monitor + track module</span>
               </div>
 
-              <img src="../images/map.jpg" alt="Live fleet map" class="live-map-img"/>
+              <div id="fleetMap"></div>
 
               <div class="route-pill-wrap" id="routePills">
                 <span class="route-pill">Loading vessels...</span>
@@ -126,7 +126,7 @@
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
   <!-- Service scripts -->
@@ -134,11 +134,13 @@
   <script src="../../assets/js/services/vessels.js"></script>
   <script src="../../assets/js/services/bookings.js"></script>
   <script src="../../assets/js/services/realtime.js"></script>
+  <script src="../../assets/js/fleet-map.js"></script>
 
   <script>
     let vesselData = {};
     let allBangkas = [];
     let allPositions = [];
+    let fleetMap = null;
 
     const locationVessel = document.getElementById("locationVessel");
     const historyVessel = document.getElementById("historyVessel");
@@ -322,7 +324,8 @@
         populateVesselSelects();
         updateRoutePills();
         updateKPIs();
-        
+        pushMapMarkers();
+
         // Update current selection
         if (locationVessel.value) updateVesselPanel(locationVessel.value);
         if (historyVessel.value) loadReplayData(historyVessel.value);
@@ -331,6 +334,26 @@
         console.error('Error loading vessel data:', e);
         routePills.innerHTML = '<span class="route-pill text-danger">Error loading vessels</span>';
       }
+    }
+
+    // Feed every vessel with a real fix to the live Leaflet map.
+    function pushMapMarkers() {
+      if (!fleetMap) return;
+      fleetMap.update(allBangkas.map(b => {
+        const pos = allPositions.find(p => p.bangkaId === b.bangkaId);
+        if (!pos) return null;
+        const v = vesselData[b.bangkaName] || {};
+        return {
+          id: b.bangkaId,
+          name: b.bangkaName,
+          lat: pos.latitude,
+          lng: pos.longitude,
+          signal: v.signal,
+          speed: v.speed,
+          last: v.last,
+          dest: v.dest
+        };
+      }).filter(Boolean));
     }
 
     function loadReplayData(vesselName) {
@@ -352,6 +375,8 @@
     // Event listeners
     locationVessel.addEventListener("change", (e) => {
       updateVesselPanel(e.target.value);
+      const v = vesselData[e.target.value];
+      if (fleetMap && v && v.bangkaId) fleetMap.panTo(v.bangkaId);
     });
 
     historyVessel.addEventListener("change", (e) => {
@@ -375,6 +400,11 @@
     (async function () {
       try {
         await window.bangkagoAuthReady;
+        try {
+          fleetMap = await window.bangkagoFleetMap.mount('fleetMap');
+        } catch (err) {
+          console.error('Fleet map failed to load:', err); // page still works without it
+        }
         loadVesselData();
       } catch (e) {
         console.error('Auth guard failed:', e);

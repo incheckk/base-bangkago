@@ -33,14 +33,35 @@ Section [E] carries the P2 security debt moved out of that pass.
    SHIPPED in the M1-M6 build: book-package and rental-form capture
    companions through the shared CompanionForm; rows land in
    passenger_details (booking_id for rides, boat_rental_id for rentals,
-   migration 026) and render for passenger AND bangkero. Still open:
-   companions remain INSERT-only (E7) — no edit/correct flow.
+   migration 026) and render for passenger AND bangkero. Row ✕ was
+   replaced by an edit pencil (2026-10): the modal opens prefilled
+   with Save changes / Remove passenger. Still open: that edit works
+   on the LOCAL list before filing — companions remain INSERT-only in
+   the DB (E7), so they cannot be corrected AFTER the booking exists.
 
 5. BOAT RENTAL HOURLY RATE DEFAULT (Phase 4C)
    bangkas.hourly_rate defaults to ₱500 (migration 016) when a
    operator never set one; rates are editable per boat in
    (bangkero)/rentals. Confirm real per-boat pricing with operators
    before launch.
+
+6. ADMIN AUDIT TRAIL SKIPS SQL-EDITOR WRITES (web batch 2026-10-16)
+   audit_log (migration 038) is trigger-based, so it only sees writes
+   with a JWT. Anything an admin types directly into the Supabase SQL
+   editor (e.g. hand-editing a fare, forcing a status) is NOT audited.
+   Acceptable for the demo; at launch either route those edits through
+   the dashboard/RPCs or add a session variable convention the trigger
+   reads. Also: the trigger snapshots actor id + role, so a user whose
+   role changed later keeps the role they had AT THE TIME (by design).
+
+7. FLEET MAP ETA/DIRECTION TEXT IS AN ESTIMATE (web batch 2026-10-16)
+   The Leaflet/OSM fleet maps (fleet-map.js on admin + coastguard
+   monitor-fleet and coastguard index) plot REAL vessel_tracking fixes,
+   but the "ETA"/delay text on the route pills is derived from fix age
+   only (Stable <60s, Intermittent <5min, Lost after) — there is no
+   heading/speed→arrival math. Same class as the mock ETA in
+   monitor-fleet's vessel panel. Wire real routing/ETA only if a demo
+   script needs it.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
@@ -89,13 +110,24 @@ B9. REAL GCASH PAYMENT INTEGRATION
     GCash/API gateway (and the scan flow) at launch.
     Escrow (Phases 4B/4C): island-hop packages and boat rentals file
     their 50% downpayment against the ADMIN's GCash QR (app_settings
-    row 'gcash_qr_url', Admin → GCash QR) as a reference number +
-    screenshot upload into the downpayments table (migration 015).
-    Everything is settled OUT OF BAND: approve/refund is a manual
-    Admin → Downpayments button, nothing moves automatically. Rental
-    remainders are collected CASH IN PERSON when the charter
-    completes; package remainders are a 'cash' payment row collected
-    onboard. No real gateway in any of these paths yet.
+    row 'gcash_qr_url', Admin → GCash QR) as a RECEIPT SCREENSHOT
+    upload into the downpayments table (migration 015). The manual
+    reference-number input was REMOVED by decision (2026-10): the
+    admin reads the Ref No. off the receipt image and confirms the
+    money in their own GCash (numbered steps card on Admin →
+    Downpayments, mobile + web). Everything is settled OUT OF BAND:
+    approve/refund is a manual Admin → Downpayments button, nothing
+    moves automatically. Rental remainders are collected CASH IN
+    PERSON when the charter completes; package remainders are a
+    'cash' payment row collected onboard. No real gateway in any of
+    these paths yet.
+    B9a. RECEIPT OCR — deferred by decision (2026-10), researched:
+         auto-reading the Ref No. off the uploaded receipt instead of
+         the admin doing it by eye. Chosen candidate when revived:
+         OCR.space free tier — 25,000 scans/month, 500/day/IP, no
+         credit card, 1 MB file cap (downscale the receipt before
+         upload). Rejected for now: Google Cloud Vision (free 1,000
+         mo but requires a credit card). No OCR code exists today.
 B10. DEMAND PREDICTION (ML)
      PARTIALLY SHIPPED in the M1-M6 build: ml/ pipeline trained (RF
      R² 0.51), predictions land in demand_predictions (migration 024
@@ -151,6 +183,16 @@ C8. (shipped in 023 — stamp_booking_depart stamps depart_time and
     complete_trip stamps arrival_time as SECURITY DEFINER RPCs,
     bypassing the 004 column restriction. Kept for context: sailing
     times ALSO live on trip_manifest.)
+C9. ADMIN APPROVE GUARD ON EMPTY SUBMISSIONS — stored, NOT built
+    (2026-10 by user decision). Idea: block the Approve button on
+    Admin → Downpayments when the receipt image is missing, and
+    block Approve on a bangkero row whose four document paths are
+    NULL. Post-037 the document half is largely moot (an
+    'incomplete' row cannot reach 'pending' without all four docs),
+    so the remaining value is the missing-receipt case on escrow.
+    If revived: disable approve + show a warning on the downpayments
+    modal when row.proofUrl is empty (mobile (admin)/downpayments.tsx
+    and web downpayments.html).
 
 [E] P2 SECURITY DEBT — deferred out of the post-4C fix pass
 --------------------------------------------------------------------------------

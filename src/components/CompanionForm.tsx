@@ -59,6 +59,8 @@ export function CompanionForm({
   hint,
 }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
+  /** Which row the modal is editing — null = adding a new passenger. */
+  const [editIndex, setEditIndex] = useState<number | null>(null);
   const [draftFirst, setDraftFirst] = useState('');
   const [draftLast, setDraftLast] = useState('');
   const [draftAge, setDraftAge] = useState('');
@@ -108,6 +110,26 @@ export function CompanionForm({
     );
   }
 
+  /** Row ✕ became an edit pencil — open the modal prefilled. */
+  function openEdit(index: number) {
+    const c = companions[index];
+    setEditIndex(index);
+    setDraftFirst(c.firstName);
+    setDraftLast(c.lastName);
+    setDraftAge(String(c.age));
+    setDraftSex(c.sex);
+    setDraftContact(c.contact);
+    setDraftAddress(c.address);
+    setErrors({});
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    resetDrafts();
+    setEditIndex(null);
+    setModalOpen(false);
+  }
+
   function validate(): boolean {
     const next: FieldErrors = {};
     const first = draftFirst.trim();
@@ -121,21 +143,23 @@ export function CompanionForm({
     return Object.keys(next).length === 0;
   }
 
-  function addCompanion() {
-    if (atCap || !allPresent || !validate()) return;
-    onChange([
-      ...companions,
-      {
-        firstName: draftFirst.trim(),
-        lastName: draftLast.trim(),
-        age: parseInt(draftAge.trim(), 10),
-        sex: draftSex,
-        contact: draftContact.trim(),
-        address: draftAddress.trim(),
-      },
-    ]);
-    resetDrafts();
-    setModalOpen(false);
+  /** Adds a new companion, or saves the one being edited (editIndex). */
+  function saveCompanion() {
+    if ((editIndex === null && atCap) || !allPresent || !validate()) return;
+    const entry: Companion = {
+      firstName: draftFirst.trim(),
+      lastName: draftLast.trim(),
+      age: parseInt(draftAge.trim(), 10),
+      sex: draftSex,
+      contact: draftContact.trim(),
+      address: draftAddress.trim(),
+    };
+    onChange(
+      editIndex === null
+        ? [...companions, entry]
+        : companions.map((c, i) => (i === editIndex ? entry : c))
+    );
+    closeModal();
   }
 
   function backdropPress() {
@@ -144,7 +168,7 @@ export function CompanionForm({
       Keyboard.dismiss();
       return;
     }
-    setModalOpen(false);
+    closeModal();
   }
 
   return (
@@ -174,18 +198,22 @@ export function CompanionForm({
               </Text>
             </View>
             <Pressable
-              onPress={() => removeCompanion(i)}
+              onPress={() => openEdit(i)}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${c.firstName}`}
+              accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
             >
-              <Text style={styles.paxRemove}>✕</Text>
+              <Text style={styles.paxEdit}>✎</Text>
             </Pressable>
           </View>
         ))}
 
         <Pressable
-          onPress={() => setModalOpen(true)}
+          onPress={() => {
+            setEditIndex(null);
+            resetDrafts();
+            setModalOpen(true);
+          }}
           disabled={atCap}
           accessibilityRole="button"
           style={({ pressed }) => [
@@ -203,7 +231,7 @@ export function CompanionForm({
         visible={modalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
+        onRequestClose={closeModal}
       >
         <KeyboardAvoidingView
           style={styles.modalBackdrop}
@@ -309,17 +337,34 @@ export function CompanionForm({
                   <PrimaryButton
                     label="Cancel"
                     variant="secondary"
-                    onPress={() => setModalOpen(false)}
+                    onPress={closeModal}
                   />
                 </View>
                 <View style={styles.modalActionBtn}>
                   <PrimaryButton
-                    label="Add passenger"
-                    onPress={addCompanion}
+                    label={editIndex === null ? 'Add passenger' : 'Save changes'}
+                    onPress={saveCompanion}
                     disabled={!allPresent}
                   />
                 </View>
               </View>
+
+              {/* Removal lives INSIDE the edit screen — the row's ✕ is now
+                  this pencil, so this is the only way to drop a companion. */}
+              {editIndex !== null && (
+                <Pressable
+                  onPress={() => {
+                    const index = editIndex;
+                    closeModal();
+                    removeCompanion(index);
+                  }}
+                  hitSlop={8}
+                  style={styles.removeBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.removeBtnText}>Remove passenger</Text>
+                </Pressable>
+              )}
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -351,7 +396,7 @@ const styles = StyleSheet.create({
   paxInfo: { flex: 1, minWidth: 0 },
   paxName: { flexShrink: 1, ...typography.bodyStrong },
   paxMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  paxRemove: { flexShrink: 1, color: colors.danger, fontSize: 15, fontWeight: '700', paddingHorizontal: spacing.xs },
+  paxEdit: { flexShrink: 1, color: colors.textMuted, fontSize: 17, fontWeight: '700', paddingHorizontal: spacing.xs },
   paxAdd: {
     minHeight: touchTarget, alignItems: 'center', justifyContent: 'center',
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
@@ -400,4 +445,6 @@ const styles = StyleSheet.create({
   resetText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: spacing.md },
   modalActionBtn: { flex: 1 },
+  removeBtn: { marginTop: spacing.md, alignSelf: 'center' },
+  removeBtnText: { color: colors.danger, fontSize: 14, fontWeight: '700' },
 });

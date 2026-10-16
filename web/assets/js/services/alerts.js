@@ -68,14 +68,17 @@
 
   async function notify(alertId, recipients, message) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    // recipients: 'all_operators', 'coastguard', 'lgu', 'admins', 'all'
+    // recipients: 'all_operators', 'coastguard', 'admins', 'all'
+    // ('lgu' removed — not a valid users.user_role since migration 025)
     var roleMap = {
       'all_operators': 'bangkero',
       'coastguard': 'coastguard',
-      'lgu': 'lgu',
       'admins': 'admin',
       'all': null // all users
     };
+    if (recipients && !Object.prototype.hasOwnProperty.call(roleMap, recipients)) {
+      throw new Error('Unknown recipients: ' + recipients);
+    }
     var targetRole = roleMap[recipients];
     var query = c.from('users').select('id');
     if (targetRole) query = query.eq('user_role', targetRole);

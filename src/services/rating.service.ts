@@ -107,30 +107,26 @@ export async function getAverageRatingsMap(): Promise<Record<string, { avg: numb
 export const PENALTY_MISSED_PICKUP = 0.5;
 export const PENALTY_FALSE_ONBOARD = 1.0;
 /** At or below this effective rating a bangkero can no longer accept bookings. */
-export const MIN_ACCEPT_RATING = 3.0;
+export const MIN_ACCEPT_RATING = 1.0;
 
 /**
- * What the accept gate sees: the passenger average — an unrated bangkero gets
- * the benefit of the doubt as 5.0 — minus accumulated penalties.
+ * What the accept gate sees — RULE V2 (migration 036): the SQL RPC
+ * `bangkero_effective_rating` is the single source of truth (smoothed
+ * average with a four-5★ prior, minus penalties, plus any stars
+ * regained by the 2-day recovery). Calling it also runs the recovery
+ * tick, so the screen and the gate always agree.
  *
- * Fails open on any lookup error (including the rating_penalty column missing
- * before migration 007): a transient failure must never block accepting work.
+ * Fails open on any lookup error: a transient failure must never
+ * block accepting work.
  */
 export async function getEffectiveRating(bangkeroId: string): Promise<number> {
   try {
-    const [ratingsRes, bangkeroRes] = await Promise.all([
-      supabase.from('ratings').select('score').eq('bangkero_id', bangkeroId),
-      supabase.from('bangkeros').select('*').eq('id', bangkeroId).maybeSingle(),
-    ]);
-    if (ratingsRes.error) throw ratingsRes.error;
-    if (bangkeroRes.error) throw bangkeroRes.error;
-
-    const rows = ratingsRes.data ?? [];
-    const avg = rows.length === 0
-      ? 5
-      : rows.reduce((sum, r) => sum + r.score, 0) / rows.length;
-    const penalty = Number(bangkeroRes.data?.rating_penalty ?? 0) || 0;
-    return Math.max(0, avg - penalty);
+    const { data, error } = await supabase.rpc('bangkero_effective_rating', {
+      p_bangkero: bangkeroId,
+    });
+    if (error) throw error;
+    const n = Number(data);
+    return Number.isFinite(n) ? n : 5;
   } catch {
     return 5;
   }

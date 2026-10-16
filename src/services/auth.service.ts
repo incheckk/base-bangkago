@@ -58,13 +58,16 @@ export async function signUp({
   if (profileError) throw profileError;
 
   if (role === 'bangkero') {
+    // 'incomplete' (037): signed up but NOT submitted — the only state
+    // that routes to the upload screen. 'pending' is reserved for
+    // rows that passed submitForReview's four-document check.
     const bangkeroDoc: BangkeroDoc = {
       uid,
       govIssuedId: null,
       boatRegistrationCert: null,
       coastalPermit: null,
       brgyClearance: null,
-      verificationStat: 'pending',
+      verificationStat: 'incomplete',
       permitNumber: null,
       displayName: `${firstName.trim()} ${lastName.trim()}`.trim(),
       isAvailable: false,
@@ -79,7 +82,7 @@ export async function signUp({
       boat_registration_cert: null,
       coastal_permit: null,
       brgy_clearance: null,
-      verification_stat: 'pending',
+      verification_stat: 'incomplete',
       permit_number: null,
       display_name: bangkeroDoc.displayName,
       is_available: false,
@@ -188,7 +191,7 @@ export function friendlyAuthError(e: unknown): string {
     return 'You already have a pending booking. Only one active booking at a time.';
   }
   if (message.includes('rating is too low')) {
-    return 'Your rating is 3.0★ or below — you can no longer accept bookings until it improves.';
+    return 'Your effective rating is 1.0★ or below — you can no longer accept bookings until it improves (it lifts on its own after 2 days).';
   }
   // Ratings unique index (013): a second submit from a lost race.
   if (message.includes('duplicate key') && message.includes('ratings')) {

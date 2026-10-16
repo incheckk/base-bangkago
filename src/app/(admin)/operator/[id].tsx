@@ -14,6 +14,7 @@ import type { VerificationStatus, BangkeroDoc } from '@/types/models';
 const STATUS_STYLE: Record<VerificationStatus, { fg: string; bg: string }> = {
   verified: { fg: colors.primary, bg: colors.primaryTint },
   pending: { fg: colors.warning, bg: colors.warningTint },
+  incomplete: { fg: colors.textMuted, bg: colors.warningTint },
   rejected: { fg: colors.danger, bg: colors.dangerTint },
 };
 

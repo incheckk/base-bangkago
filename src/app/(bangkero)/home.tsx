@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
   useAcceptedBookings, useBangkero, useDevFlags, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
@@ -74,6 +75,7 @@ export default function BangkeroHome() {
   const uid = user?.id ?? null;
 
   const notifications = useNotifications(uid);
+  const piggybackRequests = usePiggybackRequests(uid);
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
   // Island-package catalogue (static) — just the names behind the chips.
@@ -546,6 +548,25 @@ export default function BangkeroHome() {
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>
                     {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/(bangkero)/piggyback-requests')}
+              accessibilityRole="button"
+              accessibilityLabel={
+                piggybackRequests.data.length > 0
+                  ? `Piggyback requests, ${piggybackRequests.data.length} pending`
+                  : 'Piggyback requests'
+              }
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="parcel" size={20} color={colors.text} />
+              {piggybackRequests.data.length > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {piggybackRequests.data.length > 9 ? '9+' : piggybackRequests.data.length}
                   </Text>
                 </View>
               )}

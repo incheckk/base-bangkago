@@ -16,6 +16,7 @@ import { getDownpaymentByBooking } from '@/services/downpayment.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
 import { getPaymentByBooking } from '@/services/payment.service';
+import { getParcelByBooking } from '@/services/parcel.service';
 import { startPortOf } from '@/services/queue.service';
 import {
   PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
@@ -23,7 +24,7 @@ import {
 import { createAlert } from '@/services/safety-alert.service';
 import { getLatestPositionForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { DownpaymentDoc, IslandPackageDoc, PaymentDoc } from '@/types/models';
+import type { DownpaymentDoc, IslandPackageDoc, ParcelDoc, PaymentDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -60,6 +61,8 @@ export default function BookingDetail() {
   // admin reviews it in Admin → Downpayments.
   const [downpayment, setDownpayment] = useState<DownpaymentDoc | null>(null);
   const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
+  // Cargo bookings carry their parcel inline — receiver + mode rows.
+  const [parcel, setParcel] = useState<ParcelDoc | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -101,6 +104,22 @@ export default function BookingDetail() {
       alive = false;
     };
   }, [booking?.packageId]);
+
+  // Cargo bookings show receiver + mode instead of passenger rows.
+  useEffect(() => {
+    if (!id || booking?.serviceType !== 'cargo') return;
+    let alive = true;
+    getParcelByBooking(id)
+      .then((p) => {
+        if (alive) setParcel(p);
+      })
+      .catch(() => {
+        // fare row still shows without the receiver
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, booking?.serviceType]);
 
   useEffect(() => {
     if (!id) return;
@@ -433,7 +452,17 @@ export default function BookingDetail() {
               strong
             />
           )}
-          <Row label="Passengers" value={String(booking.numOfPassenger)} />
+          {booking.serviceType === 'cargo' ? (
+            <>
+              <Row label="Parcels" value="1" />
+              <Row label="Delivery mode" value={parcel?.deliveryType ?? '—'} />
+              {parcel?.totalWeightKg != null && (
+                <Row label="Total weight" value={`${parcel.totalWeightKg} kg`} />
+              )}
+            </>
+          ) : (
+            <Row label="Passengers" value={String(booking.numOfPassenger)} />
+          )}
           <Row label="Fare" value={`₱${booking.totalPrice}`} strong />
           <Row label="Payment" value={paymentLabel} />
           {downpayment ? (
@@ -458,8 +487,17 @@ export default function BookingDetail() {
             )
           )}
           {!!pkg && <Row label="Package" value={pkg.packageName} />}
-          <Row label="Booked by" value={booking.passengerName ?? ''} />
-          <Row label="Contact" value={booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''} />
+          {booking.serviceType === 'cargo' ? (
+            <>
+              <Row label="Receiver" value={parcel?.receiverName ?? '—'} />
+              <Row label="Contact" value={parcel?.receiverContact ? formatPhone(parcel.receiverContact) : ''} />
+            </>
+          ) : (
+            <>
+              <Row label="Booked by" value={booking.passengerName ?? ''} />
+              <Row label="Contact" value={booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''} />
+            </>
+          )}
         </View>
 
         {!!actionError && (
@@ -502,25 +540,29 @@ export default function BookingDetail() {
                   ? 'You reported that you were NOT on board. The trip continues for the rest of your group — the bangkero and Coastguard have been notified.'
                   : booking.onboardedAt
                     ? 'You are confirmed on board. Safe travels!'
-                    : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
+                    : booking.serviceType === 'cargo'
+                      ? `Your parcel will ride with ${booking.operatorName ?? 'the bangkero'}. The receiver can pick it up at ${booking.toPortName}.`
+                      : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
               </Text>
               <PrimaryButton
                 label="View trip details"
                 onPress={() => router.push(`/(passenger)/trip/${id}`)}
               />
 
-              {/* One QR per rider — the bangkero scans them at boarding. */}
-              <PrimaryButton
-                label="Show boarding QR codes"
-                variant="secondary"
-                onPress={() =>
-                  router.push({
-                    pathname: '/(passenger)/boarding-pass',
-                    params: { bookingId: booking.bookingId },
-                  })
-                }
-                style={styles.secondaryAction}
-              />
+              {/* One QR per rider — the bangkero scans them at boarding. Cargo has no boarding. */}
+              {booking.serviceType !== 'cargo' && (
+                <PrimaryButton
+                  label="Show boarding QR codes"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(passenger)/boarding-pass',
+                      params: { bookingId: booking.bookingId },
+                    })
+                  }
+                  style={styles.secondaryAction}
+                />
+              )}
 
               {/* Live progress + SOS/contact — the en-route view. */}
               <PrimaryButton
@@ -549,8 +591,8 @@ export default function BookingDetail() {
                   </Text>
                 ))}
 
-              {/* Once aboard, the only complaint left is "you left without me". */}
-              {booking.onboardedAt && (
+              {/* Once aboard, the only complaint left is "you left without me". Passenger-only — no boarding for cargo. */}
+              {booking.serviceType !== 'cargo' && booking.onboardedAt && (
                 <PrimaryButton
                   label="I'm NOT on board"
                   variant="danger"

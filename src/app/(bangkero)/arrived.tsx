@@ -93,6 +93,29 @@ export default function ArrivedScreen() {
     setParcelError(null);
     try {
       await updateParcelStatus(parcel.parcelId, step.next);
+
+      // Best-effort notify — failures don't block the status update
+      if (parcel.userId) {
+        const title =
+          step.next === 'in_transit'
+            ? 'Your parcel is on the way'
+            : step.next === 'delivered'
+              ? 'Parcel delivered'
+              : null;
+        const body =
+          step.next === 'in_transit'
+            ? `Departed for ${parcel.receiverName}.`
+            : step.next === 'delivered'
+              ? `Parcel for ${parcel.receiverName} has been delivered.`
+              : null;
+        if (title && body) {
+          try {
+            await createNotification(parcel.userId, title, body);
+          } catch {
+            /* swallow — notification is best-effort */
+          }
+        }
+      }
     } catch (e) {
       setParcelError(friendlyError(e));
     }

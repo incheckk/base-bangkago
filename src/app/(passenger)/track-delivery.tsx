@@ -27,6 +27,11 @@ export default function TrackDelivery() {
   }>();
   const [currentStep, setCurrentStep] = useState(stepForStatus(params.status));
   const [liveStatus, setLiveStatus] = useState<string | undefined>(params.status);
+  const [liveExtra, setLiveExtra] = useState<{
+    deliveryType?: string | null;
+    approvalStatus?: string | null;
+    approvalDeadlineAt?: string | null;
+  } | null>(null);
   const parcelId = params.parcelId ?? null;
   const seq = useRef(0);
 
@@ -40,11 +45,18 @@ export default function TrackDelivery() {
     try {
       const { data, error } = await supabase
         .from('parcels')
-        .select('status')
+        .select('status, delivery_type, approval_status, approval_deadline_at, piggyback_booking_id')
         .eq('id', parcelId)
         .maybeSingle();
       if (id !== seq.current) return;
       if (!error && data?.status) setLiveStatus(data.status);
+      if (!error && data) {
+        setLiveExtra({
+          deliveryType: data.delivery_type ?? null,
+          approvalStatus: data.approval_status ?? null,
+          approvalDeadlineAt: data.approval_deadline_at ?? null,
+        });
+      }
     } catch {
       // keep the last known status when the refresh fails
     }
@@ -95,6 +107,59 @@ export default function TrackDelivery() {
           <Text style={styles.cardTitle}>Estimated Arrival</Text>
           <Text style={styles.eta}>{status === 'delivered' ? 'Delivered' : '1-2 business days'}</Text>
         </View>
+
+        {liveExtra?.deliveryType === 'piggyback' && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Piggyback Status</Text>
+            <View style={styles.row}>
+              <Text style={styles.label}>Delivery mode</Text>
+              <Text style={styles.value}>Piggyback</Text>
+            </View>
+            {liveExtra.approvalStatus === 'pending' && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Approval</Text>
+                <Text style={styles.value}>
+                  Waiting for bangkero approval…
+                  {liveExtra.approvalDeadlineAt &&
+                    ` (by ${new Date(liveExtra.approvalDeadlineAt).toLocaleTimeString()})`}
+                </Text>
+              </View>
+            )}
+            {liveExtra.approvalStatus === 'accepted' && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Approval</Text>
+                <Text style={[styles.value, { color: colors.primary }]}>
+                  Accepted — will ride with a passenger trip
+                </Text>
+              </View>
+            )}
+            {(liveExtra.approvalStatus === 'rejected' ||
+              liveExtra.approvalStatus === 'timeout') && (
+              <>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Approval</Text>
+                  <Text style={[styles.value, { color: colors.danger }]}>
+                    {liveExtra.approvalStatus === 'rejected'
+                      ? 'Declined by bangkero'
+                      : 'No response in time'}
+                  </Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Next step</Text>
+                  <Text style={styles.value}>Batched delivery (coming soon)</Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Next step</Text>
+                  <Text style={styles.value}>Solo delivery (coming soon)</Text>
+                </View>
+                <View style={styles.row}>
+                  <Text style={styles.label}>Next step</Text>
+                  <Text style={styles.value}>Or contact support to cancel</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
       </View>
     </ScreenContainer>
   );

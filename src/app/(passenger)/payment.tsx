@@ -12,6 +12,8 @@ import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.
 import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
 import { createParcel } from '@/services/parcel.service';
+import { assignToBatch } from '@/services/parcel-batching.service';
+import { supabase } from '@/services/supabase';
 import { createPassengerDetail } from '@/services/passenger-detail.service';
 import { createPayment } from '@/services/payment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -53,6 +55,10 @@ export default function PaymentScreen() {
     receiverName?: string;
     receiverContact?: string;
     itemsJson?: string;
+    deliveryMode?: string;
+    piggybackBookingId?: string;
+    originIsland?: string;
+    destinationIsland?: string;
     packageId?: string;
     packageName?: string;
     downAmount?: string;
@@ -68,6 +74,27 @@ export default function PaymentScreen() {
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);
   const serviceType = params.serviceType === 'cargo' ? 'cargo' : 'passenger';
+
+  const deliveryMode: 'accompanied' | 'piggyback' | 'batched' | 'solo' =
+    params.deliveryMode === 'piggyback'
+      ? 'piggyback'
+      : params.deliveryMode === 'batched'
+        ? 'batched'
+        : params.deliveryMode === 'solo'
+          ? 'solo'
+          : 'accompanied';
+  const piggybackBookingId =
+    typeof params.piggybackBookingId === 'string' && params.piggybackBookingId.length > 0
+      ? params.piggybackBookingId
+      : null;
+  const originIsland =
+    typeof params.originIsland === 'string' && params.originIsland.length > 0
+      ? params.originIsland
+      : null;
+  const destinationIsland =
+    typeof params.destinationIsland === 'string' && params.destinationIsland.length > 0
+      ? params.destinationIsland
+      : null;
 
   // Package mode passes its 50% down/remainder split along.
   const isPackage = !!params.packageId;
@@ -228,8 +255,37 @@ export default function PaymentScreen() {
             userId: profile.uid,
             bookingId,
             items,
+            deliveryType: deliveryMode,
+            piggybackBookingId,
+            totalWeightKg: items.reduce((sum, i) => sum + (Number(i.kilogram) || 0), 0) || null,
+            originIsland,
+            destinationIsland,
+            quotedFare: Number.isFinite(fare) ? fare : null,
           });
           parcelId = parcel.parcelId;
+          // Batched mode: put the parcel in the batch queue. Never blocks
+          // the booking — on failure the parcel keeps its createParcel
+          // pending_batch state and batching is retried from tracking.
+          if (deliveryMode === 'batched' && parcel?.parcelId) {
+            const result = await assignToBatch({
+              parcelId: parcel.parcelId,
+              fromPortId: params.fromId,
+              toPortId: params.toId,
+            });
+            if (!result) {
+              parcelWarning = true;
+            }
+          }
+          if (deliveryMode === 'solo' && parcel?.parcelId) {
+            // Solo mode = immediate departure, no batching window.
+            await supabase
+              .from('parcels')
+              .update({
+                batching_status: 'solo',
+                solo_surcharge: 150,
+              })
+              .eq('id', parcel.parcelId);
+          }
         } catch {
           parcelWarning = true;
         }
@@ -251,6 +307,16 @@ export default function PaymentScreen() {
         } catch {
           downWarning = true;
         }
+      }
+
+      // Batched parcels wait in the batch queue — hand off to the
+      // waiting screen instead of the standard confirmation.
+      if (deliveryMode === 'batched' && parcelId) {
+        router.replace({
+          pathname: '/(passenger)/batched-waiting',
+          params: { parcelId },
+        });
+        return;
       }
 
       // replace, not push: the payment form must leave the stack so the
@@ -320,6 +386,14 @@ export default function PaymentScreen() {
               <Text style={styles.summaryRowLabel}>Passengers</Text>
               <Text style={styles.summaryRowValue}>{paxCount}</Text>
             </View>
+            {serviceType === 'cargo' && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryRowLabel}>Delivery mode</Text>
+                <Text style={styles.summaryRowValue}>
+                  {deliveryMode === 'piggyback' ? 'Piggyback' : 'Accompanied'}
+                </Text>
+              </View>
+            )}
             <View style={styles.summaryDivider} />
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total to be paid</Text>

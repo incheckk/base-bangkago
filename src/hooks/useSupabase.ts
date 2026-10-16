@@ -302,7 +302,27 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
       .maybeSingle();
     if (id !== seq.current) return;
     if (err) { setError(err.message); setLoading(false); return; }
-    setData(row ? mapBookingRow(row) : null);
+    let mapped = row ? mapBookingRow(row) : null;
+
+    // Fallback: bangkeros.display_name when the denormalized operator_name
+    // is missing (e.g. operator_id was set directly without the accept RPC).
+    if (mapped?.operatorId && !mapped.operatorName) {
+      try {
+        const { data: bk } = await supabase
+          .from('bangkeros')
+          .select('display_name')
+          .eq('id', mapped.operatorId)
+          .maybeSingle();
+        if (id !== seq.current) return;
+        if (bk?.display_name) {
+          mapped = { ...mapped, operatorName: bk.display_name };
+        }
+      } catch {
+        // keep original mapped value
+      }
+    }
+
+    setData(mapped);
     setLoading(false);
     setError(null);
   }, [bookingId]);

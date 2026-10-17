@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -126,92 +126,154 @@
       return map[status] || status;
     }
 
-    function csvEscape(str) {
-      if (!str) return '';
-      const s = String(str);
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return '"' + s.replace(/"/g, '""') + '"';
+    function loadScript(src) {
+      return new Promise(function(resolve, reject) {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF library: ' + src));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensureJsPdf() {
+      if (window.jspdf?.jsPDF) return;
+      await loadScript('../../../assets/vendor/jspdf/jspdf.umd.min.js');
+      await loadScript('../../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      if (!window.jspdf?.jsPDF) throw new Error('PDF library did not initialize.');
+    }
+
+    async function downloadPDF(manifestId, button) {
+      const manifest = manifests.find(m => m.manifestId === manifestId);
+      if (!manifest) {
+        alert('Manifest not found. Refresh the page and try again.');
+        return;
       }
-      return s;
-    }
 
-    function generateCSV(manifest) {
-      const rows = [];
+      const originalText = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
 
-      // Header info
-      rows.push(['MANIFEST EXPORT']);
-      rows.push(['Manifest ID', manifest.manifestId]);
-      rows.push(['Vessel', manifest.bangkaName || 'Unassigned']);
-      rows.push(['Bangkero', manifest.bangkeroName || 'Unknown']);
-      rows.push(['Route', `${manifest.departurePortName || 'Unknown'} â†’ ${manifest.arrivalPortName || 'Unknown'}`]);
-      rows.push(['Departure', formatDate(manifest.actualDepartureTime)]);
-      rows.push(['Arrival', formatDate(manifest.actualArrivalTime)]);
-      rows.push(['Status', statusText(manifest.status)]);
-      rows.push(['Passengers', manifest.totalPassengersOnBoard]);
-      rows.push(['Parcels', manifest.totalParcelsOnBoard]);
-      rows.push(['Generated', formatDate(manifest.generatedAt)]);
-      rows.push([]);
-
-      // Passenger list
-      rows.push(['PASSENGER LIST']);
-      rows.push(['Name', 'Weight (kg)', 'Boarded', 'Booking ID']);
-
-      return rows.map(r => r.map(csvEscape).join(',')).join('\n');
-    }
-
-    async function downloadCSV(manifestId) {
       try {
-        // Fetch passengers for this manifest
-        const pax = await window.bangkagoManifests.getPassengers(manifestId);
-        const manifest = manifests.find(m => m.manifestId === manifestId);
+        await ensureJsPdf();
+        const [{ jsPDF }, passengers, parcels] = await Promise.all([
+          Promise.resolve(window.jspdf),
+          window.bangkagoManifests.getPassengers(manifestId),
+          window.bangkagoManifests.getParcels(manifestId)
+        ]);
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
 
-        if (!manifest) {
-          alert('Manifest not found');
-          return;
+        doc.setFillColor(23, 42, 66);
+        doc.rect(0, 0, pageWidth, 24, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('BangkaGo Manifest', margin, 11);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text('Manifest ' + manifest.manifestId, margin, 18);
+        doc.text('Generated ' + new Date().toLocaleString('en-PH'), pageWidth - margin, 18, { align: 'right' });
+        doc.setTextColor(40, 40, 40);
+
+        const details = [
+          ['Vessel', manifest.bangkaName || 'Unassigned'],
+          ['Bangkero', manifest.bangkeroName || 'Unknown'],
+          ['Route', (manifest.departurePortName || 'Unknown') + ' to ' + (manifest.arrivalPortName || 'Unknown')],
+          ['Departure', formatDate(manifest.actualDepartureTime)],
+          ['Arrival', formatDate(manifest.actualArrivalTime)],
+          ['Status', statusText(manifest.status)],
+          ['Passengers', String(manifest.totalPassengersOnBoard ?? 0)],
+          ['Parcels', String(manifest.totalParcelsOnBoard ?? 0)],
+          ['Snapshot Created', formatDate(manifest.generatedAt)]
+        ];
+
+        doc.autoTable({
+          startY: 30,
+          head: [['Manifest Details', 'Value']],
+          body: details,
+          styles: { fontSize: 9, cellPadding: 2.5, overflow: 'linebreak' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin }
+        });
+
+        let nextY = doc.lastAutoTable.finalY + 8;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Passenger List', margin, nextY);
+        nextY += 3;
+        if (passengers.length) {
+          doc.autoTable({
+            startY: nextY,
+            head: [['#', 'Name', 'Weight (kg)', 'Boarded', 'Booking ID']],
+            body: passengers.map((passenger, index) => [
+              index + 1,
+              passenger.passengerName || 'Unknown',
+              passenger.actualWeightKg == null ? '—' : String(passenger.actualWeightKg),
+              passenger.boardedAt ? formatDate(passenger.boardedAt) : 'No',
+              passenger.bookingId || '—'
+            ]),
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+            headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [242, 246, 250] },
+            margin: { left: margin, right: margin }
+          });
+          nextY = doc.lastAutoTable.finalY + 8;
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text('No passenger records.', margin, nextY + 5);
+          nextY += 13;
         }
 
-        let csv = 'MANIFEST EXPORT\n';
-        csv += `Manifest ID,${manifest.manifestId}\n`;
-        csv += `Vessel,${manifest.bangkaName || 'Unassigned'}\n`;
-        csv += `Bangkero,${manifest.bangkeroName || 'Unknown'}\n`;
-        csv += `Route,${manifest.departurePortName || 'Unknown'} â†’ ${manifest.arrivalPortName || 'Unknown'}\n`;
-        csv += `Departure,${formatDate(manifest.actualDepartureTime)}\n`;
-        csv += `Arrival,${formatDate(manifest.actualArrivalTime)}\n`;
-        csv += `Status,${statusText(manifest.status)}\n`;
-        csv += `Passengers,${manifest.totalPassengersOnBoard}\n`;
-        csv += `Parcels,${manifest.totalParcelsOnBoard}\n`;
-        csv += `Generated,${formatDate(manifest.generatedAt)}\n`;
-        csv += '\n';
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        if (nextY > doc.internal.pageSize.getHeight() - 25) {
+          doc.addPage();
+          nextY = 20;
+        }
+        doc.text('Parcel List', margin, nextY);
+        nextY += 3;
+        if (parcels.length) {
+          doc.autoTable({
+            startY: nextY,
+            head: [['#', 'Description', 'Weight (kg)', 'Loaded']],
+            body: parcels.map((parcel, index) => [
+              index + 1,
+              parcel.parcelDescription || 'Unspecified',
+              parcel.weightKg == null ? '—' : String(parcel.weightKg),
+              parcel.loadedAt ? formatDate(parcel.loadedAt) : 'No'
+            ]),
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+            headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [242, 246, 250] },
+            margin: { left: margin, right: margin }
+          });
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text('No parcel records.', margin, nextY + 5);
+        }
 
-        csv += 'PASSENGER LIST\n';
-        csv += 'Name,Weight (kg),Boarded,Booking ID\n';
-        pax.forEach(p => {
-          csv += `${csvEscape(p.passengerName)},${p.actualWeightKg ?? ''},${p.boardedAt ? 'Yes' : 'No'},${p.bookingId}\n`;
-        });
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page++) {
+          doc.setPage(page);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text('BangkaGo manifest | Page ' + page + ' of ' + pageCount, margin, doc.internal.pageSize.getHeight() - 8);
+        }
 
-        csv += '\nPARCEL LIST\n';
-        csv += 'Description,Weight (kg),Loaded\n';
-        const parcels = await window.bangkagoManifests.getParcels(manifestId);
-        parcels.forEach(p => {
-          csv += `${csvEscape(p.parcelDescription)},${p.weightKg ?? ''},${p.loadedAt ? 'Yes' : 'No'}\n`;
-        });
-
-        // Download
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `manifest_${manifest.manifestId.slice(0,8)}_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-        URL.revokeObjectURL(link.href);
+        doc.save('BangkaGo-manifest-' + manifest.manifestId.slice(0, 8) + '.pdf');
       } catch (e) {
         console.error(e);
-        alert('Error generating CSV: ' + e.message);
+        alert('PDF export failed: ' + e.message);
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
       }
-    }
-
-    async function downloadPDF(manifestId) {
-      alert('PDF export requires a PDF library (e.g., jsPDF). CSV export is available.');
-      // For production, integrate jsPDF here
     }
 
     function renderManifests(data) {
@@ -221,7 +283,7 @@
       else emptyState.classList.add("d-none");
 
       data.forEach(m => {
-        const route = `${m.departurePortName || 'Unknown'} â†’ ${m.arrivalPortName || 'Unknown'}`;
+        const route = `${m.departurePortName || 'Unknown'} to ${m.arrivalPortName || 'Unknown'}`;
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${m.manifestId.slice(0, 12)}...</td>
@@ -234,10 +296,7 @@
           <td><span class="badge ${statusBadge(m.status)}">${statusText(m.status)}</span></td>
           <td>
             <div class="d-flex gap-1">
-              <button class="btn btn-sm btn-outline-primary action-btn" onclick="downloadCSV('${m.manifestId}')" title="Export CSV">
-                <i class="bi bi-file-earmark-spreadsheet"></i> CSV
-              </button>
-              <button class="btn btn-sm btn-outline-danger action-btn" onclick="downloadPDF('${m.manifestId}')" title="Export PDF">
+              <button class="btn btn-sm btn-outline-danger action-btn" onclick="downloadPDF('${m.manifestId}', this)" title="Export PDF">
                 <i class="bi bi-file-earmark-pdf"></i> PDF
               </button>
             </div>
@@ -294,7 +353,6 @@
     });
 
     // Make functions global for onclick
-    window.downloadCSV = downloadCSV;
     window.downloadPDF = downloadPDF;
 
     window.bangkagoAuthReady.then(function(role) {

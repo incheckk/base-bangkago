@@ -136,6 +136,7 @@
 
     async function loadUser() {
       try {
+        await window.bangkagoAuthReady;
         const user = await window.bangkagoUsers.getById(userId);
         if (!user) {
           throw new Error('User not found');

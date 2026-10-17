@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -115,16 +115,13 @@
               </p>
 
               <div class="d-grid gap-2">
-                <button class="btn btn-outline-secondary w-100" id="exportCsvBtn" type="button">
-                  <i class="bi bi-file-earmark-spreadsheet"></i> Export CSV
-                </button>
                 <button class="btn btn-outline-danger w-100" id="exportPdfBtn" type="button">
-                  <i class="bi bi-file-earmark-pdf"></i> Export PDF
+                  <i class="bi bi-file-earmark-pdf"></i> View / Download PDF Receipt
                 </button>
               </div>
 
               <div id="exportMsg" class="alert alert-success mt-3 d-none mb-0">
-                Export prepared for selected manifest.
+                PDF receipt opened in a new tab.
               </div>
             </div>
           </div>
@@ -157,8 +154,8 @@
     const resetBtn = document.getElementById("resetBtn");
 
     const exportMsg = document.getElementById("exportMsg");
-    const exportCsvBtn = document.getElementById("exportCsvBtn");
     const exportPdfBtn = document.getElementById("exportPdfBtn");
+    exportPdfBtn.disabled = true;
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
@@ -187,8 +184,8 @@
       return "text-bg-info";
     }
 
-    function showExportMessage(type){
-      exportMsg.textContent = `${type} export prepared for ${selectedManifestNo}.`;
+    function showExportMessage(message){
+      exportMsg.textContent = message;
       exportMsg.classList.remove("d-none");
       setTimeout(() => exportMsg.classList.add("d-none"), 2200);
     }
@@ -196,6 +193,7 @@
     async function renderPassengers(manifestNo) {
       selectedManifestNo = manifestNo;
       selectedManifestLabel.textContent = manifestNo;
+      exportPdfBtn.disabled = false;
       
       passengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>';
       
@@ -297,19 +295,161 @@
       renderManifests(manifests);
     });
 
-    exportCsvBtn.addEventListener("click", () => {
-      if (!selectedManifestNo) { alert('Select a manifest first'); return; }
-      showExportMessage("CSV");
-    });
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF library.'));
+        document.head.appendChild(script);
+      });
+    }
 
-    exportPdfBtn.addEventListener("click", () => {
+    async function ensureJsPdf() {
+      if (window.jspdf?.jsPDF) return;
+      await loadScript('../../../assets/vendor/jspdf/jspdf.umd.min.js');
+      await loadScript('../../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      if (!window.jspdf?.jsPDF) throw new Error('PDF library did not initialize.');
+    }
+
+    exportPdfBtn.addEventListener("click", async () => {
       if (!selectedManifestNo) { alert('Select a manifest first'); return; }
-      showExportMessage("PDF");
+      const manifest = manifests.find(m => m.manifestId === selectedManifestNo);
+      if (!manifest) { alert('Manifest not found. Refresh the page and select it again.'); return; }
+
+      const preview = window.open('about:blank', '_blank');
+      const originalText = exportPdfBtn.innerHTML;
+      exportPdfBtn.disabled = true;
+      exportPdfBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparing receipt...';
+
+      try {
+        await ensureJsPdf();
+        const [passengers, parcels] = await Promise.all([
+          window.bangkagoManifests.getPassengers(manifest.manifestId),
+          window.bangkagoManifests.getParcels(manifest.manifestId)
+        ]);
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+
+        doc.setFillColor(23, 42, 66);
+        doc.rect(0, 0, pageWidth, 25, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('BangkaGo Manifest Receipt', margin, 11);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text('Manifest ID: ' + manifest.manifestId, margin, 19);
+        doc.text('Generated: ' + new Date().toLocaleString('en-PH'), pageWidth - margin, 19, { align: 'right' });
+        doc.setTextColor(40, 40, 40);
+
+        doc.autoTable({
+          startY: 31,
+          head: [['Manifest Details', 'Value']],
+          body: [
+            ['Vessel', manifest.bangkaName || 'Unassigned'],
+            ['Bangkero', manifest.bangkeroName || 'Unknown'],
+            ['Route', (manifest.departurePortName || 'Unknown') + ' to ' + (manifest.arrivalPortName || 'Unknown')],
+            ['Departure', formatDate(manifest.actualDepartureTime)],
+            ['Arrival', formatDate(manifest.actualArrivalTime)],
+            ['Status', mapStatus(manifest.status)],
+            ['Passengers', String(manifest.totalPassengersOnBoard ?? 0)],
+            ['Parcels', String(manifest.totalParcelsOnBoard ?? 0)],
+            ['Snapshot Created', formatDate(manifest.generatedAt)]
+          ],
+          styles: { fontSize: 9, cellPadding: 2.5, overflow: 'linebreak' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin }
+        });
+
+        let nextY = doc.lastAutoTable.finalY + 8;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Passenger List', margin, nextY);
+        nextY += 3;
+        if (passengers.length) {
+          doc.autoTable({
+            startY: nextY,
+            head: [['#', 'Name', 'Weight (kg)', 'Boarded', 'Booking ID']],
+            body: passengers.map((p, index) => [
+              String(index + 1), p.passengerName || 'Unknown',
+              p.actualWeightKg == null ? 'N/A' : String(p.actualWeightKg),
+              p.boardedAt ? formatDate(p.boardedAt) : 'No', p.bookingId || 'N/A'
+            ]),
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+            headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [242, 246, 250] },
+            margin: { left: margin, right: margin }
+          });
+          nextY = doc.lastAutoTable.finalY + 8;
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text('No passenger records.', margin, nextY + 5);
+          nextY += 13;
+        }
+
+        if (nextY > doc.internal.pageSize.getHeight() - 25) {
+          doc.addPage();
+          nextY = 20;
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Parcel List', margin, nextY);
+        nextY += 3;
+        if (parcels.length) {
+          doc.autoTable({
+            startY: nextY,
+            head: [['#', 'Description', 'Weight (kg)', 'Loaded']],
+            body: parcels.map((p, index) => [
+              String(index + 1), p.parcelDescription || 'Unspecified',
+              p.weightKg == null ? 'N/A' : String(p.weightKg),
+              p.loadedAt ? formatDate(p.loadedAt) : 'No'
+            ]),
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+            headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [242, 246, 250] },
+            margin: { left: margin, right: margin }
+          });
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.text('No parcel records.', margin, nextY + 5);
+        }
+
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page++) {
+          doc.setPage(page);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text('BangkaGo manifest | Page ' + page + ' of ' + pageCount, margin, doc.internal.pageSize.getHeight() - 8);
+        }
+
+        const pdfUrl = doc.output('bloburl');
+        if (preview) {
+          preview.location.href = pdfUrl;
+          showExportMessage('PDF receipt opened in a new tab.');
+        } else {
+          doc.save('BangkaGo-manifest-' + manifest.manifestId.slice(0, 8) + '.pdf');
+          showExportMessage('Pop-up blocked; PDF receipt downloaded instead.');
+        }
+      } catch (e) {
+        console.error(e);
+        if (preview) preview.close();
+        alert('PDF receipt could not be generated: ' + e.message);
+      } finally {
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.innerHTML = originalText;
+      }
     });
 
     async function loadManifests() {
       try {
-        manifests = await window.bangkagoManifests.listAll({ limit: 100 });
+        manifests = await window.bangkagoManifests.listAll({ limit: 100, includeCompleted: true });
         renderManifests(manifests);
       } catch(e) {
         console.error(e);

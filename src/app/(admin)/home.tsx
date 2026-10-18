@@ -33,6 +33,7 @@ const MANAGE: { key: string; icon: IconName; label: string; route: string; group
 
   { key: 'downpayments', icon: 'cash', label: 'Downpayments', route: '/(admin)/downpayments', group: 'FINANCE' },
   { key: 'reports', icon: 'receipt', label: 'Reports', route: '/(admin)/reports' },
+  { key: 'parcel-rates', icon: 'parcel', label: 'Parcel Rates', route: '/(admin)/manage-parcel-rates' },
 
   { key: 'safety', icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', group: 'SYSTEM' },
   { key: 'alerts', icon: 'alert', label: 'System Alerts', route: '/(admin)/alerts' },

@@ -32,7 +32,7 @@
 
   /* BRAND CONTROLS */
   --brand-logo-box:80px;
-  --brand-logo-img:120px;
+  --brand-logo-img:80px;
   --brand-title-size:1.1rem;
   --brand-subtitle-size:.78rem;
   --brand-gap:.70rem;
@@ -169,7 +169,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .cg-brand .brand-logo img,
 .cg-brand .brand-logo-img{
   object-fit: contain;
-  object-position: 60% 75%;
+  object-position: center;
 }
 .cg-brand .brand-logo,
 .cg-brand .brand-logo-wrap{

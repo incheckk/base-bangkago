@@ -234,12 +234,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .cg-sidebar.collapsed{width:var(--cg-sidebar-collapsed)}
 .cg-brand{
   display:grid;
-  grid-template-columns:64px 1fr;
+  grid-template-columns:64px minmax(0,1fr);
   align-items:center;
-  column-gap:12px;
+  column-gap:8px;
   text-decoration:none;
   color:var(--white);
-  padding:8px;
+  padding:6px;
   border-radius:var(--cg-radius-md);
   flex-shrink:0;
   transition: background var(--cg-ease-fast);
@@ -252,10 +252,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   background:rgba(255,255,255,.06);
 }
 .cg-brand .brand-logo img{
-  width:52px; height:52px;
+  width:100%; height:100%;
+  padding:6px;
+  box-sizing:border-box;
   object-fit:contain;
   display:block;
-  transform:scale(1.8);
 }
 .cg-brand .brand-text{ min-width:0; line-height:1.15; }
 .cg-brand .brand-text h5{
@@ -267,7 +268,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 }
 .cg-brand .brand-text h5 span{color:var(--cg-accent)}
 .cg-brand .brand-text small{ display:block; margin-top:2px; opacity:.8; white-space:normal; font-size:.78rem; font-weight:400; }
-.cg-sidebar.collapsed .cg-brand{ grid-template-columns:1fr; justify-items:center; }
+.cg-sidebar.collapsed .cg-brand{ grid-template-columns:1fr; justify-items:center; padding:0; }
 .cg-sidebar.collapsed .brand-text{display:none}
 .nav-group-label{
   font-size:.70rem;

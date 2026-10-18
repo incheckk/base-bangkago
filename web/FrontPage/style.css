@@ -207,8 +207,7 @@ a {
     height: 80px;              /* change this anytime */
     width: auto;               /* prevents distortion */
     display: block;            /* removes baseline/descender gaps */
-    object-fit: contain;
-    transform: translateY(7px);   
+    object-fit: contain;   
 }
 
 /* Brand name text */

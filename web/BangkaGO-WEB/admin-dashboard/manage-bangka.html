@@ -25,7 +25,12 @@
             <span class="muted-note">Vessel registry and readiness</span>
           </div>
 
-          <div class="d-flex justify-content-end mb-3">
+          <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+            <select class="form-select" id="bangkaFilter" aria-label="Filter vessels" style="max-width: 220px;">
+              <option value="active">Active vessels</option>
+              <option value="deactivated">Unverified / inactive</option>
+              <option value="all">All vessels</option>
+            </select>
             <button class="btn btn-bangkago" id="addBangkaBtn">
               <i class="bi bi-plus-circle me-1"></i> Add Bangka
             </button>
@@ -37,8 +42,8 @@
                 <tr>
                   <th>Vessel</th>
                   <th>Capacity</th>
-                  <th>Route</th>
-                  <th>Maintenance</th>
+                  <th>Current Use</th>
+                  <th>Max Load (kg)</th>
                   <th>Status</th>
                   <th style="width:240px;">Actions</th>
                 </tr>
@@ -54,6 +59,27 @@
           
           <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
+
+          <div class="cg-card p-3 mt-3">
+            <div class="panel-head">
+              <h6 class="mb-0">Deleted Bangkas</h6>
+              <span class="muted-note">Deleted vessels retain their original records and trip history</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-theme align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Vessel</th>
+                    <th>Capacity</th>
+                    <th>Owner</th>
+                    <th>Deleted</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="deletedBangkaBody"></tbody>
+              </table>
+            </div>
+          </div>
       </section>
     </main>
   </div>
@@ -77,14 +103,14 @@
             <div class="col-md-6"><div class="form-control bg-light"><strong>Owner:</strong> <span id="dOwner">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Owner Status:</strong> <span id="dOwnerStatus">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Computed Status:</strong> <span id="dStatus">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Active Booking:</strong> <span id="dActiveBooking">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Active Use:</strong> <span id="dActiveBooking">-</span></div></div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- UPDATE STATUS MODAL (only Deactivated is actionable) -->
+  <!-- UPDATE VESSEL ASSIGNMENT -->
   <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="updateStatusForm">
@@ -96,18 +122,22 @@
           <div class="mb-2"><strong>Vessel:</strong> <span id="uVessel">-</span></div>
           <div class="alert alert-info">
             <i class="bi bi-info-circle me-2"></i>
-            Status is derived from bangkero verification, availability, and active bookings.
-            Only <strong>Deactivated</strong> (unassign from bangkero) can be set directly.
+            Vessel status is based on its verified owner, operator availability, and active trips.
+            Deactivate keeps the owner and marks this vessel unavailable. Activate returns it to service.
           </div>
           <div class="mb-3">
-            <label class="form-label">Set to Deactivated</label>
+            <label class="form-label" for="uStatus">Action</label>
             <select id="uStatus" class="form-select" required>
-              <option value="Deactivated">Deactivated</option>
+              <option value="">Choose an action...</option>
+              <option value="Activate">Activate</option>
+              <option value="Deactivate">Deactivate</option>
             </select>
           </div>
-          <div class="mb-2">
-            <label class="form-label">Notes</label>
-            <textarea id="uNotes" class="form-control" rows="3" placeholder="Optional status notes..."></textarea>
+          <div class="mb-3 d-none" id="activateOwnerField">
+            <label class="form-label" for="uBangkeroId">Assign to verified bangkero</label>
+            <select id="uBangkeroId" class="form-select">
+              <option value="">Select a verified bangkero...</option>
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -118,24 +148,21 @@
     </div>
   </div>
 
-  <!-- DEACTIVATE MODAL (unassign from bangkero) -->
+  <!-- REMOVE VESSEL MODAL -->
   <div class="modal fade" id="deactivateModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="deactivateForm">
         <div class="modal-header">
-          <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Deactivate Bangka</h5>
+          <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Delete Bangka</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">You are about to deactivate: <strong id="xVessel">-</strong></p>
-          <p class="text-muted mb-3">This will unassign the vessel from its bangkero. It will no longer be available for assignments.</p>
-
-          <label class="form-label">Reason (required)</label>
-          <textarea id="xReason" class="form-control" rows="3" required placeholder="Enter reason for deactivation..."></textarea>
+          <p class="mb-2">Move <strong id="xVessel">-</strong> to Deleted Bangkas?</p>
+          <p class="text-muted mb-3">The vessel record and trip history will be preserved. Vessels with active bookings or rentals cannot be deleted until their use is complete.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-danger">Confirm Deactivate</button>
+          <button type="submit" class="btn btn-danger">Delete Bangka</button>
         </div>
       </form>
     </div>
@@ -176,19 +203,9 @@
               <input type="text" class="form-control" id="aPermit" placeholder="Permit-12345">
             </div>
             <div class="col-md-6">
-              <label class="form-label">Photo URL</label>
-              <input type="url" class="form-control" id="aPhoto" placeholder="https://...">
-            </div>
-            <div class="col-md-6">
               <label class="form-label">Owner (Bangkero) <span class="text-danger">*</span></label>
               <select class="form-select" id="aBangkeroId" required>
                 <option value="">Select verified bangkero...</option>
-              </select>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Route (optional)</label>
-              <select class="form-select" id="aRouteId">
-                <option value="">No route assigned</option>
               </select>
             </div>
           </div>
@@ -208,15 +225,17 @@
   <script src="../../assets/js/services/supabase.js"></script>
   <script src="../../assets/js/services/bangkas.js"></script>
   <script src="../../assets/js/services/bangkeros.js"></script>
-  <script src="../../assets/js/services/portsRoutes.js"></script>
   <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
     let bangkas = [];
+    let deletedBangkas = [];
     let selectedIndex = null;
     let bangkeroOptions = [];
 
     const bangkaBody = document.getElementById("bangkaBody");
+    const deletedBangkaBody = document.getElementById("deletedBangkaBody");
+    const bangkaFilter = document.getElementById("bangkaFilter");
     const loadingState = document.getElementById("loadingState");
     const errorState = document.getElementById("errorState");
 
@@ -238,20 +257,18 @@
 
     const uVessel = document.getElementById("uVessel");
     const uStatus = document.getElementById("uStatus");
-    const uNotes = document.getElementById("uNotes");
-
+    const uBangkeroId = document.getElementById("uBangkeroId");
+    const activateOwnerField = document.getElementById("activateOwnerField");
     const xVessel = document.getElementById("xVessel");
-    const xReason = document.getElementById("xReason");
 
     const addBangkaForm = document.getElementById("addBangkaForm");
     const aBangkeroId = document.getElementById("aBangkeroId");
 
     function statusBadge(s) {
       if (s === "Available") return "text-bg-success";
-      if (s === "On Trip") return "text-bg-info";
+      if (s === "Unavailable") return "text-bg-danger";
       if (s === "Offline") return "text-bg-secondary";
       if (s === "Unverified") return "text-bg-warning";
-      if (s === "Deactivated") return "text-bg-danger";
       return "text-bg-secondary";
     }
 
@@ -268,14 +285,13 @@
 
     function renderTable() {
       bangkaBody.innerHTML = bangkas.map((b, i) => {
-        // Derive route from active booking or show N/A
-        const routeDisplay = b.activeBookingRef ? 'Active: ' + b.activeBookingRef : (b.routeId ? 'Route: ' + b.routeId : '—');
+        const routeDisplay = b.activeRoute || (b.activeBookingRef ? 'Booking ' + b.activeBookingRef : '—');
         return `
           <tr>
             <td>${b.bangkaName}</td>
             <td>${b.capacity}</td>
             <td>${routeDisplay}</td>
-            <td>—</td>
+            <td>${b.maxLoadKg ?? '—'}</td>
             <td><span class="badge ${statusBadge(b.status)}">${b.status}</span></td>
             <td>
               <div class="d-flex gap-2">
@@ -286,7 +302,7 @@
                   <i class="bi bi-arrow-repeat"></i> Status
                 </button>
                 <button class="btn btn-sm btn-outline-danger" onclick="openDeactivateModal(${i})">
-                  <i class="bi bi-slash-circle"></i> Deactivate
+                  <i class="bi bi-trash"></i> Delete
                 </button>
               </div>
             </td>
@@ -295,42 +311,58 @@
       }).join("");
     }
 
+    function renderDeletedTable() {
+      if (!deletedBangkas.length) {
+        deletedBangkaBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No deleted bangkas.</td></tr>';
+        return;
+      }
+      deletedBangkaBody.innerHTML = deletedBangkas.map((b, i) => `
+        <tr>
+          <td>${b.bangkaName}</td>
+          <td>${b.capacity}</td>
+          <td>${b.bangkeroName || 'Unassigned'}</td>
+          <td>${b.deletedAt ? new Date(b.deletedAt).toLocaleDateString('en-PH') : '—'}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-success" onclick="restoreBangka(${i})">
+              <i class="bi bi-arrow-counterclockwise"></i> Restore Bangka
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
     async function loadBangkeroOptions() {
       try {
         const verified = await window.bangkagoBangkeros.listAll({ verificationStat: 'verified' });
         bangkeroOptions = verified;
         aBangkeroId.innerHTML = '<option value="">Select verified bangkero...</option>';
+        uBangkeroId.innerHTML = '<option value="">Select a verified bangkero...</option>';
         verified.forEach(b => {
           const opt = document.createElement('option');
           opt.value = b.uid;
           opt.textContent = b.displayName + (b.permitNumber ? ' (' + b.permitNumber + ')' : '');
           aBangkeroId.appendChild(opt);
+          uBangkeroId.appendChild(opt.cloneNode(true));
         });
       } catch (e) {
         console.error('Failed to load bangkeros:', e);
       }
     }
 
-    async function loadRouteOptions() {
-      try {
-        const routes = await window.bangkagoPortsRoutes.listRoutes(true);
-        aRouteId.innerHTML = '<option value="">No route assigned</option>';
-        routes.forEach(r => {
-          const opt = document.createElement('option');
-          opt.value = r.routeId;
-          opt.textContent = r.startPortId + ' → ' + r.endPortId + ' (₱' + r.baseFare + ')';
-          aRouteId.appendChild(opt);
-        });
-      } catch (e) {
-        console.error('Failed to load routes:', e);
-      }
-    }
-
     async function loadBangkas() {
       showLoading(true);
       try {
-        bangkas = await window.bangkagoBangkas.listAll();
+        const [activeRows, deletedRows] = await Promise.all([
+          window.bangkagoBangkas.listAll({
+            includeActivity: true,
+            assignment: bangkaFilter.value,
+          }),
+          window.bangkagoBangkas.listDeleted(),
+        ]);
+        bangkas = activeRows;
+        deletedBangkas = deletedRows;
         renderTable();
+        renderDeletedTable();
         showLoading(false);
       } catch (e) {
         console.error(e);
@@ -358,18 +390,36 @@
       selectedIndex = index;
       const b = bangkas[index];
       uVessel.textContent = b.bangkaName;
-      uStatus.value = 'Deactivated';
-      uNotes.value = "";
+      uStatus.value = '';
+      uBangkeroId.value = b.bangkeroId || '';
+      activateOwnerField.classList.add('d-none');
+      uBangkeroId.required = false;
       updateStatusModal.show();
     }
+
+    uStatus.addEventListener('change', function() {
+      const activating = uStatus.value === 'Activate';
+      activateOwnerField.classList.toggle('d-none', !activating);
+      uBangkeroId.required = activating;
+    });
 
     window.openDeactivateModal = function(index) {
       selectedIndex = index;
       const b = bangkas[index];
       xVessel.textContent = b.bangkaName;
-      xReason.value = "";
       deactivateModal.show();
     }
+
+    window.restoreBangka = async function(index) {
+      const b = deletedBangkas[index];
+      if (!b) return;
+      try {
+        await window.bangkagoBangkas.restore(b.bangkaId);
+        await loadBangkas();
+      } catch (e) {
+        alert('Unable to restore Bangka: ' + e.message);
+      }
+    };
 
     document.getElementById("updateStatusForm").addEventListener("submit", async function(e) {
       e.preventDefault();
@@ -377,13 +427,11 @@
 
       const b = bangkas[selectedIndex];
       const newStatus = uStatus.value;
-      const notes = uNotes.value.trim();
-
       try {
-        await window.bangkagoBangkas.setStatus(b.bangkaId, newStatus, notes);
+        await window.bangkagoBangkas.setStatus(b.bangkaId, newStatus, uBangkeroId.value);
         await loadBangkas(); // Reload to get updated computed status
         updateStatusModal.hide();
-        alert("Bangka deactivated (unassigned from bangkero).");
+        alert(newStatus === 'Activate' ? 'Bangka activated and assigned.' : 'Bangka status set to Unverified.');
       } catch (e) {
         alert('Error: ' + e.message);
       }
@@ -394,15 +442,13 @@
       if (selectedIndex === null) return;
 
       const b = bangkas[selectedIndex];
-      const reason = xReason.value.trim();
-
-      if (!confirm('Deactivate "' + b.bangkaName + '"? This will unassign it from the bangkero.')) return;
+      if (!confirm('Move "' + b.bangkaName + '" to Deleted Bangkas? Its record and trip history will be retained.')) return;
 
       try {
         await window.bangkagoBangkas.delete(b.bangkaId);
         await loadBangkas();
         deactivateModal.hide();
-        alert("Bangka deleted.");
+        alert('Bangka moved to Deleted Bangkas. Its history is preserved.');
       } catch (e) {
         alert('Error: ' + e.message);
       }
@@ -419,7 +465,7 @@
         maxLoadKg: parseFloat(document.getElementById("aMaxLoad").value) || null,
         hourlyRate: parseFloat(document.getElementById("aHourlyRate").value) || null,
         permitNumber: document.getElementById("aPermit").value.trim() || null,
-        bangkaPhoto: document.getElementById("aPhoto").value.trim() || null,
+        bangkaPhoto: null,
         bangkeroId: document.getElementById("aBangkeroId").value
       };
 
@@ -427,10 +473,6 @@
         alert('Please fill required fields: Vessel Name, Capacity, Owner');
         return;
       }
-
-      // Add route if selected
-      const routeId = document.getElementById("aRouteId").value;
-      if (routeId) data.routeId = routeId;
 
       try {
         await window.bangkagoBangkas.create(data);
@@ -447,6 +489,8 @@
     document.getElementById("addBangkaBtn").addEventListener("click", function() {
       addBangkaModal.show();
     });
+
+    bangkaFilter.addEventListener('change', loadBangkas);
 
     // Reset form on modal close
     document.getElementById("addBangkaModal").addEventListener("hidden.bs.modal", function() {
@@ -470,7 +514,6 @@
       try {
         await window.bangkagoAuthReady;
         loadBangkeroOptions();
-        loadRouteOptions();
         loadBangkas();
       } catch (e) {
         console.error('Auth guard failed:', e);

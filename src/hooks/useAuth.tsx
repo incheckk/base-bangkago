@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       log(silent ? 'silent profile revalidate' : 'refreshProfile', doc ? `role=${doc.role}` : 'missing');
     } catch (e) {
       const message = (e as Error)?.message ?? 'Failed to load your profile.';
-      if (!silent) setError(message);
+      if (!silent || message.includes('deleted')) setError(message);
       log('refreshProfile error', message);
     } finally {
       if (!silent) setProfileLoading(false);
@@ -167,6 +167,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'users', filter: `id=eq.${uid}` },
+          () => revalidateRef.current(),
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'bangkeros', filter: `id=eq.${uid}` },
           () => revalidateRef.current(),
         )
         .subscribe((status, err) => {

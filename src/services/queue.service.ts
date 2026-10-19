@@ -1,7 +1,7 @@
+import type { PortQueueDoc } from '../types/models';
 import { mapPortQueueRow } from './mappers';
 import { supabase } from './supabase';
 import { getAllVesselPositions, getLatestPositionForBangkero } from './tracking.service';
-import type { PortQueueDoc } from '../types/models';
 
 /** How long a boat must sit inside a perimeter before it joins the list. */
 export const DWELL_MS = 5 * 60_000;
@@ -39,8 +39,9 @@ export function formatDistance(meters: number): string {
 export async function getPortQueue(portId: string): Promise<PortQueueDoc[]> {
   const { data, error } = await supabase
     .from('port_queue')
-    .select('*, bangkeros(display_name, is_available)')
+    .select('*, bangkeros!inner(display_name, is_available, is_deleted)')
     .eq('port_id', portId)
+    .eq('bangkeros.is_deleted', false)
     .is('left_at', null)
     .order('entered_at', { ascending: true });
   if (error) throw error;
@@ -51,7 +52,8 @@ export async function getPortQueue(portId: string): Promise<PortQueueDoc[]> {
 export async function getAllActiveQueues(): Promise<(PortQueueDoc & { portName: string | null })[]> {
   const { data, error } = await supabase
     .from('port_queue')
-    .select('*, ports(port_name), bangkeros(display_name, is_available)')
+    .select('*, ports(port_name), bangkeros!inner(display_name, is_available, is_deleted)')
+    .eq('bangkeros.is_deleted', false)
     .is('left_at', null)
     .order('entered_at', { ascending: true });
   if (error) throw error;
@@ -72,8 +74,9 @@ export interface MyQueueState {
 export async function getMyQueue(bangkeroUid: string): Promise<MyQueueState> {
   const { data, error } = await supabase
     .from('port_queue')
-    .select('*, bangkeros(display_name, is_available)')
+    .select('*, bangkeros!inner(display_name, is_available, is_deleted)')
     .eq('bangkero_id', bangkeroUid)
+    .eq('bangkeros.is_deleted', false)
     .is('left_at', null)
     .limit(1)
     .maybeSingle();
@@ -102,11 +105,12 @@ export async function getQueuedSeatCeiling(portId: string | null): Promise<numbe
   const cutoff = new Date(Date.now() - DWELL_MS).toISOString();
   const { data, error } = await supabase
     .from('port_queue')
-    .select('bangkero_id, bangkeros!inner(is_available)')
+    .select('bangkero_id, bangkeros!inner(is_available, is_deleted)')
     .eq('port_id', portId)
     .is('left_at', null)
     .lte('entered_at', cutoff)
-    .eq('bangkeros.is_available', true);
+    .eq('bangkeros.is_available', true)
+    .eq('bangkeros.is_deleted', false);
   if (error) throw error;
 
   const bangkeroIds = (data ?? []).map((row: any) => row.bangkero_id as string);
@@ -115,7 +119,8 @@ export async function getQueuedSeatCeiling(portId: string | null): Promise<numbe
   const { data: bangkas, error: bangkaErr } = await supabase
     .from('bangkas')
     .select('capacity')
-    .in('bangkero_id', bangkeroIds);
+    .in('bangkero_id', bangkeroIds)
+    .eq('is_active', true);
   if (bangkaErr) throw bangkaErr;
 
   const caps = (bangkas ?? [])
@@ -140,7 +145,8 @@ export async function getNearestQueuedBoatDistance(
   const { data: bangkas, error } = await supabase
     .from('bangkas')
     .select('id, bangkero_id')
-    .in('bangkero_id', bangkeroIds);
+    .in('bangkero_id', bangkeroIds)
+    .eq('is_active', true);
   if (error) throw error;
 
   const wanted = new Set((bangkas ?? []).map((b: any) => b.id));
@@ -173,6 +179,7 @@ export async function getMyBangkaCapacity(bangkeroUid: string): Promise<number |
     .from('bangkas')
     .select('capacity')
     .eq('bangkero_id', bangkeroUid)
+    .eq('is_active', true)
     .order('id')
     .limit(1)
     .maybeSingle();

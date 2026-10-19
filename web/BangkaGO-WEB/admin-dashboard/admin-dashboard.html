@@ -145,7 +145,7 @@
           window.bangkagoBookings.getStats(),
           window.bangkagoVessels.getAllLatestPositions(),
           svc.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
-          svc.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending'),
+          svc.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending').eq('is_deleted', false),
           svc.from('downpayments').select('*', { count: 'exact', head: true }).eq('status', 'pending')
         ]);
 

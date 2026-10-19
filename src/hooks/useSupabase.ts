@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { useRealtimeQuery } from './useRealtimeQuery';
 import { getArrivalBypass, getDispatchBypass, getGatesBypass } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import {
-  getAllActiveQueues, getMyQueue, getPortQueue, refreshHolds, type MyQueueState,
+    getAllActiveQueues, getMyQueue, getPortQueue, refreshHolds, type MyQueueState,
 } from '../services/queue.service';
 import { supabase } from '../services/supabase';
 import type { BangkeroDoc, BookingDoc, PortDoc, PortQueueDoc } from '../types/models';
+import { useRealtimeQuery } from './useRealtimeQuery';
 
 interface Result<T> {
   data: T;
@@ -68,7 +68,8 @@ export function useAvailableBangkeroCount(): Result<number> {
     const { count, error: err } = await supabase
       .from('bangkeros')
       .select('*', { count: 'exact', head: true })
-      .eq('is_available', true);
+      .eq('is_available', true)
+      .eq('is_deleted', false);
     if (id !== seq.current) return;
     if (err) { setError(err.message); setLoading(false); return; }
     setData(count ?? 0);

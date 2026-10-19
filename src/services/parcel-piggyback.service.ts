@@ -11,11 +11,11 @@
  *   3. Bangkero approves/rejects within 15 min
  *   4. If rejected/timed out → sender falls back to batched/solo
  */
-import { supabase } from './supabase';
 import type { ParcelDoc, PiggybackCandidate } from '../types/models';
 import { routeIdFor } from './booking.service';
-import { mapRow } from './parcel.service';
 import { createNotification } from './notification.service';
+import { mapRow } from './parcel.service';
+import { supabase } from './supabase';
 
 export async function findEligiblePiggybackBooking(params: {
   fromPortId: string;
@@ -48,7 +48,8 @@ export async function findEligiblePiggybackBooking(params: {
     .from('bangkeros')
     .select('id')
     .in('id', operatorIds)
-    .eq('piggyback_opt_in', true);
+    .eq('piggyback_opt_in', true)
+    .eq('is_deleted', false);
 
   const optedInIds = new Set((optedInBangkeros ?? []).map((b) => b.id));
 

@@ -68,6 +68,12 @@ export default function DepartureScreen() {
   );
   const boardedTrips = acceptedTrips.filter((t) => t.onboardedAt);
   const waitingTrips = acceptedTrips.filter((t) => !t.onboardedAt);
+  // Cargo bookings have no passenger QR — the bangkero ticks "Cargo Ready"
+  // on the status screen. Their parcels still belong on the manifest, so
+  // every accepted cargo trip is recorded regardless of onboarded_at.
+  const manifestTrips = acceptedTrips.filter(
+    (t) => t.onboardedAt || t.serviceType === 'cargo'
+  );
   const pendingTrips = waitingTrips.filter((t) => !t.noShowAt && !t.disputedAt);
   // Vacuous-true with no accepted trips — the empty-departure guard below
   // is what actually decides whether the boat may leave.
@@ -219,10 +225,14 @@ export default function DepartureScreen() {
   }
 
   async function handleFinalize() {
-    if (finalizing) return;
+    if (finalizing || !manifest) return;
     setFinalizing(true);
     setGenError(null);
     try {
+      // Snapshot the manifest children now so the card/manifest screen is
+      // not blank between finalize and departure. Skip the departure stamp:
+      // handleDepart records the real actual_departure_time (trip duration).
+      await populateManifestDeparture(manifest, manifestTrips, { stampDeparture: false });
       await finalizeManifest();
     } catch (e) {
       setGenError(friendlyError(e));
@@ -237,7 +247,7 @@ export default function DepartureScreen() {
     // report real numbers — but never block the departure over it.
     if (manifest) {
       try {
-        await populateManifestDeparture(manifest, boardedTrips);
+        await populateManifestDeparture(manifest, manifestTrips);
       } catch (e) {
         setGenError(`Could not record everyone aboard: ${friendlyError(e)}`);
       }

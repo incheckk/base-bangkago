@@ -16,6 +16,19 @@ export interface PickablePort {
 }
 
 /**
+ * UI-only grouping: the five Olango satellites all share "Lapu-Lapu, Cebu"
+ * in the DB, which says where they are administered but not where they are.
+ * Show them as one island group in the picker.
+ */
+const OLANGO_ISLANDS = ['caohagan', 'sulpa', 'st. vicente', 'hilotongan', 'nalusuan'];
+
+function portSubtitle(port: PickablePort): string | null {
+  const name = port.portName.toLowerCase().replace(/\s+island$/, '').trim();
+  if (OLANGO_ISLANDS.includes(name)) return 'Olango Group';
+  return port.location ?? null;
+}
+
+/**
  * Why a sheet and not a chip grid.
  *
  * Nine ports × two legs meant eighteen pill buttons on the booking form, which
@@ -71,6 +84,9 @@ export function PortPickerSheet({
               {ports.map((p) => {
                 const reason = isDisabled?.(p.portId) ?? null;
                 const active = p.portId === selected;
+                // The blocking reason replaces the location: when a port
+                // can't be picked, why matters more than where it is.
+                const subtitle = reason ?? portSubtitle(p);
                 return (
                   <Pressable
                     key={p.portId}
@@ -104,14 +120,12 @@ export function PortPickerSheet({
                       >
                         {p.portName}
                       </Text>
-                      {/* The blocking reason replaces the location: when a port
-                          can't be picked, why matters more than where it is. */}
-                      {(reason || p.location) && (
+                      {!!subtitle && (
                         <Text
                           style={[styles.rowMeta, !!reason && styles.rowTextOff]}
                           numberOfLines={1}
                         >
-                          {reason ?? p.location}
+                          {subtitle}
                         </Text>
                       )}
                     </View>

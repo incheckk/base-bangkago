@@ -99,7 +99,22 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
       .eq('user_id', passengerId);
     if (id !== seq.current) return;
     if (err) { setError(err.message); setLoading(false); return; }
-    setData((rows ?? []).map(mapBookingRow).sort(byNewest).slice(0, max));
+    setData(
+      (rows ?? [])
+        .map(mapBookingRow)
+        // Hide the shared batch booking (054) from the sender's own lists:
+        // it is a system-created crossing, not a trip the passenger booked.
+        .filter(
+          (b) =>
+            !(
+              b.serviceType === 'cargo' &&
+              b.cargoMode === 'batched' &&
+              b.isDispatchable === true
+            ),
+        )
+        .sort(byNewest)
+        .slice(0, max),
+    );
     setLoading(false);
     setError(null);
   }, [passengerId, max]);

@@ -11,9 +11,9 @@ export function usePiggybackRequests(operatorId: string | null) {
   const seq = useRef(0);
 
   const load = useCallback(async () => {
-    console.log('[piggyback-debug] load called, operatorId =', operatorId);
+    if (__DEV__) console.log('[piggyback-debug] load called, operatorId =', operatorId);
     if (!operatorId) {
-      console.log('[piggyback-debug] no operatorId, skipping');
+      if (__DEV__) console.log('[piggyback-debug] no operatorId, skipping');
       setData([]);
       setLoading(false);
       return;
@@ -21,7 +21,7 @@ export function usePiggybackRequests(operatorId: string | null) {
     const id = ++seq.current;
     try {
       const result = await listPendingPiggybackRequests(operatorId);
-      console.log('[piggyback-debug] result count =', result?.length, 'data =', result);
+      if (__DEV__) console.log('[piggyback-debug] result count =', result?.length, 'data =', result);
       if (id !== seq.current) return;
       setData(result);
       setLoading(false);

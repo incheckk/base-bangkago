@@ -68,12 +68,10 @@ export async function findEligiblePiggybackBooking(params: {
 }
 
 export async function approvePiggyback(parcelId: string): Promise<void> {
+  // Piggyback approval is NOT batched mode — only the approval state flips.
   const { error } = await supabase
     .from('parcels')
-    .update({
-      approval_status: 'accepted',
-      batching_status: 'batched',
-    })
+    .update({ approval_status: 'accepted' })
     .eq('id', parcelId);
 
   if (error) throw new Error(`Failed to approve piggyback: ${error.message}`);
@@ -85,7 +83,8 @@ export async function approvePiggyback(parcelId: string): Promise<void> {
       `Your parcel for ${receiverName} will ride with a passenger trip.`
   );
 
-  // Sync parent cargo booking's status to match the passenger ride
+  // Sync parent cargo booking's status to match the passenger ride, and
+  // (Option B / 045) link the parcel to its carrier booking. Best-effort.
   try {
     const { data: parcel } = await supabase
       .from('parcels')
@@ -94,6 +93,16 @@ export async function approvePiggyback(parcelId: string): Promise<void> {
       .maybeSingle();
 
     if (parcel?.booking_id && parcel?.piggyback_booking_id) {
+      // Requires migration 045 (carrier_booking_id). A missing column is
+      // skipped without blocking approval.
+      const { error: carrierErr } = await supabase
+        .from('parcels')
+        .update({ carrier_booking_id: parcel.piggyback_booking_id })
+        .eq('id', parcelId);
+      if (carrierErr && __DEV__) {
+        console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
+      }
+
       const { data: ride } = await supabase
         .from('bookings')
         .select('operator_id')

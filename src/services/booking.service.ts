@@ -109,6 +109,12 @@ interface CreateArgs {
   /** Sailing date (YYYY-MM-DD) and slot; future dates escrow first (020). */
   scheduledDate?: string;
   scheduledTime?: string;
+  /**
+   * Option B (045): false = parcel-mode stub (piggyback/batched/solo) —
+   * hidden from FCFS holds and accept gates. Defaults true so every
+   * pre-045 caller behaves unchanged.
+   */
+  isDispatchable?: boolean;
 }
 
 /** Advance = sailing date after today (Manila). Needs the 50% escrow. */
@@ -125,7 +131,7 @@ export function isAdvanceDate(scheduledDate?: string | null): boolean {
  */
 export async function createBooking({
   passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare, packageId,
-  scheduledDate, scheduledTime,
+  scheduledDate, scheduledTime, isDispatchable,
 }: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
@@ -151,27 +157,49 @@ export async function createBooking({
     throw new Error('Pick a departure time for your sailing date.');
   }
 
-  const { data, error } = await supabase
+  const bookingFields: Record<string, unknown> = {
+    user_id: passenger.uid,
+    passenger_name: `${passenger.firstName} ${passenger.lastName}`.trim(),
+    passenger_phone: passenger.phone,
+    from_port_name: fromPort.portName,
+    to_port_name: toPort.portName,
+    num_of_passenger: passengerCount,
+    total_price: totalPrice,
+    route_id: route.routeId,
+    service_type: serviceType,
+    trip_stat: advance ? 'pending' : 'open',
+    scheduled_date: scheduledDate ?? null,
+    scheduled_time: advance ? scheduledTime : (scheduledTime ?? null),
+    ...(packageId ? { package_id: packageId } : {}),
+  };
+
+  // Option B (045): parcel-mode stubs insert is_dispatchable=false; every
+  // other booking (incl. pre-045 callers) defaults to the real crossing.
+  let { data, error } = await supabase
     .from('bookings')
-    .insert({
-      user_id: passenger.uid,
-      passenger_name: `${passenger.firstName} ${passenger.lastName}`.trim(),
-      passenger_phone: passenger.phone,
-      from_port_name: fromPort.portName,
-      to_port_name: toPort.portName,
-      num_of_passenger: passengerCount,
-      total_price: totalPrice,
-      route_id: route.routeId,
-      service_type: serviceType,
-      trip_stat: advance ? 'pending' : 'open',
-      scheduled_date: scheduledDate ?? null,
-      scheduled_time: advance ? scheduledTime : (scheduledTime ?? null),
-      ...(packageId ? { package_id: packageId } : {}),
-    })
+    .insert({ ...bookingFields, is_dispatchable: isDispatchable ?? true })
     .select('id, ref')
     .single();
 
+  // A pre-045 schema has no is_dispatchable column — PostgREST rejects the
+  // insert. Retry without it so booking creation still works.
+  if (error && (error.code === 'PGRST204' || /is_dispatchable/i.test(error.message ?? ''))) {
+    if (__DEV__) {
+      console.warn(
+        '[booking] is_dispatchable column missing (pre-045). Booking continues without it.'
+      );
+    }
+    ({ data, error } = await supabase
+      .from('bookings')
+      .insert(bookingFields)
+      .select('id, ref')
+      .single());
+  }
+
   if (error) throw error;
+  // `.single()` can still surface null on an empty result; `let` also drops
+  // the response-union narrowing, so pin it explicitly.
+  if (!data) throw new Error('Booking could not be created.');
 
   // FCFS dispatch: hand the request its first 3-minute hold (008).
   // Skipped for advance rows — no hold exists until the admin flips
@@ -209,6 +237,23 @@ export async function acceptBooking(
   bookingId: string,
   bangkero: Pick<BangkeroDoc, 'uid' | 'displayName'>
 ): Promise<void> {
+  // Solo parcel stubs are minted non-dispatchable (050) so they never enter
+  // the FCFS pool. RLS blocks the bangkero from reading the parcel pre-accept,
+  // so we blindly ask the SECURITY DEFINER RPC to claim it: it safely verifies
+  // the booking and raises for anything that is not a solo parcel, which we
+  // swallow before running the normal accept flow.
+  try {
+    if (__DEV__) console.log('[booking] Attempting solo claim for:', bookingId);
+    const { error: soloError } = await supabase.rpc('bangkero_claim_solo', {
+      p_booking_id: bookingId,
+    });
+    if (soloError && __DEV__) {
+      console.log('[booking] Not a solo parcel (expected for others):', soloError.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Solo claim exception:', e);
+  }
+
   // Documents + rating are enforced inside the RPC (010) so the admin
   // gates-bypass switch applies; the sentence arrives mapped through
   // friendlyError ("rating is too low", "documents are not approved").
@@ -238,6 +283,36 @@ export async function rejectBooking(bookingId: string): Promise<void> {
 export async function completeBooking(bookingId: string): Promise<void> {
   const { error } = await supabase.rpc('complete_trip', { p_booking_id: bookingId });
   if (error) throw error;
+
+  // Best-effort: auto-deliver every parcel attached to this booking —
+  // piggyback riders, Option B carriers, and accompanied cargo.
+  // Never blocks completion — a parcel-sync failure is only logged.
+  try {
+    const deliveredAt = new Date().toISOString();
+    const { error: parcelError } = await supabase
+      .from('parcels')
+      .update({ status: 'delivered', actual_arrival_at: deliveredAt })
+      .or(
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+      );
+
+    if (parcelError) {
+      if (__DEV__) {
+        console.warn('[booking] Failed to auto-deliver attached parcels:', parcelError.message);
+      }
+      // Pre-050 has no carrier_booking_id column — retry on the keys that
+      // always exist so accompanied and piggyback parcels still close out.
+      const { error: fallbackError } = await supabase
+        .from('parcels')
+        .update({ status: 'delivered', actual_arrival_at: deliveredAt })
+        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+      if (fallbackError && __DEV__) {
+        console.warn('[booking] Parcel delivery sync failed:', fallbackError.message);
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Parcel delivery sync failed:', e);
+  }
 }
 
 /**
@@ -260,6 +335,34 @@ export async function stampBookingDepart(bookingId: string): Promise<void> {
     p_booking_id: bookingId,
   });
   if (error) throw error;
+
+  // Best-effort: attached parcels are now under way. A parcel-sync failure
+  // must never stop the boat from sailing — it is only logged.
+  try {
+    const { error: parcelError } = await supabase
+      .from('parcels')
+      .update({ status: 'in_transit' })
+      .or(
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+      );
+
+    if (parcelError) {
+      if (__DEV__) {
+        console.warn('[booking] Failed to mark attached parcels in_transit:', parcelError.message);
+      }
+      // Pre-050 has no carrier_booking_id column — retry without it so
+      // accompanied and piggyback parcels still move to in_transit.
+      const { error: fallbackError } = await supabase
+        .from('parcels')
+        .update({ status: 'in_transit' })
+        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+      if (fallbackError && __DEV__) {
+        console.warn('[booking] Parcel in_transit sync failed:', fallbackError.message);
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Parcel in_transit sync failed:', e);
+  }
 }
 
 /**

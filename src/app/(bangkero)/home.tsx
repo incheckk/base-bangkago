@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
@@ -29,9 +30,10 @@ import {
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
+import { supabase } from '@/services/supabase';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { BookingDoc, DemandPredictionDoc } from '@/types/models';
+import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
@@ -103,6 +105,9 @@ export default function BangkeroHome() {
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
   const accepted = useAcceptedBookings(uid);
+  // Option B (045): the parcel rows tell us which cargo bookings are
+  // non-accompanied stubs — the pre-045 fallback for the filter below.
+  const parcels = useBangkeroParcels(uid);
 
   const [pending, setPending] = useState<string | null>(null);
   /**
@@ -128,7 +133,89 @@ export default function BangkeroHome() {
     if (availOverride !== null && availOverride === serverAvailable) setAvailOverride(null);
   }, [availOverride, serverAvailable]);
 
-  const activeTrips = accepted.data;
+  /** Booking id → its parcel, so the Active Trips filter can read delivery_type. */
+  const parcelsByBookingId = useMemo(() => {
+    const map = new Map<string, ParcelDoc>();
+    for (const p of parcels.data) {
+      if (p.bookingId) map.set(p.bookingId, p);
+    }
+    return map;
+  }, [parcels.data]);
+
+  /** Passenger ride id → the piggyback parcels riding along. */
+  const piggybackByRideId = useMemo(() => {
+    const map = new Map<string, ParcelDoc[]>();
+    for (const p of parcels.data) {
+      if (p.piggybackBookingId) {
+        const list = map.get(p.piggybackBookingId);
+        if (list) list.push(p);
+        else map.set(p.piggybackBookingId, [p]);
+      }
+    }
+    return map;
+  }, [parcels.data]);
+
+  /**
+   * Batched stubs (053): cargo_mode='batched' + is_dispatchable=false.
+   * Read straight off `bookings` — RLS hides a pending_batch parcel from
+   * the bangkero, so the parcel row can never be used for this decision.
+   */
+  const [batchedStubIds, setBatchedStubIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const cargoIds = requests.data
+      .filter((b) => b.serviceType === 'cargo')
+      .map((b) => b.bookingId);
+    if (cargoIds.length === 0) return;
+    let alive = true;
+    supabase
+      .from('bookings')
+      .select('id, is_dispatchable, cargo_mode')
+      .in('id', cargoIds)
+      .eq('cargo_mode', 'batched')
+      .eq('is_dispatchable', false)
+      .then(({ data, error }) => {
+        if (!alive || error) return;
+        setBatchedStubIds(new Set((data ?? []).map((r) => r.id as string)));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [requests.data]);
+
+  /**
+   * Active Trips: only an unassigned batched parcel still waiting for its
+   * batching window is a stub. Accompanied / piggyback / solo cargo and
+   * anything this bangkero already owns are real trips — never hide them.
+   */
+  const isCargoStub = useCallback(
+    (b: BookingDoc) => {
+      // 1. If the bangkero owns it, it's a real trip. Never hide it.
+      if (b.operatorId === uid) return false;
+
+      // 2. Check if the booking has a linked parcel.
+      const linkedParcel = parcelsByBookingId.get(b.bookingId);
+
+      if (linkedParcel) {
+        // 3. ONLY hide if it's a batched parcel waiting for the batching
+        //    window to close.
+        if (
+          linkedParcel.deliveryType === 'batched' &&
+          linkedParcel.batchingStatus === 'pending_batch'
+        ) {
+          return true;
+        }
+      }
+
+      // 4. Otherwise it's not a stub (piggyback, solo, accompanied, ...).
+      return false;
+    },
+    [uid, parcelsByBookingId],
+  );
+
+  const activeTrips = useMemo(
+    () => accepted.data.filter((b) => !isCargoStub(b)),
+    [accepted.data, isCargoStub],
+  );
   const hasActiveTrip = activeTrips.length > 0;
 
   // Port-queue presence + the clocks the chips tick against. `now`
@@ -470,13 +557,18 @@ export default function BangkeroHome() {
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   // Two groups so an operator can tell tomorrow's commitments from
-  // people standing at the pier right now.
-  const advanceReqs = requests.data.filter(isAdvance);
-  const todayReqs = requests.data.filter((b) => !isAdvance(b));
+  // people standing at the pier right now. Batched stubs now stay visible
+  // with a disabled Accept ("Waiting for batch"), so nothing is filtered.
+  const visibleRequests = requests.data;
+  const advanceReqs = visibleRequests.filter(isAdvance);
+  const todayReqs = visibleRequests.filter((b) => !isAdvance(b));
 
   const renderRequest = (b: BookingDoc) => {
     const chip = chipFor(b);
     const category = categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined);
+    // 053: batched stub still waiting on its batch window — visible, but
+    // not acceptable until the dispatcher marks it dispatchable.
+    const isPendingBatch = batchedStubIds.has(b.bookingId);
     return (
       <View key={b.bookingId} style={styles.request}>
         <RequestBody booking={b} category={category} />
@@ -514,10 +606,10 @@ export default function BangkeroHome() {
             style={styles.declineBtn}
           />
           <PrimaryButton
-            label="Accept"
+            label={isPendingBatch ? 'Waiting for batch' : 'Accept'}
             onPress={() => accept(b)}
             loading={pending === b.bookingId}
-            disabled={acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
+            disabled={isPendingBatch || acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
             style={styles.acceptBtn}
           />
         </View>
@@ -731,9 +823,9 @@ export default function BangkeroHome() {
             directly under the status card — demand/earnings can wait. */}
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabelInline}>INCOMING REQUESTS</Text>
-          {available && requests.data.length > 0 && (
+          {available && visibleRequests.length > 0 && (
             <View style={[styles.countPill, styles.countPillLive]}>
-              <Text style={styles.countPillTextLive}>{requests.data.length}</Text>
+              <Text style={styles.countPillTextLive}>{visibleRequests.length}</Text>
             </View>
           )}
         </View>
@@ -752,7 +844,7 @@ export default function BangkeroHome() {
           <View style={styles.stateBox}><LoadingState label="Listening for requests…" /></View>
         ) : requests.error ? (
           <View style={styles.stateBox}><ErrorState message={requests.error} /></View>
-        ) : requests.data.length === 0 ? (
+        ) : visibleRequests.length === 0 ? (
           <View style={styles.stateBox}>
             <EmptyState
               icon="bell"
@@ -807,6 +899,7 @@ export default function BangkeroHome() {
                 <RequestBody
                   booking={b}
                   category={categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined)}
+                  ridingAlong={piggybackByRideId.get(b.bookingId) ?? []}
                 />
                 {/* Completing requires everyone aboard (complete_trip raises
                     otherwise) — until then the button routes to the boarding
@@ -889,7 +982,20 @@ function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: st
   );
 }
 
-function RequestBody({ booking, category }: { booking: BookingDoc; category?: string | null }) {
+function RequestBody({
+  booking,
+  category,
+  ridingAlong = [],
+}: {
+  booking: BookingDoc;
+  category?: string | null;
+  ridingAlong?: ParcelDoc[];
+}) {
+  // Passenger fare plus the cargo fares riding along on this trip. A cargo
+  // booking never carries piggyback parcels, so this is a no-op for them.
+  const cargoTotal = ridingAlong.reduce((sum, p) => sum + (p.totalPrice || 0), 0);
+  const totalEarnings = booking.totalPrice + cargoTotal;
+  const showCargoBreakdown = booking.serviceType !== 'cargo' && cargoTotal > 0;
   return (
     <>
       <View style={styles.requestTop}>
@@ -920,8 +1026,13 @@ function RequestBody({ booking, category }: { booking: BookingDoc; category?: st
           </Text>
         </View>
         <View style={styles.fareWrap}>
-          <Text style={styles.fare}>₱{booking.totalPrice}</Text>
+          <Text style={styles.fare}>₱{totalEarnings}</Text>
           <Text style={styles.fareUnit}>{booking.numOfPassenger} pax</Text>
+          {showCargoBreakdown && (
+            <Text style={styles.fareUnit} numberOfLines={1}>
+              ₱{booking.totalPrice} fare + ₱{cargoTotal} cargo
+            </Text>
+          )}
         </View>
       </View>
 
@@ -932,6 +1043,16 @@ function RequestBody({ booking, category }: { booking: BookingDoc; category?: st
           {booking.passengerPhone ? ` · ${formatPhone(booking.passengerPhone)}` : ''}
         </Text>
       </View>
+
+      {/* Option B (045): piggyback parcels attached to this passenger ride. */}
+      {ridingAlong.length > 0 && (
+        <View style={styles.parcelBadge}>
+          <Icon name="parcel" size={12} color={colors.primary} />
+          <Text style={styles.parcelBadgeText}>
+            {ridingAlong.length} parcel{ridingAlong.length > 1 ? 's' : ''} riding along
+          </Text>
+        </View>
+      )}
     </>
   );
 }
@@ -1138,6 +1259,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
   },
   passenger: { ...typography.caption, color: colors.textMuted, flex: 1 },
+
+  parcelBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryTint,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs,
+    marginTop: spacing.sm,
+  },
+  parcelBadgeText: { flexShrink: 1, ...typography.label, color: colors.primary },
 
   // ---------- dispatch chips (008) ----------
   chipRow: {

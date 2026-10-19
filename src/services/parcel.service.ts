@@ -142,12 +142,51 @@ export async function getParcelsForBangkero(bangkeroUid: string): Promise<Parcel
   const ids = (bookings ?? []).map((b) => b.id);
   if (ids.length === 0) return [];
 
-  const { data, error } = await supabase
+  const seen = new Set<string>();
+  const results: ParcelDoc[] = [];
+  const addRows = (rows: any[] | null) => {
+    for (const row of rows ?? []) {
+      if (!seen.has(row.id)) {
+        seen.add(row.id);
+        results.push(mapRow(row));
+      }
+    }
+  };
+
+  // 1. Direct parcels on the bangkero's own bookings (accompanied cargo).
+  const { data: direct, error: dErr } = await supabase
     .from('parcels')
     .select('*')
     .in('booking_id', ids)
     .order('created_at', { ascending: false });
+  if (dErr) throw dErr;
+  addRows(direct);
 
-  if (error) throw error;
-  return (data ?? []).map(mapRow);
+  // 2. Piggyback parcels riding one of the bangkero's passenger rides:
+  //    their booking_id points at a stub with operator_id = NULL.
+  const { data: piggy, error: pErr } = await supabase
+    .from('parcels')
+    .select('*')
+    .eq('delivery_type', 'piggyback')
+    .in('piggyback_booking_id', ids)
+    .order('created_at', { ascending: false });
+  if (pErr) throw pErr;
+  addRows(piggy);
+
+  // 3. Option B (045): any parcel whose carrier booking is ours. A
+  //    pre-045 schema has no carrier_booking_id column — skip on error.
+  const { data: carried, error: cErr } = await supabase
+    .from('parcels')
+    .select('*')
+    .not('carrier_booking_id', 'is', null)
+    .in('carrier_booking_id', ids)
+    .order('created_at', { ascending: false });
+  if (cErr) {
+    if (__DEV__) console.warn('[parcel] carrier query skipped:', cErr.message);
+  } else {
+    addRows(carried);
+  }
+
+  results.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return results;
 }

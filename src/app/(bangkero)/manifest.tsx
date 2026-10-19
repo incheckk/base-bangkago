@@ -192,6 +192,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function SailingCard({ sailing, upcoming }: { sailing: Sailing; upcoming?: boolean }) {
+  // Cargo bookings are parcels, not passengers — keep them out of the pax
+  // count so the card reads honestly.
+  const paxCount = sailing.bookings
+    .filter((b) => b.status !== 'cancelled' && b.serviceType !== 'cargo')
+    .reduce((sum, b) => sum + b.numOfPassenger, 0);
   return (
     <Pressable
       onPress={() =>
@@ -217,7 +222,8 @@ function SailingCard({ sailing, upcoming }: { sailing: Sailing; upcoming?: boole
 
       <View style={styles.metaRow}>
         <Text style={styles.meta}>
-          {sailing.bookings.length} booking{sailing.bookings.length === 1 ? '' : 's'} · {sailing.pax} pax
+          {sailing.bookings.length} booking{sailing.bookings.length === 1 ? '' : 's'}
+          {paxCount > 0 ? ` · ${paxCount} pax` : ''}
         </Text>
         {sailing.parcelCount > 0 && (
           <Text style={styles.meta}>· {sailing.parcelCount} parcel{sailing.parcelCount === 1 ? '' : 's'}</Text>

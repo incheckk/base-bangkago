@@ -109,6 +109,24 @@ export async function assignToBatch(params: {
 
   if (error) return null;
 
+  // Option B (045): link the parcel's own stub as its carrier so
+  // carrier-based RLS can resolve it. Best-effort — a missing column is
+  // skipped (pre-045 schema).
+  const { data: own } = await supabase
+    .from('parcels')
+    .select('booking_id')
+    .eq('id', params.parcelId)
+    .maybeSingle();
+  if (own?.booking_id) {
+    const { error: carrierErr } = await supabase
+      .from('parcels')
+      .update({ carrier_booking_id: own.booking_id })
+      .eq('id', params.parcelId);
+    if (carrierErr && __DEV__) {
+      console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
+    }
+  }
+
   return {
     routeKey,
     deadlineAt: deadlineAt.toISOString(),
@@ -152,6 +170,25 @@ export async function resolveBatchOutcome(
         batched_count_at_sail: batchedCount,
       })
       .eq('id', parcelId);
+
+    // Option B (045): each batched parcel carries its own stub for now —
+    // a future migration may unify to a single crossing booking. The stub
+    // stays is_dispatchable=false, so no bangkero interference. Best-effort;
+    // a missing column is skipped (pre-045 schema).
+    const { data: own } = await supabase
+      .from('parcels')
+      .select('booking_id')
+      .eq('id', parcelId)
+      .maybeSingle();
+    if (own?.booking_id) {
+      const { error: carrierErr } = await supabase
+        .from('parcels')
+        .update({ carrier_booking_id: own.booking_id })
+        .eq('id', parcelId);
+      if (carrierErr && __DEV__) {
+        console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
+      }
+    }
   }
   return { batchedCount, isSolo };
 }

@@ -13,6 +13,7 @@ import { createDownpayment, uploadDownpaymentProof } from '@/services/downpaymen
 import { pickImage } from '@/services/documents.service';
 import { createParcel } from '@/services/parcel.service';
 import { assignToBatch } from '@/services/parcel-batching.service';
+import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
 import { createPassengerDetail } from '@/services/passenger-detail.service';
 import { createPayment } from '@/services/payment.service';
@@ -171,6 +172,10 @@ export default function PaymentScreen() {
         passengerCount: serviceType === 'cargo' ? 1 : paxCount,
         serviceType,
         totalFare: fare,
+        // Option B (045): only accompanied cargo is a real crossing.
+        // Piggyback/batched/solo stubs stay invisible to FCFS until the
+        // carrier link (or create_solo_sailing) promotes them.
+        isDispatchable: serviceType !== 'cargo' || deliveryMode === 'accompanied',
         ...(isPackage && params.packageId ? { packageId: params.packageId } : {}),
         ...(params.scheduledDate
           ? { scheduledDate: params.scheduledDate, scheduledTime: params.scheduledTime || undefined }
@@ -282,9 +287,19 @@ export default function PaymentScreen() {
               .from('parcels')
               .update({
                 batching_status: 'solo',
-                solo_surcharge: 150,
+                solo_surcharge: PARCEL_RATES.soloSurcharge,
               })
               .eq('id', parcel.parcelId);
+            // Solo: its own booking is the carrier. Requires migration 045
+            // (carrier_booking_id) — best-effort so the booking still
+            // confirms if the column is not in the DB yet.
+            const { error: carrierErr } = await supabase
+              .from('parcels')
+              .update({ carrier_booking_id: bookingId })
+              .eq('id', parcel.parcelId);
+            if (carrierErr && __DEV__) {
+              console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
+            }
           }
         } catch {
           parcelWarning = true;

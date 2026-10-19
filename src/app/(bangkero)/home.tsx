@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import {
@@ -31,7 +32,7 @@ import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service
 import { getPaymentsForBookings } from '@/services/payment.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { BookingDoc, DemandPredictionDoc } from '@/types/models';
+import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
@@ -103,6 +104,9 @@ export default function BangkeroHome() {
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
   const accepted = useAcceptedBookings(uid);
+  // Option B (045): the parcel rows tell us which cargo bookings are
+  // non-accompanied stubs — the pre-045 fallback for the filter below.
+  const parcels = useBangkeroParcels(uid);
 
   const [pending, setPending] = useState<string | null>(null);
   /**
@@ -128,7 +132,45 @@ export default function BangkeroHome() {
     if (availOverride !== null && availOverride === serverAvailable) setAvailOverride(null);
   }, [availOverride, serverAvailable]);
 
-  const activeTrips = accepted.data;
+  /** Booking id → its parcel, so the Active Trips filter can read delivery_type. */
+  const parcelsByBookingId = useMemo(() => {
+    const map = new Map<string, ParcelDoc>();
+    for (const p of parcels.data) {
+      if (p.bookingId) map.set(p.bookingId, p);
+    }
+    return map;
+  }, [parcels.data]);
+
+  /** Passenger ride id → how many piggyback parcels ride along. */
+  const piggybackByRideId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of parcels.data) {
+      if (p.piggybackBookingId) {
+        map.set(p.piggybackBookingId, (map.get(p.piggybackBookingId) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [parcels.data]);
+
+  const activeTrips = useMemo(
+    () =>
+      accepted.data.filter((b) => {
+        if (b.serviceType !== 'cargo') return true; // passengers always show
+        // Post-045 guard: a stub is non-dispatchable. (No-op until the
+        // mapper surfaces the column — the parcel check below covers it.)
+        if ((b as BookingDoc & { isDispatchable?: boolean }).isDispatchable === false) {
+          return false;
+        }
+        // Pre-045 fallback: a cargo booking whose parcel is a non-accompanied
+        // ride-along stub should never appear as a trip.
+        const linked = parcelsByBookingId.get(b.bookingId);
+        if (linked?.deliveryType && linked.deliveryType !== 'accompanied') {
+          return false;
+        }
+        return true;
+      }),
+    [accepted.data, parcelsByBookingId],
+  );
   const hasActiveTrip = activeTrips.length > 0;
 
   // Port-queue presence + the clocks the chips tick against. `now`
@@ -807,6 +849,7 @@ export default function BangkeroHome() {
                 <RequestBody
                   booking={b}
                   category={categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined)}
+                  ridingAlong={piggybackByRideId.get(b.bookingId) ?? 0}
                 />
                 {/* Completing requires everyone aboard (complete_trip raises
                     otherwise) — until then the button routes to the boarding
@@ -889,7 +932,15 @@ function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: st
   );
 }
 
-function RequestBody({ booking, category }: { booking: BookingDoc; category?: string | null }) {
+function RequestBody({
+  booking,
+  category,
+  ridingAlong = 0,
+}: {
+  booking: BookingDoc;
+  category?: string | null;
+  ridingAlong?: number;
+}) {
   return (
     <>
       <View style={styles.requestTop}>
@@ -932,6 +983,16 @@ function RequestBody({ booking, category }: { booking: BookingDoc; category?: st
           {booking.passengerPhone ? ` · ${formatPhone(booking.passengerPhone)}` : ''}
         </Text>
       </View>
+
+      {/* Option B (045): piggyback parcels attached to this passenger ride. */}
+      {ridingAlong > 0 && (
+        <View style={styles.parcelBadge}>
+          <Icon name="parcel" size={12} color={colors.primary} />
+          <Text style={styles.parcelBadgeText}>
+            {ridingAlong} parcel{ridingAlong > 1 ? 's' : ''} riding along
+          </Text>
+        </View>
+      )}
     </>
   );
 }
@@ -1138,6 +1199,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: colors.borderSubtle,
   },
   passenger: { ...typography.caption, color: colors.textMuted, flex: 1 },
+
+  parcelBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryTint,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xxs,
+    marginTop: spacing.sm,
+  },
+  parcelBadgeText: { flexShrink: 1, ...typography.label, color: colors.primary },
 
   // ---------- dispatch chips (008) ----------
   chipRow: {

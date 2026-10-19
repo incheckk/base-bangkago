@@ -165,6 +165,10 @@ export default function SailingScreen() {
   const unpaid = activeBookings.filter((b) => payments[b.bookingId]?.paymentStatus !== 'completed');
   const allPaid = activeBookings.length > 0 && unpaid.length === 0;
   const parcelsHere = parcels.data.filter((p) => bookingIds.includes(p.bookingId));
+  // Cargo bookings are not passengers — count only ride pax for the summary.
+  const paxCount = activeBookings
+    .filter((b) => b.serviceType !== 'cargo')
+    .reduce((sum, b) => sum + b.numOfPassenger, 0);
 
   return (
     <ScreenContainer padded={false}>
@@ -179,7 +183,8 @@ export default function SailingScreen() {
           <Text style={styles.day}>{sailingDayLabel(sailing.day)}</Text>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
-              {activeBookings.length} booking{activeBookings.length === 1 ? '' : 's'} · {sailing.pax} pax
+              {activeBookings.length} booking{activeBookings.length === 1 ? '' : 's'}
+              {paxCount > 0 ? ` · ${paxCount} pax` : ''}
             </Text>
             {sailing.inProgress && (
               <View style={styles.chipLive}>
@@ -193,6 +198,8 @@ export default function SailingScreen() {
         {sailing.bookings.map((b) => {
           const companions = details[b.bookingId] ?? [];
           const payment = payments[b.bookingId];
+          const isCargo = b.serviceType === 'cargo';
+          const parcelForBooking = parcels.data.find((p) => p.bookingId === b.bookingId);
           return (
             <View key={b.bookingId} style={styles.bookingCard}>
               <View style={styles.bookingTop}>
@@ -207,7 +214,12 @@ export default function SailingScreen() {
                 {b.passengerPhone ? ` · ${formatPhone(b.passengerPhone)}` : ''}
               </Text>
               <Text style={styles.bookingMeta} numberOfLines={1}>
-                {b.numOfPassenger} pax · ₱{b.totalPrice}
+                {isCargo
+                  ? parcelForBooking
+                    ? parcelMode(parcelForBooking)
+                    : `${b.numOfPassenger} parcel${b.numOfPassenger === 1 ? '' : 's'}`
+                  : `${b.numOfPassenger} pax`}{' '}
+                · ₱{b.totalPrice}
                 {b.packageId ? ' · Island hop' : ''}
                 {payment ? ` · ${METHOD_LABELS[payment.paymentMethod] ?? payment.paymentMethod}` : ''}
               </Text>
@@ -316,13 +328,22 @@ export default function SailingScreen() {
   );
 }
 
+/** Cargo display token: mode + weight, not a passenger count.
+ *  accompanied = the sender rides along; the rest are cargo-only. */
+function parcelMode(parcel: ParcelDoc): string {
+  const mode = parcel.deliveryType ?? 'accompanied';
+  if (mode === 'accompanied') return '1 pax · accompanied';
+  const weight = parcel.totalWeightKg != null ? `${parcel.totalWeightKg}kg · ` : '';
+  return `${weight}${mode}`;
+}
+
 function ParcelRow({ parcel }: { parcel: ParcelDoc }) {
   return (
     <View style={styles.parcelCard}>
       <View style={styles.parcelBody}>
         <Text style={styles.parcelName} numberOfLines={1}>{parcel.receiverName}</Text>
         <Text style={styles.parcelMeta} numberOfLines={1}>
-          ₱{parcel.totalPrice} · {parcel.status.replace('_', ' ')}
+          ₱{parcel.totalPrice} · {parcelMode(parcel)} · {parcel.status.replace('_', ' ')}
         </Text>
       </View>
     </View>

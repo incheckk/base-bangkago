@@ -18,9 +18,10 @@ import {
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
+import { getParcelByBooking } from '@/services/parcel.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { IslandPackageDoc, PassengerDetailDoc } from '@/types/models';
+import type { IslandPackageDoc, ParcelDoc, PassengerDetailDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { safeBack } from '@/utils/navigation';
 
@@ -67,6 +68,20 @@ export default function BookingStatus() {
       });
     return () => { alive = false; };
   }, [bookingId, noShowDone]);
+
+  // Cargo (Option B): the sender's booking carries no receiver data — read
+  // it off the parcel so the crew sees who to hand the cargo to.
+  const [parcel, setParcel] = useState<ParcelDoc | null>(null);
+  useEffect(() => {
+    if (!bookingId) return;
+    let alive = true;
+    getParcelByBooking(bookingId)
+      .then((p) => { if (alive) setParcel(p); })
+      .catch(() => {
+        // receiver info stays hidden; the booking text still renders
+      });
+    return () => { alive = false; };
+  }, [bookingId]);
 
   // Optimistic boarding state; the server value catches up through realtime.
   const [boardOverride, setBoardOverride] = useState<boolean | null>(null);
@@ -270,6 +285,8 @@ export default function BookingStatus() {
   }
 
   const isCargo = booking?.serviceType === 'cargo';
+  // A cargo booking carries one parcel row; null keeps the "?? 1" fallback.
+  const parcelCount = parcel ? 1 : null;
 
   async function handleAccept() {
     if (!uid || !booking) return;
@@ -453,12 +470,22 @@ export default function BookingStatus() {
             )}
 
             <View style={styles.card}>
-              <Text style={styles.cardLabel}>PASSENGER INFO</Text>
-              <Text style={styles.cardValue} numberOfLines={1}>{booking.passengerName ?? 'N/A'}</Text>
-              <Text style={styles.cardSub}>
-                {booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
+              <Text style={styles.cardLabel}>{isCargo ? 'RECEIVER / CARGO INFO' : 'PASSENGER INFO'}</Text>
+              <Text style={styles.cardValue} numberOfLines={1}>
+                {isCargo
+                  ? parcel?.receiverName ?? booking.passengerName ?? 'N/A'
+                  : booking.passengerName ?? 'N/A'}
               </Text>
-              <Text style={styles.cardSub} numberOfLines={1}>{booking.numOfPassenger} pax · ₱{booking.totalPrice}</Text>
+              <Text style={styles.cardSub}>
+                {isCargo
+                  ? parcel?.receiverContact ? formatPhone(parcel.receiverContact) : ''
+                  : booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
+              </Text>
+              <Text style={styles.cardSub} numberOfLines={1}>
+                {isCargo
+                  ? `${parcelCount ?? 1} parcel${(parcelCount ?? 1) === 1 ? '' : 's'} · ₱${booking.totalPrice}`
+                  : `${booking.numOfPassenger} pax · ₱${booking.totalPrice}`}
+              </Text>
             </View>
 
             {!!actionError && (
@@ -485,7 +512,7 @@ export default function BookingStatus() {
                   </View>
                   <View style={styles.boardText}>
                     <Text style={styles.boardName} numberOfLines={1}>
-                      {booking.passengerName ?? 'Passengers'}
+                      {isCargo ? 'Cargo' : booking.passengerName ?? 'Passengers'}
                     </Text>
                     <Text style={styles.boardSub}>
                       {isCargo
@@ -524,12 +551,16 @@ export default function BookingStatus() {
                     </View>
                   </Pressable>
                 ))}
-                <PrimaryButton
-                  label="Scan boarding QR"
-                  variant="secondary"
-                  onPress={() => void openScanner()}
-                  style={styles.scanBtn}
-                />
+                {/* Cargo has no boarding pass to scan — the loaded checkbox
+                    is the whole gate. */}
+                {!isCargo && (
+                  <PrimaryButton
+                    label="Scan boarding QR"
+                    variant="secondary"
+                    onPress={() => void openScanner()}
+                    style={styles.scanBtn}
+                  />
+                )}
               </View>
             )}
 
@@ -608,8 +639,9 @@ export default function BookingStatus() {
                         ? 'Tick every passenger who is aboard to start the trip.'
                         : 'Confirm everyone is on board to start the trip.'}
                 </Text>
-                {/* Nobody missed a boat that has not left yet. */}
-                {!advanceLocked && (
+                {/* Nobody missed a boat that has not left yet. Cargo has no
+                    passenger to no-show — hide it for cargo bookings. */}
+                {!advanceLocked && !isCargo && (
                   <PrimaryButton
                     label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
                     variant="danger"

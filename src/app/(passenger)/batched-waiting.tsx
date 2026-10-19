@@ -6,6 +6,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { bumpBatchCycle } from '@/services/parcel-batching.service';
+import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing } from '@/theme/tokens';
 
@@ -84,12 +85,12 @@ export default function BatchedWaiting() {
                   // Immediately sail: flip status to solo with surcharge
                   await supabase
                     .from('parcels')
-                    .update({ batching_status: 'solo', solo_surcharge: 150 })
+                    .update({ batching_status: 'solo', solo_surcharge: PARCEL_RATES.soloSurcharge })
                     .eq('id', parcelId);
                   void load();
                 }}
               >
-              <Text style={styles.primaryBtnText}>Pay ₱150 and sail now (coming soon)</Text>
+              <Text style={styles.primaryBtnText}>Pay ₱{PARCEL_RATES.soloSurcharge} and sail now (coming soon)</Text>
             </Pressable>
               <Pressable
                 style={styles.secondaryBtn}

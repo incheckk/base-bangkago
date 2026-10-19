@@ -109,6 +109,12 @@ interface CreateArgs {
   /** Sailing date (YYYY-MM-DD) and slot; future dates escrow first (020). */
   scheduledDate?: string;
   scheduledTime?: string;
+  /**
+   * Option B (045): false = parcel-mode stub (piggyback/batched/solo) —
+   * hidden from FCFS holds and accept gates. Defaults true so every
+   * pre-045 caller behaves unchanged.
+   */
+  isDispatchable?: boolean;
 }
 
 /** Advance = sailing date after today (Manila). Needs the 50% escrow. */
@@ -125,7 +131,7 @@ export function isAdvanceDate(scheduledDate?: string | null): boolean {
  */
 export async function createBooking({
   passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare, packageId,
-  scheduledDate, scheduledTime,
+  scheduledDate, scheduledTime, isDispatchable,
 }: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
@@ -151,27 +157,49 @@ export async function createBooking({
     throw new Error('Pick a departure time for your sailing date.');
   }
 
-  const { data, error } = await supabase
+  const bookingFields: Record<string, unknown> = {
+    user_id: passenger.uid,
+    passenger_name: `${passenger.firstName} ${passenger.lastName}`.trim(),
+    passenger_phone: passenger.phone,
+    from_port_name: fromPort.portName,
+    to_port_name: toPort.portName,
+    num_of_passenger: passengerCount,
+    total_price: totalPrice,
+    route_id: route.routeId,
+    service_type: serviceType,
+    trip_stat: advance ? 'pending' : 'open',
+    scheduled_date: scheduledDate ?? null,
+    scheduled_time: advance ? scheduledTime : (scheduledTime ?? null),
+    ...(packageId ? { package_id: packageId } : {}),
+  };
+
+  // Option B (045): parcel-mode stubs insert is_dispatchable=false; every
+  // other booking (incl. pre-045 callers) defaults to the real crossing.
+  let { data, error } = await supabase
     .from('bookings')
-    .insert({
-      user_id: passenger.uid,
-      passenger_name: `${passenger.firstName} ${passenger.lastName}`.trim(),
-      passenger_phone: passenger.phone,
-      from_port_name: fromPort.portName,
-      to_port_name: toPort.portName,
-      num_of_passenger: passengerCount,
-      total_price: totalPrice,
-      route_id: route.routeId,
-      service_type: serviceType,
-      trip_stat: advance ? 'pending' : 'open',
-      scheduled_date: scheduledDate ?? null,
-      scheduled_time: advance ? scheduledTime : (scheduledTime ?? null),
-      ...(packageId ? { package_id: packageId } : {}),
-    })
+    .insert({ ...bookingFields, is_dispatchable: isDispatchable ?? true })
     .select('id, ref')
     .single();
 
+  // A pre-045 schema has no is_dispatchable column — PostgREST rejects the
+  // insert. Retry without it so booking creation still works.
+  if (error && (error.code === 'PGRST204' || /is_dispatchable/i.test(error.message ?? ''))) {
+    if (__DEV__) {
+      console.warn(
+        '[booking] is_dispatchable column missing (pre-045). Booking continues without it.'
+      );
+    }
+    ({ data, error } = await supabase
+      .from('bookings')
+      .insert(bookingFields)
+      .select('id, ref')
+      .single());
+  }
+
   if (error) throw error;
+  // `.single()` can still surface null on an empty result; `let` also drops
+  // the response-union narrowing, so pin it explicitly.
+  if (!data) throw new Error('Booking could not be created.');
 
   // FCFS dispatch: hand the request its first 3-minute hold (008).
   // Skipped for advance rows — no hold exists until the admin flips

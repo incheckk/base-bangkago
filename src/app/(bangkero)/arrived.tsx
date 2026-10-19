@@ -25,6 +25,15 @@ const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelSta
   in_transit: { label: 'Mark Delivered', next: 'delivered' },
 };
 
+/** Cargo display token: mode + weight, not a passenger count.
+ *  accompanied = the sender rides along; the rest are cargo-only. */
+function parcelMode(parcel: ParcelDoc): string {
+  const mode = parcel.deliveryType ?? 'accompanied';
+  if (mode === 'accompanied') return '1 pax · accompanied';
+  const weight = parcel.totalWeightKg != null ? `${parcel.totalWeightKg}kg · ` : '';
+  return `${weight}${mode}`;
+}
+
 export default function ArrivedScreen() {
   // Post-transaction screen — back would walk into departure and re-run the
   // depart/notify flow. Only the explicit buttons leave.
@@ -260,7 +269,7 @@ export default function ArrivedScreen() {
                           {p.status.replace('_', ' ')}
                         </Text>
                       </View>
-                      <Text style={styles.parcelMeta}>₱{p.totalPrice}</Text>
+                      <Text style={styles.parcelMeta}>₱{p.totalPrice} · {parcelMode(p)}</Text>
                       {step && (
                         <PrimaryButton
                           label={step.label}

@@ -18,18 +18,27 @@ export const BATCH_MAX_CYCLES = 3;
 export const BATCH_THRESHOLD = 2;
 
 /**
- * Compute a route key for batching. Format: {from}__{to}-HHMM
- * where HHMM is the target crossing time.
+ * Local YYYYMMDD key for the crossing day. Batching route keys are
+ * day-scoped so stale queues from a previous day can never be counted.
+ */
+function ymd(date: Date): string {
+  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Compute a route key for batching. Format: {from}__{to}-HHMM-YYYYMMDD
+ * where HHMM is the target crossing time and YYYYMMDD its sailing day.
  */
 export function computeBatchingRouteKey(params: {
   fromPortId: string;
   toPortId: string;
   crossingHour: number;
   crossingMinute: number;
+  date?: string;
 }): string {
   const hh = String(params.crossingHour).padStart(2, '0');
   const mm = String(params.crossingMinute).padStart(2, '0');
-  return `${params.fromPortId}__${params.toPortId}-${hh}${mm}`;
+  return `${params.fromPortId}__${params.toPortId}-${hh}${mm}-${params.date ?? ymd(new Date())}`;
 }
 
 /**
@@ -92,6 +101,7 @@ export async function assignToBatch(params: {
     toPortId: params.toPortId,
     crossingHour: crossing.getHours(),
     crossingMinute: crossing.getMinutes(),
+    date: ymd(crossing),
   });
 
   const { error } = await supabase
@@ -137,60 +147,49 @@ export async function assignToBatch(params: {
 /**
  * Count parcels currently in the same batch queue (excluding self).
  */
-export async function listBatchPartners(routeKey: string): Promise<ParcelDoc[]> {
-  const { data, error } = await supabase
+export async function listBatchPartners(
+  routeKey: string,
+  excludeParcelId?: string
+): Promise<ParcelDoc[]> {
+  let query = supabase
     .from('parcels')
     .select('*')
     .eq('batching_route_key', routeKey)
-    .eq('batching_status', 'pending_batch');
+    .eq('batching_status', 'pending_batch')
+    .eq('status', 'pending');
+
+  if (excludeParcelId) query = query.neq('id', excludeParcelId);
+
+  const { data, error } = await query;
 
   if (error || !data) return [];
   return data as ParcelDoc[]; // approximate — full mapRow not needed here
 }
 
 /**
- * Resolve the outcome of a batch at its deadline.
- * If batchedCount >= BATCH_THRESHOLD: mark as batched (no solo fee).
- * If solo: leave batching_status='pending_batch' but signal sender.
- * Returns whether solo fee applies.
+ * Resolve the outcome of a batch at its deadline (054).
+ * Delegates to resolve_batch_rpc, which creates ONE shared batch
+ * booking for the route and relinks every pending parcel to it.
+ * Returns the batch booking id when batched, or NULL when the route is
+ * below the threshold (solo path).
  */
 export async function resolveBatchOutcome(
-  parcelId: string,
+  _parcelId: string,
   routeKey: string
 ): Promise<{ batchedCount: number; isSolo: boolean }> {
-  const partners = await listBatchPartners(routeKey);
-  const batchedCount = partners.length;
-  const isSolo = batchedCount < BATCH_THRESHOLD;
+  const { data, error } = await supabase.rpc('resolve_batch_rpc', {
+    p_route_key: routeKey,
+    p_min_count: BATCH_THRESHOLD,
+  });
 
-  if (!isSolo) {
-    await supabase
-      .from('parcels')
-      .update({
-        batching_status: 'batched',
-        batched_count_at_sail: batchedCount,
-      })
-      .eq('id', parcelId);
-
-    // Option B (045): each batched parcel carries its own stub for now —
-    // a future migration may unify to a single crossing booking. The stub
-    // stays is_dispatchable=false, so no bangkero interference. Best-effort;
-    // a missing column is skipped (pre-045 schema).
-    const { data: own } = await supabase
-      .from('parcels')
-      .select('booking_id')
-      .eq('id', parcelId)
-      .maybeSingle();
-    if (own?.booking_id) {
-      const { error: carrierErr } = await supabase
-        .from('parcels')
-        .update({ carrier_booking_id: own.booking_id })
-        .eq('id', parcelId);
-      if (carrierErr && __DEV__) {
-        console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
-      }
+  if (error || !data) {
+    if (error && __DEV__) {
+      console.warn('[parcel] resolve_batch_rpc skipped:', error.message);
     }
+    return { batchedCount: 0, isSolo: true };
   }
-  return { batchedCount, isSolo };
+
+  return { batchedCount: BATCH_THRESHOLD, isSolo: false };
 }
 
 /**

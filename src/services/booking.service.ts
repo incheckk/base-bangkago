@@ -237,6 +237,23 @@ export async function acceptBooking(
   bookingId: string,
   bangkero: Pick<BangkeroDoc, 'uid' | 'displayName'>
 ): Promise<void> {
+  // Solo parcel stubs are minted non-dispatchable (050) so they never enter
+  // the FCFS pool. RLS blocks the bangkero from reading the parcel pre-accept,
+  // so we blindly ask the SECURITY DEFINER RPC to claim it: it safely verifies
+  // the booking and raises for anything that is not a solo parcel, which we
+  // swallow before running the normal accept flow.
+  try {
+    if (__DEV__) console.log('[booking] Attempting solo claim for:', bookingId);
+    const { error: soloError } = await supabase.rpc('bangkero_claim_solo', {
+      p_booking_id: bookingId,
+    });
+    if (soloError && __DEV__) {
+      console.log('[booking] Not a solo parcel (expected for others):', soloError.message);
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Solo claim exception:', e);
+  }
+
   // Documents + rating are enforced inside the RPC (010) so the admin
   // gates-bypass switch applies; the sentence arrives mapped through
   // friendlyError ("rating is too low", "documents are not approved").
@@ -266,6 +283,36 @@ export async function rejectBooking(bookingId: string): Promise<void> {
 export async function completeBooking(bookingId: string): Promise<void> {
   const { error } = await supabase.rpc('complete_trip', { p_booking_id: bookingId });
   if (error) throw error;
+
+  // Best-effort: auto-deliver every parcel attached to this booking —
+  // piggyback riders, Option B carriers, and accompanied cargo.
+  // Never blocks completion — a parcel-sync failure is only logged.
+  try {
+    const deliveredAt = new Date().toISOString();
+    const { error: parcelError } = await supabase
+      .from('parcels')
+      .update({ status: 'delivered', actual_arrival_at: deliveredAt })
+      .or(
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+      );
+
+    if (parcelError) {
+      if (__DEV__) {
+        console.warn('[booking] Failed to auto-deliver attached parcels:', parcelError.message);
+      }
+      // Pre-050 has no carrier_booking_id column — retry on the keys that
+      // always exist so accompanied and piggyback parcels still close out.
+      const { error: fallbackError } = await supabase
+        .from('parcels')
+        .update({ status: 'delivered', actual_arrival_at: deliveredAt })
+        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+      if (fallbackError && __DEV__) {
+        console.warn('[booking] Parcel delivery sync failed:', fallbackError.message);
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Parcel delivery sync failed:', e);
+  }
 }
 
 /**
@@ -288,6 +335,34 @@ export async function stampBookingDepart(bookingId: string): Promise<void> {
     p_booking_id: bookingId,
   });
   if (error) throw error;
+
+  // Best-effort: attached parcels are now under way. A parcel-sync failure
+  // must never stop the boat from sailing — it is only logged.
+  try {
+    const { error: parcelError } = await supabase
+      .from('parcels')
+      .update({ status: 'in_transit' })
+      .or(
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+      );
+
+    if (parcelError) {
+      if (__DEV__) {
+        console.warn('[booking] Failed to mark attached parcels in_transit:', parcelError.message);
+      }
+      // Pre-050 has no carrier_booking_id column — retry without it so
+      // accompanied and piggyback parcels still move to in_transit.
+      const { error: fallbackError } = await supabase
+        .from('parcels')
+        .update({ status: 'in_transit' })
+        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+      if (fallbackError && __DEV__) {
+        console.warn('[booking] Parcel in_transit sync failed:', fallbackError.message);
+      }
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[booking] Parcel in_transit sync failed:', e);
+  }
 }
 
 /**

@@ -16,12 +16,13 @@ import { getDownpaymentByBooking } from '@/services/downpayment.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
 import { getPaymentByBooking } from '@/services/payment.service';
-import { getParcelByBooking } from '@/services/parcel.service';
+import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.service';
 import { startPortOf } from '@/services/queue.service';
 import {
   PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
 } from '@/services/rating.service';
 import { createAlert } from '@/services/safety-alert.service';
+import { supabase } from '@/services/supabase';
 import { getLatestPositionForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { DownpaymentDoc, IslandPackageDoc, ParcelDoc, PaymentDoc } from '@/types/models';
@@ -30,6 +31,20 @@ import { formatPhone } from '@/utils/phone';
 const PAYMENT_LABELS: Record<string, string> = {
   cash: 'Pay onboard to the bangkero',
   gcash: 'Pay via GCash on board',
+};
+
+const DELIVERY_MODE_LABELS: Record<string, string> = {
+  accompanied: 'Accompanied',
+  piggyback: 'Piggyback',
+  batched: 'Batched',
+  solo: 'Solo',
+};
+
+const PARCEL_STATUS: Record<ParcelDoc['status'], { text: string; fg: string; bg: string }> = {
+  pending: { text: 'Awaiting Pickup', fg: colors.warning, bg: colors.warningTint },
+  in_transit: { text: 'In Transit', fg: colors.primary, bg: colors.primaryTint },
+  delivered: { text: 'Delivered', fg: colors.success, bg: colors.successTint },
+  returned: { text: 'Returned', fg: colors.danger, bg: colors.dangerTint },
 };
 
 /** The escape valve opens this long after the bangkero accepts. */
@@ -63,6 +78,8 @@ export default function BookingDetail() {
   const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
   // Cargo bookings carry their parcel inline — receiver + mode rows.
   const [parcel, setParcel] = useState<ParcelDoc | null>(null);
+  // A piggyback parcel riding on this booking (someone else's cargo).
+  const [attachedParcel, setAttachedParcel] = useState<ParcelDoc | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -116,6 +133,37 @@ export default function BookingDetail() {
       .catch(() => {
         // fare row still shows without the receiver
       });
+    return () => {
+      alive = false;
+    };
+  }, [id, booking?.serviceType]);
+
+  // A piggyback parcel rides with this passenger booking — surface its status.
+  useEffect(() => {
+    if (!id || booking?.serviceType === 'cargo') return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error: qError } = await supabase
+          .from('parcels')
+          .select('*')
+          .or(`piggyback_booking_id.eq.${id},carrier_booking_id.eq.${id}`)
+          .maybeSingle();
+        if (qError) {
+          // Pre-050 has no carrier_booking_id column — retry on the piggyback key.
+          const { data: fallback } = await supabase
+            .from('parcels')
+            .select('*')
+            .eq('piggyback_booking_id', id)
+            .maybeSingle();
+          if (alive) setAttachedParcel(fallback ? mapParcelRow(fallback) : null);
+          return;
+        }
+        if (alive) setAttachedParcel(data ? mapParcelRow(data) : null);
+      } catch {
+        // the ride still renders without the attached parcel
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -386,6 +434,10 @@ export default function BookingDetail() {
     );
   }
 
+  // Cargo bookings mirror the parcel's own delivery state, not the stub
+  // booking's FCFS status.
+  const shownParcel = booking.serviceType === 'cargo' ? parcel : attachedParcel;
+
   return (
     <ScreenContainer padded={false}>
       <PassengerScreenHeader title="Booking Details" showDrawer={false} />
@@ -396,7 +448,15 @@ export default function BookingDetail() {
           <Text style={styles.ref}>
             {booking.status === 'pending' ? 'Advance booking' : booking.ref}
           </Text>
-          <StatusPill status={booking.status} />
+          {booking.serviceType === 'cargo' && parcel ? (
+            <View style={[styles.statusPill, { backgroundColor: PARCEL_STATUS[parcel.status].bg }]}>
+              <Text style={[styles.statusPillText, { color: PARCEL_STATUS[parcel.status].fg }]}>
+                {PARCEL_STATUS[parcel.status].text}
+              </Text>
+            </View>
+          ) : (
+            <StatusPill status={booking.status} />
+          )}
         </View>
 
         {booking.status === 'pending' && (
@@ -500,6 +560,18 @@ export default function BookingDetail() {
           )}
         </View>
 
+        {!!shownParcel && (
+          <View style={styles.parcel}>
+            <Text style={styles.parcelLabel}>PARCEL STATUS</Text>
+            <Row label="Receiver" value={shownParcel.receiverName} />
+            <Row
+              label="Delivery mode"
+              value={DELIVERY_MODE_LABELS[shownParcel.deliveryType ?? ''] ?? '—'}
+            />
+            <Row label="Status" value={PARCEL_STATUS[shownParcel.status].text} strong />
+          </View>
+        )}
+
         {!!actionError && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{actionError}</Text>
@@ -529,6 +601,19 @@ export default function BookingDetail() {
                   ? `Waiting for a bangkero — ${waitQueue.data.length} boat${waitQueue.data.length === 1 ? '' : 's'} waiting at ${booking.fromPortName}. This updates on its own.`
                   : 'Waiting for a bangkero to accept. This updates on its own.'}
               </Text>
+              {shownParcel?.deliveryType === 'batched' &&
+                shownParcel.batchingStatus === 'pending_batch' && (
+                  <PrimaryButton
+                    label="View Batching Countdown"
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(passenger)/batched-waiting',
+                        params: { parcelId: shownParcel.parcelId },
+                      })
+                    }
+                    style={styles.batchingLink}
+                  />
+                )}
               <PrimaryButton label="Cancel booking" variant="danger" onPress={cancel} loading={busy} disabled={acted} />
             </>
           )}
@@ -657,6 +742,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl, gap: spacing.md,
   },
   ref: { flexShrink: 1, ...typography.h2, letterSpacing: 1 },
+  statusPill: {
+    alignSelf: 'flex-start', paddingHorizontal: spacing.md,
+    paddingVertical: 5, borderRadius: radii.pill,
+  },
+  statusPillText: { fontSize: 12, fontWeight: '700' },
 
   pendingBanner: {
     backgroundColor: colors.warningTint,
@@ -700,6 +790,16 @@ const styles = StyleSheet.create({
   itineraryLabel: { ...typography.label, marginBottom: spacing.sm },
   itineraryStop: { ...typography.caption, color: colors.text, fontWeight: '600', lineHeight: 20 },
 
+  parcel: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.lg,
+  },
+  parcelLabel: { ...typography.label, marginBottom: spacing.sm },
+
   operator: {
     marginTop: spacing.lg,
     backgroundColor: colors.primaryTint,
@@ -738,6 +838,7 @@ const styles = StyleSheet.create({
   actions: { marginTop: spacing.xl },
   waiting: { ...typography.caption, textAlign: 'center', marginBottom: spacing.lg, lineHeight: 18 },
   secondaryAction: { marginTop: spacing.md },
+  batchingLink: { marginTop: spacing.md, marginBottom: spacing.md },
   escapeWait: {
     ...typography.caption,
     color: colors.textMuted,

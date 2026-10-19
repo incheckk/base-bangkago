@@ -63,6 +63,19 @@ Section [E] carries the P2 security debt moved out of that pass.
    monitor-fleet's vessel panel. Wire real routing/ETA only if a demo
    script needs it.
 
+8. BATCHED PARCEL RESOLUTION IS CLIENT-TRIGGERED (Parcel Padala 054)
+   A batched parcel's shared crossing booking is created by
+   resolve_batch_rpc when the batch window closes. Today the trigger is
+   a client-side deadline check in (passenger)/batched-waiting.tsx
+   (fired from load(): mount, 15s poll, realtime/focus). If every
+   sender closes the app before the 1-hour deadline - Expo Go pauses
+   JS while backgrounded - the batch never resolves: parcels stay
+   pending_batch, the sailing manifest misses them, and completion only
+   auto-delivers the parcel whose stub was linked. The RPC is
+   idempotent, so a late call is safe - the batch is delayed, not lost.
+   Production fix: a server-side scheduled job (pg_cron) that calls
+   resolve_batch_rpc for every route key with an expired deadline.
+
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
 B1. BACKGROUND GPS TRACKING
@@ -193,6 +206,19 @@ C9. ADMIN APPROVE GUARD ON EMPTY SUBMISSIONS — stored, NOT built
     If revived: disable approve + show a warning on the downpayments
     modal when row.proofUrl is empty (mobile (admin)/downpayments.tsx
     and web downpayments.html).
+
+C10. BATCHED/SOLO PARCELS COUNT AS 0 ON THE MANIFEST SCREEN (2026-10-20)
+     Deferred to 2026-10-21. (bangkero)/manifest.tsx builds
+     sailing.parcelCount via utils/sailings.ts buildSailings, which
+     attaches parcels ONLY by parcel.bookingId. For batched/solo parcels
+     that is their own stub (operator_id NULL), not the accepted carrier
+     booking, so the count stays 0 even though getParcelsForBangkero
+     returns them via carrier_booking_id. ParcelDoc has no
+     carrierBookingId field (models.ts; mapRow in parcel.service.ts omits
+     it). Fix: map carrier_booking_id into ParcelDoc and make
+     buildSailings fall back to carrierBookingId (then
+     piggybackBookingId) when bookingId is not one of the bangkero's
+     trips.
 
 [E] P2 SECURITY DEBT — deferred out of the post-4C fix pass
 --------------------------------------------------------------------------------

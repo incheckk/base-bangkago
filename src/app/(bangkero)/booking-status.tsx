@@ -18,15 +18,20 @@ import {
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
-import { getParcelByBooking } from '@/services/parcel.service';
+import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
+import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { IslandPackageDoc, ParcelDoc, PassengerDetailDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { safeBack } from '@/utils/navigation';
 
 export default function BookingStatus() {
-  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
+  // Expo Router can hand back an array for a repeated param; take the first
+  // string so `.eq()` / `.or()` interpolation is always a clean id.
+  const rawId = params.bookingId;
+  const bookingId = (Array.isArray(rawId) ? rawId[0] : rawId) ?? '';
   const { user } = useAuth();
   const { data: booking, loading, error } = useBooking(bookingId ?? null);
   const bangkero = useBangkero(user?.id ?? null);
@@ -80,6 +85,43 @@ export default function BookingStatus() {
       .catch(() => {
         // receiver info stays hidden; the booking text still renders
       });
+    return () => { alive = false; };
+  }, [bookingId]);
+
+  // Riding-along parcels for this booking: matched by carrier_booking_id
+  // (045) or piggyback_booking_id (pre-045). A pre-045 schema has no carrier
+  // column, so the combined query fails — fall back to the piggyback key
+  // rather than losing the section entirely.
+  const [attachedParcels, setAttachedParcels] = useState<ParcelDoc[]>([]);
+  useEffect(() => {
+    if (!bookingId) { setAttachedParcels([]); return; }
+    let alive = true;
+    (async () => {
+      if (__DEV__) console.log('[cargo-debug] Fetching parcels for bookingId:', bookingId);
+      const combined = await supabase
+        .from('parcels')
+        .select('*')
+        .or(`piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId}`);
+      if (!alive) return;
+      if (__DEV__) console.log('[cargo-debug] Attached parcels found:', combined.data?.length ?? 0);
+      if (!combined.error) {
+        setAttachedParcels((combined.data ?? []).map(mapParcelRow));
+        return;
+      }
+      if (__DEV__) {
+        console.warn('[parcel] attached-parcel carrier query skipped:', combined.error.message);
+      }
+      const fallback = await supabase
+        .from('parcels')
+        .select('*')
+        .eq('piggyback_booking_id', bookingId);
+      if (!alive) return;
+      if (!fallback.error) {
+        setAttachedParcels((fallback.data ?? []).map(mapParcelRow));
+      }
+    })().catch(() => {
+      if (alive) setAttachedParcels([]);
+    });
     return () => { alive = false; };
   }, [bookingId]);
 
@@ -487,6 +529,26 @@ export default function BookingStatus() {
                   : `${booking.numOfPassenger} pax · ₱${booking.totalPrice}`}
               </Text>
             </View>
+
+            {attachedParcels.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.cardLabel}>
+                  {isCargo ? 'CARGO ON BOARD' : 'RIDING ALONG PARCELS'}
+                </Text>
+                {attachedParcels.map((p) => (
+                  <View key={p.parcelId} style={styles.boardRow}>
+                    <Icon name="parcel" size={16} color={colors.primary} />
+                    <View style={styles.boardText}>
+                      <Text style={styles.boardName} numberOfLines={1}>{p.receiverName}</Text>
+                      <Text style={styles.boardSub} numberOfLines={1}>
+                        {p.totalWeightKg != null ? `${p.totalWeightKg} kg · ` : ''}
+                        {p.deliveryType ?? 'accompanied'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {!!actionError && (
               <View style={styles.banner}>

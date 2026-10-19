@@ -219,42 +219,39 @@ export default function BookDelivery() {
         />
 
         <Text style={[styles.sectionLabel, styles.mt]}>DELIVERY MODE</Text>
-        <View style={styles.fareRow}>
-          <Text style={styles.fareLabel}>Delivery mode</Text>
-          <View style={styles.modeRow}>
-            <Pressable
-              onPress={() => setDeliveryMode('accompanied')}
-              style={[styles.modeChip, deliveryMode === 'accompanied' && styles.modeChipActive]}
-            >
-              <Text style={[styles.modeChipText, deliveryMode === 'accompanied' && styles.modeChipTextActive]}>
-                I&apos;ll ride along
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeliveryMode('piggyback')}
-              style={[styles.modeChip, deliveryMode === 'piggyback' && styles.modeChipActive]}
-            >
-              <Text style={[styles.modeChipText, deliveryMode === 'piggyback' && styles.modeChipTextActive]}>
-                Send with a passenger
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeliveryMode('batched')}
-              style={[styles.modeChip, deliveryMode === 'batched' && styles.modeChipActive]}
-            >
-              <Text style={[styles.modeChipText, deliveryMode === 'batched' && styles.modeChipTextActive]}>
-                Batched (wait up to 1hr)
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeliveryMode('solo')}
-              style={[styles.modeChip, deliveryMode === 'solo' && styles.modeChipActive]}
-            >
-              <Text style={[styles.modeChipText, deliveryMode === 'solo' && styles.modeChipTextActive]}>
-                Solo (immediate)
-              </Text>
-            </Pressable>
-          </View>
+        <View style={styles.modeRow}>
+          <Pressable
+            onPress={() => setDeliveryMode('accompanied')}
+            style={[styles.modeChip, deliveryMode === 'accompanied' && styles.modeChipActive]}
+          >
+            <Text style={[styles.modeChipText, deliveryMode === 'accompanied' && styles.modeChipTextActive]}>
+              I&apos;ll ride along
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setDeliveryMode('piggyback')}
+            style={[styles.modeChip, deliveryMode === 'piggyback' && styles.modeChipActive]}
+          >
+            <Text style={[styles.modeChipText, deliveryMode === 'piggyback' && styles.modeChipTextActive]}>
+              Send with a passenger
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setDeliveryMode('batched')}
+            style={[styles.modeChip, deliveryMode === 'batched' && styles.modeChipActive]}
+          >
+            <Text style={[styles.modeChipText, deliveryMode === 'batched' && styles.modeChipTextActive]}>
+              Batched (wait up to 1hr)
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setDeliveryMode('solo')}
+            style={[styles.modeChip, deliveryMode === 'solo' && styles.modeChipActive]}
+          >
+            <Text style={[styles.modeChipText, deliveryMode === 'solo' && styles.modeChipTextActive]}>
+              Solo (immediate)
+            </Text>
+          </Pressable>
         </View>
 
         {deliveryMode === 'piggyback' && (

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
-import { bumpBatchCycle } from '@/services/parcel-batching.service';
+import { BATCH_THRESHOLD, bumpBatchCycle } from '@/services/parcel-batching.service';
 import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing } from '@/theme/tokens';
@@ -18,6 +19,9 @@ export default function BatchedWaiting() {
   const [partners, setPartners] = useState(0);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(Date.now());
+  // Guards the one-shot deadline resolve against re-entry from the poll,
+  // the realtime subscription and the 1s tick firing load() together.
+  const resolveTriggeredRef = useRef(false);
 
   // Tick every second for countdown
   useEffect(() => {
@@ -31,31 +35,100 @@ export default function BatchedWaiting() {
     if (data) {
       setParcel(data);
       if (data.batching_route_key) {
-        const { count } = await supabase
-          .from('parcels')
-          .select('id', { count: 'exact', head: true })
-          .eq('batching_route_key', data.batching_route_key)
-          .eq('batching_status', 'pending_batch');
-        setPartners(Math.max(0, (count ?? 1) - 1)); // exclude self
+        const { data: partnerCount } = await supabase.rpc('get_batch_partner_count', {
+          p_route_key: data.batching_route_key,
+          p_exclude_parcel_id: parcelId,
+        });
+        // Once resolved, the queue is empty (everyone is 'batched'), so the
+        // live count would read 0 — use the snapshot written at sail.
+        const snapshot =
+          typeof data.batched_count_at_sail === 'number'
+            ? Math.max(0, data.batched_count_at_sail - 1)
+            : null;
+        setPartners(
+          data.batching_status === 'batched' && snapshot !== null
+            ? snapshot
+            : (partnerCount ?? 0),
+        );
+
+        // Deadline check: resolve the batch once the window has closed.
+        // resolve_batch_rpc is idempotent server-side; the ref stops the
+        // poll/realtime/tick from firing it several times at once.
+        if (
+          data.batching_status === 'pending_batch' &&
+          data.batching_deadline_at &&
+          Date.now() >= new Date(data.batching_deadline_at).getTime() &&
+          !resolveTriggeredRef.current
+        ) {
+          resolveTriggeredRef.current = true;
+          const { error: resolveError } = await supabase.rpc('resolve_batch_rpc', {
+            p_route_key: data.batching_route_key,
+            p_min_count: BATCH_THRESHOLD,
+          });
+          if (resolveError) {
+            if (__DEV__) console.warn('[parcel] resolve_batch_rpc:', resolveError.message);
+            // Allow a retry on the next load.
+            resolveTriggeredRef.current = false;
+          } else {
+            setParcel((prev: any) =>
+              prev
+                ? {
+                    ...prev,
+                    batching_status: 'batched',
+                    batched_count_at_sail: (partnerCount ?? 0) + 1,
+                  }
+                : prev,
+            );
+          }
+        }
       }
     }
     setLoading(false);
   }, [parcelId]);
 
   useEffect(() => { void load(); }, [load]);
+  // Polling fallback: RLS also filters Realtime events for other senders'
+  // parcels, so the count would otherwise only refresh on focus/foreground.
+  useEffect(() => {
+    const id = setInterval(() => { void load(); }, 15_000);
+    return () => clearInterval(id);
+  }, [load]);
   useRealtimeQuery(load, parcelId ? [{ table: 'parcels' }] : []);
 
-  if (!parcelId) return <ErrorState message="Missing parcel ID" />;
-  if (loading) return <LoadingState />;
-  if (!parcel) return <ErrorState message="Parcel not found" />;
+  if (!parcelId) {
+    return (
+      <ScreenContainer padded={false}>
+        <PassengerScreenHeader title="Batched parcel" showDrawer={false} />
+        <View style={styles.body}><ErrorState message="Missing parcel ID" /></View>
+      </ScreenContainer>
+    );
+  }
+  if (loading) {
+    return (
+      <ScreenContainer padded={false}>
+        <PassengerScreenHeader title="Batched parcel" showDrawer={false} />
+        <View style={styles.body}><LoadingState /></View>
+      </ScreenContainer>
+    );
+  }
+  if (!parcel) {
+    return (
+      <ScreenContainer padded={false}>
+        <PassengerScreenHeader title="Batched parcel" showDrawer={false} />
+        <View style={styles.body}><ErrorState message="Parcel not found" /></View>
+      </ScreenContainer>
+    );
+  }
 
   const deadline = parcel.batching_deadline_at ? new Date(parcel.batching_deadline_at).getTime() : null;
   const secondsLeft = deadline ? Math.max(0, Math.floor((deadline - now) / 1000)) : 0;
   const isBatched = parcel.batching_status === 'batched';
 
   return (
-    <ScreenContainer padded>
-      <View style={styles.card}>
+    <ScreenContainer padded={false}>
+      <PassengerScreenHeader title="Batched parcel" showDrawer={false} />
+      <View style={styles.body}>
+        <View style={styles.card}>
         <Text style={styles.title}>Waiting for batching</Text>
         <Text style={styles.subtitle}>
           {partners > 0 ? `${partners} other parcel${partners === 1 ? '' : 's'} joined` : 'No other parcels yet'}
@@ -105,11 +178,13 @@ export default function BatchedWaiting() {
           </View>
         )}
       </View>
+      </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  body: { flex: 1, paddingHorizontal: spacing.xl },
   card: { backgroundColor: colors.surface, padding: spacing.lg, borderRadius: radii.md, marginTop: spacing.lg },
   title: { color: colors.text, fontSize: 18, fontWeight: '600' },
   subtitle: { color: colors.textMuted, marginTop: 6 },

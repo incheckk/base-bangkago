@@ -135,5 +135,8 @@ export function mapBookingRow(row: any): BookingDoc {
     cancelledAt: row.cancelled_at,
     scheduledDate: row.scheduled_date ?? null,
     scheduledTime: row.scheduled_time ?? null,
+    // ?? defaults keep this working before migrations 050/052 add the columns
+    cargoMode: row.cargo_mode ?? null,
+    isDispatchable: row.is_dispatchable ?? true,
   };
 }

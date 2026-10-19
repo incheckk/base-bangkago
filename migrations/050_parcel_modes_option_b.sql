@@ -1,5 +1,5 @@
 -- =============================================================
--- 045. PARCEL OPTION B — dispatchable flag + carrier link + RLS
+-- 050. PARCEL OPTION B — dispatchable flag + carrier link + RLS
 --
 -- Why (from the 4.13 master recon):
 --   Modes 2/3a/3b (piggyback / batched / solo) create a STUB cargo
@@ -25,7 +25,7 @@
 --      is_dispatchable = true — the bangkero then accepts it
 --      through the NORMAL FCFS path (no auto-assign).
 --
--- Run order: AFTER 044. Forward-only — never delete 002-044.
+-- Run order: AFTER 049. Forward-only — never delete 002-049.
 -- Safe to re-run (all ADDs are IF NOT EXISTS; backfills guarded).
 --
 -- Known follow-ups (NOT in this migration):
@@ -47,9 +47,9 @@ ALTER TABLE public.parcels
   ADD COLUMN IF NOT EXISTS carrier_booking_id UUID REFERENCES public.bookings(id);
 
 COMMENT ON COLUMN public.bookings.is_dispatchable IS
-  'Option B (045): false = parcel-mode stub (piggyback/batched/solo pre-sail) — invisible to FCFS holds and accept gates. Accompanied bookings stay true.';
+  'Option B (050): false = parcel-mode stub (piggyback/batched/solo pre-sail) — invisible to FCFS holds and accept gates. Accompanied bookings stay true.';
 COMMENT ON COLUMN public.parcels.carrier_booking_id IS
-  'Option B (045): the booking whose sailing this parcel rides on. Piggyback = passenger ride; batched = batch booking (set at resolveBatchOutcome); solo = create_solo_sailing() booking. Supersedes piggyback_booking_id (035).';
+  'Option B (050): the booking whose sailing this parcel rides on. Piggyback = passenger ride; batched = batch booking (set at resolveBatchOutcome); solo = create_solo_sailing() booking. Supersedes piggyback_booking_id (035).';
 
 -- -------------------------------------------------------------
 -- 2. Partial index: open dispatchable bookings only (FCFS scan)
@@ -105,7 +105,7 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Option B (045): parcel-mode stubs are not dispatchable.
+  -- Option B (050): parcel-mode stubs are not dispatchable.
   IF NOT COALESCE(v.is_dispatchable, true) THEN
     IF v.held_by IS NOT NULL OR v.hold_expires_at IS NOT NULL THEN
       UPDATE bookings SET held_by = NULL, hold_expires_at = NULL WHERE id = p_booking_id;
@@ -224,7 +224,7 @@ BEGIN
     RAISE EXCEPTION 'taken by another bangkero';
   END IF;
 
-  -- Option B (045): parcel-mode stubs cannot be accepted directly.
+  -- Option B (050): parcel-mode stubs cannot be accepted directly.
   -- Solo stubs become accept-eligible only after create_solo_sailing()
   -- flips is_dispatchable to true.
   IF NOT COALESCE(v.is_dispatchable, true) THEN

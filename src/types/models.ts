@@ -172,6 +172,10 @@ export interface BookingDoc {
   /** Sailing schedule; slot required too when the date is in the future. */
   scheduledDate: string | null; // YYYY-MM-DD
   scheduledTime: string | null; // HH:MM (07:00 | 10:00 | 13:00 | 17:00)
+  /** Cargo delivery mode mirrored from the parcel (052); NULL for non-cargo. */
+  cargoMode?: 'accompanied' | 'piggyback' | 'batched' | 'solo' | null;
+  /** False = parcel-mode stub hidden from FCFS (050). Absent pre-migration. */
+  isDispatchable?: boolean;
 }
 
 export interface PassengerDetailDoc {

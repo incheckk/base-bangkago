@@ -153,10 +153,14 @@ export interface BoardedBooking {
  * Writes the boarded passengers and parcels into the manifest children and
  * stamps departure — the data Trip Summary reports from. Insert-only and
  * idempotent: a rerun tops up missing seats instead of duplicating them.
+ *
+ * `stampDeparture: false` lets the Finalize action snapshot the children
+ * without recording an actual departure time (handleDepart stamps it).
  */
 export async function populateManifestDeparture(
   manifest: TripManifest,
   boarded: BoardedBooking[],
+  opts: { stampDeparture?: boolean } = {},
 ): Promise<void> {
   const [existingPax, existingParcels] = await Promise.all([
     getManifestPassengers(manifest.manifestId),
@@ -185,14 +189,63 @@ export async function populateManifestDeparture(
 
   const loadedParcelIds = new Set(existingParcels.map((p) => p.parcelId));
   const bookingIds = uniqueBoarding.map((b) => b.bookingId);
-  const { data: parcelRows, error: parcelErr } = bookingIds.length
-    ? await supabase.from('parcels').select('id, receiver_name').in('booking_id', bookingIds)
-    : { data: [] as { id: string; receiver_name: string }[], error: null };
-  if (parcelErr) throw parcelErr;
-  const parcelInserts = (parcelRows ?? [])
+
+  // Option B: parcels can reach this sailing three ways — their own cargo
+  // booking (accompanied), a carrier link (batched / solo), or the ride they
+  // piggyback on. Merge them so every mode is counted exactly once.
+  type ParcelRow = { id: string; receiver_name: string; total_weight_kg: number | null };
+  const parcelById = new Map<string, ParcelRow>();
+  const addParcelRows = (rows: ParcelRow[] | null) => {
+    for (const row of rows ?? []) parcelById.set(row.id, row);
+  };
+
+  if (bookingIds.length) {
+    if (__DEV__) console.log('[manifest] parcel lookup bookingIds:', bookingIds);
+
+    const { data, error } = await supabase
+      .from('parcels')
+      .select('id, receiver_name, total_weight_kg')
+      .in('booking_id', bookingIds);
+    if (__DEV__) {
+      console.log('[manifest] parcels by booking_id:', data?.length ?? 0, error?.message);
+    }
+    if (error) throw error;
+    addParcelRows(data);
+
+    // carrier_booking_id arrives with migration 050 — a pre-050 schema has
+    // no such column, so skip this leg instead of failing the departure.
+    const { data: carried, error: carrierErr } = await supabase
+      .from('parcels')
+      .select('id, receiver_name, total_weight_kg')
+      .in('carrier_booking_id', bookingIds);
+    if (__DEV__) {
+      console.log('[manifest] parcels by carrier_booking_id:', carried?.length ?? 0, carrierErr?.message);
+    }
+    if (carrierErr) {
+      if (__DEV__) console.warn('[manifest] carrier parcel query skipped:', carrierErr.message);
+    } else {
+      addParcelRows(carried);
+    }
+
+    const { data: piggy, error: piggyErr } = await supabase
+      .from('parcels')
+      .select('id, receiver_name, total_weight_kg')
+      .in('piggyback_booking_id', bookingIds);
+    if (__DEV__) {
+      console.log('[manifest] parcels by piggyback_booking_id:', piggy?.length ?? 0, piggyErr?.message);
+    }
+    if (piggyErr) {
+      if (__DEV__) console.warn('[manifest] piggyback parcel query skipped:', piggyErr.message);
+    } else {
+      addParcelRows(piggy);
+    }
+  }
+
+  const parcelInserts = [...parcelById.values()]
     .filter((r) => !loadedParcelIds.has(r.id))
     .map((r) => ({
       parcel_description: r.receiver_name,
+      weight_kg: r.total_weight_kg ?? null,
       manifest_id: manifest.manifestId,
       parcel_id: r.id,
       loaded_at: now,
@@ -211,7 +264,9 @@ export async function populateManifestDeparture(
     total_passengers_on_board: existingPax.length + paxRows.length,
     total_parcels_on_board: existingParcels.length + parcelInserts.length,
   };
-  if (!manifest.actualDepartureTime) patch.actual_departure_time = now;
+  if (opts.stampDeparture !== false && !manifest.actualDepartureTime) {
+    patch.actual_departure_time = now;
+  }
   const { error: updErr } = await supabase
     .from('trip_manifest')
     .update(patch)

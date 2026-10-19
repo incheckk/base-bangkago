@@ -2,6 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { slotLabel, todayIso } from '@/components/SchedulePicker';
@@ -25,7 +27,7 @@ import { createAlert } from '@/services/safety-alert.service';
 import { supabase } from '@/services/supabase';
 import { getLatestPositionForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { DownpaymentDoc, IslandPackageDoc, ParcelDoc, PaymentDoc } from '@/types/models';
+import type { BookingDoc, DownpaymentDoc, IslandPackageDoc, ParcelDoc, PaymentDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -53,7 +55,33 @@ const ESCAPE_WAIT_MS = 10 * 60 * 1000;
 export default function BookingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
-  const { data: booking, loading, error } = useBooking(id ?? null);
+  const { data: liveBooking, loading, error: liveError } = useBooking(id ?? null);
+
+  // Offline snapshot: every successful load is cached, and replayed when
+  // the fetch fails — a passenger who loses signal at sea still sees
+  // their trip (with a stale banner) instead of a bare error screen.
+  const cacheKey = `booking_cache:${id ?? ''}`;
+  const [cached, setCached] = useState<BookingDoc | null>(null);
+  const booking = liveBooking ?? cached;
+  useEffect(() => {
+    if (liveBooking) {
+      AsyncStorage.setItem(cacheKey, JSON.stringify(liveBooking)).catch(() => {});
+    }
+  }, [liveBooking, cacheKey]);
+  useEffect(() => {
+    if (!liveError) return;
+    let alive = true;
+    AsyncStorage.getItem(cacheKey)
+      .then((raw) => {
+        if (alive && raw) setCached(JSON.parse(raw) as BookingDoc);
+      })
+      .catch(() => {
+        // no snapshot — the error state below covers it
+      });
+    return () => {
+      alive = false;
+    };
+  }, [liveError, cacheKey]);
 
   // While the request is open, how many boats are already queued at the
   // departure port — reassurance that the wait has a real queue behind it.
@@ -414,11 +442,11 @@ export default function BookingDetail() {
     return `Sails today${when} — in ~${left}`;
   })();
 
-  if (loading) {
+  if (loading && !booking) {
     return <ScreenContainer><LoadingState label="Loading booking…" /></ScreenContainer>;
   }
-  if (error) {
-    return <ScreenContainer><ErrorState message={error} /></ScreenContainer>;
+  if (liveError && !booking) {
+    return <ScreenContainer><ErrorState message={liveError} /></ScreenContainer>;
   }
   if (!booking) {
     return (
@@ -458,6 +486,15 @@ export default function BookingDetail() {
             <StatusPill status={booking.status} />
           )}
         </View>
+
+        {!!liveError && (
+          <View style={styles.staleBanner}>
+            <Text style={styles.staleText}>
+              Offline — showing your last saved trip details. This refreshes as soon as
+              the connection returns.
+            </Text>
+          </View>
+        )}
 
         {booking.status === 'pending' && (
           <View style={styles.pendingBanner}>
@@ -757,6 +794,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   pendingText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+
+  // Offline snapshot replay — same warning language as the pending banner.
+  staleBanner: {
+    backgroundColor: colors.warningTint,
+    borderColor: colors.warning,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  staleText: { color: colors.text, fontSize: 13, lineHeight: 19 },
 
   reminder: {
     backgroundColor: colors.primaryTint,

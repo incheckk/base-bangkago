@@ -109,6 +109,12 @@ B5. GPS EN-ROUTE TRACKING FOR PASSENGERS (roadmap item 6)
     marker (useVesselTracking, realtime; bookings never carry
     bangka_id so it resolves through getBangkaIdForBangkero).
     Foreground-only — background GPS is still B1.
+    Extended 2026-10-20 (core sailing batch): the rail's "On the way"
+    keys off depart_time (was onboarded_at), the map draws the
+    departure→arrival route line, and the card shows a route-estimate
+    ETA plus a "last seen Xm ago" staleness line. Same day: the
+    passenger booking screen caches a snapshot in AsyncStorage and
+    replays it with an offline banner when the fetch fails.
 B6. (shipped — Phase 3B: documents verify flow + GCash QR, migrations
     011_documents_storage.sql / 012_mark_paid.sql)
 B7. DISPUTE COUNTER-REPORT — bangkero side deliberately not built.
@@ -156,6 +162,16 @@ B12. COASTGUARD / LGU — FOURTH MOBILE ROLE (view-only)
      (read-only), role-guard redirects, sign-in demo chip, seeded as
      0920 123 4567 Lina Reyes (after 025). NO route/port editing —
      by design.
+B13. OFFLINE QUEUEING FOR SAFETY ALERTS
+     The stuck-departure monitor on the bangkero en-route screen
+     (2026-10-20) prompts locally and escalates to a safety_alerts row
+     when nobody answers in 60s — but the escalation is a plain insert:
+     if the phone is offline at that moment it is swallowed (caught,
+     logged as a comment). GPS fixes DO survive offline (track outbox,
+     migration 056); safety alerts do not. A retry queue for alerts
+     would reuse the outbox pattern. Demo mode (arrival_bypass)
+     suppresses the escalation on purpose so rehearsals don't fill the
+     admin's alerts page.
 
 [C] CODE TODOs LEFT IN THE APP
 --------------------------------------------------------------------------------
@@ -235,6 +251,10 @@ E1. bookings UPDATE STATE-MACHINE BYPASS
     into guarded SECURITY DEFINER RPCs (the accept/complete/no-show
     paths already exist) and revoke broad UPDATE, or add a trigger that
     validates transitions.
+    Narrowing 2026-10-20 (056): cancel_own_booking now RAISEs once
+    depart_time is stamped, so the RPC path can no longer cancel a
+    boat that has sailed. That is ONE path — the broad client UPDATE
+    policy itself is untouched and still open here.
 
 E2. CLIENT-WRITABLE WALLET
     wallets / wallet top-ups are written from the client (RLS allows

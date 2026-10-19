@@ -131,6 +131,27 @@ body {
     line-height: 1.7;
 }
 
+.frontpage-loader{
+    position:fixed;
+    inset:0;
+    z-index:3000;
+    display:grid;
+    place-items:center;
+    background:var(--blue-900);
+    opacity:1;
+    visibility:visible;
+    transition:opacity .4s ease, visibility .4s ease;
+}
+.frontpage-loader.is-hidden{opacity:0;visibility:hidden;pointer-events:none;}
+.frontpage-loader-mark{display:grid;justify-items:center;gap:1.1rem;}
+.frontpage-loader-mark img{width:76px;height:76px;object-fit:contain;}
+.frontpage-loader-mark svg{width:72px;height:48px;overflow:visible;}
+.frontpage-loader-wave{fill:var(--accent);transform-box:fill-box;transform-origin:center;}
+.frontpage-loader-wave-back{opacity:.55;animation:frontpage-wave 1.5s ease-in-out infinite alternate;}
+.frontpage-loader-wave-front{fill:#fff;animation:frontpage-wave 1.1s ease-in-out -.5s infinite alternate-reverse;}
+@keyframes frontpage-wave{from{transform:translateX(-5px) translateY(2px)}to{transform:translateX(5px) translateY(-2px)}}
+@media(prefers-reduced-motion:reduce){.frontpage-loader-wave{animation:none}.frontpage-loader{transition-duration:.15s}}
+
 img {
     display: block;
 }
@@ -173,9 +194,8 @@ a {
 #mainNav .navbar-brand{
   display: inline-flex;
   align-items: center;
-  gap: 1px;        /* closer to text */
-  height: 80px;    /* slot height */
-  overflow: hidden;
+  gap: 10px;       /* clears the badge halo */
+  height: 80px;    /* slot height — no overflow:hidden, else the halo gets sliced */
   padding: 0;
   margin-left: 0;
 }
@@ -207,8 +227,12 @@ a {
     height: 80px;              /* change this anytime */
     width: auto;               /* prevents distortion */
     display: block;            /* removes baseline/descender gaps */
-    object-fit: contain;
-    transform: translateY(7px);   
+    box-sizing: border-box;    /* frame draws inside the height — no clipping */
+    border: 2px solid #22c4c4;
+    border-radius: 14px;
+    padding: 4px;
+    box-shadow: 0 0 0 3px rgba(34,196,196,.12), 0 6px 16px rgba(0,0,0,.30);
+    object-fit: contain;   
 }
 
 /* Brand name text */
@@ -1060,6 +1084,11 @@ a {
 
 .footer-logo {
     height: 44px;
+    box-sizing: border-box;
+    border: 2px solid #22c4c4;
+    border-radius: 10px;
+    padding: 2px;
+    box-shadow: 0 0 0 3px rgba(34,196,196,.12), 0 4px 10px rgba(0,0,0,.30);
     width: auto;
     object-fit: contain;
 }

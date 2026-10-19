@@ -131,6 +131,18 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
   if (error) throw error;
   if (!data) return null;
 
+  if (data.user_role === 'bangkero') {
+    const { data: operator, error: operatorError } = await supabase
+      .from('bangkeros')
+      .select('is_deleted')
+      .eq('id', uid)
+      .maybeSingle();
+    if (operatorError) throw operatorError;
+    if (operator?.is_deleted) {
+      throw new Error('This Bangkero account has been deleted. Contact an administrator.');
+    }
+  }
+
   return {
     uid: data.id,
     firstName: data.first_name,

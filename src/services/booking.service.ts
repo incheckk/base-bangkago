@@ -469,8 +469,10 @@ export async function setAvailability(
 export async function getMaxOnlineBangkaCapacity(): Promise<number | null> {
   const { data, error } = await supabase
     .from('bangkas')
-    .select('capacity, bangkeros!inner(is_available)')
-    .eq('bangkeros.is_available', true);
+    .select('capacity, bangkeros!inner(is_available, is_deleted)')
+    .eq('bangkeros.is_available', true)
+    .eq('bangkeros.is_deleted', false)
+    .eq('is_active', true);
   if (error) throw error;
   const caps = (data ?? [])
     .map((row: { capacity: number | null }) => Number(row.capacity))

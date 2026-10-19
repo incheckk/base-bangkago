@@ -24,9 +24,9 @@
       completedTodayResult
     ] = await Promise.all([
       c.from('users').select('*', { count: 'exact', head: true }),
-      c.from('bangkeros').select('*', { count: 'exact', head: true }).eq('is_available', true),
+      c.from('bangkeros').select('*', { count: 'exact', head: true }).eq('is_available', true).eq('is_deleted', false),
       c.from('bookings').select('*', { count: 'exact', head: true }),
-      c.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending'),
+      c.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending').eq('is_deleted', false),
       c.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
       c.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', today),
       c.from('bookings').select('total_price').eq('trip_stat', 'completed'),

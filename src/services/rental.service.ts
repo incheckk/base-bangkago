@@ -1,6 +1,6 @@
+import type { BoatRentalDoc } from '../types/models';
 import { createNotification } from './notification.service';
 import { supabase } from './supabase';
-import type { BoatRentalDoc } from '../types/models';
 
 // =============================================================
 // Boat rentals (migration 016). A rental is a charter request against
@@ -42,11 +42,13 @@ export interface RentableBangka {
 export async function getRentableBangkas(): Promise<RentableBangka[]> {
   const { data, error } = await supabase
     .from('bangkas')
-    .select('*, bangkeros!inner(id, display_name, verification_stat)')
+    .select('*, bangkeros!inner(id, display_name, verification_stat, is_deleted)')
     .eq('bangkeros.verification_stat', 'verified')
+    .eq('bangkeros.is_deleted', false)
     // Opt-in catalog: the bangkero lists the boat from their
     // Boat Rentals screen (rental_listed, 027).
     .eq('rental_listed', true)
+    .eq('is_active', true)
     .order('hourly_rate');
 
   if (error) throw error;
@@ -97,10 +99,11 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
 
   const { data: bangka, error: bangkaError } = await supabase
     .from('bangkas')
-    .select('hourly_rate')
+    .select('hourly_rate, is_active')
     .eq('id', args.bangkaId)
     .single();
   if (bangkaError) throw bangkaError;
+  if (!bangka?.is_active) throw new Error('This boat is unavailable. Choose another boat.');
 
   const hourly = Number(bangka?.hourly_rate ?? 500);
   const total = Math.round(hourly * args.hours);

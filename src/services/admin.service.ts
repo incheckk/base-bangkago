@@ -1,5 +1,5 @@
+import type { BangkeroDoc, UserDoc } from '../types/models';
 import { supabase } from './supabase';
-import type { UserDoc, BangkeroDoc } from '../types/models';
 
 function mapUserRow(row: any): UserDoc {
   return {
@@ -119,9 +119,9 @@ export async function getAdminStats(): Promise<AdminStats> {
     completedTodayResult,
   ] = await Promise.all([
     supabase.from('users').select('*', { count: 'exact', head: true }),
-    supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('is_available', true),
+    supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('is_available', true).eq('is_deleted', false),
     supabase.from('bookings').select('*', { count: 'exact', head: true }),
-    supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending'),
+    supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending').eq('is_deleted', false),
     supabase.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
     supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', today),
     // Revenue follows the money: the fare is collected when the trip
@@ -155,6 +155,7 @@ export async function getBangkerosByStatus(status: string): Promise<BangkeroDoc[
     .from('bangkeros')
     .select('*')
     .eq('verification_stat', status)
+    .eq('is_deleted', false)
     .order('updated_at', { ascending: false });
 
   if (error) throw error;
@@ -198,6 +199,7 @@ export async function getAllBangkeros(): Promise<BangkeroDoc[]> {
   const { data, error } = await supabase
     .from('bangkeros')
     .select('*')
+    .eq('is_deleted', false)
     .order('updated_at', { ascending: false });
 
   if (error) throw error;

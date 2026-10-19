@@ -16,7 +16,7 @@
 
   async function getAllBangkas() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('bangkas').select('*, bangkeros(display_name, is_available, verification_stat)');
+    var r = await c.from('bangkas').select('*, bangkeros(display_name, is_available, verification_stat)').eq('is_active', true);
     if (r.error) throw r.error;
     return (r.data || []).map(mapBangka);
   }

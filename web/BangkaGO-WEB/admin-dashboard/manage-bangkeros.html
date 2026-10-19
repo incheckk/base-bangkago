@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BangkaGo Admin — Manage Bangkeros</title>
+  <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
@@ -21,7 +22,7 @@
         <div class="cg-card p-3">
           <div class="panel-head">
             <h6 class="mb-0">Manage Bangkeros</h6>
-            <span class="muted-note">Review documents and decide application status</span>
+            <span class="muted-note">Review applications, update status, and manage operator access</span>
           </div>
 
           <div class="table-responsive">
@@ -46,6 +47,27 @@
           </div>
           
           <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+        </div>
+
+        <div class="cg-card p-3 mt-3">
+          <div class="panel-head">
+            <h6 class="mb-0">Deleted Bangkeros</h6>
+            <span class="muted-note">Records are retained with their trip history and can be restored</span>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-theme align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Bangkero</th>
+                  <th>ID</th>
+                  <th>Verification</th>
+                  <th>Deleted</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="deletedBangkeroBody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>
@@ -120,9 +142,11 @@
 
   <script>
     let bangkeros = [];
+    let deletedBangkeros = [];
     let selectedIndex = null;
 
     const bangkeroBody = document.getElementById("bangkeroBody");
+    const deletedBangkeroBody = document.getElementById("deletedBangkeroBody");
     const loadingState = document.getElementById("loadingState");
     const errorState = document.getElementById("errorState");
 
@@ -171,10 +195,33 @@
                 <button class="btn btn-sm btn-bangkago" onclick="openDecisionModal(${i})">
                   <i class="bi bi-check2-square"></i> Update Application
                 </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteBangkero(${i})">
+                  <i class="bi bi-person-x"></i> Delete
+                </button>
               </div>
             </td>
           </tr>
       `).join("");
+    }
+
+    function renderDeletedTable(){
+      if (!deletedBangkeros.length) {
+        deletedBangkeroBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No deleted bangkeros.</td></tr>';
+        return;
+      }
+      deletedBangkeroBody.innerHTML = deletedBangkeros.map((b, i) => `
+        <tr>
+          <td>${b.displayName}</td>
+          <td><code title="${b.uid}">${b.uid.slice(0,8)}…</code></td>
+          <td><span class="badge ${appBadge(b.verificationStat)}">${mapVerificationStat(b.verificationStat)}</span></td>
+          <td>${b.deletedAt ? new Date(b.deletedAt).toLocaleDateString('en-PH') : '—'}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-success" onclick="restoreBangkero(${i})">
+              <i class="bi bi-arrow-counterclockwise"></i> Restore Bangkero
+            </button>
+          </td>
+        </tr>
+      `).join('');
     }
 
     function showLoading(show) {
@@ -191,15 +238,54 @@
     async function loadBangkeros() {
       showLoading(true);
       try {
-        bangkeros = await window.bangkagoBangkeros.listAll();
-        // Enrich with boat and user data for UI display
-        bangkeros = await window.bangkagoBangkeros.enrichBangkeros(bangkeros);
+        const [activeRows, deletedRows] = await Promise.all([
+          window.bangkagoBangkeros.listAll(),
+          window.bangkagoBangkeros.listDeleted(),
+        ]);
+        [bangkeros, deletedBangkeros] = await Promise.all([
+          window.bangkagoBangkeros.enrichBangkeros(activeRows),
+          window.bangkagoBangkeros.enrichBangkeros(deletedRows),
+        ]);
         renderTable();
+        renderDeletedTable();
         showLoading(false);
       } catch(e) {
         console.error(e);
         showError('Failed to load bangkeros: ' + e.message);
       }
+    }
+
+    window.deleteBangkero = async function(index){
+      const b = bangkeros[index];
+      if (!b || !confirm(`Move ${b.displayName} to Deleted Bangkeros? Their account and trip history will be retained.`)) return;
+      try {
+        await window.bangkagoBangkeros.softDelete(b.uid);
+        await loadBangkeros();
+      } catch(e) {
+        alert('Unable to delete bangkero: ' + e.message);
+      }
+    };
+
+    window.restoreBangkero = async function(index){
+      const b = deletedBangkeros[index];
+      if (!b) return;
+      try {
+        await window.bangkagoBangkeros.restore(b.uid);
+        await loadBangkeros();
+      } catch(e) {
+        alert('Unable to restore bangkero: ' + e.message);
+      }
+    };
+
+    async function resolveDocumentUrl(client, storedPath){
+      const value = String(storedPath || '').trim();
+      if (!value) return null;
+      if (/^https?:\/\//i.test(value)) return value;
+
+      const path = value.replace(/^\/?docs\//i, '').replace(/^\/+/, '');
+      const { data: signedData, error: signedError } = await client.storage.from('docs').createSignedUrl(path, 3600);
+      if (!signedError && signedData?.signedUrl) return signedData.signedUrl;
+      return client.storage.from('docs').getPublicUrl(path).data?.publicUrl || null;
     }
 
     window.openReviewDocs = async function(index){
@@ -229,7 +315,8 @@
           { label: 'Brgy Clearance', field: 'brgy_clearance', icon: 'bi-building' }
         ];
 
-        docList.innerHTML = docs.map(doc => {
+        const documentUrls = [];
+        const documentRows = await Promise.all(docs.map(async (doc, docIndex) => {
           const path = bangkeroData?.[doc.field];
           if (!path) {
             return `
@@ -240,17 +327,24 @@
             `;
           }
 
-          // Get public URL from Supabase storage
-          const { data: urlData } = c.storage.from('docs').getPublicUrl(path);
-          const publicUrl = urlData?.publicUrl;
+          const publicUrl = await resolveDocumentUrl(c, path);
+          documentUrls[docIndex] = publicUrl;
+          if (!publicUrl) {
+            return `
+              <div class="list-group-item d-flex justify-content-between align-items-center">
+                <span><i class="bi ${doc.icon} me-2"></i>${doc.label}</span>
+                <span class="badge text-bg-danger">Unavailable</span>
+              </div>
+            `;
+          }
 
           return `
-            <div class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="previewDocument('${publicUrl}', '${doc.label}')">
+            <div class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" data-doc-index="${docIndex}">
               <div class="d-flex align-items-center gap-3">
                 <div class="doc-thumbnail bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; flex: 0 0 48px;">
-                  <img src="${publicUrl}" alt="${doc.label}" loading="lazy"
+                     <img src="${publicUrl}" alt="${doc.label}" loading="eager"
                        class="w-100 h-100" style="object-fit: cover;"
-                       onerror="this.style.display='none';this.nextElementSibling.style.display='block';">
+                       onerror="this.hidden=true;this.nextElementSibling.classList.remove('d-none');">
                   <i class="bi ${doc.icon} text-muted d-none" style="font-size: 1.25rem;"></i>
                 </div>
                 <div>
@@ -260,13 +354,25 @@
               </div>
               <div class="d-flex align-items-center gap-2">
                 <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Uploaded</span>
-                <a href="${publicUrl}" target="_blank" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation();">
+                <a href="${publicUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-document-link title="Open document in a new tab" aria-label="Open document in a new tab">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </a>
               </div>
             </div>
           `;
-        }).join('');
+        }));
+        docList.innerHTML = documentRows.join('');
+
+        docList.querySelectorAll('[data-doc-index]').forEach(row => {
+          row.addEventListener('click', () => {
+            const doc = docs[Number(row.dataset.docIndex)];
+            const url = documentUrls[Number(row.dataset.docIndex)];
+            if (url) window.previewDocument(url, doc.label);
+          });
+          row.querySelector('[data-document-link]')?.addEventListener('click', event => {
+            event.stopPropagation();
+          });
+        });
 
         // Update info alert
         const alertEl = docList.nextElementSibling;
@@ -286,11 +392,11 @@
           <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content bg-dark border-0">
               <div class="modal-header border-0">
-                <h5 class="modal-title text-white">${label}</h5>
+                <h5 class="modal-title text-white"></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
               </div>
-              <div class="modal-body p-0">
-                <img src="${url}" alt="${label}" class="img-fluid w-100" style="max-height: 80vh; object-fit: contain;">
+              <div class="modal-body p-0 text-center">
+                <img class="document-preview-image img-fluid" style="max-height: 80vh; object-fit: contain;">
               </div>
             </div>
           </div>
@@ -303,11 +409,24 @@
       
       // Add to body and show
       document.body.insertAdjacentHTML('beforeend', modalHtml);
-      const previewModal = new bootstrap.Modal(document.getElementById('docPreviewModal'));
+      const modalElement = document.getElementById('docPreviewModal');
+      modalElement.querySelector('.modal-title').textContent = label;
+      const previewImage = modalElement.querySelector('.document-preview-image');
+      previewImage.alt = label;
+      previewImage.src = url;
+      previewImage.addEventListener('error', () => {
+        previewImage.remove();
+        const message = document.createElement('div');
+        message.className = 'alert alert-warning m-3';
+        message.textContent = 'This document could not be loaded. The storage file may be missing or unavailable.';
+        modalElement.querySelector('.modal-body').appendChild(message);
+      }, { once: true });
+
+      const previewModal = new bootstrap.Modal(modalElement);
       previewModal.show();
       
       // Clean up on hide
-      document.getElementById('docPreviewModal').addEventListener('hidden.bs.modal', function() {
+      modalElement.addEventListener('hidden.bs.modal', function() {
         this.remove();
       });
     };

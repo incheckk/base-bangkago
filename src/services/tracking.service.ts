@@ -1,5 +1,5 @@
-import { supabase } from './supabase';
 import type { VesselTrackingDoc } from '../types/models';
+import { supabase } from './supabase';
 
 function mapRow(row: any): VesselTrackingDoc {
   return {
@@ -63,6 +63,7 @@ export async function getBangkaIdForBangkero(bangkeroId: string): Promise<string
     .from('bangkas')
     .select('id')
     .eq('bangkero_id', bangkeroId)
+    .eq('is_active', true)
     .order('bangka_name');
   if (error) throw error;
   const boats = (data ?? []) as { id: string }[];
@@ -139,6 +140,7 @@ export async function getLatestPositionForBangkero(
     .from('bangkas')
     .select('id')
     .eq('bangkero_id', bangkeroId)
+    .eq('is_active', true)
     .maybeSingle();
 
   if (error) throw error;

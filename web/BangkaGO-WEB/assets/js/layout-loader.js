@@ -85,6 +85,14 @@
     loadPartial('partials/topbar.html', topbarMount),
   ]);
 
+  const main = document.querySelector('.cg-main');
+  if (main && !main.querySelector('.cg-footer')) {
+    const footer = document.createElement('footer');
+    footer.className = 'cg-footer';
+    footer.innerHTML = '<span class="cg-footer-note">Mactan - Olango</span>';
+    main.appendChild(footer);
+  }
+
   const topbarMeta = {
     'admin-dashboard': { title: 'Dashboard', subtitle: 'Admin operations overview and live system snapshot' },
     'manage-users': { title: 'Manage Users', subtitle: 'Create, update, and monitor user access' },

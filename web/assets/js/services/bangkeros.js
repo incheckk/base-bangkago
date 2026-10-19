@@ -22,6 +22,8 @@
       ratingPenalty: row.rating_penalty ?? 0,
       ratingRecoveryStars: row.rating_recovery_stars ?? 0,
       gcashQrUrl: row.gcash_qr_url ?? null,
+      isDeleted: row.is_deleted === true,
+      deletedAt: row.deleted_at ?? null,
       updatedAt: row.updated_at,
       // Related data fetched separately when needed
       boatName: null,
@@ -37,11 +39,16 @@
     options = options || {};
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var q = c.from('bangkeros').select('*');
+    q = options.deleted === true ? q.eq('is_deleted', true) : q.eq('is_deleted', false);
     if (options.verificationStat) q = q.eq('verification_stat', options.verificationStat);
     if (options.isAvailable !== undefined) q = q.eq('is_available', options.isAvailable);
     var r = await q.order('updated_at', { ascending: false });
     if (r.error) throw r.error;
     return (r.data || []).map(mapRow);
+  }
+
+  function listDeleted() {
+    return listAll({ deleted: true });
   }
 
   async function getById(uid) {
@@ -118,11 +125,23 @@
     if (r.error) throw r.error;
   }
 
+  async function softDelete(uid) {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.rpc('admin_delete_bangkero', { p_bangkero_id: uid });
+    if (r.error) throw r.error;
+  }
+
+  async function restore(uid) {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.rpc('admin_restore_bangkero', { p_bangkero_id: uid });
+    if (r.error) throw r.error;
+  }
+
   async function setAvailability(uid, isAvailable) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var r = await c.from('bangkeros').update({ is_available: isAvailable, updated_at: new Date().toISOString() }).eq('id', uid);
     if (r.error) throw r.error;
   }
 
-  window.bangkagoBangkeros = { listAll, getById, getBangkaForBangkero, getUserForBangkero, enrichBangkeros, updateVerification, setAvailability };
+  window.bangkagoBangkeros = { listAll, listDeleted, getById, getBangkaForBangkero, getUserForBangkero, enrichBangkeros, updateVerification, softDelete, restore, setAvailability };
 })();

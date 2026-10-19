@@ -5,6 +5,28 @@
 
 'use strict';
 
+const frontpageLoader = document.getElementById('frontpageLoader');
+
+if (frontpageLoader) {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const minimumDuration = reducedMotion ? 250 : 1200;
+    const startedAt = performance.now();
+    let dismissed = false;
+
+    function hideFrontpageLoader() {
+        if (dismissed) return;
+        dismissed = true;
+        const wait = Math.max(0, minimumDuration - (performance.now() - startedAt));
+        window.setTimeout(function () {
+            frontpageLoader.classList.add('is-hidden');
+            window.setTimeout(function () { frontpageLoader.remove(); }, 450);
+        }, wait);
+    }
+
+    window.addEventListener('load', hideFrontpageLoader, { once: true });
+    window.setTimeout(hideFrontpageLoader, 5000);
+}
+
 /* ——————————————————————————————————————————————
    1. NAVBAR: Background change on scroll + progress bar (RAF-throttled)
 —————————————————————————————————————————————— */

@@ -41,6 +41,23 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-20 — FrontPage contact messages table (migration 061, PENDING;
+  gates green: tsc clean, lint 0 errors / 131 warnings, expo-doctor 21/21).**
+  - **Migration 061 (PENDING — current USER MUST RUN, after 060):**
+    `migrations/061_frontpage_submissions.sql` — the table the FrontPage
+    "Send Message" (Contact Us) and "Join Us" forms insert into as anon,
+    and that Admin → Report & Compliance → User Feedback reads back
+    (`submission_type = 'contact'`). It had been referenced in code since
+    the web merge but no file existed under any number: 050 was already
+    taken by parcel_modes_option_b, and the slot first used here (057)
+    was subsequently claimed by the parcel-polishing batch — the file is
+    now 061, and the stale `050_…` error string in
+    report-compliance.html says 061. Append-only from the client
+    (INSERT policy with full validation, no UPDATE/DELETE policies),
+    admin-only SELECT via the `users.user_role = 'admin'` EXISTS
+    pattern; `partner_role` is limited to the three options the form
+    actually offers (Passenger / Bangkero / Bangka Operator) — keep it in
+    sync with `joinRole` in `web/FrontPage/index.html`. No demo reset.
 - **2026-10-20 — Core sailing batch: en-route screen, offline GPS outbox,
   stuck-departure monitor, DEV skip-sailing, passenger surfacing
   (gates green: tsc clean, lint 0 errors / 130 warnings, expo-doctor 21/21).**

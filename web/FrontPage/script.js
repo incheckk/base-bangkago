@@ -5,6 +5,16 @@
 
 'use strict';
 
+const frontpageClient = window.supabase && window.BANGKAGO_WEB
+    ? window.supabase.createClient(window.BANGKAGO_WEB.SUPABASE_URL, window.BANGKAGO_WEB.SUPABASE_ANON_KEY, {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+        },
+    })
+    : null;
+
 const frontpageLoader = document.getElementById('frontpageLoader');
 
 if (frontpageLoader) {
@@ -314,6 +324,34 @@ function showSuccess(elId, delay) {
     }, delay);
 }
 
+async function saveFrontpageSubmission(values) {
+    if (!frontpageClient) {
+        throw new Error('Submission service is unavailable.');
+    }
+
+    const result = await frontpageClient.from('frontpage_submissions').insert(values);
+    if (result.error) throw result.error;
+}
+
+function setFormSubmitting(form, isSubmitting) {
+    const button = form.querySelector('button[type="submit"]');
+    if (!button) return;
+
+    if (isSubmitting) {
+        button.dataset.originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Sending...';
+    } else {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        if (button.dataset.originalHtml) {
+            button.innerHTML = button.dataset.originalHtml;
+            delete button.dataset.originalHtml;
+        }
+    }
+}
+
 
 /* ——————————————————————————————————————————————
    6. JOIN US FORM — Validation
@@ -321,7 +359,7 @@ function showSuccess(elId, delay) {
 const joinForm = document.getElementById('joinForm');
 
 if (joinForm) {
-    joinForm.addEventListener('submit', function (e) {
+    joinForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
         const name = document.getElementById('joinName');
@@ -373,8 +411,26 @@ if (joinForm) {
         }
 
         if (isValid) {
-            showSuccess('joinSuccess');
-            resetForm(joinForm);
+            document.getElementById('joinSuccess').classList.add('d-none');
+            document.getElementById('joinError').classList.add('d-none');
+            setFormSubmitting(joinForm, true);
+            try {
+                await saveFrontpageSubmission({
+                    submission_type: 'partner',
+                    full_name: name.value.trim(),
+                    email: email.value.trim(),
+                    phone: phone.value.trim(),
+                    partner_role: role.value,
+                    message: message.value.trim(),
+                });
+                showSuccess('joinSuccess');
+                resetForm(joinForm);
+            } catch (error) {
+                console.error('FrontPage partner application failed:', error);
+                document.getElementById('joinError').classList.remove('d-none');
+            } finally {
+                setFormSubmitting(joinForm, false);
+            }
         }
     });
 
@@ -396,7 +452,7 @@ if (joinForm) {
 const contactForm = document.getElementById('contactForm');
 
 if (contactForm) {
-    contactForm.addEventListener('submit', function (e) {
+    contactForm.addEventListener('submit', async function (e) {
         e.preventDefault();
 
         const name = document.getElementById('contactName');
@@ -439,8 +495,25 @@ if (contactForm) {
         }
 
         if (isValid) {
-            showSuccess('contactSuccess');
-            resetForm(contactForm);
+            document.getElementById('contactSuccess').classList.add('d-none');
+            document.getElementById('contactError').classList.add('d-none');
+            setFormSubmitting(contactForm, true);
+            try {
+                await saveFrontpageSubmission({
+                    submission_type: 'contact',
+                    full_name: name.value.trim(),
+                    email: email.value.trim(),
+                    subject: subject.value.trim(),
+                    message: message.value.trim(),
+                });
+                showSuccess('contactSuccess');
+                resetForm(contactForm);
+            } catch (error) {
+                console.error('FrontPage contact message failed:', error);
+                document.getElementById('contactError').classList.remove('d-none');
+            } finally {
+                setFormSubmitting(contactForm, false);
+            }
         }
     });
 

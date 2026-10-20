@@ -7,6 +7,8 @@ post-4C fix pass (018/019), and the M1-M6 build (2026-10: acceptance
 confirmations, ML demand, F-screen cleanup, coastguard role, rental +
 island-hop companions, trip close-out, live en-route tracking).
 Section [E] carries the P2 security debt moved out of that pass.
+Updated 2026-10-21 (demo-readiness batch: bookings rules v3, accept desk,
+Open-Meteo weather, validation, map legibility).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -75,6 +77,32 @@ Section [E] carries the P2 security debt moved out of that pass.
    idempotent, so a late call is safe - the batch is delayed, not lost.
    Production fix: a server-side scheduled job (pg_cron) that calls
    resolve_batch_rpc for every route key with an expired deadline.
+
+9. LIVE SEA WEATHER COMES FROM OPEN-METEO, NOT THE weather_data TABLE (2026-10-21)
+   Every weather surface (passenger home, bangkero home, admin home,
+   coastguard home, admin + coastguard web dashboards) now reads
+   Open-Meteo directly: free for NON-COMMERCIAL use, no API key, no
+   billing — the CC BY 4.0 "Weather data by Open-Meteo" credit line is
+   mandatory and must not be removed. Points are fixed demo coordinates
+   (Mactan 10.3022/124.0184, Cebu Strait 10.26/124.0), not the boat's
+   live position. The marine endpoint refuses land points, so wave
+   height is nullable and the card prints "waves n/a" rather than
+   failing. Cached 15 min (AsyncStorage / localStorage) with a stale
+   fallback, and the refresh only runs while the app is foregrounded.
+   Before monetising the app, re-check Open-Meteo's commercial terms or
+   move behind a server-side proxy. The Supabase weather_data table and
+   its service functions (getLatestWeather / getWeatherHistory) are
+   untouched but no longer feed any dashboard — the coastguard web page
+   and (bangkero)/weather.tsx still read them, so keep the table.
+
+10. IN-APP ACCEPT PING IS FOREGROUND-ONLY (2026-10-21)
+    Sound + vibration on accept (bangkero: new request; passenger:
+    booking accepted or a notification inserted) run through
+    expo-haptics + expo-audio on a realtime subscription. Realtime
+    events are not delivered while Expo Go is backgrounded, and local
+    notifications remain a no-op on Android in Expo Go — so a phone in
+    a pocket stays silent. Same root cause as B1/B2; fixed by a dev
+    build with push + background tasks.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
@@ -179,10 +207,13 @@ C1. (shipped in M4 — the no-op Settings/About menu items were removed
     from passenger profile; nothing else to delete.)
 C2. (shipped in M4 — trip-en-route "Contact Bangkero" now dials via
     router.push('tel:...') with the number from users.phone.)
-C3. migrations/007_accepted_trip_rules.sql:332 —
-    CREATE UNIQUE INDEX bookings_one_active_per_passenger is COMMENTED
-    OUT. Enable after verifying no legacy rows violate it (would block a
-    passenger from having 2 open/accepted bookings at once).
+C3. RESOLVED BY 062 (2026-10-21) — the index is not coming back.
+    migrations/062_booking_rules_v3.sql DROPS it (if a legacy build ever
+    created it) and replaces it with trg_bookings_passenger_slot: one
+    active SAME-DAY booking per passenger, plus advances that clash only
+    on the same date AND slot. The old "one booking at a time" rule was
+    wrong for the product — a passenger may hold today's trip and an
+    advance booking for next week.
 C4. profile.service.ts:62 — assumes ONE bangka per bangkero (upsert).
     Multi-boat operators need schema + UI work.
 C5. sign-in.tsx:15 — demo accounts come from the "Phase 3.10" seed
@@ -224,7 +255,7 @@ C9. ADMIN APPROVE GUARD ON EMPTY SUBMISSIONS — stored, NOT built
     and web downpayments.html).
 
 C10. BATCHED/SOLO PARCELS COUNT AS 0 ON THE MANIFEST SCREEN (2026-10-20)
-     Deferred to 2026-10-21. (bangkero)/manifest.tsx builds
+     STILL OPEN as of 2026-10-21 — not part of the demo-readiness batch. (bangkero)/manifest.tsx builds
      sailing.parcelCount via utils/sailings.ts buildSailings, which
      attaches parcels ONLY by parcel.bookingId. For batched/solo parcels
      that is their own stub (operator_id NULL), not the accepted carrier
@@ -306,7 +337,10 @@ E7. passenger_details HAS NO DELETE (or UPDATE) POLICY
     removed (026 added boat_rental_id, same gap). Add
     passenger-owned UPDATE/DELETE (or an RPC) before launch.
 
-E8. bookings_one_active_per_passenger INDEX STILL OFF — see C3.
+E8. RESOLVED BY 062 — see C3. The one-active-booking-per-passenger
+    index is gone by design; 062's trigger enforces the real rule
+    (one active same-day booking; advances only clash on the same date
+    and slot) with SECURITY DEFINER + REVOKE/GRANT.
 
 [D] ENVIRONMENT / INFRA
 --------------------------------------------------------------------------------

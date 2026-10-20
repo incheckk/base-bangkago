@@ -23,7 +23,9 @@ export default function ReportIssue() {
   const [description, setDescription] = useState('');
   const [contactEmail, setContactEmail] = useState('');
 
-  const ready = !!issueType && subject.trim() && description.trim();
+  const ready =
+    !!issueType && subject.trim() && description.trim() &&
+    (!contactEmail.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim()));
 
   function submit() {
     Alert.alert('Report Submitted', 'Thank you for your report. Our team will review it within 24 hours.', [
@@ -59,7 +61,14 @@ export default function ReportIssue() {
         </View>
 
         <Text style={[styles.sectionLabel, styles.mt]}>CONTACT EMAIL (optional)</Text>
-        <TextField label="Email" value={contactEmail} onChangeText={setContactEmail} placeholder="you@email.com" />
+        <TextField
+          label="Email"
+          value={contactEmail}
+          onChangeText={setContactEmail}
+          placeholder="you@email.com"
+          keyboardType="email-address"
+          error={contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contactEmail.trim()) ? 'Enter a valid email' : null}
+        />
 
         <PrimaryButton label="Submit Report" onPress={submit} disabled={!ready} />
       </ScrollView>

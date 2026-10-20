@@ -54,10 +54,16 @@ const styles = StyleSheet.create({
   primary: { backgroundColor: colors.primary },
   secondary: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: colors.danger },
-  disabled: { opacity: 0.45 },
+  // Disabled state is a solid muted surface with a readable label — the old
+  // 45%-opacity wash made the label vanish against the teal fill on Android.
+  disabled: {
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
   pressed: { opacity: 0.8 },
   label: { fontSize: 15, fontWeight: '700' },
   labelPrimary: { color: colors.primaryText },
   labelOther: { color: colors.text },
-  labelDisabled: { color: colors.textOnDisabled },
+  labelDisabled: { color: colors.textSecondary },
 });

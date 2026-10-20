@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRecentBookings } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
+import { bookingTypeLabel } from '@/utils/booking-label';
 
 /**
  * One screen for live bookings AND trip history (was two screens).
@@ -107,6 +108,7 @@ export default function BookingsScreen() {
                   <Text style={styles.ref}>{b.ref}</Text>
                   <StatusPill status={b.status} />
                 </View>
+                <Text style={styles.typeLine} numberOfLines={1}>{bookingTypeLabel(b)}</Text>
                 <View style={styles.routeRow}>
                   <View style={styles.rail}>
                     <View style={styles.railDot} />
@@ -160,6 +162,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   ref: { ...typography.label, color: colors.textMuted, letterSpacing: 0.5, flexShrink: 1 },
+  typeLine: { ...typography.caption, color: colors.primary, fontWeight: '700', marginTop: 2 },
 
   // Ports stack on a rail instead of sitting side by side. Two long port names
   // on one row cannot fit a phone width, and RN defaults flexShrink to 0 — so

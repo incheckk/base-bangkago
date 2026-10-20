@@ -163,7 +163,7 @@ export default function BookingStatus() {
   const advanceTrip =
     !!booking?.scheduledDate && booking.scheduledDate > todayIso();
   const advanceLocked =
-    advanceTrip && (scheduledAt === null || !(now < scheduledAt));
+    advanceTrip && (scheduledAt === null || now < scheduledAt);
   const canStart = bookerResolved && companionsResolved && !advanceLocked;
 
   // QR scanner: one scan at a time — `scanLatch` releases ONLY when the
@@ -615,7 +615,7 @@ export default function BookingStatus() {
                 ))}
                 {/* Cargo has no boarding pass to scan — the loaded checkbox
                     is the whole gate. */}
-                {!isCargo && (
+                {!isCargo && !advanceTrip && (
                   <PrimaryButton
                     label="Scan boarding QR"
                     variant="secondary"

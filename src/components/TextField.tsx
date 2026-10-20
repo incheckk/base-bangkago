@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   KeyboardTypeOptions, Pressable, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -24,6 +24,19 @@ export function TextField({
 }: Props) {
   const [hidden, setHidden] = useState(secure);
   const [focused, setFocused] = useState(false);
+  /** Android recreates the native field when secureTextEntry flips and fires a
+   *  bogus empty change; ignore that one event so the typed password survives. */
+  const toggleTs = useRef(0);
+
+  function handleChange(t: string) {
+    if (t === '' && value !== '' && Date.now() - toggleTs.current < 250) return;
+    onChangeText(t);
+  }
+
+  function toggleHidden() {
+    toggleTs.current = Date.now();
+    setHidden((h) => !h);
+  }
 
   return (
     <View style={styles.wrap}>
@@ -37,7 +50,7 @@ export function TextField({
         <TextInput
           style={styles.input}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={handleChange}
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
           secureTextEntry={hidden}
@@ -50,7 +63,7 @@ export function TextField({
           onBlur={() => setFocused(false)}
         />
         {secure && (
-          <Pressable onPress={() => setHidden((h) => !h)} hitSlop={10}>
+          <Pressable onPress={toggleHidden} hitSlop={10}>
             <Text style={styles.toggle}>{hidden ? 'Show' : 'Hide'}</Text>
           </Pressable>
         )}

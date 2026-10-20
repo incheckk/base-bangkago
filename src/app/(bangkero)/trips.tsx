@@ -10,6 +10,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
 import { useMyTrips } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
+import { bookingTypeLabel } from '@/utils/booking-label';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -78,6 +79,7 @@ export default function TripsScreen() {
               <Text style={styles.route} numberOfLines={1}>
                 {trip.fromPortName} → {trip.toPortName}
               </Text>
+              <Text style={styles.typeLine} numberOfLines={1}>{bookingTypeLabel(trip)}</Text>
               <View style={styles.cardMeta}>
                 <Text style={styles.metaItem}>
                   {new Date(trip.createdAt).toLocaleDateString()}
@@ -137,6 +139,7 @@ const styles = StyleSheet.create({
   statusTextActive: { color: colors.warning },
 
   route: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: spacing.xs },
+  typeLine: { ...typography.caption, color: colors.primary, fontWeight: '700', marginBottom: spacing.xs },
   cardMeta: { flexDirection: 'row', alignItems: 'center' },
   metaItem: { flexShrink: 1, ...typography.caption, color: colors.textMuted },
   metaFare: { color: colors.primary, fontWeight: '600' },

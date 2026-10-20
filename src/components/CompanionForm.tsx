@@ -8,6 +8,7 @@ import { PrimaryButton } from './PrimaryButton';
 import { TextField } from './TextField';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
 import { normalizePhone } from '../utils/phone';
+import { addressError, nameError } from '../utils/validation';
 
 /**
  * Everyone who rides under this booking/rental. The booker is always
@@ -38,10 +39,7 @@ interface Props {
   hint?: string;
 }
 
-/** Names on a manifest: letters (any accent), spaces, hyphen, apostrophe. No digits/emoji/symbols. */
-const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿÑñ' -]+$/;
-
-type FieldErrors = Partial<Record<'first' | 'last' | 'age' | 'contact', string>>;
+type FieldErrors = Partial<Record<'first' | 'last' | 'age' | 'contact' | 'address', string>>;
 
 const initialsOf = (name: string) => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -132,13 +130,15 @@ export function CompanionForm({
 
   function validate(): boolean {
     const next: FieldErrors = {};
-    const first = draftFirst.trim();
-    const last = draftLast.trim();
-    if (!NAME_RE.test(first)) next.first = 'Letters, spaces, hyphens only';
-    if (!NAME_RE.test(last)) next.last = 'Letters, spaces, hyphens only';
+    const firstErr = nameError(draftFirst);
+    const lastErr = nameError(draftLast);
+    if (firstErr) next.first = firstErr;
+    if (lastErr) next.last = lastErr;
     const age = parseInt(draftAge.trim(), 10);
     if (!Number.isInteger(age) || age < 1 || age > 120) next.age = 'Age 1–120 only';
     if (!normalizePhone(draftContact.trim())) next.contact = 'Enter a valid mobile number';
+    const addrErr = addressError(draftAddress);
+    if (addrErr) next.address = addrErr;
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -303,6 +303,7 @@ export function CompanionForm({
                 placeholder="House no., barangay, city"
                 autoCapitalize="words"
                 maxLength={120}
+                error={errors.address ?? null}
               />
 
               <Text style={styles.modalFieldLabel}>SEX</Text>

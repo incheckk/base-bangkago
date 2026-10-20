@@ -4,11 +4,13 @@ import { AuthErrorScreen } from '@/components/AuthErrorScreen';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
+import { useBookingAcceptedPing } from '@/hooks/useBookingAcceptedPing';
 import { colors } from '@/theme/tokens';
 
 /** Guard: passengers only. Role is read from the profile doc, not the auth token. */
 export default function PassengerLayout() {
   const { user, profile, profileLoading, error } = useAuth();
+  useBookingAcceptedPing(user?.id ?? null);
 
   if (!user) return <Redirect href="/(auth)/welcome" />;
 

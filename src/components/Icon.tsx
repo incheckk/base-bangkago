@@ -23,6 +23,7 @@ export const ICONS = {
   // Points at a list that opens downward — a dropdown field, not a link.
   expand: 'chevron-down',
   close: 'close',
+  search: 'search',
   bell: 'notifications',
   profile: 'person-circle',
   settings: 'settings',
@@ -59,6 +60,12 @@ export const ICONS = {
   weather: 'partly-sunny',
   people: 'people',
   sos: 'megaphone',
+  // weather (Open-Meteo card)
+  sun: 'sunny',
+  partlySunny: 'partly-sunny',
+  cloud: 'cloud',
+  rain: 'rainy',
+  storm: 'thunderstorm',
 } as const;
 
 export type IconName = keyof typeof ICONS;

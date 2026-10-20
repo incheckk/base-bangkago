@@ -13,6 +13,7 @@ import { friendlyAuthError, signUp } from '@/services/auth.service';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { UserRole } from '@/types/models';
 import { normalizePhone } from '@/utils/phone';
+import { nameError } from '@/utils/validation';
 
 const MIN_PASSWORD = 6;
 
@@ -39,8 +40,10 @@ export default function SignUp() {
 
     const e164 = normalizePhone(phone);
     const next: Errors = {};
-    if (!firstName.trim()) next.firstName = 'Required.';
-    if (!lastName.trim()) next.lastName = 'Required.';
+    const firstErr = nameError(firstName);
+    const lastErr = nameError(lastName);
+    if (firstErr) next.firstName = firstErr;
+    if (lastErr) next.lastName = lastErr;
     if (!e164) next.phone = 'Enter a valid mobile number, e.g. 0917 123 4567';
     if (password.length < MIN_PASSWORD) next.password = `At least ${MIN_PASSWORD} characters.`;
 
@@ -147,7 +150,6 @@ export default function SignUp() {
               placeholder={`At least ${MIN_PASSWORD} characters`}
               secure
               error={errors.password ?? null}
-              editable={!busy}
             />
 
             {!!formError && (

@@ -5,6 +5,7 @@ import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { Icon } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { WeatherCard } from '@/components/WeatherCard';
 import { useAllPorts } from '@/hooks/useAllPorts';
 import { useAllPortQueues, usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
@@ -117,6 +118,10 @@ export default function CoastguardHome() {
         showBack={false}
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.weatherWrap}>
+          <WeatherCard latitude={10.26} longitude={124.0} place="Cebu Strait" />
+        </View>
+
         {/* ---------- waiting now ---------- */}
         <View style={styles.sectionHead}>
           <Text style={styles.sectionLabel}>WAITING NOW</Text>
@@ -238,6 +243,7 @@ const styles = StyleSheet.create({
   },
   sectionGap: { marginTop: spacing.xxl },
   sectionLabel: { ...typography.label },
+  weatherWrap: { marginBottom: spacing.xl },
   sectionCount: { flexShrink: 1, ...typography.label, ...numeric, fontWeight: '400', letterSpacing: 0 },
 
   // One card per block, rows inside it. Previously every single port and

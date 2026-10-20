@@ -41,6 +41,84 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-21 — Demo-readiness batch: booking rules v3, accept desk rebuild,
+  Open-Meteo weather on all six surfaces, input validation, map legibility
+  (gates green: tsc clean, lint 0 errors / 133 warnings, expo-doctor 21/21).**
+  - **Migrations 062 + 063 PENDING — USER MUST RUN, in that order, after 061.**
+    062 `booking_rules_v3.sql`: drops 027's one-trip-per-bangkero-per-day
+    trigger (multiple same-route accepts until the boat is full are the
+    point; route + capacity stay enforced by 008 inside
+    `accept_booking_hold`), drops 023's one-active-booking-per-passenger
+    index, and adds `enforce_passenger_booking_slot()` +
+    `trg_bookings_passenger_slot` — one active SAME-DAY booking per
+    passenger, advances clash only on the same date AND slot; occupying
+    statuses pending/open/accepted. 063 `port_coordinates.sql`: nine real
+    Google-Maps coordinates and two renames (`st-vicente` → "Santa Rosa
+    Port, Olango Island", `hilotongan` → "Gilutongan Island") — IDs are
+    untouched, so routes/packages follow. Both are no-demo-reset. Until
+    062 runs, a second same-day accept still raises 027's error.
+  - **Accept desk rebuilt (`BangkeroTripSheet`):** accepting no longer jumps
+    into the QR scanner. It opens a sheet that keeps the request list
+    behind it: boat-load bar (pax/capacity), SOLO and GROUP sections, the
+    just-accepted row highlighted, plus Notify passengers / Scan boarding
+    QR / Sail. Sail asks first — "Boat not full (x/y). Sail anyway?" when
+    capacity is known. Advance bookings show sailing date + slot and no
+    scan. The same sheet opens from ACTIVE TRIPS ("Boat load ›") to review
+    the whole load.
+  - **Notifications that actually ring:** `expo-haptics` + `expo-audio`
+    (+ `expo-asset`) and a bundled `assets/sounds/ping.wav` behind
+    `alertPing()`. Bangkero home pings on a newly arrived request; the
+    passenger layout pings when a booking flips to accepted and on every
+    notification insert (so "Boat is ready" rings too). Local
+    notifications remain a no-op in Expo Go on Android.
+  - **Accept/close rules:** same-day accepts are blocked while a trip is at
+    sea (advance accepts stay open); home shows an "ON TRIP · SAILING NOW"
+    banner as the way back; en-route absorbs hardware back
+    (`useLockBack`, no header back, `gestureEnabled: false`) so departure
+    can never be re-entered. Arrived's Complete Trip now asks for
+    confirmation, and the `force_complete_trip` fallback only runs with
+    `arrival_bypass` on. Old bug: any completion failure silently
+    force-completed trips with nobody boarded.
+  - **Booking status:** `advanceLocked` was inverted (locked AFTER the
+    slot arrived); the boarding scanner is hidden for future-dated trips.
+  - **Passenger booking rule mirror:** `getActiveBooking(uid, {scheduledDate,
+    scheduledTime})` — one active same-day booking (date NULL or today),
+    advances only clash on the same date + slot; book-ride checks with the
+    chosen schedule.
+  - **Validation everywhere:** `src/utils/validation.ts` (`nameError`
+    2+ letters, `addressError`, `textError`) now guards sign-up, the
+    companion form (incl. address), both profile saves, padala receiver /
+    contact / item names / quantity, and the report-issue email. Password
+    fields no longer flip `editable` while submitting and the secure-text
+    toggle ignores Android's spurious empty change — that was the "password
+    clears / starts over" bug.
+  - **Map:** OpenStreetMap tiles are no longer inverted to near-black, and
+    the recentre / + / − stack is gone. `showControls`/`controlsOffset` were
+    removed from `OSMMap`/`MapContainer`.
+  - **Passenger UI:** burger lives on home only (`showDrawer` default false);
+    book-ride highlights the departure row and opens its picker when a
+    destination is tapped first, same-island ports are hidden from the
+    destination list, the footer quotes ₱/passenger and the total no longer
+    collapses to "₱…"; fares-info grew a port search with routes grouped by
+    origin; contact-bangkero is always tappable (falls back to an
+    explanation); profile's redundant email line is gone.
+  - **Labels:** one shared `bookingTypeLabel()` (SOLO / GROUP · n pax /
+    PADALA · mode / BOAT RENTAL + ISLAND HOPPING + ADVANCE date · slot /
+    TODAY · slot) on passenger My Bookings, bangkero My Trips and both
+    request cards. Departure trip details read live accepted pax/parcel
+    counts before the manifest is finalized.
+  - **Weather (Open-Meteo, free for non-commercial use, no key, no billing —
+    the CC BY credit line must stay):** `getLiveWeather` (forecast +
+    marine wave height, 15-min AsyncStorage/localStorage cache, stale
+    fallback) behind `WeatherCard` on passenger home, bangkero home, admin
+    home and coastguard home; `web/BangkaGO-WEB/assets/js/sea-weather.js`
+    fills the admin dashboard strip and the coastguard dashboard's Weather
+    KPI.
+  - **Next:** Expo Go smoke of the accept loop (accept → sheet → accept a
+    second → Notify → Sail), a second same-day booking must raise, an
+    advance booking must still accept while sailing, and the web
+    dashboards' weather strip over venue wifi.
+
 - **2026-10-20 — FrontPage contact messages table (migration 061, PENDING;
   gates green: tsc clean, lint 0 errors / 131 warnings, expo-doctor 21/21).**
   - **Migration 061 (PENDING — current USER MUST RUN, after 060):**
@@ -58,6 +136,7 @@ gracefully. Don't mass-refactor hooks to silence warnings.
     pattern; `partner_role` is limited to the three options the form
     actually offers (Passenger / Bangkero / Bangka Operator) — keep it in
     sync with `joinRole` in `web/FrontPage/index.html`. No demo reset.
+
 - **2026-10-20 — Core sailing batch: en-route screen, offline GPS outbox,
   stuck-departure monitor, DEV skip-sailing, passenger surfacing
   (gates green: tsc clean, lint 0 errors / 130 warnings, expo-doctor 21/21).**

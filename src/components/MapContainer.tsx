@@ -16,9 +16,6 @@ interface Props {
   vessels?: { latitude: number; longitude: number; speed?: number | null; bangkaId?: string }[];
   /** Pass false for a map inside a ScrollView that must keep scrolling. */
   draggable?: boolean;
-  /** Lift the zoom controls clear of an overlapping sheet. */
-  controlsOffset?: number;
-  showControls?: boolean;
 }
 
 /**
@@ -41,8 +38,6 @@ export function MapContainer({
   selectedPortId = null,
   vessels = [],
   draggable = true,
-  controlsOffset = 0,
-  showControls = true,
 }: Props) {
   const [osmFailed, setOsmFailed] = useState(false);
 
@@ -72,8 +67,6 @@ export function MapContainer({
         selectedPortId={selectedPortId}
         vessels={vessels}
         draggable={draggable}
-        controlsOffset={controlsOffset}
-        showControls={showControls}
         onFail={() => setOsmFailed(true)}
       />
     </View>

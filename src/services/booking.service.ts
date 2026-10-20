@@ -33,18 +33,33 @@ export interface CreateBookingResult {
 }
 
 /**
- * The passenger's live booking, if any. One active trip at a time — screens
- * gate on this before letting the passenger start another request, and
- * createBooking re-checks as the server-side backstop.
+ * The live booking that conflicts with the one about to be made.
+ *
+ * Rule (062): a passenger may hold ONE active same-day booking, plus any
+ * number of advance bookings — advances only clash when they share the
+ * same date AND sailing slot. Same-day rows carry scheduled_date = NULL.
  */
 export async function getActiveBooking(
-  passengerUid: string
+  passengerUid: string,
+  opts?: { scheduledDate?: string | null; scheduledTime?: string | null }
 ): Promise<{ bookingId: string; ref: string } | null> {
-  const { data, error } = await supabase
+  const advance = isAdvanceDate(opts?.scheduledDate);
+
+  let q = supabase
     .from('bookings')
     .select('id, ref')
     .eq('user_id', passengerUid)
-    .in('trip_stat', ['pending', 'open', 'accepted'])
+    .in('trip_stat', ['pending', 'open', 'accepted']);
+
+  if (advance) {
+    q = q.eq('scheduled_date', opts?.scheduledDate)
+      .eq('scheduled_time', opts?.scheduledTime ?? '');
+  } else {
+    // Same-day rows carry either NULL or today's date.
+    q = q.or(`scheduled_date.is.null,scheduled_date.eq.${manilaTodayIso()}`);
+  }
+
+  const { data, error } = await q
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -141,8 +156,14 @@ export async function createBooking({
   if (!route) throw new Error('No route runs between those two ports.');
   if (!route.isActive) throw new Error('That route is not running right now.');
 
-  const active = await getActiveBooking(passenger.uid);
-  if (active) throw new Error('You already have a pending booking.');
+  const active = await getActiveBooking(passenger.uid, { scheduledDate, scheduledTime });
+  if (active) {
+    throw new Error(
+      isAdvanceDate(scheduledDate)
+        ? 'You already have a booking for that sailing date and time.'
+        : 'You already have a same-day booking. Finish or cancel it first.'
+    );
+  }
 
   const ban = await getBookingBan(passenger.uid);
   if (ban) {

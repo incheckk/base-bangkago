@@ -47,6 +47,8 @@ export default function BookRide() {
   const [ban, setBan] = useState<number | null>(null);
   /** Which leg's port list is open. One sheet serves both. */
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
+  /** The passenger reached for a destination before picking a departure. */
+  const [needsDeparture, setNeedsDeparture] = useState(false);
 
   useEffect(() => {
     if (params.fromId) setFromId(params.fromId);
@@ -127,7 +129,7 @@ export default function BookRide() {
       setChecking(true);
       try {
         const [active, banInfo] = await Promise.all([
-          getActiveBooking(user.id),
+          getActiveBooking(user.id, { scheduledDate, scheduledTime }),
           getBookingBan(user.id),
         ]);
         if (banInfo) {
@@ -227,13 +229,23 @@ export default function BookRide() {
               <View style={styles.legDivider} />
 
               <Pressable
-                onPress={() => setPicking('to')}
-                disabled={routeLocked || !fromId}
+                onPress={() => {
+                  // Tapping "where are you going" first sends the passenger
+                  // to the departure picker — the destination list depends on it.
+                  if (!fromId) {
+                    setNeedsDeparture(true);
+                    setPicking('from');
+                    return;
+                  }
+                  setPicking('to');
+                }}
+                disabled={routeLocked}
                 accessibilityRole="button"
                 accessibilityLabel={`Destination: ${toPort?.portName ?? 'not selected'}`}
                 style={({ pressed }) => [
                   styles.legRow,
-                  pressed && !routeLocked && !!fromId && styles.legRowPressed,
+                  !fromId && !routeLocked && styles.legRowNeedsFrom,
+                  pressed && !routeLocked && styles.legRowPressed,
                 ]}
               >
                 <View style={styles.legText}>
@@ -242,10 +254,17 @@ export default function BookRide() {
                     {toPort?.portName ?? (fromId ? 'Select a destination' : 'Pick a departure first')}
                   </Text>
                 </View>
-                {!routeLocked && !!fromId && (
+                {!routeLocked && (
                   <Icon name="expand" size={18} color={colors.textMuted} />
                 )}
               </Pressable>
+              {!routeLocked && !fromId && (
+                <Text style={styles.legHint}>
+                  {needsDeparture
+                    ? 'Choose your departure port first — destinations depend on it.'
+                    : 'Pick a departure port to unlock destinations.'}
+                </Text>
+              )}
             </View>
 
             <Pressable
@@ -301,16 +320,14 @@ export default function BookRide() {
           means deciding without seeing the price. */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <View style={styles.fareRow}>
-          <View>
+          <View style={styles.fareInfo}>
             <Text style={styles.fareLabel}>
               {fare !== null ? 'Fare estimate' : 'Fare'}
             </Text>
-            <Text style={styles.fareNote} numberOfLines={1}>
+            <Text style={styles.fareNote} numberOfLines={2}>
               {fare === null
                 ? 'Pick both ports'
-                : advance
-                  ? `${count} ${count === 1 ? 'passenger' : 'passengers'} · 50% GCash downpayment to confirm`
-                  : `${count} ${count === 1 ? 'passenger' : 'passengers'} · discounts on board`}
+                : `₱${route?.baseFare ?? 0} per passenger · ${count} ${count === 1 ? 'passenger' : 'passengers'}${advance ? ' · 50% GCash downpayment' : ' · discounts on board'}`}
             </Text>
           </View>
           <Text style={[styles.fareValue, fare === null && styles.fareValueEmpty]} numberOfLines={1}>
@@ -328,7 +345,9 @@ export default function BookRide() {
         visible={picking !== null}
         onClose={() => setPicking(null)}
         title={picking === 'to' ? 'Destination' : 'Departure'}
-        ports={ports.data}
+        ports={picking === 'to' && fromPort
+          ? ports.data.filter((p) => p.islandGroup !== fromPort.islandGroup)
+          : ports.data}
         selected={picking === 'to' ? toId : fromId}
         isDisabled={(id) => {
           if (picking === 'to') {
@@ -339,8 +358,12 @@ export default function BookRide() {
           return id === toId ? 'Same as destination' : null;
         }}
         onSelect={(id) => {
-          if (picking === 'to') setToId(id);
-          else setFromId(id);
+          if (picking === 'to') {
+            setToId(id);
+          } else {
+            setFromId(id);
+            setNeedsDeparture(false);
+          }
         }}
       />
 
@@ -454,6 +477,12 @@ const styles = StyleSheet.create({
     minHeight: touchTarget,
   },
   legRowPressed: { opacity: 0.6 },
+  // No departure picked yet — the destination row points at the top field.
+  legRowNeedsFrom: {
+    borderWidth: 1, borderColor: colors.primary, borderRadius: radii.sm,
+    backgroundColor: colors.primaryTint, paddingHorizontal: spacing.sm,
+  },
+  legHint: { ...typography.caption, color: colors.primary, marginTop: spacing.xs },
   legText: { flex: 1, minWidth: 0 },
   legLabel: { ...typography.label, marginBottom: spacing.xxs },
   legValue: { flexShrink: 1, ...typography.bodyStrong, lineHeight: 20 },
@@ -515,8 +544,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: spacing.md, marginBottom: spacing.md,
   },
+  fareInfo: { flex: 1, minWidth: 0 },
   fareLabel: { flexShrink: 1, ...typography.label },
   fareNote: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xxs },
-  fareValue: { flexShrink: 1, ...typography.h1, ...numeric, color: colors.primary },
+  // The price never shrinks; the note beside it does. flexShrink:1 here was
+  // what turned a long note into "₱…".
+  fareValue: { flexShrink: 0, ...typography.h1, ...numeric, color: colors.primary },
   fareValueEmpty: { color: colors.textMuted },
 });

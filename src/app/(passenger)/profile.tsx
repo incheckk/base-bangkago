@@ -11,6 +11,7 @@ import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { friendlyError as profileFriendlyError, updateName } from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
+import { nameError } from '@/utils/validation';
 import { useState } from 'react';
 
 export default function PassengerProfile() {
@@ -33,6 +34,13 @@ export default function PassengerProfile() {
 
   async function saveProfile() {
     if (!profile) return;
+    const firstErr = nameError(firstName);
+    const lastErr = nameError(lastName);
+    const invalid = firstErr ? `First name: ${firstErr}` : lastErr ? `Last name: ${lastErr}` : null;
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setSavingProfile(true);
     setError(null);
     try {
@@ -88,7 +96,6 @@ export default function PassengerProfile() {
         {/* Info */}
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{displayFirst} {displayLast}</Text>
-          <Text style={styles.email}>{profile.email ?? formatPhone(profile.phone)}</Text>
           <Text style={styles.phone}>{formatPhone(profile.phone)}</Text>
         </View>
 

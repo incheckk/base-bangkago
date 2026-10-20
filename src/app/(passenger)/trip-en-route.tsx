@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -338,26 +338,21 @@ export default function TripEnRoute() {
               you actually came here to do. */}
           <View style={styles.actions}>
             <Pressable
-              style={({ pressed }) => [
-                styles.primaryBtn,
-                !operatorPhone && styles.primaryBtnOff,
-                pressed && !!operatorPhone && styles.primaryBtnPressed,
-              ]}
-              disabled={!operatorPhone}
+              style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
               accessibilityRole="button"
               onPress={() => {
-                if (!operatorPhone) return;
+                if (!operatorPhone) {
+                  Alert.alert(
+                    'Contact bangkero',
+                    'The number is still loading. Ask the crew on board, or try again in a moment.'
+                  );
+                  return;
+                }
                 void router.push(`tel:${operatorPhone.replace('+', '')}`);
               }}
             >
-              <Icon
-                name="bell"
-                size={18}
-                color={operatorPhone ? colors.primaryText : colors.textOnDisabled}
-              />
-              <Text style={[styles.primaryBtnText, !operatorPhone && styles.btnTextOff]}>
-                {operatorPhone ? 'Contact bangkero' : 'Contact unavailable'}
-              </Text>
+              <Icon name="bell" size={18} color={colors.primaryText} />
+              <Text style={styles.primaryBtnText}>Contact bangkero</Text>
             </Pressable>
 
             <Pressable

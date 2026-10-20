@@ -13,6 +13,7 @@ import { MapContainer } from '@/components/MapContainer';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
+import { WeatherCard } from '@/components/WeatherCard';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -331,9 +332,6 @@ export default function PassengerHome() {
         <MapContainer
           ports={ports.data}
           fill
-          // The sheet covers the bottom of the map, so the zoom controls sit
-          // above its collapsed height rather than underneath it.
-          controlsOffset={SHEET_COLLAPSED}
           onPortPress={(p) => setSelectedPort((cur) => (cur?.portId === p.portId ? null : p))}
           selectedPortId={selectedPort?.portId ?? null}
         />
@@ -580,6 +578,10 @@ export default function PassengerHome() {
               </Pressable>
             ))}
           </ScrollView>
+
+          <View style={styles.weatherWrap}>
+            <WeatherCard latitude={10.3022} longitude={124.0184} variant="bar" />
+          </View>
 
           <View style={styles.sectionHead}>
             <Text style={styles.sectionLabel}>RECENT TRIPS</Text>
@@ -882,6 +884,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: { ...typography.label },
   sectionAction: { ...typography.caption, color: colors.primary, fontWeight: '600' },
+  weatherWrap: { marginTop: spacing.lg },
 
   stateBox: { minHeight: 140 },
 

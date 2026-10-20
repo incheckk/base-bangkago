@@ -21,6 +21,7 @@ import { supabase } from '@/services/supabase';
 import { getAverageRating, getEffectiveRating } from '@/services/rating.service';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
+import { nameError } from '@/utils/validation';
 
 /**
  * Vector icons, not emoji.
@@ -134,6 +135,13 @@ export default function BangkeroProfileScreen() {
 
   async function saveProfile() {
     if (!profile || !uid) return;
+    const firstErr = nameError(firstName);
+    const lastErr = nameError(lastName);
+    const invalid = firstErr ? `First name: ${firstErr}` : lastErr ? `Last name: ${lastErr}` : null;
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
     setSavingProfile(true);
     setError(null);
     // Two writes, no shared transaction (RPC change deferred): if the boat

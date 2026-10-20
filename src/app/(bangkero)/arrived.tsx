@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  ScrollView, StyleSheet, Text, View,
+  Alert, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -11,6 +11,7 @@ import { useLockBack } from '@/hooks/useLockBack';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useAuth } from '@/hooks/useAuth';
+import { useDevFlags } from '@/hooks/useSupabase';
 import { updateParcelStatus } from '@/services/parcel.service';
 import { completeBooking, forceCompleteBooking, friendlyError } from '@/services/booking.service';
 import { completeManifest, stampManifestArrival } from '@/services/manifest.service';
@@ -41,6 +42,7 @@ export default function ArrivedScreen() {
   const { user } = useAuth();
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
   const { data: allParcels } = useBangkeroParcels(user?.id ?? null);
+  const devFlags = useDevFlags();
 
   // Scope parcels to THIS sailing: the hook returns full history, but the
   // disembarkation list must only cover today's close-out set (same scope
@@ -136,7 +138,20 @@ export default function ArrivedScreen() {
     setParcelBusy(null);
   }
 
-  async function handleComplete() {
+  /** Completion is irreversible and sweeps every trip accepted today —
+   *  always ask first. */
+  function handleComplete() {
+    Alert.alert(
+      'Close out this trip?',
+      'All trips accepted for today will be marked completed and their passengers told to disembark. Only do this once the boat is at the pier.',
+      [
+        { text: 'Not yet', style: 'cancel' },
+        { text: 'Complete trip', onPress: () => void completeTrips() },
+      ]
+    );
+  }
+
+  async function completeTrips() {
     if (completing) return;
     setCompleting(true);
     setCompleteError(null);
@@ -161,6 +176,13 @@ export default function ArrivedScreen() {
             try {
               await completeBooking(b.id);
             } catch {
+              // force_complete_trip exists for rehearsals only — without the
+              // admin arrival-bypass switch, a party that never boarded must
+              // stay open, not be silently completed.
+              if (!devFlags.data.arrivalBypass) {
+                failedRefs.push(b.ref ?? b.id);
+                return;
+              }
               try {
                 await forceCompleteBooking(b.id);
               } catch {

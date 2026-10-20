@@ -20,7 +20,7 @@ interface Props {
   right?: React.ReactNode;
 }
 
-export function PassengerScreenHeader({ title, eyebrow, subtitle, showBack = true, showDrawer = true, right }: Props) {
+export function PassengerScreenHeader({ title, eyebrow, subtitle, showBack = true, showDrawer = false, right }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (

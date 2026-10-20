@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
+import { useLockBack } from '@/hooks/useLockBack';
 import { useDevFlags, usePorts } from '@/hooks/useSupabase';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useVesselTracking } from '@/hooks/useVesselTracking';
@@ -50,6 +51,10 @@ const CHIP_POLL_MS = 10_000;
 const DEFAULT_ROUTE_MINUTES = 30;
 
 export default function EnRouteScreen() {
+  // The manifest is finalised and the boat is at sea — nothing behind this
+  // screen (departure/finalize) may be reached again. Hardware back is
+  // absorbed; the header has no back arrow; home carries an ON TRIP banner.
+  useLockBack();
   const { user } = useAuth();
   const uid = user?.id ?? null;
   const ports = usePorts();
@@ -271,7 +276,7 @@ export default function EnRouteScreen() {
   if (loading) {
     return (
       <ScreenContainer padded={false}>
-        <BangkeroScreenHeader eyebrow="SAILING" title="En Route" />
+        <BangkeroScreenHeader eyebrow="SAILING" title="En Route" showBack={false} />
         <LoadingState label="Loading your trip…" />
       </ScreenContainer>
     );
@@ -280,7 +285,7 @@ export default function EnRouteScreen() {
   if (!sailing || !manifest) {
     return (
       <ScreenContainer padded={false}>
-        <BangkeroScreenHeader eyebrow="SAILING" title="En Route" />
+        <BangkeroScreenHeader eyebrow="SAILING" title="En Route" showBack={false} />
         <EmptyState
           icon="boat"
           title="No trip in progress"

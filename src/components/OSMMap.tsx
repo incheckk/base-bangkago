@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-import { Icon } from './Icon';
-import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
+import { colors, radii } from '../theme/tokens';
 import type { PortDoc } from '../types/models';
 
 interface Props {
@@ -21,14 +20,9 @@ interface Props {
   vessels?: { latitude: number; longitude: number; speed?: number | null; bangkaId?: string }[];
   /**
    * One-finger drag to pan. Off for a map embedded in a ScrollView, where the
-   * WebView would otherwise swallow the page's vertical scroll. Pinch-zoom and
-   * the zoom buttons work either way.
+   * WebView would otherwise swallow the page's vertical scroll.
    */
   draggable?: boolean;
-  /** Hide the zoom / recentre controls (e.g. a decorative thumbnail). */
-  showControls?: boolean;
-  /** Lift the controls clear of something overlapping the map, like a sheet. */
-  controlsOffset?: number;
   /** Tiles or Leaflet itself failed to load — the caller swaps in SeaMap. */
   onFail?: () => void;
 }
@@ -142,26 +136,18 @@ function buildLeafletHTML(
       <style>
         html, body, #map {
           margin: 0; padding: 0; height: 100%; width: 100%;
-          background: ${colors.bg};
+          background: #dfe8ea;
         }
-        /*
-         * A dark map from light tiles, with no second CDN to fail on.
-         * invert() darkens everything but flips every hue to its complement —
-         * the sea comes out orange — so hue-rotate(180deg) puts the colours
-         * back where they started. The rest just settles the result into the
-         * app's navy instead of a harsh pure black.
-         */
-        .leaflet-tile-pane {
-          filter: invert(1) hue-rotate(180deg) saturate(0.5) brightness(0.88) contrast(1.05);
-        }
-        .leaflet-container { background: ${colors.bg}; }
+        /* Untouched OpenStreetMap tiles: the invert() filter this used to
+         * carry made the sea almost black on a projector. */
+        .leaflet-container { background: #dfe8ea; }
         .leaflet-control-attribution {
           font-size: 8px !important;
-          background: rgba(10,22,32,0.72) !important;
-          color: ${colors.textMuted} !important;
+          background: rgba(255,255,255,0.85) !important;
+          color: #3a4a50 !important;
           padding: 1px 5px !important;
         }
-        .leaflet-control-attribution a { color: ${colors.textSecondary} !important; }
+        .leaflet-control-attribution a { color: #1c5a66 !important; }
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
           background: ${colors.surface};
           color: ${colors.text};
@@ -287,26 +273,11 @@ function buildLeafletHTML(
               maxZoom: 19
             }).addTo(map);
 
-            // Controls live in React Native, so they need the zoom reported back
-            // to grey themselves out at the limits.
-            function reportZoom() {
-              send({ type: 'zoom', zoom: map.getZoom(), min: ${MIN_ZOOM}, max: ${MAX_ZOOM} });
-            }
-            map.on('zoomend', reportZoom);
-
             ${portMarkers}
             ${routeLine}
             ${vesselMarkers}
 
             send({ type: 'ready' });
-            reportZoom();
-
-            window.__recentre = function () {
-              map.flyTo([${CENTER_LAT}, ${CENTER_LNG}], ${ZOOM}, { duration: 0.45 });
-            };
-            window.__zoomBy = function (d) {
-              map.setZoom(map.getZoom() + d);
-            };
           } catch (e) {
             send({ type: 'failed', reason: String(e && e.message) });
           }
@@ -327,13 +298,10 @@ export function OSMMap({
   selectedPortId = null,
   vessels = [],
   draggable = true,
-  showControls = true,
-  controlsOffset = 0,
   onFail,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const failedRef = useRef(false);
-  const [zoom, setZoom] = useState<number | null>(null);
 
   const html = useMemo(
     () => buildLeafletHTML(
@@ -373,10 +341,6 @@ export function OSMMap({
       fail();
       return;
     }
-    if (msg.type === 'zoom' && typeof msg.zoom === 'number') {
-      setZoom(msg.zoom);
-      return;
-    }
     // The prop was accepted but never wired, so tapping a pin on the real map
     // did nothing — the port callout only ever appeared on the SVG fallback.
     if (msg.type === 'portPress' && msg.portId) {
@@ -384,13 +348,6 @@ export function OSMMap({
       if (port) onPortPress?.(port);
     }
   }, [ports, onPortPress, fail]);
-
-  const run = useCallback((js: string) => {
-    webRef.current?.injectJavaScript(`${js}; true;`);
-  }, []);
-
-  const atMax = zoom !== null && zoom >= MAX_ZOOM;
-  const atMin = zoom !== null && zoom <= MIN_ZOOM;
 
   return (
     <View style={fill ? styles.fill : [styles.wrap, { height }]}>
@@ -405,43 +362,6 @@ export function OSMMap({
         onError={fail}
         onHttpError={fail}
       />
-
-      {showControls && (
-        <View style={[styles.controls, { bottom: controlsOffset + spacing.lg }]}>
-          <Pressable
-            onPress={() => run('window.__recentre && window.__recentre()')}
-            accessibilityRole="button"
-            accessibilityLabel="Recentre the map"
-            style={({ pressed }) => [styles.ctrl, styles.ctrlSolo, pressed && styles.ctrlPressed]}
-          >
-            <Icon name="ride" size={18} color={colors.text} />
-          </Pressable>
-
-          {/* One stacked pair, hairline between — two separate floating pills
-              read as two unrelated tools rather than one zoom control. */}
-          <View style={styles.zoomStack}>
-            <Pressable
-              onPress={() => run('window.__zoomBy && window.__zoomBy(1)')}
-              disabled={atMax}
-              accessibilityRole="button"
-              accessibilityLabel="Zoom in"
-              style={({ pressed }) => [styles.ctrl, pressed && !atMax && styles.ctrlPressed]}
-            >
-              <Text style={[styles.ctrlGlyph, atMax && styles.ctrlGlyphOff]}>+</Text>
-            </Pressable>
-            <View style={styles.ctrlRule} />
-            <Pressable
-              onPress={() => run('window.__zoomBy && window.__zoomBy(-1)')}
-              disabled={atMin}
-              accessibilityRole="button"
-              accessibilityLabel="Zoom out"
-              style={({ pressed }) => [styles.ctrl, pressed && !atMin && styles.ctrlPressed]}
-            >
-              <Text style={[styles.ctrlGlyph, atMin && styles.ctrlGlyphOff]}>−</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -462,39 +382,4 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bgElevated,
   },
-
-  // ---------- zoom / recentre controls ----------
-  // Native, not Leaflet's own: Leaflet's buttons are 26pt, far under the 44pt
-  // minimum, and styled by its stylesheet rather than by the design tokens.
-  controls: {
-    position: 'absolute',
-    right: spacing.md,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  ctrl: {
-    width: touchTarget,
-    height: touchTarget,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctrlSolo: {
-    backgroundColor: colors.scrim,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    ...elevation.e2,
-  },
-  ctrlPressed: { backgroundColor: colors.surfaceAlt },
-  zoomStack: {
-    backgroundColor: colors.scrim,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    overflow: 'hidden',
-    ...elevation.e2,
-  },
-  ctrlRule: { height: 1, backgroundColor: colors.borderSubtle },
-  ctrlGlyph: { ...typography.h2, color: colors.text, lineHeight: 24 },
-  ctrlGlyphOff: { color: colors.textOnDisabled },
 });

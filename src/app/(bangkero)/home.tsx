@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { BangkeroTripSheet } from '@/components/BangkeroTripSheet';
 import { DemandBadge } from '@/components/DemandBadge';
 import { EarningsCard } from '@/components/EarningsCard';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -10,6 +11,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { Icon } from '@/components/Icon';
 import { sailsLabel, slotLabel, todayIso } from '@/components/SchedulePicker';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { WeatherCard } from '@/components/WeatherCard';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -35,6 +37,8 @@ import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
+import { alertPing } from '@/utils/feedback';
+import { bookingTypeLabel } from '@/utils/booking-label';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
 const clock = (ms: number) => {
@@ -57,18 +61,9 @@ function shortDate(iso: string): string {
   return `${MONTHS_SHORT[(m ?? 1) - 1]} ${d}`;
 }
 
-/** Category chip: island package name, else advance slot, else same-day. */
+/** Category chip: padala/charter type, then package / advance slot / same-day. */
 function categoryLabel(b: BookingDoc, pkgName?: string): string | null {
-  if (b.packageId) return `ISLAND HOPPING · ${pkgName ?? 'package'}`;
-  if (isAdvance(b)) {
-    return `ADVANCE · ${shortDate(b.scheduledDate as string)}${b.scheduledTime ? ` · ${slotLabel(b.scheduledTime)}` : ''}`;
-  }
-  // Sail day: isAdvance has flipped false, but the slot still matters —
-  // without this the advance chip vanishes on the morning it sails.
-  if (b.scheduledDate === todayIso() && b.scheduledTime) {
-    return `TODAY · ${slotLabel(b.scheduledTime)}`;
-  }
-  return null;
+  return bookingTypeLabel(b, pkgName) || null;
 }
 
 
@@ -80,6 +75,15 @@ export default function BangkeroHome() {
   const piggybackRequests = usePiggybackRequests(uid);
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
+  /** Ping for a request that just arrived — the first load is the baseline. */
+  const seenRequests = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const ids = requests.data.map((r) => r.bookingId);
+    const baseline = seenRequests.current.size === 0;
+    const fresh = ids.filter((id) => !seenRequests.current.has(id));
+    ids.forEach((id) => seenRequests.current.add(id));
+    if (!baseline && fresh.length > 0) alertPing();
+  }, [requests.data]);
   // Island-package catalogue (static) — just the names behind the chips.
   const [pkgNames, setPkgNames] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -119,6 +123,10 @@ export default function BangkeroHome() {
   const [acted, setActed] = useState<Set<string>>(new Set());
   const markActed = (id: string) => setActed((prev) => new Set(prev).add(id));
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Booking shown in the accept sheet (null = boat-load view, no focus). */
+  const [sheetBooking, setSheetBooking] = useState<BookingDoc | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [notifying, setNotifying] = useState(false);
 
   /**
    * Availability flips locally the instant the switch moves; the server value
@@ -217,6 +225,8 @@ export default function BangkeroHome() {
     [accepted.data, isCargoStub],
   );
   const hasActiveTrip = activeTrips.length > 0;
+  /** The trip currently at sea — has a departure stamp and no completion. */
+  const sailingTrip = activeTrips.find((b) => !!b.departTime) ?? null;
 
   // Port-queue presence + the clocks the chips tick against. `now`
   // advances every second; the boat's own fix is re-read every 15s so
@@ -312,6 +322,15 @@ export default function BangkeroHome() {
     // lock or offer hold (accept_booking_hold skips them too via v_advance).
     // The gates below (online, docs, rating, capacity) still apply.
     const advance = isAdvance(b);
+
+    // A boat at sea cannot take another same-day booking (the trip must
+    // close first). Advance bookings are a different day — still allowed.
+    if (!advance && sailingTrip) {
+      return {
+        text: 'You are sailing — finish this trip first',
+        tone: 'block', canAccept: false, distance,
+      };
+    }
 
     // Route lock: one destination at a time (and a mixed legacy set
     // locks the boat out entirely until those trips clear).
@@ -461,10 +480,10 @@ export default function BangkeroHome() {
         'Booking Accepted',
         `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.${sails ? ` Sails ${sails}.` : ''}`
       ).catch(() => {});
-      router.push({
-        pathname: '/(bangkero)/booking-status',
-        params: { bookingId: b.bookingId },
-      });
+      // Stay on the list: the sheet shows this booking while the bangkero
+      // keeps accepting more same-route bookings until the boat is full.
+      setSheetBooking(b);
+      setSheetOpen(true);
     } catch (e) {
       setActionError(
         friendlyError(e) === 'You do not have permission to do that.'
@@ -503,6 +522,75 @@ export default function BangkeroHome() {
       setActionError(friendlyError(e));
     }
     setPending(null);
+  }
+
+  /** Accepted trips plus the just-accepted row (realtime can lag a second). */
+  const sheetTrips = useMemo(() => {
+    if (!sheetBooking) return activeTrips;
+    return activeTrips.some((t) => t.bookingId === sheetBooking.bookingId)
+      ? activeTrips
+      : [...activeTrips, sheetBooking];
+  }, [activeTrips, sheetBooking]);
+
+  /** Bangkero → everyone boarding today: the boat is ready. */
+  async function notifyPassengers() {
+    setNotifying(true);
+    setActionError(null);
+    try {
+      await Promise.all(
+        activeTrips
+          .filter((t) => !isAdvance(t))
+          .map((t) =>
+            createNotification(
+              t.userId,
+              'Boat is ready',
+              `Your bangkero is at ${t.fromPortName} and ready to board trip ${t.ref}. Head to the pier now.`
+            )
+          )
+      );
+      alertPing();
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setNotifying(false);
+  }
+
+  /** Sail gate: confirm whether the bangkero realises the boat is not full. */
+  function askSail() {
+    const dayTrips = activeTrips.filter((t) => !isAdvance(t));
+    const load = dayTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
+    const full = myCapacity !== null && load >= myCapacity;
+    Alert.alert(
+      full ? 'Ready to sail?' : 'Boat not full',
+      full
+        ? `Your boat is full (${load}/${myCapacity} pax). Start the trip now?`
+        : `${load}/${myCapacity ?? '—'} seats taken. Do you still want to sail?`,
+      [
+        { text: 'Not yet', style: 'cancel' },
+        {
+          text: 'Sail',
+          onPress: () => {
+            setSheetBooking(null);
+            setSheetOpen(false);
+            router.push('/(bangkero)/departure');
+          },
+        },
+      ]
+    );
+  }
+
+  function openScan(b: BookingDoc) {
+    setSheetBooking(null);
+    setSheetOpen(false);
+    router.push({
+      pathname: '/(bangkero)/booking-status',
+      params: { bookingId: b.bookingId },
+    });
+  }
+
+  function closeSheet() {
+    setSheetBooking(null);
+    setSheetOpen(false);
   }
 
   // Earnings count only trips that actually completed AND got paid,
@@ -775,6 +863,30 @@ export default function BangkeroHome() {
           </View>
         </View>
 
+        {/* The boat is at sea — the app stays browsable, but this is the way
+            back to the live trip (same-day accepts are blocked meanwhile). */}
+        {sailingTrip && (
+          <Pressable
+            onPress={() => router.push('/(bangkero)/en-route')}
+            accessibilityRole="button"
+            accessibilityLabel="Open the live sailing trip"
+            style={({ pressed }) => [styles.tripBanner, pressed && styles.requestPressed]}
+          >
+            <View style={styles.tripBannerDot} />
+            <View style={styles.tripBannerText}>
+              <Text style={styles.tripBannerTitle}>ON TRIP · SAILING NOW</Text>
+              <Text style={styles.tripBannerRoute} numberOfLines={1}>
+                {sailingTrip.fromPortName} → {sailingTrip.toPortName}
+              </Text>
+            </View>
+            <Text style={styles.tripBannerAction}>Open ›</Text>
+          </Pressable>
+        )}
+
+        <View style={styles.weatherWrap}>
+          <WeatherCard latitude={10.3022} longitude={124.0184} variant="bar" />
+        </View>
+
         {!!actionError && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{actionError}</Text>
@@ -891,8 +1003,21 @@ export default function BangkeroHome() {
           <>
             <View style={styles.sectionHead}>
               <Text style={styles.sectionLabelInline}>ACTIVE TRIPS</Text>
-              <View style={styles.countPill}>
-                <Text style={styles.countPillText}>{activeTrips.length}</Text>
+              <View style={styles.sectionHeadRight}>
+                <Pressable
+                  onPress={() => {
+                    setSheetBooking(null);
+                    setSheetOpen(true);
+                  }}
+                  hitSlop={12}
+                  accessibilityRole="button"
+                  accessibilityLabel="Boat load, all accepted trips"
+                >
+                  <Text style={styles.sectionAction}>Boat load ›</Text>
+                </Pressable>
+                <View style={styles.countPill}>
+                  <Text style={styles.countPillText}>{activeTrips.length}</Text>
+                </View>
               </View>
             </View>
             {activeTrips.map((b) => (
@@ -973,6 +1098,18 @@ export default function BangkeroHome() {
           </View>
         </View>
       </ScrollView>
+
+      <BangkeroTripSheet
+        visible={sheetOpen}
+        trips={sheetTrips}
+        focusId={sheetBooking?.bookingId ?? null}
+        capacity={myCapacity}
+        notifying={notifying}
+        onClose={closeSheet}
+        onNotify={notifyPassengers}
+        onScan={openScan}
+        onSail={askSail}
+      />
     </ScreenContainer>
   );
 }
@@ -1093,7 +1230,18 @@ const styles = StyleSheet.create({
     ...elevation.e2,
   },
   statusCardOn: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
-  statusTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  tripBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginTop: spacing.md, padding: spacing.lg,
+    borderRadius: radii.lg, borderWidth: 1, borderColor: colors.warning,
+    backgroundColor: colors.surface,
+  },
+  tripBannerDot: { width: 10, height: 10, borderRadius: radii.pill, backgroundColor: colors.warning },
+  tripBannerText: { flex: 1, minWidth: 0 },
+  tripBannerTitle: { ...typography.label, color: colors.warning, fontSize: 11 },
+  tripBannerRoute: { ...typography.bodyStrong, marginTop: 2 },
+  tripBannerAction: { ...typography.caption, color: colors.textSecondary, fontWeight: '700' },
+  weatherWrap: { marginTop: spacing.md },  statusTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusDot: { width: 10, height: 10, borderRadius: radii.pill },
   statusDotOn: { backgroundColor: colors.primary },
   statusDotOff: { backgroundColor: colors.textMuted },
@@ -1172,6 +1320,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.huge, marginBottom: spacing.md,
   },
   sectionLabelInline: { ...typography.label },
+  sectionHeadRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sectionAction: { ...typography.caption, color: colors.primary, fontWeight: '700' },
   groupHead: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     marginTop: spacing.lg, marginBottom: spacing.sm,

@@ -16,6 +16,8 @@ import { calculateParcelFare } from '@/services/parcel-pricing.service';
 import { findEligiblePiggybackBooking } from '@/services/parcel-piggyback.service';
 import type { PiggybackCandidate, RouteDoc } from '@/types/models';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
+import { normalizePhone } from '@/utils/phone';
+import { nameError, textError } from '@/utils/validation';
 
 interface ParcelItem {
   itemName: string;
@@ -120,8 +122,10 @@ export default function BookDelivery() {
     fromId !== toId &&
     cargoFare !== null &&
     totalKg > 0 &&
-    !!receiverName.trim() &&
-    items.some((i) => i.itemName.trim()) &&
+    !nameError(receiverName) &&
+    !!normalizePhone(receiverContact) &&
+    items.some((i) => i.itemName.trim() && !textError(i.itemName)) &&
+    items.every((i) => /^\d+$/.test(i.quantity.trim()) && Number(i.quantity) > 0) &&
     piggybackReady;
 
   if (ports.loading || routesLoading) {
@@ -267,9 +271,24 @@ export default function BookDelivery() {
         )}
 
         <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
-        <TextField label="Receiver Name" value={receiverName} onChangeText={setReceiverName} placeholder="Juan Dela Cruz" />
+        <TextField
+          label="Receiver Name"
+          value={receiverName}
+          onChangeText={setReceiverName}
+          placeholder="Juan Dela Cruz"
+          autoCapitalize="words"
+          error={receiverName ? nameError(receiverName) : null}
+        />
         <View style={{ height: spacing.md }} />
-        <TextField label="Contact Number" value={receiverContact} onChangeText={setReceiverContact} placeholder="+639171234567" />
+        <TextField
+          label="Contact Number"
+          value={receiverContact}
+          onChangeText={setReceiverContact}
+          placeholder="+639171234567"
+          keyboardType="phone-pad"
+          maxLength={20}
+          error={receiverContact && !normalizePhone(receiverContact) ? 'Enter a valid mobile number' : null}
+        />
 
         <Text style={[styles.sectionLabel, styles.mt]}>PARCEL ITEMS</Text>
         {items.map((item, idx) => (
@@ -282,10 +301,17 @@ export default function BookDelivery() {
                 </Pressable>
               )}
             </View>
-            <TextField label="Item Name" value={item.itemName} onChangeText={(v) => updateItem(idx, 'itemName', v)} placeholder="e.g. Box of vegetables" />
+            <TextField
+              label="Item Name"
+              value={item.itemName}
+              onChangeText={(v) => updateItem(idx, 'itemName', v)}
+              placeholder="e.g. Box of vegetables"
+              autoCapitalize="sentences"
+              error={item.itemName ? textError(item.itemName) : null}
+            />
             <View style={styles.itemRow}>
               <View style={styles.itemHalf}>
-                <TextField label="Qty" value={item.quantity} onChangeText={(v) => updateItem(idx, 'quantity', v)} placeholder="1" />
+                <TextField label="Qty" value={item.quantity} onChangeText={(v) => updateItem(idx, 'quantity', v)} placeholder="1" keyboardType="number-pad" maxLength={4} />
               </View>
               <View style={styles.itemHalf}>
                 <TextField label="Weight (kg)" value={item.kilogram} onChangeText={(v) => updateItem(idx, 'kilogram', v)} placeholder="1" keyboardType="numeric" />

@@ -86,6 +86,7 @@ export default function BangkeroLayout() {
       }}
     >
       {/* Completed-trip chain — swipe-back would re-run arrival/notifications. */}
+      <Stack.Screen name="en-route" options={{ gestureEnabled: false }} />
       <Stack.Screen name="arrived" options={{ gestureEnabled: false }} />
       <Stack.Screen name="post-trip" options={{ gestureEnabled: false }} />
       <Stack.Screen name="trip-summary" options={{ gestureEnabled: false }} />

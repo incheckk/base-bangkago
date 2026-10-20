@@ -5,6 +5,7 @@ import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { Icon, type IconName } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
+import { WeatherCard } from '@/components/WeatherCard';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useAuth } from '@/hooks/useAuth';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
@@ -148,6 +149,10 @@ export default function AdminHome() {
 
             {/* Surface 2 of 2. Group labels sit outside the card so the card
                 itself stays one unbroken list to run a thumb down. */}
+            <View style={styles.weatherWrap}>
+              <WeatherCard latitude={10.3022} longitude={124.0184} place="Mactan" />
+            </View>
+
             <View style={styles.section}>
               {MANAGE.map((item, i) => {
                 const first = i === 0;
@@ -201,6 +206,7 @@ const styles = StyleSheet.create({
   iconBtnPressed: { backgroundColor: colors.surfaceAlt },
 
   section: { paddingHorizontal: spacing.xl, marginBottom: spacing.xl },
+  weatherWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
 
   // ---------- summary card ----------
   summary: {

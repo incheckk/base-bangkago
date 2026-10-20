@@ -99,7 +99,6 @@ export default function SignIn() {
               placeholder="Your password"
               secure
               error={passwordError}
-              editable={!busy}
             />
 
             {!!formError && (

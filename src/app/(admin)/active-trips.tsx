@@ -28,7 +28,7 @@ export default function ActiveTripsScreen() {
   return (
     <ScreenContainer padded={false}>
       <AdminScreenHeader
-      title="Active Trips"
+      title="Trips"
       subtitle={trips.loading ? 'Loading…' : `${trips.data.length} trip${trips.data.length === 1 ? '' : 's'}`}
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -52,6 +52,9 @@ export default function ActiveTripsScreen() {
             {trips.data.map((t) => (
               <Pressable
                 key={t.bookingId}
+                onPress={() => router.push(`/(admin)/booking/${t.bookingId}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open manifest for trip ${t.ref}`}
                 style={({ pressed }) => [styles.tripCard, pressed && styles.cardPressed]}
               >
                 <View style={styles.tripTop}>
@@ -84,6 +87,8 @@ export default function ActiveTripsScreen() {
                 {t.passengerName && (
                   <Text style={styles.passenger}>Passenger: {t.passengerName}</Text>
                 )}
+
+                <Text style={styles.manifestLink}>View manifest ›</Text>
               </Pressable>
             ))}
           </View>
@@ -154,4 +159,9 @@ const styles = StyleSheet.create({
   dot: { color: colors.textMuted, fontSize: 13 },
 
   passenger: { flexShrink: 1, color: colors.textMuted, fontSize: 12, marginTop: spacing.sm },
+  // Every row opens its manifest — say so, the cards used to do nothing.
+  manifestLink: {
+    flexShrink: 1, color: colors.warning, fontSize: 12,
+    fontWeight: '700', marginTop: spacing.sm, textAlign: 'right',
+  },
 });

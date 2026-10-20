@@ -44,7 +44,11 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 - **2026-10-21 — Demo-readiness batch: booking rules v3, accept desk rebuild,
   Open-Meteo weather on all six surfaces, input validation, map legibility
   (gates green: tsc clean, lint 0 errors / 133 warnings, expo-doctor 21/21).**
-  - **Migrations 062 + 063 PENDING — USER MUST RUN, in that order, after 061.**
+  - **Migrations 062 + 063 + 064 PENDING — USER MUST RUN, in that order,
+    after 061.** 064 `admin_parcel_items_read.sql`: admin SELECT on
+    `parcel_items` (038 covered `parcels` + `passenger_details` only), so
+    the admin trip manifest can list what cargo is aboard; without it the
+    item rows read empty and the card just shows the parcel header.
     062 `booking_rules_v3.sql`: drops 027's one-trip-per-bangkero-per-day
     trigger (multiple same-route accepts until the boat is full are the
     point; route + capacity stay enforced by 008 inside
@@ -114,6 +118,16 @@ gracefully. Don't mass-refactor hooks to silence warnings.
     home and coastguard home; `web/BangkaGO-WEB/assets/js/sea-weather.js`
     fills the admin dashboard strip and the coastguard dashboard's Weather
     KPI.
+  - **Admin console:** profile lost the synthetic `bangkago+<phone>@gmail.com`
+    line (it is the auth address, not an inbox); the drawer no longer carries
+    a Profile row (`menuFor` skips admin as it already skips bangkero — the
+    admin home header icon still opens Profile + Sign Out); "Active Trips" is
+    now "Trips" (menu, admin home MANAGE, screen header, profile menu) since
+    the list shows completed/open/accepted too; and every trip card opens
+    `/(admin)/booking/{id}`, which gained a MANIFEST card — booker + phone,
+    `passenger_details` companions (age/sex/contact/address, boarded/no-show)
+    and the booking's parcel with receiver, mode, weight and `parcel_items`
+    lines (064).
   - **Next:** Expo Go smoke of the accept loop (accept → sheet → accept a
     second → Notify → Sail), a second same-day booking must raise, an
     advance booking must still accept while sailing, and the web

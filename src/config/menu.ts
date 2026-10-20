@@ -60,7 +60,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'home', label: 'Home', route: '/(admin)/home', section: 'OPERATIONS' },
     { icon: 'people', label: 'Operators', route: '/(admin)/operators' },
     { icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-    { icon: 'boat', label: 'Active Trips', route: '/(admin)/active-trips' },
+    { icon: 'boat', label: 'Trips', route: '/(admin)/active-trips' },
 
     { icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', section: 'FLEET' },
     { icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },
@@ -120,7 +120,8 @@ export function menuFor(role: UserRole | 'admin'): MenuItem[] {
   }));
 
   // Bangkero has a profile icon on the home screen header — no need in sidebar.
-  if (role !== 'bangkero') {
+  // Admin has one too (admin home header), so both skip this row.
+  if (role !== 'bangkero' && role !== 'admin') {
     items.unshift({
       icon: 'profile',
       label: 'Profile',

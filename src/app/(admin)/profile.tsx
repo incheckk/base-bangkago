@@ -11,7 +11,7 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
 const MENU_ITEMS = [
   { key: 'operators', label: 'Manage Operators', icon: '🚤', route: '/(admin)/all-users' },
   { key: 'users', label: 'All Users', icon: '👥', route: '/(admin)/all-users' },
-  { key: 'trips', label: 'Active Trips', icon: '📋', route: '/(admin)/active-trips' },
+  { key: 'trips', label: 'Trips', icon: '📋', route: '/(admin)/active-trips' },
   { key: 'alerts', label: 'System Alerts', icon: '🚨', route: '/(admin)/alerts' },
 ] as const;
 
@@ -47,7 +47,6 @@ export default function AdminProfileScreen() {
           <Text style={styles.name} numberOfLines={1}>
             {profile ? `${profile.firstName} ${profile.lastName}` : 'Loading…'}
           </Text>
-          <Text style={styles.email}>{profile?.email ?? ''}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleText}>Administrator</Text>
           </View>
@@ -105,8 +104,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   initials: { flexShrink: 1, color: colors.primaryText, fontSize: 28, fontWeight: '700' },
-  name: { flexShrink: 1, color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.xs },
-  email: { flexShrink: 1, color: colors.textSecondary, fontSize: 14, marginBottom: spacing.sm },
+  name: { flexShrink: 1, color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: spacing.sm },
   roleBadge: {
     backgroundColor: colors.warning + '20',
     paddingHorizontal: spacing.lg,

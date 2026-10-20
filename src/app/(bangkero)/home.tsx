@@ -557,9 +557,17 @@ export default function BangkeroHome() {
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   // Two groups so an operator can tell tomorrow's commitments from
-  // people standing at the pier right now. Batched stubs now stay visible
-  // with a disabled Accept ("Waiting for batch"), so nothing is filtered.
-  const visibleRequests = requests.data;
+  // people standing at the pier right now. Batched stubs stay visible
+  // with a disabled Accept ("Waiting for batch"); piggyback stubs are
+  // approved via the cube icon, so keep them off this list.
+  const visibleRequests = requests.data.filter(
+    (b) =>
+      !(
+        b.serviceType === 'cargo' &&
+        b.cargoMode === 'piggyback' &&
+        b.isDispatchable === false
+      ),
+  );
   const advanceReqs = visibleRequests.filter(isAdvance);
   const todayReqs = visibleRequests.filter((b) => !isAdvance(b));
 

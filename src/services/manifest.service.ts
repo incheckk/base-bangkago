@@ -147,6 +147,7 @@ export interface BoardedBooking {
   passengerName: string | null;
   numOfPassenger: number;
   serviceType: string;
+  cargoMode?: 'accompanied' | 'piggyback' | 'batched' | 'solo' | null;
 }
 
 /**
@@ -175,7 +176,9 @@ export async function populateManifestDeparture(
   }
   const paxRows: Record<string, unknown>[] = [];
   for (const b of uniqueBoarding) {
-    if (b.serviceType === 'cargo') continue;
+    // Stub cargo (piggyback/batched/solo) has nobody aboard; an accompanied
+    // sender rides with the parcel, so it counts as one passenger.
+    if (b.serviceType === 'cargo' && b.cargoMode !== 'accompanied') continue;
     const missing = b.numOfPassenger - (seatedByBooking.get(b.bookingId) ?? 0);
     for (let i = 0; i < missing; i++) {
       paxRows.push({
@@ -205,7 +208,8 @@ export async function populateManifestDeparture(
     const { data, error } = await supabase
       .from('parcels')
       .select('id, receiver_name, total_weight_kg')
-      .in('booking_id', bookingIds);
+      .in('booking_id', bookingIds)
+      .or('delivery_type.eq.accompanied,delivery_type.is.null');
     if (__DEV__) {
       console.log('[manifest] parcels by booking_id:', data?.length ?? 0, error?.message);
     }
@@ -256,13 +260,26 @@ export async function populateManifestDeparture(
     if (error) throw error;
   }
   if (parcelInserts.length) {
-    const { error } = await supabase.from('manifest_parcels').insert(parcelInserts);
-    if (error) throw error;
+    // 056 adds UNIQUE(manifest_id, parcel_id): a double-tap or two
+    // overlapping populates can no longer record the same parcel twice.
+    // Pre-056 the constraint is missing — fall back to a plain insert.
+    const { error } = await supabase
+      .from('manifest_parcels')
+      .upsert(parcelInserts, { onConflict: 'manifest_id,parcel_id', ignoreDuplicates: true });
+    if (error) {
+      if (__DEV__) console.warn('[manifest] parcel upsert fell back to insert:', error.message);
+      const { error: insertErr } = await supabase
+        .from('manifest_parcels')
+        .insert(parcelInserts);
+      if (insertErr) throw insertErr;
+    }
   }
 
   const patch: Record<string, unknown> = {
     total_passengers_on_board: existingPax.length + paxRows.length,
-    total_parcels_on_board: existingParcels.length + parcelInserts.length,
+    // Distinct parcel ids only — duplicate manifest_parcels rows (pre-056
+    // or a stale row) must never inflate the "items" count again.
+    total_parcels_on_board: loadedParcelIds.size + parcelInserts.length,
   };
   if (opts.stampDeparture !== false && !manifest.actualDepartureTime) {
     patch.actual_departure_time = now;
@@ -354,5 +371,14 @@ export async function getManifestParcels(
     .eq('manifest_id', manifestId);
 
   if (error) throw error;
-  return (data ?? []).map(mapManifestParcel);
+  // Defensive: a pre-056 database can still hold duplicate
+  // (manifest_id, parcel_id) rows — report each parcel once.
+  const seen = new Set<string>();
+  return (data ?? [])
+    .map(mapManifestParcel)
+    .filter((p) => {
+      if (seen.has(p.parcelId)) return false;
+      seen.add(p.parcelId);
+      return true;
+    });
 }

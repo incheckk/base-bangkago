@@ -287,13 +287,13 @@ export async function completeBooking(bookingId: string): Promise<void> {
   // Best-effort: auto-deliver every parcel attached to this booking —
   // piggyback riders, Option B carriers, and accompanied cargo.
   // Never blocks completion — a parcel-sync failure is only logged.
+  const deliveredAt = new Date().toISOString();
   try {
-    const deliveredAt = new Date().toISOString();
     const { error: parcelError } = await supabase
       .from('parcels')
       .update({ status: 'delivered', actual_arrival_at: deliveredAt })
       .or(
-        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
       );
 
     if (parcelError) {
@@ -305,10 +305,25 @@ export async function completeBooking(bookingId: string): Promise<void> {
       const { error: fallbackError } = await supabase
         .from('parcels')
         .update({ status: 'delivered', actual_arrival_at: deliveredAt })
-        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+        .or(
+          `piggyback_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
+        );
       if (fallbackError && __DEV__) {
         console.warn('[booking] Parcel delivery sync failed:', fallbackError.message);
       }
+    }
+
+    // Delivery only flips `parcels.status`; the sender's cargo stub keeps
+    // trip_stat='accepted' (piggyback) or 'open' (batched), so
+    // getActiveBooking() would keep refusing their next booking and the home
+    // banner would keep advertising a finished delivery. The stub is not ours
+    // (user_id = sender), so RLS blocks a direct UPDATE — close it through the
+    // SECURITY DEFINER RPC (057). Best-effort: never blocks completion.
+    const { error: stubError } = await supabase.rpc('close_delivered_cargo_stubs', {
+      p_carrier_booking_id: bookingId,
+    });
+    if (stubError && __DEV__) {
+      console.warn('[booking] Cargo stub close skipped:', stubError.message);
     }
   } catch (e) {
     if (__DEV__) console.warn('[booking] Parcel delivery sync failed:', e);
@@ -343,7 +358,7 @@ export async function stampBookingDepart(bookingId: string): Promise<void> {
       .from('parcels')
       .update({ status: 'in_transit' })
       .or(
-        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`
+        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
       );
 
     if (parcelError) {
@@ -355,7 +370,9 @@ export async function stampBookingDepart(bookingId: string): Promise<void> {
       const { error: fallbackError } = await supabase
         .from('parcels')
         .update({ status: 'in_transit' })
-        .or(`piggyback_booking_id.eq.${bookingId},booking_id.eq.${bookingId}`);
+        .or(
+          `piggyback_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
+        );
       if (fallbackError && __DEV__) {
         console.warn('[booking] Parcel in_transit sync failed:', fallbackError.message);
       }

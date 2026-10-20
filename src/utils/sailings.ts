@@ -107,7 +107,17 @@ export function buildSailings(
   }
 
   for (const parcel of parcels) {
-    const s = sailingOfBooking.get(parcel.bookingId);
+    // Option B: a batched/solo parcel's own booking is a non-dispatchable
+    // stub, and a piggyback parcel hangs off its carrier ride. Fall back to
+    // those links so every mode lands on the sailing it actually sails on.
+    const s =
+      sailingOfBooking.get(parcel.bookingId) ??
+      (parcel.carrierBookingId
+        ? sailingOfBooking.get(parcel.carrierBookingId)
+        : undefined) ??
+      (parcel.piggybackBookingId
+        ? sailingOfBooking.get(parcel.piggybackBookingId)
+        : undefined);
     if (s) s.parcelCount += 1;
   }
 

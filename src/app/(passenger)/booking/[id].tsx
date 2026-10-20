@@ -220,7 +220,7 @@ export default function BookingDetail() {
   }, [id, user?.id, booking?.status]);
 
   async function cancel() {
-    if (!id || acted || busy) return;
+    if (!id || acted || busy || parcelDone) return;
     setBusy(true);
     setActionError(null);
     try {
@@ -437,6 +437,13 @@ export default function BookingDetail() {
   // Cargo bookings mirror the parcel's own delivery state, not the stub
   // booking's FCFS status.
   const shownParcel = booking.serviceType === 'cargo' ? parcel : attachedParcel;
+  // Cargo stubs keep their FCFS trip_stat after the parcel lands; the parcel
+  // is the source of truth for the delivery lifecycle (same as the header
+  // badge). Treat a landed parcel as terminal for the actions below.
+  const parcelDone =
+    booking.serviceType === 'cargo' &&
+    !!parcel &&
+    (parcel.status === 'delivered' || parcel.status === 'returned');
 
   return (
     <ScreenContainer padded={false}>
@@ -459,7 +466,7 @@ export default function BookingDetail() {
           )}
         </View>
 
-        {booking.status === 'pending' && (
+        {booking.status === 'pending' && !parcelDone && (
           <View style={styles.pendingBanner}>
             <Text style={styles.pendingText}>
               Awaiting admin confirmation of your GCash downpayment. Bangkeros cannot see
@@ -579,7 +586,7 @@ export default function BookingDetail() {
         )}
 
         <View style={styles.actions}>
-          {booking.status === 'pending' && (
+          {booking.status === 'pending' && !parcelDone && (
             <>
               <Text style={styles.waiting}>
                 Waiting for the admin to confirm your downpayment. This updates on its own.
@@ -594,7 +601,7 @@ export default function BookingDetail() {
             </>
           )}
 
-          {booking.status === 'open' && (
+          {booking.status === 'open' && !parcelDone && (
             <>
               <Text style={styles.waiting}>
                 {waitQueue.data.length > 0
@@ -618,7 +625,7 @@ export default function BookingDetail() {
             </>
           )}
 
-          {booking.status === 'accepted' && (
+          {booking.status === 'accepted' && !parcelDone && (
             <>
               <Text style={styles.waiting}>
                 {booking.disputedAt
@@ -712,6 +719,14 @@ export default function BookingDetail() {
                 style={{ marginTop: spacing.md }}
               />
             )
+          )}
+
+          {parcelDone && (
+            <Text style={styles.waiting}>
+              {parcel?.status === 'delivered'
+                ? `Delivered to ${parcel.receiverName}. This booking is complete.`
+                : 'Parcel returned to you.'}
+            </Text>
           )}
 
           <PrimaryButton

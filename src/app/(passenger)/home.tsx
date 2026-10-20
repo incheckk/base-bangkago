@@ -16,11 +16,14 @@ import { EmptyState, LoadingState } from '@/components/States';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings } from '@/hooks/useSupabase';
+import {
+  useActiveCargoDeliveries, useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings,
+} from '@/hooks/useSupabase';
 import { scheduleLocalNotification } from '@/services/notification.service';
 import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
+import { supabase } from '@/services/supabase';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { BookingDoc, PortDoc } from '@/types/models';
+import type { BookingDoc, ParcelDoc, PortDoc } from '@/types/models';
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -55,12 +58,47 @@ const SERVICES: { key: string; icon: IconName; label: string; enabled: boolean; 
   { key: 'rental', icon: 'rental', label: 'Boat Rental', enabled: true, route: '/(passenger)/boat-rental' },
 ];
 
+function deliveryModeLabel(parcel: ParcelDoc): string {
+  // An abandoned batch auto-solos the parcel (059) without rewriting
+  // delivery_type, so the batching lifecycle is the live mode.
+  if (parcel.batchingStatus === 'solo') return 'Solo';
+  if (parcel.deliveryType === 'batched') return 'Batched';
+  if (parcel.deliveryType === 'solo') return 'Solo';
+  return 'Piggyback';
+}
+
+/** Parcel lifecycle, not `trip_stat` — batched stubs are cancelled at resolve. */
+function deliveryStateLabel(parcel: ParcelDoc): string {
+  if (parcel.batchingStatus === 'solo') {
+    return parcel.status === 'in_transit' ? 'On the way' : 'Waiting for a bangkero';
+  }
+  if (parcel.deliveryType === 'batched') {
+    if (parcel.batchingStatus !== 'batched') return 'Waiting for other parcels';
+    return parcel.batchedCountAtSail != null
+      ? `Sailing with ${parcel.batchedCountAtSail} parcels`
+      : 'Sailing';
+  }
+  if (parcel.deliveryType === 'solo') {
+    return parcel.status === 'in_transit' ? 'On the way' : 'Waiting for a bangkero';
+  }
+  if (parcel.approvalStatus === 'pending') return 'Waiting for the captain';
+  if (parcel.approvalStatus === 'rejected') return 'Not approved';
+  if (parcel.approvalStatus === 'timeout') return 'Request expired';
+  return parcel.status === 'in_transit' ? 'On the way' : 'With your trip';
+}
+
+function deliveryNeedsAttention(parcel: ParcelDoc): boolean {
+  return parcel.deliveryType === 'piggyback' &&
+    (parcel.approvalStatus === 'rejected' || parcel.approvalStatus === 'timeout');
+}
+
 export default function PassengerHome() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const ports = usePorts();
   const bangkeros = useAvailableBangkeroCount();
   const bookings = useRecentBookings(user?.id ?? null, 10);
+  const deliveries = useActiveCargoDeliveries(user?.id ?? null);
   const notifications = useNotifications(user?.id ?? null);
 
   // ---------- nearest port waiting line (Phase 2, 008) ----------
@@ -122,13 +160,68 @@ export default function PassengerHome() {
     };
   }, [nearPortId, myPos, nearQueue.data.length]);
 
+  // A landed parcel no longer warrants a live banner (and a batched stub can
+  // still read 'open' until the batch resolves). The banner only sees booking
+  // rows, so look up the sender's cargo parcels and drop the finished ones.
+  const [deliveredBookingIds, setDeliveredBookingIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const cargoIds = bookings.data
+      .filter((b) => b.serviceType === 'cargo')
+      .map((b) => b.bookingId);
+    if (cargoIds.length === 0) return;
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from('parcels')
+        .select('booking_id, status')
+        .in('booking_id', cargoIds)
+        .in('status', ['delivered', 'returned']);
+      if (!alive || error) return;
+      setDeliveredBookingIds(
+        new Set(
+          (data ?? [])
+            .map((r) => r.booking_id as string | null)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [bookings.data]);
+
   // Newest first. The banner must surface a live booking even when newer
   // finished trips would push it out of the top-3 recent list.
   const activeBookings = bookings.data.filter(
-    (b) => b.status === 'open' || b.status === 'accepted' || b.status === 'pending'
+    (b) =>
+      (b.status === 'open' || b.status === 'accepted' || b.status === 'pending') &&
+      !deliveredBookingIds.has(b.bookingId)
   );
   const bannerBooking = activeBookings[0] ?? null;
-  const recentTrips = bookings.data.slice(0, 3);
+  // Padala first: a batched sender's stub is cancelled at resolve, so the
+  // parcel-derived banner is the only surface that can show the live batch.
+  const activeDelivery = deliveries.data[0] ?? null;
+  const bannerHeight = activeDelivery ? 84 : ACTIVE_BANNER_H;
+  const openDelivery = () => {
+    if (!activeDelivery) return;
+    const parcel = activeDelivery.parcel;
+    // Only a parcel still in the batching queue belongs on the waiting
+    // screen; auto-soloed/in-transit former batches track via the booking.
+    const waitingOnBatch =
+      parcel.deliveryType === 'batched' &&
+      (parcel.batchingStatus === 'pending_batch' || parcel.batchingStatus === 'batched');
+    if (waitingOnBatch) {
+      router.push({
+        pathname: '/(passenger)/batched-waiting',
+        params: { parcelId: parcel.parcelId },
+      });
+    } else {
+      router.push(`/(passenger)/booking/${parcel.bookingId}`);
+    }
+  };
+  const recentTrips = bookings.data
+    .filter((b) => !deliveredBookingIds.has(b.bookingId))
+    .slice(0, 3);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedPort, setSelectedPort] = useState<PortDoc | null>(null);
@@ -329,35 +422,67 @@ export default function PassengerHome() {
         )}
       </View>
 
-      {/* ---------- active booking banner ----------
+      {/* ---------- active booking / Padala banner ----------
           Sits just above the collapsed sheet and rides the same translateY as
           the port callout, so expanding the sheet slides it underneath —
-          where RECENT TRIPS is already showing the same bookings. */}
-      {bannerBooking && (
-        <Animated.View style={[styles.bannerWrap, calloutStyle]}>
-          <Pressable
-            onPress={() => router.push(`/(passenger)/booking/${bannerBooking.bookingId}`)}
-            accessibilityRole="button"
-            accessibilityLabel={`Open booking for ${bannerBooking.fromPortName} to ${bannerBooking.toPortName}`}
-            style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
-          >
-            <View style={styles.bannerDot} />
-            <View style={styles.bannerBody}>
-              <Text style={styles.bannerRoute} numberOfLines={1}>
-                {bannerBooking.fromPortName} → {bannerBooking.toPortName}
-              </Text>
-              <Text style={styles.bannerMeta} numberOfLines={1}>
-                {bannerBooking.status === 'pending'
-                  ? 'Awaiting confirmation'
-                  : bannerBooking.status === 'open'
-                    ? 'Waiting for a bangkero'
-                    : 'Accepted'}
-                {' · '}{bannerBooking.numOfPassenger} pax · ₱{bannerBooking.totalPrice}
-                {activeBookings.length > 1 ? ` · +${activeBookings.length - 1} more` : ''}
-              </Text>
-            </View>
-            <Icon name="forward" size={18} color={colors.primary} />
-          </Pressable>
+          where RECENT TRIPS is already showing the same bookings. Padala wins
+          while one is live; the booking still lists under RECENT TRIPS. */}
+      {(activeDelivery || bannerBooking) && (
+        <Animated.View style={[styles.bannerWrap, { height: bannerHeight }, calloutStyle]}>
+          {activeDelivery ? (
+            <Pressable
+              onPress={openDelivery}
+              accessibilityRole="button"
+              accessibilityLabel={`Open Padala for ${activeDelivery.parcel.receiverName}`}
+              style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+            >
+              <View style={styles.bannerDot} />
+              <View style={styles.bannerBody}>
+                <Text style={styles.bannerRoute} numberOfLines={1}>
+                  {deliveryNeedsAttention(activeDelivery.parcel)
+                    ? 'Padala needs attention'
+                    : 'Padala in progress'}
+                </Text>
+                <Text style={styles.bannerMeta} numberOfLines={1}>
+                  {activeDelivery.booking
+                    ? `${activeDelivery.booking.fromPortName} → ${activeDelivery.booking.toPortName}${
+                        activeDelivery.booking.ref ? ` · ${activeDelivery.booking.ref}` : ''
+                      }`
+                    : `For ${activeDelivery.parcel.receiverName}`}
+                </Text>
+                <Text style={styles.bannerMeta} numberOfLines={1}>
+                  {deliveryModeLabel(activeDelivery.parcel)} · {deliveryStateLabel(activeDelivery.parcel)}
+                  {` · ${activeDelivery.parcel.receiverName} · ₱${activeDelivery.parcel.totalPrice}`}
+                  {deliveries.data.length > 1 ? ` · +${deliveries.data.length - 1} more` : ''}
+                </Text>
+              </View>
+              <Icon name="forward" size={18} color={colors.primary} />
+            </Pressable>
+          ) : bannerBooking ? (
+            <Pressable
+              onPress={() => router.push(`/(passenger)/booking/${bannerBooking.bookingId}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open booking for ${bannerBooking.fromPortName} to ${bannerBooking.toPortName}`}
+              style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
+            >
+              <View style={styles.bannerDot} />
+              <View style={styles.bannerBody}>
+                <Text style={styles.bannerRoute} numberOfLines={1}>
+                  {bannerBooking.fromPortName} → {bannerBooking.toPortName}
+                </Text>
+                <Text style={styles.bannerMeta} numberOfLines={1}>
+                  {bannerBooking.status === 'pending'
+                    ? 'Awaiting confirmation'
+                    : bannerBooking.status === 'open'
+                      ? 'Waiting for a bangkero'
+                      : 'Accepted'}
+                  {' · '}{bannerBooking.numOfPassenger} pax · ₱{bannerBooking.totalPrice}
+                  {activeBookings.length > 1 ? ` · +${activeBookings.length - 1} more` : ''}
+                </Text>
+              </View>
+              <Icon name="forward" size={18} color={colors.primary} />
+            </Pressable>
+          ) : null}
         </Animated.View>
       )}
 
@@ -367,7 +492,9 @@ export default function PassengerHome() {
           style={[
             styles.callout,
             // Stack above the banner when both are on screen.
-            bannerBooking && { bottom: SHEET_COLLAPSED + spacing.md + ACTIVE_BANNER_H + spacing.md },
+            (activeDelivery || bannerBooking) && {
+              bottom: SHEET_COLLAPSED + spacing.md + bannerHeight + spacing.md,
+            },
             calloutStyle,
           ]}
         >
@@ -465,7 +592,7 @@ export default function PassengerHome() {
 
           {bookings.loading ? (
             <View style={styles.stateBox}><LoadingState label="Loading your trips…" /></View>
-          ) : bookings.data.length === 0 ? (
+          ) : recentTrips.length === 0 ? (
             <View style={styles.stateBox}>
               <EmptyState
                 icon="anchor"

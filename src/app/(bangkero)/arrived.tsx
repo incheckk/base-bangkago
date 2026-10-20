@@ -68,7 +68,12 @@ export default function ArrivedScreen() {
     };
   }, [user?.id]);
   const parcels = sailingIds
-    ? allParcels.filter((p) => sailingIds.includes(p.bookingId))
+    ? allParcels.filter(
+        (p) =>
+          (p.deliveryType === 'accompanied' && sailingIds.includes(p.bookingId)) ||
+          (p.carrierBookingId != null && sailingIds.includes(p.carrierBookingId)) ||
+          (p.piggybackBookingId != null && sailingIds.includes(p.piggybackBookingId)),
+      )
     : allParcels;
 
   const [completing, setCompleting] = useState(false);
@@ -242,7 +247,7 @@ export default function ArrivedScreen() {
                 <Text style={styles.cardLabel}>Parcels</Text>
                 <Text style={styles.cardValue}>
                   {parcels.length} {parcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
-                  {manifest?.totalParcelsOnBoard ?? '?'} items to unload
+                  {parcels.length} items to unload
                 </Text>
               </View>
             </View>

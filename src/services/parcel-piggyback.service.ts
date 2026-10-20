@@ -110,13 +110,16 @@ export async function approvePiggyback(parcelId: string): Promise<void> {
         .maybeSingle();
 
       if (ride?.operator_id) {
-        await supabase
+        const { error: stubError } = await supabase
           .from('bookings')
           .update({
             trip_stat: 'accepted',
             operator_id: ride.operator_id,
           })
           .eq('id', parcel.booking_id);
+        if (stubError && __DEV__) {
+          console.warn('[parcel] Failed to link piggyback stub to operator:', stubError.message);
+        }
       }
     }
   } catch {

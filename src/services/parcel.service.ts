@@ -11,6 +11,7 @@ export function mapRow(row: any): ParcelDoc {
     createdAt: row.created_at,
     userId: row.user_id,
     bookingId: row.booking_id,
+    carrierBookingId: row.carrier_booking_id ?? null,
     deliveryType: row.delivery_type ?? null,
     piggybackBookingId: row.piggyback_booking_id ?? null,
     approvalStatus: row.approval_status ?? null,

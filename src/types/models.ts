@@ -244,6 +244,8 @@ export interface ParcelDoc {
   createdAt: string;
   userId: string;
   bookingId: string;
+  /** 050: accepted booking this parcel actually sails on (batched / solo). */
+  carrierBookingId: string | null;
   // Phase 1 (042): mode + batching lifecycle
   deliveryType: 'accompanied' | 'piggyback' | 'batched' | 'solo' | null;
   piggybackBookingId: string | null;

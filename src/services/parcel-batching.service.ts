@@ -196,12 +196,21 @@ export async function resolveBatchOutcome(
  * Increment the batch cycle count and extend the deadline by 1 hour.
  * If max cycles reached, auto-apply solo fee.
  */
+export async function releaseAbandonedBatch(routeKey: string): Promise<void> {
+  const { error } = await supabase.rpc('release_abandoned_batch', {
+    p_route_key: routeKey,
+  });
+  if (error && __DEV__) {
+    console.warn('[parcel] release_abandoned_batch skipped:', error.message);
+  }
+}
+
 export async function bumpBatchCycle(
   parcelId: string
 ): Promise<{ cycleCount: number; autoSolo: boolean }> {
   const { data: parcel } = await supabase
     .from('parcels')
-    .select('batching_cycle_count')
+    .select('batching_cycle_count, batching_route_key, booking_id')
     .eq('id', parcelId)
     .maybeSingle();
 
@@ -217,8 +226,16 @@ export async function bumpBatchCycle(
   if (autoSolo) {
     update.batching_status = 'solo';
     update.solo_surcharge = PARCEL_RATES.soloSurcharge;
+    // Solo parcels stay reachable through their own stub (Option B);
+    // clear any batch carrier left over from an earlier resolve.
+    update.carrier_booking_id = parcel?.booking_id ?? null;
   }
 
   await supabase.from('parcels').update(update).eq('id', parcelId);
+
+  if (autoSolo && parcel?.batching_route_key) {
+    await releaseAbandonedBatch(parcel.batching_route_key);
+  }
+
   return { cycleCount: next, autoSolo };
 }

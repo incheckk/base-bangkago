@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { useAuth } from '@/hooks/useAuth';
+import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
@@ -50,10 +51,15 @@ export default function DepartureScreen() {
   // only sails today (mirror of arrived.tsx; 027 makes advance accepts
   // common). Payment reads below still cover every accepted row.
   const accepted = useAcceptedBookings(bangkeroId);
+  const { data: allParcels } = useBangkeroParcels(bangkeroId);
 
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [finalizing, setFinalizing] = useState(false);
   const [departing, setDeparting] = useState(false);
+  // Synchronous tap guards: useState updates land after the handler, so a
+  // fast double-tap used to run two populates and duplicate manifest rows.
+  const finalizeInFlight = useRef(false);
+  const departInFlight = useRef(false);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [routeContext, setRouteContext] = useState<{ from: string; to: string } | null>(null);
@@ -63,16 +69,18 @@ export default function DepartureScreen() {
   // A partial no-show / dispute (022) keeps the booking accepted with
   // onboarded_at NULL — resolved, not waiting, so it never blocks depart.
   const todayIso = manilaTodayIso();
-  const acceptedTrips = accepted.data.filter(
-    (t) => !t.scheduledDate || t.scheduledDate <= todayIso
+  const acceptedTrips = useMemo(
+    () => accepted.data.filter((t) => !t.scheduledDate || t.scheduledDate <= todayIso),
+    [accepted.data, todayIso],
   );
   const boardedTrips = acceptedTrips.filter((t) => t.onboardedAt);
   const waitingTrips = acceptedTrips.filter((t) => !t.onboardedAt);
   // Cargo bookings have no passenger QR — the bangkero ticks "Cargo Ready"
   // on the status screen. Their parcels still belong on the manifest, so
   // every accepted cargo trip is recorded regardless of onboarded_at.
-  const manifestTrips = acceptedTrips.filter(
-    (t) => t.onboardedAt || t.serviceType === 'cargo'
+  const manifestTrips = useMemo(
+    () => acceptedTrips.filter((t) => t.onboardedAt || t.serviceType === 'cargo'),
+    [acceptedTrips],
   );
   const pendingTrips = waitingTrips.filter((t) => !t.noShowAt && !t.disputedAt);
   // Vacuous-true with no accepted trips — the empty-departure guard below
@@ -88,7 +96,14 @@ export default function DepartureScreen() {
   const noShowSince = manifest?.generatedAt
     ?? new Date(manilaDayStartMs(manilaTodayIso())).toISOString();
   const noShows = useNoShowTrips(bangkeroId, noShowSince);
-  const noShowedTrips = noShows.data;
+  const sailingRouteIds = new Set(
+    acceptedTrips.map((t) => t.routeId).filter((id): id is string => !!id),
+  );
+  const noShowedTrips = noShows.data.filter(
+    (t) =>
+      (!t.scheduledDate || t.scheduledDate <= todayIso) &&
+      (sailingRouteIds.size === 0 || !t.routeId || sailingRouteIds.has(t.routeId)),
+  );
   const freedSeats = noShowedTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
 
   // Pay-on-board checklist: one read for every accepted booking, kept
@@ -134,6 +149,74 @@ export default function DepartureScreen() {
 
   const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.key]);
   const manifestFinalized = manifest?.status === 'finalized';
+
+  const liveParcels = useMemo(() => {
+    const sailingIds = new Set(acceptedTrips.map((t) => t.bookingId));
+    return allParcels.filter(
+      (p) =>
+        p.status !== 'returned' &&
+        ((p.deliveryType === 'accompanied' && sailingIds.has(p.bookingId)) ||
+          (p.carrierBookingId != null && sailingIds.has(p.carrierBookingId)) ||
+          (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId))),
+    );
+  }, [acceptedTrips, allParcels]);
+
+  const livePassengers = useMemo(() => {
+    const passengerBookingIds = new Set(
+      manifestTrips
+        .filter((t) => t.serviceType !== 'cargo' || t.cargoMode === 'accompanied')
+        .map((t) => t.bookingId),
+    );
+    return passengers.filter((p) => passengerBookingIds.has(p.bookingId));
+  }, [manifestTrips, passengers]);
+
+  const manifestParcelIds = useMemo(
+    () => new Set(parcels.map((p) => p.parcelId)),
+    [parcels],
+  );
+
+  const [topUpNonce, setTopUpNonce] = useState(0);
+  const topUpInFlight = useRef(false);
+  const topUpQueued = useRef(false);
+  const topUpKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!manifestFinalized || !manifest) return;
+    const missingIds = liveParcels
+      .filter((p) => !manifestParcelIds.has(p.parcelId))
+      .map((p) => p.parcelId)
+      .sort();
+    if (missingIds.length === 0) {
+      topUpKey.current = null;
+      return;
+    }
+    const key = [
+      manifest.manifestId,
+      manifestTrips.map((t) => t.bookingId).sort().join(','),
+      missingIds.join(','),
+    ].join(':');
+    if (topUpKey.current === key) return;
+    if (topUpInFlight.current) {
+      topUpQueued.current = true;
+      return;
+    }
+    topUpKey.current = key;
+    topUpInFlight.current = true;
+    void (async () => {
+      try {
+        await populateManifestDeparture(manifest, manifestTrips, { stampDeparture: false });
+      } catch (e) {
+        topUpKey.current = null;
+        if (__DEV__) console.warn('[departure] manifest top-up failed:', e);
+      } finally {
+        topUpInFlight.current = false;
+        if (topUpQueued.current) {
+          topUpQueued.current = false;
+          setTopUpNonce((n) => n + 1);
+        }
+      }
+    })();
+  }, [liveParcels, manifest, manifestFinalized, manifestParcelIds, manifestTrips, topUpNonce]);
 
   const load = useCallback(async () => {
     if (!bangkeroId) return;
@@ -225,7 +308,8 @@ export default function DepartureScreen() {
   }
 
   async function handleFinalize() {
-    if (finalizing || !manifest) return;
+    if (finalizeInFlight.current || !manifest) return;
+    finalizeInFlight.current = true;
     setFinalizing(true);
     setGenError(null);
     try {
@@ -237,11 +321,13 @@ export default function DepartureScreen() {
     } catch (e) {
       setGenError(friendlyError(e));
     }
+    finalizeInFlight.current = false;
     setFinalizing(false);
   }
 
   async function handleDepart() {
-    if (departing) return;
+    if (departInFlight.current) return;
+    departInFlight.current = true;
     setDeparting(true);
     // Best effort: the manifest must record who sailed for Trip Summary to
     // report real numbers — but never block the departure over it.
@@ -364,7 +450,7 @@ export default function DepartureScreen() {
 
               {/* Left behind — kept visible so the story survives the cancel,
                   plus the seat count the bangkero can now backfill. */}
-              {noShowedTrips.length > 0 && (
+              {!allCargo && noShowedTrips.length > 0 && (
                 <>
                   <View style={styles.boardDivider} />
                   <Text style={styles.boardGroupLabel}>
@@ -413,12 +499,12 @@ export default function DepartureScreen() {
               <View style={styles.divider} />
               <View style={styles.tripRow}>
                 <Text style={styles.tripLabel}>Passengers</Text>
-                <Text style={styles.tripValue} numberOfLines={1}>{passengers.length} ({manifest.totalPassengersOnBoard} pax)</Text>
+                <Text style={styles.tripValue} numberOfLines={1}>{livePassengers.length} ({livePassengers.length} pax)</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.tripRow}>
                 <Text style={styles.tripLabel}>Parcels</Text>
-                <Text style={styles.tripValue} numberOfLines={1}>{parcels.length} ({manifest.totalParcelsOnBoard} items)</Text>
+                <Text style={styles.tripValue} numberOfLines={1}>{liveParcels.length} ({liveParcels.length} items)</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.tripRow}>

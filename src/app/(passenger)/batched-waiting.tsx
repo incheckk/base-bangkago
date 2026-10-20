@@ -6,7 +6,11 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
-import { BATCH_THRESHOLD, bumpBatchCycle } from '@/services/parcel-batching.service';
+import {
+  BATCH_THRESHOLD,
+  bumpBatchCycle,
+  releaseAbandonedBatch,
+} from '@/services/parcel-batching.service';
 import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing } from '@/theme/tokens';
@@ -155,11 +159,20 @@ export default function BatchedWaiting() {
                 onPress={async () => {
                   if (!parcelId) return;
                   await bumpBatchCycle(parcelId);
-                  // Immediately sail: flip status to solo with surcharge
+                  // Immediately sail: flip status to solo with surcharge.
+                  // Restore the self-stub carrier so a batch link from an
+                  // earlier resolve cannot keep this parcel attached.
                   await supabase
                     .from('parcels')
-                    .update({ batching_status: 'solo', solo_surcharge: PARCEL_RATES.soloSurcharge })
+                    .update({
+                      batching_status: 'solo',
+                      solo_surcharge: PARCEL_RATES.soloSurcharge,
+                      carrier_booking_id: parcel.booking_id ?? null,
+                    })
                     .eq('id', parcelId);
+                  if (parcel.batching_route_key) {
+                    await releaseAbandonedBatch(parcel.batching_route_key);
+                  }
                   void load();
                 }}
               >

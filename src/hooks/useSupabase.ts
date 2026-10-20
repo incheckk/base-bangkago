@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getArrivalBypass, getDispatchBypass, getGatesBypass } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
+import { mapRow as mapParcelRow } from '../services/parcel.service';
 import {
     getAllActiveQueues, getMyQueue, getPortQueue, refreshHolds, type MyQueueState,
 } from '../services/queue.service';
 import { supabase } from '../services/supabase';
-import type { BangkeroDoc, BookingDoc, PortDoc, PortQueueDoc } from '../types/models';
+import type { BangkeroDoc, BookingDoc, ParcelDoc, PortDoc, PortQueueDoc } from '../types/models';
 import { useRealtimeQuery } from './useRealtimeQuery';
 
 interface Result<T> {
@@ -122,10 +123,112 @@ export function useRecentBookings(passengerId: string | null, max = 5): Result<B
   useEffect(() => { setLoading(true); void load(); }, [load]);
   useRealtimeQuery(
     load,
-    passengerId ? [{ table: 'bookings', filter: `user_id=eq.${passengerId}` }] : [],
+    passengerId
+      ? [
+          { table: 'bookings', filter: `user_id=eq.${passengerId}` },
+          // Delivery flips `parcels.status`, not the stub booking — subscribe
+          // so the home banner (and its parcel filter) clears without a remount.
+          { table: 'parcels', filter: `user_id=eq.${passengerId}` },
+        ]
+      : [],
   );
 
   return { data, loading, error };
+}
+
+export interface ActiveCargoBooking {
+  bookingId: string;
+  ref: string;
+  fromPortName: string;
+  toPortName: string;
+}
+
+export interface ActiveCargoDelivery {
+  parcel: ParcelDoc;
+  booking: ActiveCargoBooking | null;
+}
+
+/**
+ * The sender's live non-accompanied Padala. A batched sender has no usable
+ * booking row once 054/058 cancel their stub and hide the shared batch from
+ * their lists, so the parcel — not `bookings.trip_stat` — is the source of
+ * truth. `status IN ('pending','in_transit')` drops a delivered/returned
+ * parcel immediately (B1), and the parcels realtime sub re-runs the fetch.
+ */
+export function useActiveCargoDeliveries(
+  passengerId: string | null,
+): { data: ActiveCargoDelivery[]; error: string | null } {
+  const [data, setData] = useState<ActiveCargoDelivery[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const seq = useRef(0);
+
+  const load = useCallback(async () => {
+    if (!passengerId) return;
+    const id = ++seq.current;
+    const { data: rows, error: err } = await supabase
+      .from('parcels')
+      .select('*')
+      .eq('user_id', passengerId)
+      .in('delivery_type', ['batched', 'solo', 'piggyback'])
+      .in('status', ['pending', 'in_transit'])
+      .order('created_at', { ascending: false });
+    if (id !== seq.current) return;
+    if (err) { setError(err.message); return; }
+
+    const parcels = (rows ?? []).map(mapParcelRow);
+    // Batched/solo sail on the linked carrier booking; piggyback's own stub
+    // is where approval + cancellation live.
+    const targetId = (p: ParcelDoc) =>
+      p.deliveryType === 'piggyback' ? p.bookingId : (p.carrierBookingId ?? p.bookingId);
+    const ids = Array.from(new Set(parcels.map(targetId)));
+    const bookingMap = new Map<string, ActiveCargoBooking>();
+    // A cancelled stub must not leave its parcel pending: cancel_own_booking
+    // only flips the booking, so the target row is the cancellation signal.
+    // Auto-soloed parcels are the exception — an abandoned batch cancels the
+    // stub it was linked to while the solo delivery is still live.
+    const cancelledTargets = new Set<string>();
+
+    if (ids.length > 0) {
+      const { data: bookingRows, error: bookingErr } = await supabase
+        .from('bookings')
+        .select('id, ref, from_port_name, to_port_name, trip_stat')
+        .in('id', ids);
+      if (id !== seq.current) return;
+      if (bookingErr) {
+        if (__DEV__) {
+          console.warn('[parcels] delivery booking lookup failed:', bookingErr.message);
+        }
+      } else {
+        for (const row of bookingRows ?? []) {
+          if (row.trip_stat === 'cancelled') cancelledTargets.add(row.id as string);
+          bookingMap.set(row.id as string, {
+            bookingId: row.id as string,
+            ref: row.ref ?? '',
+            fromPortName: row.from_port_name ?? '',
+            toPortName: row.to_port_name ?? '',
+          });
+        }
+      }
+    }
+
+    const autoSoloed = (p: ParcelDoc) =>
+      p.deliveryType === 'batched' && p.batchingStatus === 'solo';
+
+    setData(
+      parcels
+        .filter((parcel) => autoSoloed(parcel) || !cancelledTargets.has(targetId(parcel)))
+        .map((parcel) => ({ parcel, booking: bookingMap.get(targetId(parcel)) ?? null })),
+    );
+    setError(null);
+  }, [passengerId]);
+
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(
+    load,
+    passengerId ? [{ table: 'parcels', filter: `user_id=eq.${passengerId}` }] : [],
+  );
+
+  return { data, error };
 }
 
 /**
@@ -346,7 +449,14 @@ export function useBooking(bookingId: string | null): Result<BookingDoc | null> 
   useEffect(() => { setLoading(true); void load(); }, [load]);
   useRealtimeQuery(
     load,
-    bookingId ? [{ table: 'bookings', filter: `id=eq.${bookingId}` }] : [],
+    bookingId
+      ? [
+          { table: 'bookings', filter: `id=eq.${bookingId}` },
+          // Delivery lands on the parcel, not the cargo stub — refresh so
+          // the header badge and the terminal actions flip on their own.
+          { table: 'parcels' },
+        ]
+      : [],
   );
 
   return { data, loading, error };

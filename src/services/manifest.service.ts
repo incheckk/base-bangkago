@@ -260,9 +260,9 @@ export async function populateManifestDeparture(
     if (error) throw error;
   }
   if (parcelInserts.length) {
-    // 056 adds UNIQUE(manifest_id, parcel_id): a double-tap or two
+    // 060 adds UNIQUE(manifest_id, parcel_id): a double-tap or two
     // overlapping populates can no longer record the same parcel twice.
-    // Pre-056 the constraint is missing — fall back to a plain insert.
+    // Pre-060 the constraint is missing — fall back to a plain insert.
     const { error } = await supabase
       .from('manifest_parcels')
       .upsert(parcelInserts, { onConflict: 'manifest_id,parcel_id', ignoreDuplicates: true });
@@ -277,7 +277,7 @@ export async function populateManifestDeparture(
 
   const patch: Record<string, unknown> = {
     total_passengers_on_board: existingPax.length + paxRows.length,
-    // Distinct parcel ids only — duplicate manifest_parcels rows (pre-056
+    // Distinct parcel ids only — duplicate manifest_parcels rows (pre-060
     // or a stale row) must never inflate the "items" count again.
     total_parcels_on_board: loadedParcelIds.size + parcelInserts.length,
   };
@@ -371,7 +371,7 @@ export async function getManifestParcels(
     .eq('manifest_id', manifestId);
 
   if (error) throw error;
-  // Defensive: a pre-056 database can still hold duplicate
+  // Defensive: a pre-060 database can still hold duplicate
   // (manifest_id, parcel_id) rows — report each parcel once.
   const seen = new Set<string>();
   return (data ?? [])

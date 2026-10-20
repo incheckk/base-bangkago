@@ -1,5 +1,5 @@
 -- =============================================================
--- 056. MANIFEST_PARCELS UNIQUE (manifest_id, parcel_id)
+-- 060. MANIFEST_PARCELS UNIQUE (manifest_id, parcel_id)
 -- =============================================================
 -- Why: populateManifestDeparture reads the existing rows and then inserts;
 -- the screen guards were useState flags, so a fast double-tap (or two
@@ -12,7 +12,7 @@
 -- counter, and makes a repeat impossible. populateManifestDeparture now
 -- upserts on this key with ON CONFLICT DO NOTHING.
 --
--- Run order: AFTER 055. Forward-only — never delete 002-056.
+-- Run order: AFTER 059. Renumbered to make room for main's offline tracking migration. Forward-only — never delete 002-060.
 -- =============================================================
 
 -- 1. Keep the earliest row for each (manifest_id, parcel_id); id breaks
@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS manifest_parcels_manifest_parcel_unique
   ON public.manifest_parcels (manifest_id, parcel_id);
 
 COMMENT ON INDEX public.manifest_parcels_manifest_parcel_unique IS
-  'One manifest_parcels row per parcel per manifest (056). populateManifestDeparture upserts on this key.';
+  'One manifest_parcels row per parcel per manifest (060). populateManifestDeparture upserts on this key.';
 
 -- -------------------------------------------------------------
 -- VERIFY (run manually after applying)

@@ -41,6 +41,72 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-20 — Core sailing batch: en-route screen, offline GPS outbox,
+  stuck-departure monitor, DEV skip-sailing, passenger surfacing
+  (gates green: tsc clean, lint 0 errors / 130 warnings, expo-doctor 21/21).**
+  - **Migration 056 (PENDING — current USER MUST RUN, after 055):**
+    `sync_track_points(p_bangka_id, p_points jsonb)` — the offline
+    outbox's flush target: client timestamps validated (range + 5-min
+    future / 24-h past skew), batch 1–500, boat ownership proven
+    server-side (008's `report_boat_position` picks the boat with
+    `ORDER BY id LIMIT 1` and stamps `now()` — unsafe to replay), then
+    port-queue presence synced from the NEWEST point only using 008's
+    enter/leave logic. Adds `vessel_tracking (bangka_id, recorded_at
+    DESC)` index. Also `cancel_own_booking` RAISEs once
+    `depart_time IS NOT NULL` — closes the post-departure cancel hole
+    (`'accepted'` persists through sailing, so trip_stat never blocked
+    it). No demo reset.
+  - **Offline GPS outbox** (`tracking.service` + `useLocationTracking`):
+    every fix is written to AsyncStorage FIRST (FIFO, 720 ≈ 2 h @ 10 s,
+    drops oldest), then flushed in ≤500-point batches; flush retries on
+    every tick and on AppState-active; a DB without 056 falls back to
+    the legacy single-point `report_boat_position`, so tracking never
+    breaks pre-migration. Chip states: `● RECORDING` /
+    `OFFLINE · N points saved`.
+  - **NEW `(bangkero)/en-route.tsx`** — the sailing phase that lived
+    nowhere before: `departure.tsx` "Ready to Depart" now pushes here
+    (it used to push `arrived`, whose mount-stamp made every trip
+    teleport departure→arrival in 0 seconds). Screen shows the route
+    line + own boat marker (newest of server fix vs local queue wins),
+    progress % / remaining distance (`haversineM`), ETA = `depart_time`
+    + route estimate × (1 − progress), RECORDING/OFFLINE chip, SOS, and
+    **I have arrived** → stamps `stampManifestArrival` then
+    `arrived.tsx` (its idempotent mount-stamp remains the offline retry
+    path; Complete Trip keeps its existing retry banner).
+  - **Stuck-departure monitor** (same screen): 60 s position samples,
+    after 4 min with <100 m displacement and <0.5 m/s → prompt
+    "Your boat has not moved in 4 minutes. Is there a problem?"
+    [we're fine / we need help → SOS]; **no answer in 60 s → auto
+    `safety_alerts` insert (severity high)**, re-prompt every 5 min.
+    Escalation is suppressed while `arrival_bypass` is on so rehearsals
+    don't fill the admin's alerts page (the prompt itself still shows —
+    demoable). Offline escalation is swallowed → LAUNCH_DEFERRED B13.
+  - **DEV · Skip sailing →** chip on en-route, rendered only while
+    `dev_flags.arrival_bypass` is on (reuses the existing switch — no
+    new flag, no new migration): runs the exact Arrived handler, so a
+    rehearsal goes depart → sail → skip → close-out with one tap. Flip
+    it in Admin → Developer Options before the demo.
+  - **Passenger surfacing:** trip-en-route rail keys step 1 off
+    `depart_time` (was `onboarded_at` — "On the way" used to light up
+    while the boat was still moored), status line shows
+    "On the way · ETA ~h:mm", a 1 s clock ticker drives "boat last seen
+    Xm ago" (warning past 5 min), and the map now draws the
+    departure→arrival route line (`from/to` were never passed).
+    booking/[id] caches a booking snapshot in AsyncStorage and replays
+    it under an offline banner when the fetch fails.
+  - `sailing.tsx` is a different, pre-existing screen (per-sailing
+    manifest detail from the trips list) — kept as is; the new tracker
+    is `en-route.tsx` to match the passenger's `trip-en-route`.
+  - Foreground-only at sea stands (B1): the demo story is
+    airplane-mode sync, not screen-off tracking.
+  - **USER MUST RUN (current): `migrations/056_offline_track_sync.sql`**
+    in the SQL editor, after 055. Until then the outbox keeps queueing
+    to its 720 cap and reports fall back to the legacy single-point
+    path (no data loss, no crash).
+  - **Next:** Expo Go smoke — depart → sail (airplane mode: chip counts
+    up, flushes on reconnect) → 4-min stuck prompt → DEV skip → arrived →
+    close-out; passenger rail + staleness + offline snapshot; cancel a
+    departed booking (must raise).
 - **2026-10-16 — Web hardening batch: admin audit trail + rating-adjust
   knob (migration 038, APPLIED same day), auto-logout fixed, live OSM
   fleet maps, real manifest + PDF, phone-first users, perf pass

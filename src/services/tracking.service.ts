@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import type { VesselTrackingDoc } from '../types/models';
 import { supabase } from './supabase';
 
@@ -148,4 +150,98 @@ export async function getLatestPositionForBangkero(
 
   const position = await getLatestPosition(data.id);
   return position ? { bangkaId: data.id, position } : null;
+}
+
+// =============================================================
+// Offline outbox (core sailing batch)
+//
+// Every GPS fix is written to AsyncStorage FIRST and only then sent.
+// Offline at sea is the normal case, not the error case: the tick keeps
+// queueing, the flush drains when the connection returns. Migration 056
+// (sync_track_points) replays the batch with the client's real
+// timestamps, so history survives the outage intact.
+// =============================================================
+
+/** One GPS fix, as the outbox stores it (client clock is the truth). */
+export interface TrackFix {
+  lat: number;
+  lng: number;
+  speed: number | null;
+  /** ISO 8601 — when the fix was actually taken, not when it was sent. */
+  recordedAt: string;
+}
+
+const outboxKey = (bangkaId: string) => `track_outbox:v1:${bangkaId}`;
+/** Two hours of 10-second fixes; past that the FIFO drops the oldest. */
+const OUTBOX_CAP = 720;
+/** sync_track_points accepts at most this many per call (056). */
+const FLUSH_BATCH = 500;
+
+async function readOutbox(bangkaId: string): Promise<TrackFix[]> {
+  try {
+    const raw = await AsyncStorage.getItem(outboxKey(bangkaId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeOutbox(bangkaId: string, fixes: TrackFix[]): Promise<void> {
+  const trimmed = fixes.slice(-OUTBOX_CAP);
+  try {
+    if (trimmed.length === 0) await AsyncStorage.removeItem(outboxKey(bangkaId));
+    else await AsyncStorage.setItem(outboxKey(bangkaId), JSON.stringify(trimmed));
+  } catch {
+    // Storage full/racing — the next tick rewrites it.
+  }
+}
+
+/** Queue one fix. Returns the queue depth after the write. */
+export async function enqueueFix(bangkaId: string, fix: TrackFix): Promise<number> {
+  const fixes = await readOutbox(bangkaId);
+  fixes.push(fix);
+  await writeOutbox(bangkaId, fixes);
+  return Math.min(fixes.length, OUTBOX_CAP);
+}
+
+/** Newest queued fix — the boat's true position while offline. */
+export async function peekLastQueuedFix(bangkaId: string): Promise<TrackFix | null> {
+  const fixes = await readOutbox(bangkaId);
+  return fixes.length > 0 ? fixes[fixes.length - 1] : null;
+}
+
+/** How many fixes are waiting to sync — the "N points saved" chip. */
+export async function getOutboxDepth(bangkaId: string): Promise<number> {
+  return (await readOutbox(bangkaId)).length;
+}
+
+/**
+ * Send the queue in batches through sync_track_points (056). Returns
+ * the number of fixes drained. Throws `missingFunction` when 056 is
+ * not applied yet (same tolerance pattern as reportPosition/008) so
+ * the caller can fall back to the legacy single-point path.
+ */
+export async function flushOutbox(bangkaId: string): Promise<number> {
+  const fixes = await readOutbox(bangkaId);
+  if (fixes.length === 0) return 0;
+
+  const batch = fixes.slice(0, FLUSH_BATCH);
+  const { error } = await supabase.rpc('sync_track_points', {
+    p_bangka_id: bangkaId,
+    p_points: batch.map((f) => ({
+      lat: f.lat,
+      lng: f.lng,
+      speed: f.speed,
+      recorded_at: f.recordedAt,
+    })),
+  });
+  if (error) {
+    const e = new Error(error.message) as Error & { missingFunction?: boolean };
+    if (error.message.includes('sync_track_points')) e.missingFunction = true;
+    throw e;
+  }
+
+  await writeOutbox(bangkaId, fixes.slice(batch.length));
+  return batch.length;
 }

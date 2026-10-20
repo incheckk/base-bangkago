@@ -376,7 +376,7 @@ export default function DepartureScreen() {
         }
       }
     }
-    router.push('/(bangkero)/arrived');
+    router.push('/(bangkero)/en-route');
   }
 
   const steps = ['Manifest', 'Checklist', 'Weather', 'Ready'];

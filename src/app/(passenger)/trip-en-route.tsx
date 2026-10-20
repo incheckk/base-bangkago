@@ -15,6 +15,8 @@ import { usePorts, useBooking } from '@/hooks/useSupabase';
 import { getActiveBooking } from '@/services/booking.service';
 import { fetchUserDoc } from '@/services/auth.service';
 import { getAverageRating } from '@/services/rating.service';
+import { endPortOf, startPortOf } from '@/services/queue.service';
+import { getAllRoutes } from '@/services/route.service';
 import { getBangkaIdForBangkero } from '@/services/tracking.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -87,6 +89,34 @@ export default function TripEnRoute() {
   // Latest fix first (getTrackingByBangka orders desc), refreshed live.
   const { data: positions } = useVesselTracking(bangkaId);
   const vessel = positions[0] ?? null;
+
+  // Route estimate for the "On the way" ETA line — one fetch per route.
+  const [routeMins, setRouteMins] = useState<number | null>(null);
+  useEffect(() => {
+    if (!booking?.routeId) return;
+    let alive = true;
+    getAllRoutes()
+      .then((routes) => {
+        if (!alive) return;
+        setRouteMins(routes.find((r) => r.routeId === booking.routeId)?.estimatedMinutes ?? null);
+      })
+      .catch(() => {
+        if (alive) setRouteMins(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking?.routeId]);
+
+  // Live clock for the "last seen" age — a render must not call Date.now,
+  // so the age reads off this ticker (runs only while underway).
+  const [now, setNow] = useState(() => Date.now());
+  const underway = !!booking?.departTime && !booking?.completedAt;
+  useEffect(() => {
+    if (!underway) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [underway]);
 
   useEffect(() => {
     let alive = true;
@@ -161,9 +191,31 @@ export default function TripEnRoute() {
     );
   }
 
-  // Real progress from the booking row — boarding, then underway, then done.
-  const currentStep = booking.completedAt ? 2 : booking.onboardedAt ? 1 : 0;
+  // Real progress from the booking row. "On the way" keys off depart_time —
+  // the boat actually leaving — not off boarding, which can happen long
+  // before the sails are up.
+  const currentStep = booking.completedAt ? 2 : booking.departTime ? 1 : 0;
   const initials = initialsOf(booking.operatorName ?? '');
+
+  // Underway facts: ETA from the departure stamp + route estimate, and how
+  // stale the boat's GPS is — quiet while the fix is fresh, a warning when
+  // the position has gone silent mid-voyage.
+  const enRoute = underway;
+  const etaClock =
+    enRoute && booking.departTime && routeMins != null
+      ? new Date(Date.parse(booking.departTime) + routeMins * 60_000).toLocaleTimeString('en-PH', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : null;
+  const fixAgeMs = vessel ? now - Date.parse(vessel.recordedAt) : null;
+  const stale = fixAgeMs != null && fixAgeMs > 5 * 60_000;
+  const fixAgeLabel =
+    fixAgeMs == null
+      ? ''
+      : fixAgeMs < 60_000
+        ? 'just now'
+        : `${Math.round(fixAgeMs / 60_000)} min ago`;
 
   return (
     <ScreenContainer>
@@ -173,6 +225,8 @@ export default function TripEnRoute() {
             height and painted a surface behind it — two containers, one job. */}
         <MapContainer
           ports={ports.data}
+          fromPortId={startPortOf(booking.routeId)}
+          toPortId={endPortOf(booking.routeId)}
           height={260}
           // Inside a ScrollView: one-finger drag has to stay with the page or
           // the map becomes a dead zone you cannot scroll past. Pinch and the
@@ -202,11 +256,21 @@ export default function TripEnRoute() {
               <Text style={styles.eta} numberOfLines={1}>
                 {booking.completedAt
                   ? 'Trip completed'
-                  : booking.onboardedAt
-                    ? 'On the way'
-                    : `Meet at ${booking.fromPortName}`}
+                  : enRoute
+                    ? `On the way${etaClock ? ` · ETA ~${etaClock}` : ''}`
+                    : booking.onboardedAt
+                      ? 'Boarded — about to sail'
+                      : `Meet at ${booking.fromPortName}`}
               </Text>
             </View>
+
+            {enRoute && (
+              <Text style={[styles.lastSeen, stale && styles.lastSeenStale]} numberOfLines={1}>
+                {vessel
+                  ? `Boat last seen ${fixAgeLabel}${stale ? ' — signal may be out' : ''}`
+                  : 'Waiting for the boat’s GPS…'}
+              </Text>
+            )}
 
             <View style={styles.divider} />
 
@@ -350,6 +414,14 @@ const styles = StyleSheet.create({
   // Neutral on purpose. The StatusPill beside it already carries the colour;
   // a second teal string next to it just dilutes what teal means.
   eta: { flexShrink: 1, ...typography.caption, textAlign: 'right' },
+
+  // GPS staleness while underway — quiet until the fix goes silent.
+  lastSeen: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  lastSeenStale: { color: colors.warning },
 
   // ---------- progress rail ----------
   steps: {

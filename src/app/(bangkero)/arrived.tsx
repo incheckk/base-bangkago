@@ -27,11 +27,11 @@ const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelSta
 };
 
 /** Cargo display token: mode + weight, not a passenger count.
- *  accompanied = the sender rides along; the rest are cargo-only. */
-function parcelMode(parcel: ParcelDoc): string {
+ *  accompanied = baggage on a passenger ride, or a sender riding along. */
+function parcelMode(parcel: ParcelDoc, isBaggage = false): string {
   const mode = parcel.deliveryType ?? 'accompanied';
-  if (mode === 'accompanied') return '1 pax · accompanied';
   const weight = parcel.totalWeightKg != null ? `${parcel.totalWeightKg}kg · ` : '';
+  if (mode === 'accompanied') return isBaggage ? `${weight}baggage` : `${weight}with passenger`;
   return `${weight}${mode}`;
 }
 
@@ -49,6 +49,7 @@ export default function ArrivedScreen() {
   // handleComplete uses below). Null = scope unknown, show everything
   // rather than an empty list.
   const [sailingIds, setSailingIds] = useState<string[] | null>(null);
+  const [passengerBookingIds, setPassengerBookingIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!user?.id) return;
     let alive = true;
@@ -56,11 +57,17 @@ export default function ArrivedScreen() {
       try {
         const { data } = await supabase
           .from('bookings')
-          .select('id')
+          .select('id, service_type')
           .eq('operator_id', user.id)
           .eq('trip_stat', 'accepted')
           .or(`scheduled_date.is.null,scheduled_date.lte.${manilaTodayIso()}`);
-        if (alive) setSailingIds((data ?? []).map((b) => b.id));
+        if (alive) {
+          const rows = (data ?? []) as { id: string; service_type: string | null }[];
+          setSailingIds(rows.map((b) => b.id));
+          setPassengerBookingIds(
+            new Set(rows.filter((b) => b.service_type === 'passenger').map((b) => b.id)),
+          );
+        }
       } catch {
         if (alive) setSailingIds(null);
       }
@@ -284,6 +291,7 @@ export default function ArrivedScreen() {
                 )}
                 {parcels.map((p) => {
                   const step = NEXT_STATUS[p.status];
+                  const isAccompanied = p.deliveryType === 'accompanied';
                   return (
                     <View key={p.parcelId} style={styles.parcelCard}>
                       <View style={styles.parcelTop}>
@@ -296,8 +304,15 @@ export default function ArrivedScreen() {
                           {p.status.replace('_', ' ')}
                         </Text>
                       </View>
-                      <Text style={styles.parcelMeta}>₱{p.totalPrice} · {parcelMode(p)}</Text>
-                      {step && (
+                      <Text style={styles.parcelMeta}>
+                        ₱{p.totalPrice} · {parcelMode(p, passengerBookingIds.has(p.bookingId))}
+                      </Text>
+                      {isAccompanied && (
+                        <View style={styles.ridingBadge}>
+                          <Text style={styles.ridingBadgeText}>Riding with passenger</Text>
+                        </View>
+                      )}
+                      {step && !isAccompanied && (
                         <PrimaryButton
                           label={step.label}
                           onPress={() => advanceParcel(p)}
@@ -435,6 +450,14 @@ const styles = StyleSheet.create({
   parcelStatusOk: { color: colors.primary },
   parcelStatusBad: { color: colors.danger },
   parcelMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
+  ridingBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primaryTint,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  ridingBadgeText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
   parcelBtn: { marginTop: spacing.xs },
 
   footer: { marginTop: spacing.xxl },

@@ -307,8 +307,7 @@
                 <div class="col-lg-5 fade-in" data-reveal="left">
                     <span class="section-eyebrow text-white-50">Become a Partner</span>
                     <h2 class="section-title text-white mt-2">Join the BangkaGo Community</h2>
-                    <p class="text-white-75 mt-3">Whether you're a boat operator, delivery rider, restaurant owner, or
-                        tourism guide — BangkaGo has a place for you. Earn more. Grow with us.</p>
+                    <p class="text-white-75 mt-3">Whether you're a bangka operator, passenger, or island explorer, BangkaGo connects you to reliable inter-island travel, convenient bookings, and exciting island adventures. Travel smarter. Explore more with BangkaGo.</p>
                     <ul class="join-perks mt-4">
                         <li><i class="bi bi-check2-circle me-2"></i> Flexible working hours</li>
                         <li><i class="bi bi-check2-circle me-2"></i> Competitive earnings &amp; bonuses</li>
@@ -349,11 +348,9 @@
                                             class="text-danger">*</span></label>
                                     <select class="form-select custom-input" id="joinRole" required>
                                         <option value="">Select a role...</option>
-                                        <option>Delivery Rider</option>
-                                        <option>Boat Operator</option>
-                                        <option>Restaurant Partner</option>
-                                        <option>Tour Guide</option>
-                                        <option>Other</option>
+                                        <option>Passenger</option>
+                                        <option>Bangkero</option>
+                                        <option>Bangka Operator</option>
                                     </select>
                                     <div class="invalid-feedback" id="joinRoleError"></div>
                                 </div>
@@ -374,6 +371,10 @@
                                         <i class="bi bi-check-circle-fill me-2"></i>
                                         <strong>Application received!</strong> We'll review your details and get back to
                                         you within 2-3 business days.
+                                    </div>
+                                    <div id="joinError" class="alert alert-danger d-none" role="alert">
+                                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                                        We couldn't submit your application. Check your connection and try again.
                                     </div>
                                 </div>
                             </div>
@@ -537,8 +538,12 @@
                                 <div class="col-12">
                                     <div id="contactSuccess" class="alert alert-success d-none" role="alert">
                                         <i class="bi bi-check-circle-fill me-2"></i>
-                                        <strong>Message sent!</strong> Thank you for reaching out. We'll reply within 24
+                                        <strong>Message sent!</strong> Thank you for reaching out.
                                         hours.
+                                    </div>
+                                    <div id="contactError" class="alert alert-danger d-none" role="alert">
+                                        <i class="bi bi-exclamation-circle-fill me-2"></i>
+                                        We couldn't send your message. Check your connection and try again.
                                     </div>
                                 </div>
                             </div>
@@ -642,6 +647,8 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="../config.js"></script>
+    <script src="../assets/js/supabase.js"></script>
     <!-- Custom JS -->
     <script src="script.js"></script>
 </body>

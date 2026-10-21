@@ -241,24 +241,21 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   color:var(--white);
   padding:6px;
   border-radius:var(--cg-radius-md);
-  border:1px solid rgba(34,196,196,.62);
-  background:rgba(255,255,255,.035);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 4px 12px rgba(0,0,0,.16);
   flex-shrink:0;
-  transition:background var(--cg-ease-fast), border-color var(--cg-ease-fast), box-shadow var(--cg-ease-fast);
+  transition:background var(--cg-ease-fast);
 }
-.cg-brand:hover{background:rgba(255,255,255,.08);border-color:#22c4c4;box-shadow:0 0 0 3px rgba(34,196,196,.1)}
+.cg-brand:hover{background:rgba(255,255,255,.08)}
 .cg-brand .brand-logo{
   width:64px; height:64px;
   display:flex; align-items:center; justify-content:center;
-  overflow:hidden; border-radius:var(--cg-radius-md);
+  border-radius:var(--cg-radius-md);
 }
 .cg-brand .brand-logo img{
   width:100%; height:100%;
-  padding:3px;
-  box-sizing:border-box;
   object-fit:contain;
   display:block;
+  filter:drop-shadow(0 0 6px rgba(34,196,196,.55))
+          drop-shadow(0 0 16px rgba(34,196,196,.30));
 }
 .cg-brand .brand-text{ min-width:0; line-height:1.15; }
 .cg-brand .brand-text h5{

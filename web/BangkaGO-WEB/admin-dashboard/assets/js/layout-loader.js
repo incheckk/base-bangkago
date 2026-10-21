@@ -92,7 +92,7 @@
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
     'view-weather': { title: 'View Weather', subtitle: 'Weather data and route safety status' },
-    'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents with evidence' },
+    'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents and review contact feedback' },
     'suspend-user': { title: 'Suspend User', subtitle: 'Confirm user suspension' },
     'document-review': { title: 'Document Review', subtitle: 'Review bangkero verification documents' },
     'boat-rentals': { title: 'Boat Rentals', subtitle: 'View all boat charter bookings' },

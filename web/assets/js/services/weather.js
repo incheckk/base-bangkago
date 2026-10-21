@@ -20,12 +20,23 @@
     };
   }
 
+  function manilaDayRange(date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Invalid weather date');
+    var start = new Date(date + 'T00:00:00+08:00');
+    if (isNaN(start.getTime())) throw new Error('Invalid weather date');
+    return { start: start.toISOString(), end: new Date(start.getTime() + 86400000).toISOString() };
+  }
+
   async function listAll(filters) {
     filters = filters || {};
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var q = c.from('weather_data').select('*, ports(port_name)');
     if (filters.portId) q = q.eq('port_id', filters.portId);
     if (filters.isSafe !== undefined) q = q.eq('is_safe', filters.isSafe);
+    if (filters.date) {
+      var range = manilaDayRange(filters.date);
+      q = q.gte('recorded_at', range.start).lt('recorded_at', range.end);
+    }
     q = q.order('recorded_at', { ascending: false });
     if (filters.limit) q = q.limit(filters.limit);
     var r = await q;

@@ -25,19 +25,25 @@
         <div class="cg-card p-3">
           <div class="panel-head">
             <h6 class="mb-0">Manage Payments</h6>
-            <span class="muted-note">View transactions and generate professional payment reports</span>
+            <span class="muted-note">View fares and GCash escrow transactions, then generate a dated payment report</span>
           </div>
 
           <div class="row g-2 mb-3">
             <div class="col-md-4">
-              <input id="paymentSearch" class="form-control" placeholder="Search payment ID, booking ID, payer">
+              <input id="paymentSearch" class="form-control" placeholder="Search transaction, booking, payer, reference">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
               <select id="paymentStatusFilter" class="form-select">
                 <option value="">All Status</option>
-                <option value="completed">Completed</option>
-                <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
+                <option value="fare:completed">Fare · Paid</option>
+                <option value="fare:pending">Fare · Pending</option>
+                <option value="fare:unpaid">Fare · Unpaid (completed trip)</option>
+                <option value="fare:void">Fare · Void (cancelled trip)</option>
+                <option value="fare:failed">Fare · Failed</option>
+                <option value="fare:refunded">Fare · Refunded</option>
+                <option value="downpayment:pending">Downpayment · Awaiting review</option>
+                <option value="downpayment:approved">Downpayment · Approved</option>
+                <option value="downpayment:refunded">Downpayment · Refunded</option>
               </select>
             </div>
             <div class="col-md-2 d-grid">
@@ -49,24 +55,25 @@
             <table class="table table-theme align-middle mb-0">
               <thead>
                 <tr>
-                  <th>Payment ID</th>
-                  <th>Booking ID</th>
+                  <th>Transaction</th>
+                  <th>Booking / Rental</th>
                   <th>Payer</th>
                   <th>Amount</th>
                   <th>Method</th>
                   <th>Status</th>
-                  <th style="min-width: 240px;">Actions</th>
+                  <th>Filed</th>
+                  <th style="min-width: 230px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="payBody"></tbody>
             </table>
           </div>
-          
+
           <div id="loadingState" class="text-center py-4 d-none">
             <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
             <p class="mt-2 text-muted">Loading payments...</p>
           </div>
-          
+
           <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
         </div>
       </section>
@@ -75,11 +82,11 @@
 
   <!-- VIEW PAYMENT MODAL -->
   <div class="modal fade" id="viewPaymentModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">View Payment Details</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">View Transaction Details</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" id="paymentDetailsBox"></div>
       </div>
@@ -92,28 +99,27 @@
       <form class="modal-content" id="reportForm">
         <div class="modal-header">
           <h5 class="modal-title">Generate Payment Report</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <div class="summary-box mb-3">
-            <div><strong>Payment ID:</strong> <span id="rPaymentId">-</span></div>
-            <div><strong>Payer:</strong> <span id="rPayer">-</span></div>
-            <div><strong>Amount:</strong> <span id="rAmount">-</span></div>
+          <div class="alert alert-primary mb-3">
+            The report covers every fare and GCash downpayment filed from
+            <strong>From Date</strong> through <strong>To Date</strong>.
           </div>
 
           <div class="row g-2 mb-2">
             <div class="col-md-6">
-              <label class="form-label">From Date</label>
+              <label class="form-label" for="rFrom">From Date</label>
               <input type="date" id="rFrom" class="form-control" required>
             </div>
             <div class="col-md-6">
-              <label class="form-label">To Date</label>
+              <label class="form-label" for="rTo">To Date</label>
               <input type="date" id="rTo" class="form-control" required>
             </div>
           </div>
 
           <div class="mb-2">
-            <label class="form-label">Report Type</label>
+            <label class="form-label" for="rType">Report Type</label>
             <select id="rType" class="form-select">
               <option value="Transaction Summary">Transaction Summary</option>
               <option value="Detailed Audit">Detailed Audit</option>
@@ -122,8 +128,9 @@
           </div>
 
           <div class="mb-0">
-            <label class="form-label">Notes (optional)</label>
-            <textarea id="rNotes" class="form-control" rows="3" placeholder="Add remarks for this report..."></textarea>
+            <label class="form-label" for="rNotes">Notes (optional)</label>
+            <textarea id="rNotes" class="form-control" rows="3" maxlength="300"
+              placeholder="Add remarks for this report..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -138,11 +145,11 @@
 
   <!-- REPORT RESULT MODAL -->
   <div class="modal fade" id="reportResultModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Payment Report Generated</h5>
-          <button class="btn-close" data-bs-dismiss="modal"></button>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" id="reportResultBox"></div>
       </div>
@@ -155,12 +162,10 @@
   <!-- Service scripts -->
   <script src="../../assets/js/services/supabase.js"></script>
   <script src="../../assets/js/services/payments.js"></script>
-  <script src="../../assets/js/services/bookings.js"></script>
   <script src="../../assets/js/services/realtime.js"></script>
 
   <script>
     let payments = [];
-    let selectedIndex = null;
     let generatedPaymentReport = null;
 
     const tbody = document.getElementById('payBody');
@@ -173,20 +178,112 @@
     const reportModal = new bootstrap.Modal('#reportModal');
     const reportResultModal = new bootstrap.Modal('#reportResultModal');
 
+    const FARE_STATUS = {
+      completed: { label: 'Paid',     badge: 'text-bg-success',    hint: 'Fare collected.' },
+      pending:   { label: 'Pending',  badge: 'text-bg-warning',    hint: 'Fare not yet marked paid.' },
+      failed:    { label: 'Failed',   badge: 'text-bg-danger',     hint: 'Payment failed.' },
+      refunded:  { label: 'Refunded', badge: 'text-bg-secondary',  hint: 'Payment was refunded.' }
+    };
+    const DP_STATUS = {
+      pending:  { label: 'Awaiting review', badge: 'text-bg-warning',   hint: 'GCash proof still needs review.' },
+      approved: { label: 'Approved',        badge: 'text-bg-success',   hint: 'GCash downpayment was confirmed.' },
+      refunded: { label: 'Refunded',        badge: 'text-bg-secondary', hint: 'GCash downpayment was refunded.' }
+    };
+    const TARGET_STATUS = {
+      pending: 'Pending',
+      open: 'Open',
+      accepted: 'Accepted',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      awaiting_payment: 'Awaiting payment',
+      confirmed: 'Confirmed'
+    };
+
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+
     function peso(n){
-      return `₱${Number(n).toLocaleString('en-PH', {minimumFractionDigits:2})}`;
+      return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     }
 
-    function badge(status){
-      if(status === 'completed') return 'text-bg-success';
-      if(status === 'pending') return 'text-bg-warning';
-      if(status === 'failed') return 'text-bg-danger';
-      return 'text-bg-info';
+    function methodLabel(method){
+      return { gcash: 'GCash', cash: 'Cash', maya: 'Maya', bank_transfer: 'Bank transfer' }[method] || method || '—';
     }
 
-    function displayStatus(status){
-      const map = { completed: 'Paid', pending: 'Pending', failed: 'Failed' };
-      return map[status] || status;
+    function targetStatusLabel(status){
+      return TARGET_STATUS[status] || status || '—';
+    }
+
+    function statusInfo(p){
+      if (p.type === 'downpayment') {
+        return DP_STATUS[p.paymentStatus] || { label: p.paymentStatus || 'Unknown', badge: 'text-bg-secondary', hint: '' };
+      }
+      if (p.paymentStatus === 'pending' && p.targetStatus === 'cancelled') {
+        return { label: 'Void', badge: 'text-bg-secondary', hint: 'Trip cancelled — no fare is expected.' };
+      }
+      if (p.paymentStatus === 'pending' && p.targetStatus === 'completed') {
+        return { label: 'Unpaid', badge: 'text-bg-danger', hint: 'Trip completed, but the fare was not marked paid.' };
+      }
+      return FARE_STATUS[p.paymentStatus] || { label: p.paymentStatus || 'Unknown', badge: 'text-bg-secondary', hint: '' };
+    }
+
+    function statusKey(p){
+      if (p.type === 'downpayment') return 'downpayment:' + p.paymentStatus;
+      if (p.paymentStatus === 'pending' && p.targetStatus === 'cancelled') return 'fare:void';
+      if (p.paymentStatus === 'pending' && p.targetStatus === 'completed') return 'fare:unpaid';
+      return 'fare:' + p.paymentStatus;
+    }
+
+    function linkLabel(p){
+      if (p.bookingId) return p.bookingRef || p.label || 'Booking';
+      if (p.boatRentalId) return 'Rental · ' + (p.label || 'Charter');
+      return '—';
+    }
+
+    function downpaymentWarning(p){
+      if (p.type !== 'downpayment') return '';
+      if (p.targetStatus === 'cancelled' && (p.paymentStatus === 'pending' || p.paymentStatus === 'approved')) {
+        return (p.boatRentalId ? 'Rental' : 'Trip') + ' cancelled — refund due';
+      }
+      return '';
+    }
+
+    function shortId(p){
+      return p.paymentId ? p.paymentId.slice(0, 8).toUpperCase() + '…' : '—';
+    }
+
+    // All dates are shown in Asia/Manila; report ranges compare calendar days.
+    function manilaDay(value){
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(d);
+      const get = t => (parts.find(p => p.type === t) || {}).value;
+      return `${get('year')}-${get('month')}-${get('day')}`;
+    }
+    function formatDay(value){
+      if (!value) return 'N/A';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-PH', {
+          year: 'numeric', month: 'short', day: 'numeric'
+        });
+      }
+      return formatDay(manilaDay(value));
+    }
+    function formatDateTime(value){
+      if (!value) return 'N/A';
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? String(value) : d.toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
     }
 
     function showLoading(show) {
@@ -201,14 +298,29 @@
     }
 
     function render(data){
-      tbody.innerHTML = data.map((p) => `
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No transactions match.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(p => {
+        const info = statusInfo(p);
+        const warning = downpaymentWarning(p);
+        return `
           <tr>
-            <td>${p.paymentId.slice(0,12)}...</td>
-            <td>${p.bookingId ? p.bookingId.slice(0,12)+'...' : 'N/A'}</td>
-            <td>${p.payerName || 'Unknown'}</td>
+            <td>
+              <div class="fw-semibold" title="${esc(p.paymentId)}">${esc(shortId(p))}</div>
+              <div class="small text-muted">${p.type === 'downpayment' ? 'Downpayment' : 'Fare'}</div>
+            </td>
+            <td>
+              <div>${esc(linkLabel(p))}</div>
+              ${p.targetStatus ? `<div class="small text-muted">${esc(targetStatusLabel(p.targetStatus))}</div>` : ''}
+              ${warning ? `<div class="small text-danger">${esc(warning)}</div>` : ''}
+            </td>
+            <td>${esc(p.payerName || 'Unknown')}</td>
             <td>${peso(p.amount)}</td>
-            <td>${p.paymentMethod}</td>
-            <td><span class="badge ${badge(p.paymentStatus)}">${displayStatus(p.paymentStatus)}</span></td>
+            <td>${esc(methodLabel(p.paymentMethod))}</td>
+            <td><span class="badge ${info.badge}" title="${esc(info.hint || '')}">${esc(info.label)}</span></td>
+            <td>${esc(formatDay(manilaDay(p.createdAt)))}</td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewPayment('${p.paymentId}')">
@@ -217,10 +329,16 @@
                 <button class="btn btn-sm btn-outline-dark action-btn" onclick="openReport('${p.paymentId}')">
                   <i class="bi bi-file-earmark-text"></i> Report
                 </button>
+                ${p.type === 'downpayment'
+                  ? `<a class="btn btn-sm btn-outline-secondary action-btn" href="downpayments.html?id=${encodeURIComponent(p.paymentId)}">
+                       <i class="bi bi-cash-coin"></i> Review
+                     </a>`
+                  : ''}
               </div>
             </td>
           </tr>
-      `).join('');
+        `;
+      }).join('');
     }
 
     function runFilter(){
@@ -228,12 +346,13 @@
       const s = paymentStatusFilter.value;
 
       const filtered = payments.filter(p => {
-        const textMatch =
-          p.paymentId.toLowerCase().includes(q) ||
-          (p.bookingId || '').toLowerCase().includes(q) ||
-          (p.payerName || '').toLowerCase().includes(q);
+        const haystack = [
+          p.paymentId, p.bookingId, p.bookingRef, p.label, p.serviceLabel,
+          p.payerName, p.referenceNum
+        ].filter(Boolean).join(' ').toLowerCase();
 
-        const statusMatch = s ? p.paymentStatus === s : true;
+        const textMatch = !q || haystack.includes(q);
+        const statusMatch = !s || statusKey(p) === s;
         return textMatch && statusMatch;
       });
 
@@ -241,98 +360,190 @@
     }
 
     // By id: the table renders the FILTERED list, so a row index here
-    // would open a different payment whenever a search is active.
+    // would open a different transaction whenever a search is active.
     window.viewPayment = function(paymentId){
       const p = payments.find(x => x.paymentId === paymentId);
       if (!p) return;
-      document.getElementById('paymentDetailsBox').innerHTML = `
-        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.paymentId}</div>
-        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bookingId || 'N/A'}</div>
-        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payerName || 'Unknown'}</div>
-        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amount)}</div>
-        <div class="summary-box mb-2"><strong>Method:</strong> ${p.paymentMethod}</div>
-        <div class="summary-box mb-2"><strong>Status:</strong> <span class="badge ${badge(p.paymentStatus)}">${displayStatus(p.paymentStatus)}</span></div>
-        <div class="summary-box mb-0"><strong>Reference:</strong> ${p.referenceNum || 'N/A'}</div>
-        <div class="summary-box mb-0"><strong>Created:</strong> ${new Date(p.createdAt).toLocaleString()}</div>
-      `;
+      const info = statusInfo(p);
+      const warning = downpaymentWarning(p);
+      const rows = [
+        ['Transaction ID', p.paymentId],
+        ['Type', p.type === 'downpayment' ? 'GCash downpayment' : 'Fare'],
+        ['Booking / Rental', linkLabel(p)],
+        ['Trip / Rental status', targetStatusLabel(p.targetStatus)],
+        ['Payer', p.payerName || 'Unknown'],
+        ['Amount', peso(p.amount)],
+        ['Method', methodLabel(p.paymentMethod)],
+        ['Status', info.label],
+        ['Reference', p.referenceNum || '—'],
+        ['Filed', formatDateTime(p.createdAt)]
+      ];
+      if (p.type === 'downpayment') {
+        rows.push(['Reviewed', p.reviewedAt ? formatDateTime(p.reviewedAt) : '—']);
+      }
+      if (warning) rows.push(['Needs attention', warning]);
+
+      document.getElementById('paymentDetailsBox').innerHTML =
+        rows.map(([label, value]) =>
+          `<div class="summary-box mb-2"><strong>${esc(label)}:</strong> ${esc(value)}</div>`
+        ).join('') +
+        (p.type === 'downpayment'
+          ? `<div class="mt-3 d-grid">
+               <a class="btn btn-outline-primary" href="downpayments.html?id=${encodeURIComponent(p.paymentId)}">
+                 <i class="bi bi-cash-coin me-1"></i>Review on Downpayments
+               </a>
+             </div>`
+          : '');
+
       viewPaymentModal.show();
-    }
+    };
 
     window.openReport = function(paymentId){
-      selectedIndex = payments.findIndex(x => x.paymentId === paymentId);
-      if (selectedIndex === -1) return;
-      const p = payments[selectedIndex];
-
-      document.getElementById('rPaymentId').textContent = p.paymentId;
-      document.getElementById('rPayer').textContent = p.payerName || 'Unknown';
-      document.getElementById('rAmount').textContent = peso(p.amount);
-
-      document.getElementById('rFrom').value = p.createdAt.split('T')[0];
-      document.getElementById('rTo').value = p.createdAt.split('T')[0];
+      const p = payments.find(x => x.paymentId === paymentId);
+      if (!p) return;
+      const day = manilaDay(p.createdAt);
+      document.getElementById('rFrom').value = day;
+      document.getElementById('rTo').value = day;
       document.getElementById('rType').value = 'Transaction Summary';
       document.getElementById('rNotes').value = '';
-
       reportModal.show();
-    }
+    };
 
     document.getElementById('reportForm').addEventListener('submit', function(e){
       e.preventDefault();
-      if(selectedIndex === null) return;
 
-      const p = payments[selectedIndex];
       const from = document.getElementById('rFrom').value;
       const to = document.getElementById('rTo').value;
       const type = document.getElementById('rType').value;
       const notes = document.getElementById('rNotes').value.trim();
 
-      if(from > to){
+      if (!from || !to) {
+        alert('Pick both a From Date and a To Date.');
+        return;
+      }
+      if (from > to) {
         alert('Invalid date range: "From Date" cannot be later than "To Date".');
         return;
       }
 
+      const rows = payments.filter(p => {
+        const day = manilaDay(p.createdAt);
+        return day && day >= from && day <= to;
+      });
+      if (!rows.length) {
+        alert('No transactions were filed in that date range.');
+        return;
+      }
+
+      const totals = {
+        count: rows.length, gross: 0, paid: 0, pending: 0, unpaid: 0,
+        voided: 0, downApproved: 0, downPending: 0, refunded: 0, failed: 0
+      };
+      rows.forEach(p => {
+        const amount = Number(p.amount) || 0;
+        const key = statusKey(p);
+        totals.gross += amount;
+        if (key === 'fare:completed') totals.paid += amount;
+        else if (key === 'fare:pending') totals.pending += amount;
+        else if (key === 'fare:unpaid') totals.unpaid += amount;
+        else if (key === 'fare:void') totals.voided += amount;
+        else if (key === 'fare:failed') totals.failed += amount;
+        else if (key === 'downpayment:approved') totals.downApproved += amount;
+        else if (key === 'downpayment:pending') totals.downPending += amount;
+        else if (key === 'fare:refunded' || key === 'downpayment:refunded') totals.refunded += amount;
+      });
+
       generatedPaymentReport = {
-        paymentId: p.paymentId,
-        payerName: p.payerName || 'Unknown',
-        bookingId: p.bookingId || 'N/A',
-        amount: Number(p.amount) || 0,
-        paymentMethod: p.paymentMethod || 'N/A',
-        paymentStatus: p.paymentStatus || 'unknown',
-        referenceNum: p.referenceNum || 'N/A',
-        createdAt: p.createdAt,
+        rows: rows,
+        totals: totals,
         from: from,
         to: to,
         type: type,
         notes: notes || 'None'
       };
 
+      // Chain on hidden so the two Bootstrap modals never fight over the
+      // backdrop.
+      document.getElementById('reportModal').addEventListener('hidden.bs.modal', function () {
+        renderReportResult();
+        reportResultModal.show();
+      }, { once: true });
       reportModal.hide();
+    });
+
+    function renderReportResult(){
+      const r = generatedPaymentReport;
+      if (!r) return;
+
+      const summary = [
+        ['Transactions', String(r.totals.count)],
+        ['Gross filed', peso(r.totals.gross)],
+        ['Fares paid', peso(r.totals.paid)],
+        ['Fares pending', peso(r.totals.pending)],
+        ['Fares unpaid', peso(r.totals.unpaid)],
+        ['Void (cancelled)', peso(r.totals.voided)],
+        ['Fares failed', peso(r.totals.failed)],
+        ['Downpayments approved', peso(r.totals.downApproved)],
+        ['Downpayments pending', peso(r.totals.downPending)],
+        ['Refunded', peso(r.totals.refunded)]
+      ];
+
+      const body = r.rows.map(p => {
+        const info = statusInfo(p);
+        return `<tr>
+          <td>${esc(formatDay(manilaDay(p.createdAt)))}</td>
+          <td>${p.type === 'downpayment' ? 'Downpayment' : 'Fare'}</td>
+          <td>${esc(linkLabel(p))}</td>
+          <td>${esc(p.payerName || 'Unknown')}</td>
+          <td class="text-end">${peso(p.amount)}</td>
+          <td>${esc(info.label)}</td>
+        </tr>`;
+      }).join('');
 
       document.getElementById('reportResultBox').innerHTML = `
         <div class="alert alert-success">
-          <strong>${type}</strong> receipt generated successfully.
+          <strong>${esc(r.type)}</strong> generated for ${esc(formatDay(r.from))} to ${esc(formatDay(r.to))}.
         </div>
 
-        <div class="summary-box mb-2"><strong>Payment ID:</strong> ${p.paymentId}</div>
-        <div class="summary-box mb-2"><strong>Payer:</strong> ${p.payerName || 'Unknown'}</div>
-        <div class="summary-box mb-2"><strong>Booking ID:</strong> ${p.bookingId || 'N/A'}</div>
-        <div class="summary-box mb-2"><strong>Amount:</strong> ${peso(p.amount)}</div>
-        <div class="summary-box mb-2"><strong>Date Range:</strong> ${from} to ${to}</div>
-        <div class="summary-box mb-0"><strong>Notes:</strong> ${notes || '-'}</div>
+        <div class="row g-2 mb-3">
+          ${summary.map(([label, value]) => `
+            <div class="col-6">
+              <div class="summary-box">
+                <div class="small text-muted">${esc(label)}</div>
+                <div class="fw-semibold">${esc(value)}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+
+        <div class="summary-box mb-3"><strong>Notes:</strong> ${esc(r.notes)}</div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-theme align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Filed</th>
+                <th>Type</th>
+                <th>Booking / Rental</th>
+                <th>Payer</th>
+                <th class="text-end">Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${body}</tbody>
+          </table>
+        </div>
 
         <div class="mt-3 d-grid">
           <button class="btn btn-outline-dark" id="downloadReportBtn" type="button">
-            <i class="bi bi-file-earmark-pdf me-1"></i> View / Download Receipt
+            <i class="bi bi-file-earmark-pdf me-1"></i> View / Download Report
           </button>
         </div>
       `;
 
-      const downloadButton = document.getElementById('downloadReportBtn');
-      downloadButton.addEventListener('click', function() {
-        downloadPaymentReport(generatedPaymentReport, downloadButton);
+      document.getElementById('downloadReportBtn').addEventListener('click', function() {
+        downloadPaymentReport(generatedPaymentReport, this);
       });
-
-      reportResultModal.show();
-    });
+    }
 
     function loadPdfScript(src) {
       return new Promise(function(resolve, reject) {
@@ -356,7 +567,7 @@
       const preview = window.open('about:blank', '_blank');
       const originalText = button.innerHTML;
       button.disabled = true;
-      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating receipt...';
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating report...';
 
       try {
         await ensurePdfLibrary();
@@ -364,34 +575,36 @@
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
-        const reportDate = new Date().toLocaleString('en-PH');
+        const reportDate = new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
 
         doc.setFillColor(23, 42, 66);
         doc.rect(0, 0, pageWidth, 27, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
-        doc.text('BangkaGo Payment Receipt', margin, 12);
+        doc.text('BangkaGo Payment Report', margin, 12);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.text(report.type, margin, 20);
         doc.text('Generated ' + reportDate, pageWidth - margin, 20, { align: 'right' });
         doc.setTextColor(40, 40, 40);
 
+        const money = n => 'PHP ' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 });
         doc.autoTable({
           startY: 34,
-          head: [['Payment Details', 'Value']],
+          head: [['Report summary', 'Value']],
           body: [
-            ['Payment ID', report.paymentId],
-            ['Payer', report.payerName],
-            ['Booking ID', report.bookingId],
-            ['Amount', 'PHP ' + report.amount.toLocaleString('en-PH', { minimumFractionDigits: 2 })],
-            ['Payment Method', report.paymentMethod],
-            ['Payment Status', displayStatus(report.paymentStatus)],
-            ['Reference Number', report.referenceNum],
-            ['Payment Date', report.createdAt ? new Date(report.createdAt).toLocaleString('en-PH') : 'N/A'],
-            ['Report Date Range', report.from + ' to ' + report.to],
-            ['Report Type', report.type],
+            ['Period', report.from + ' to ' + report.to],
+            ['Transactions', String(report.totals.count)],
+            ['Gross filed', money(report.totals.gross)],
+            ['Fares paid', money(report.totals.paid)],
+            ['Fares pending', money(report.totals.pending)],
+            ['Fares unpaid', money(report.totals.unpaid)],
+            ['Void (cancelled)', money(report.totals.voided)],
+            ['Fares failed', money(report.totals.failed)],
+            ['Downpayments approved', money(report.totals.downApproved)],
+            ['Downpayments pending', money(report.totals.downPending)],
+            ['Refunded', money(report.totals.refunded)],
             ['Notes', report.notes]
           ],
           styles: { fontSize: 9, cellPadding: 3, overflow: 'linebreak' },
@@ -400,25 +613,54 @@
           margin: { left: margin, right: margin }
         });
 
+        const body = report.rows.map(p => {
+          const info = statusInfo(p);
+          return [
+            formatDay(manilaDay(p.createdAt)),
+            p.type === 'downpayment' ? 'Downpayment' : 'Fare',
+            linkLabel(p).replace(/·/g, '-'),
+            p.payerName || 'Unknown',
+            'PHP ' + Number(p.amount || 0).toFixed(2),
+            info.label
+          ];
+        });
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [['Filed', 'Type', 'Booking / Rental', 'Payer', 'Amount', 'Status']],
+          body: body,
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+          headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin },
+          columnStyles: {
+            0: { cellWidth: 26 },
+            1: { cellWidth: 24 },
+            2: { cellWidth: 40 },
+            3: { cellWidth: 45 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 22 }
+          }
+        });
+
         const pageCount = doc.internal.getNumberOfPages();
         for (let page = 1; page <= pageCount; page++) {
           doc.setPage(page);
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8);
           doc.setTextColor(120, 120, 120);
-          doc.text('BangkaGo payment receipt | Page ' + page + ' of ' + pageCount, margin, doc.internal.pageSize.getHeight() - 8);
+          doc.text('BangkaGo payment report | Page ' + page + ' of ' + pageCount, margin, doc.internal.pageSize.getHeight() - 8);
         }
 
         const pdfUrl = doc.output('bloburl');
         if (preview) {
           preview.location.href = pdfUrl;
         } else {
-          doc.save('BangkaGo-payment-receipt-' + report.paymentId.slice(0, 8) + '.pdf');
+          doc.save('BangkaGo-payment-report-' + report.from + '-to-' + report.to + '.pdf');
         }
       } catch (error) {
         console.error(error);
         if (preview) preview.close();
-        alert('Could not generate payment receipt: ' + error.message);
+        alert('Could not generate payment report: ' + error.message);
       } finally {
         button.disabled = false;
         button.innerHTML = originalText;
@@ -438,29 +680,12 @@
       showLoading(true);
       try {
         const [pays, downs] = await Promise.all([
-          window.bangkagoPayments.listPayments({ limit: 100 }),
-          window.bangkagoPayments.listDownpayments({ limit: 100 })
+          window.bangkagoPayments.listPayments({ limit: 500 }),
+          window.bangkagoPayments.listDownpayments({ limit: 500 })
         ]);
-        
-        // Normalize payments
-        payments = pays.map(p => ({
-          ...p,
-          payerName: p.booking?.passenger_name || p.user?.first_name + ' ' + p.user?.last_name || 'Unknown'
-        })).concat(
-          downs.map(d => ({
-            paymentId: d.downpaymentId,
-            bookingId: d.bookingId || d.boatRentalId,
-            payerName: d.user?.first_name + ' ' + d.user?.last_name || 'Unknown',
-            amount: d.amount,
-            paymentMethod: 'GCash',
-            paymentStatus: d.status,
-            referenceNum: d.referenceNum,
-            createdAt: d.createdAt,
-            type: 'downpayment'
-          }))
-        ).sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        render(payments);
+        payments = pays.concat(downs).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        runFilter(); // keep the admin's active search/status filter
         showLoading(false);
       } catch(e) {
         console.error(e);
@@ -468,12 +693,12 @@
       }
     }
 
-    // Real-time updates
-    window.bangkagoRealtime.subscribe('payments', null, function() {
-      loadPayments();
-    });
-    window.bangkagoRealtime.subscribe('downpayments', null, function() {
-      loadPayments();
+    // Realtime: payments and escrow rows change status; bookings change the
+    // target trip status shown beside each fare.
+    ['payments', 'downpayments', 'bookings'].forEach(function(table) {
+      window.bangkagoRealtime.subscribe(table, null, function() {
+        loadPayments();
+      });
     });
 
     // Initial load — wait for auth guard to complete and session to restore
@@ -486,7 +711,6 @@
         // Never auto-redirect from here: the guard already distinguishes
         // 'signed out' (bounces you) from 'can't verify' (stays put).
         showError('Could not verify your session (connection problem). Refresh the page to retry.');
-        
       }
     })();
   </script>

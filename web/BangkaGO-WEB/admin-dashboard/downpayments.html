@@ -33,6 +33,7 @@
               <li>In your GCash app open <strong>Transactions</strong> and search that Ref No. (or match the amount + date).</li>
               <li>Confirm the money landed in <strong>your</strong> GCash number (Admin &rarr; GCash QR) and the amount matches the row.</li>
               <li>Money found &rarr; <strong>Approve</strong>. Not found / wrong amount &rarr; <strong>Refund</strong>.</li>
+              <li>An already-approved row can still be refunded if the trip was cancelled or the money must be returned.</li>
             </ol>
           </div>
 
@@ -90,9 +91,14 @@
           <div class="summary-box mb-2"><strong>Payer:</strong> <span id="mPayer">-</span></div>
           <div class="summary-box mb-2"><strong>Trip / Rental:</strong> <span id="mLabel">-</span></div>
           <div class="summary-box mb-2"><strong>Details:</strong> <span id="mService">-</span></div>
+          <div class="summary-box mb-2"><strong>Target status:</strong> <span id="mTarget">-</span></div>
           <div class="summary-box mb-2"><strong>Amount:</strong> <span id="mAmount">-</span></div>
+          <div class="summary-box mb-2"><strong>Downpayment status:</strong> <span id="mStatus">-</span></div>
           <div class="summary-box mb-2"><strong>Filed:</strong> <span id="mFiled">-</span></div>
+          <div class="summary-box mb-2"><strong>Reviewed:</strong> <span id="mReviewed">-</span></div>
           <div class="summary-box mb-0"><strong>GCash ref:</strong> <span id="mRef">-</span></div>
+
+          <div class="alert alert-warning mt-3 mb-0 d-none" id="mWarning"></div>
 
           <div class="alert alert-primary mt-3 mb-0">
             <ol class="mb-0 ps-3">
@@ -144,7 +150,8 @@
 
   <script>
     let downpayments = [];
-    let selectedIndex = null;
+    let selectedDownpaymentId = null;
+    let deepLinkHandled = false;
 
     const dpBody = document.getElementById('dpBody');
     const dpSearch = document.getElementById('dpSearch');
@@ -158,7 +165,7 @@
     const mRefundBtn = document.getElementById('mRefundBtn');
     let photoRequestId = 0;
 
-    function peso(n){ return `₱${Number(n).toLocaleString('en-PH')}`; }
+    function peso(n){ return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`; }
 
     function dpBadge(status){
       if(status === 'approved') return 'text-bg-success';
@@ -182,9 +189,46 @@
       errorState.classList.remove('d-none');
     }
 
-    function shortDate(iso){
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+
+    // Dates are shown in Asia/Manila; day-only report/date math never shifts
+    // through UTC.
+    function manilaDay(value){
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(d);
+      const get = t => (parts.find(p => p.type === t) || {}).value;
+      return `${get('year')}-${get('month')}-${get('day')}`;
+    }
+    function formatDay(value){
+      if (!value) return 'N/A';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-PH', {
+          month: 'short', day: 'numeric', year: 'numeric'
+        });
+      }
+      return formatDay(manilaDay(value));
+    }
+    function shortDateTime(iso){
+      if (!iso) return 'N/A';
       const d = new Date(iso);
-      return isNaN(d) ? iso : d.toLocaleDateString('en-PH', { month:'short', day:'numeric', year:'numeric' });
+      return isNaN(d.getTime()) ? String(iso) : d.toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
+    }
+    function shortDate(iso){
+      if (!iso) return 'N/A';
+      return formatDay(manilaDay(iso));
     }
 
     function payerName(d){
@@ -193,11 +237,27 @@
       return 'Unknown';
     }
 
+    function targetStatusLabel(status){
+      return {
+        pending: 'Pending', open: 'Open', accepted: 'Accepted', completed: 'Completed',
+        cancelled: 'Cancelled', awaiting_payment: 'Awaiting payment', confirmed: 'Confirmed'
+      }[status] || status || '—';
+    }
+
+    // An approved or pending escrow row on a cancelled trip is money the
+    // admin still owes back. Surface it before it is lost in the list.
+    function targetWarning(d){
+      if (d.targetStatus === 'cancelled' && (d.status === 'pending' || d.status === 'approved')) {
+        return (d.boatRentalId ? 'Rental' : 'Trip') + ' cancelled — refund due';
+      }
+      return '';
+    }
+
     function runFilter(){
       const q = dpSearch.value.toLowerCase().trim();
       const s = dpStatusFilter.value;
       const rows = downpayments.filter(d => {
-        const hay = `${payerName(d)} ${d.label || ''} ${d.serviceLabel || ''}`.toLowerCase();
+        const hay = `${payerName(d)} ${d.label || ''} ${d.serviceLabel || ''} ${targetStatusLabel(d.targetStatus)}`.toLowerCase();
         return (!s || d.status === s) && (!q || hay.includes(q));
       });
       render(rows);
@@ -209,20 +269,25 @@
         return;
       }
       dpBody.innerHTML = rows.map(d => {
-        const i = downpayments.indexOf(d); // same object references — safe under filters
         const label = d.bookingId ? `Booking ${d.label}` : `Rental · ${d.label}`;
+        const warning = targetWarning(d);
         return `
           <tr>
-            <td>${payerName(d)}</td>
-            <td>${label}<div class="small text-muted">${d.serviceLabel || ''}</div></td>
+            <td>${esc(payerName(d))}</td>
+            <td>
+              ${esc(label)}
+              <div class="small text-muted">${esc(d.serviceLabel || '')}</div>
+              <div class="small text-muted">Target: ${esc(targetStatusLabel(d.targetStatus))}</div>
+              ${warning ? `<div class="small text-danger">${esc(warning)}</div>` : ''}
+            </td>
             <td>${peso(d.amount)}</td>
             <td>${d.proofUrl
-              ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openReceipt(${i})" aria-label="View receipt photo for ${payerName(d)}"><i class="bi bi-image me-1"></i>View photo</button>`
+              ? `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openReceipt('${d.downpaymentId}')" aria-label="View receipt photo for ${esc(payerName(d))}"><i class="bi bi-image me-1"></i>View photo</button>`
               : '<span class="badge text-bg-danger">Missing</span>'}</td>
-            <td>${shortDate(d.createdAt)}</td>
-            <td><span class="badge ${dpBadge(d.status)}">${dpStatusLabel(d.status)}</span></td>
+            <td>${esc(shortDate(d.createdAt))}</td>
+            <td><span class="badge ${dpBadge(d.status)}">${esc(dpStatusLabel(d.status))}</span></td>
             <td>
-              <button class="btn btn-sm btn-outline-primary" onclick="openReview(${i})">
+              <button class="btn btn-sm btn-outline-primary" onclick="openReview('${d.downpaymentId}')">
                 <i class="bi bi-eye"></i> Review
               </button>
             </td>
@@ -266,8 +331,8 @@
       box.replaceChildren(link);
     }
 
-    window.openReceipt = function(index){
-      const d = downpayments[index];
+    window.openReceipt = function(downpaymentId){
+      const d = downpayments.find(x => x.downpaymentId === downpaymentId);
       if (!d?.proofUrl) return;
       const requestId = ++photoRequestId;
       const box = document.getElementById('receiptPhotoBox');
@@ -285,26 +350,47 @@
       document.getElementById('receiptPhotoBox').replaceChildren();
     });
 
-    window.openReview = function(index){
-      selectedIndex = index;
-      const d = downpayments[index];
+    function applyReviewState(d){
+      const pending = d.status === 'pending';
+      const refundable = d.status === 'pending' || d.status === 'approved';
+      mApproveBtn.disabled = !pending || d.targetStatus === 'cancelled';
+      mRefundBtn.disabled = !refundable;
+    }
+
+    window.openReview = function(downpaymentId){
+      const d = downpayments.find(x => x.downpaymentId === downpaymentId);
+      if (!d) return;
+      selectedDownpaymentId = d.downpaymentId;
 
       document.getElementById('mPayer').textContent = payerName(d);
       document.getElementById('mLabel').textContent = d.bookingId ? `Booking ${d.label}` : `Rental · ${d.label}`;
       document.getElementById('mService').textContent = d.serviceLabel || '—';
+      document.getElementById('mTarget').textContent = targetStatusLabel(d.targetStatus);
       document.getElementById('mAmount').textContent = peso(d.amount);
-      document.getElementById('mFiled').textContent = shortDate(d.createdAt);
+      document.getElementById('mStatus').textContent = dpStatusLabel(d.status);
+      document.getElementById('mFiled').textContent = shortDateTime(d.createdAt);
+      document.getElementById('mReviewed').textContent = d.reviewedAt ? shortDateTime(d.reviewedAt) : 'Not reviewed';
       document.getElementById('mRef').textContent = d.referenceNum || 'Not entered; read it from the receipt';
 
-      const pending = d.status === 'pending';
-      mApproveBtn.disabled = !pending;
-      mRefundBtn.disabled = !pending;
+      const warning = targetWarning(d);
+      const warningBox = document.getElementById('mWarning');
+      warningBox.textContent = warning;
+      warningBox.classList.toggle('d-none', !warning);
+
+      applyReviewState(d);
       dpModal.show();
     };
 
     async function decide(action){
-      if (selectedIndex === null) return;
-      const d = downpayments[selectedIndex];
+      if (!selectedDownpaymentId) return;
+      const d = downpayments.find(x => x.downpaymentId === selectedDownpaymentId);
+      if (!d) {
+        alert('This downpayment is no longer loaded. Refresh the page.');
+        return;
+      }
+      const verb = action === 'approve' ? 'Approve' : 'Refund';
+      if (!confirm(`${verb} this ${peso(d.amount)} downpayment for ${d.label}?`)) return;
+
       mApproveBtn.disabled = true;
       mRefundBtn.disabled = true;
       try {
@@ -314,8 +400,9 @@
         await loadDownpayments();
       } catch(e) {
         alert('Error: ' + e.message);
-        mApproveBtn.disabled = false;
-        mRefundBtn.disabled = false;
+        // Re-read the current row: a concurrent review may have changed it.
+        const current = downpayments.find(x => x.downpaymentId === selectedDownpaymentId);
+        if (current) applyReviewState(current);
       }
     }
 
@@ -328,18 +415,31 @@
     async function loadDownpayments() {
       showLoading(true);
       try {
-        downpayments = await window.bangkagoPayments.listDownpayments({ limit: 200 });
+        downpayments = await window.bangkagoPayments.listDownpayments({ limit: 500 });
         showLoading(false);
         runFilter();
+        // Deep link from Manage Payments: open that row on the first load.
+        if (!deepLinkHandled) {
+          deepLinkHandled = true;
+          const id = new URLSearchParams(location.search).get('id');
+          const d = id ? downpayments.find(x => x.downpaymentId === id) : null;
+          if (d) {
+            dpStatusFilter.value = ''; // the row may be approved/refunded
+            runFilter();
+            openReview(d.downpaymentId);
+          }
+        }
       } catch(e) {
         console.error(e);
         showError('Failed to load downpayments: ' + e.message);
       }
     }
 
-    // Real-time updates
-    window.bangkagoRealtime.subscribe('downpayments', null, function() {
-      loadDownpayments();
+    // Real-time updates: escrow rows and the booking status shown beside them.
+    ['downpayments', 'bookings', 'boat_rentals'].forEach(function(table) {
+      window.bangkagoRealtime.subscribe(table, null, function() {
+        loadDownpayments();
+      });
     });
 
     // Initial load — wait for auth guard to complete and session to restore

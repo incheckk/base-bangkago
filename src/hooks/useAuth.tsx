@@ -138,7 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       log(silent ? 'silent profile revalidate' : 'refreshProfile', doc ? `role=${doc.role}` : 'missing');
     } catch (e) {
       const message = (e as Error)?.message ?? 'Failed to load your profile.';
-      if (!silent || message.includes('deleted')) setError(message);
+      // Deleted bangkeros and suspended accounts (065) must surface even on a
+      // silent revalidation - otherwise the live user keeps the open session
+      // until the app restarts.
+      if (!silent || /deleted|suspended/i.test(message)) setError(message);
       log('refreshProfile error', message);
     } finally {
       if (!silent) setProfileLoading(false);

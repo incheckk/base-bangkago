@@ -98,7 +98,7 @@
     'manage-users': { title: 'Manage Users', subtitle: 'Create, update, and monitor user access' },
     'manage-bangkeros': { title: 'Manage Bangkeros', subtitle: 'Maintain bangkero records and status' },
     'manage-bangka': { title: 'Manage Bangka', subtitle: 'Maintain vessel master list and availability' },
-    'manage-routes': { title: 'Manage Routes', subtitle: 'Configure official routes and travel corridors' },
+    'manage-routes': { title: 'Manage Ports & Routes', subtitle: 'Ports, travel corridors, fares and stops' },
     'manage-bookings': { title: 'Manage Bookings', subtitle: 'Review booking flow, assignments, and status' },
     'downpayments': { title: 'Downpayments', subtitle: 'Confirm GCash escrow before trips are released' },
     'monitor-fleet': { title: 'Monitor Fleet', subtitle: 'Live fleet monitoring and real-time vessel tracking' },

@@ -131,6 +131,12 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
   if (error) throw error;
   if (!data) return null;
 
+  // 065: the admin's Suspend toggle. The guards turn this into
+  // AuthErrorScreen (which always offers Sign out) instead of a spinner.
+  if (data.is_suspended === true) {
+    throw new Error('This account has been suspended. Contact an administrator.');
+  }
+
   if (data.user_role === 'bangkero') {
     const { data: operator, error: operatorError } = await supabase
       .from('bangkeros')

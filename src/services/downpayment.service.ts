@@ -223,11 +223,17 @@ export async function listDownpayments(
  * approval itself must not roll back over a notification hiccup.
  */
 export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void> {
-  const { error } = await supabase
+  // Only a still-pending row moves: a double-tap or a second admin
+  // cannot approve the same downpayment twice.
+  const { data: updated, error } = await supabase
     .from('downpayments')
     .update({ status: 'approved', reviewed_at: new Date().toISOString() })
-    .eq('id', row.downpaymentId);
+    .eq('id', row.downpaymentId)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!updated) throw new Error('This downpayment was already reviewed. Refresh the page.');
 
   // Opens the gate (020). FALSE = row was already reviewed/cancelled —
   // don't announce a release that never happened.
@@ -239,7 +245,15 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
       p_approve: true,
     }
   );
-  if (gateError) throw gateError;
+  if (gateError) {
+    // Restore the escrow row so the page can retry the gate.
+    await supabase
+      .from('downpayments')
+      .update({ status: 'pending', reviewed_at: null })
+      .eq('id', row.downpaymentId)
+      .eq('status', 'approved');
+    throw gateError;
+  }
 
   if (flipped && row.notifyUserId) {
     await createNotification(
@@ -266,11 +280,21 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
  * out). A row that never passed review cancels with it.
  */
 export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void> {
-  const { error } = await supabase
+  const previousStatus = row.status;
+  const previousReviewedAt = row.reviewedAt ?? null;
+
+  // Pending and approved rows can be refunded once. The status guard
+  // makes a double-tap harmless and stops a refund overwriting a
+  // concurrent approval.
+  const { data: updated, error } = await supabase
     .from('downpayments')
     .update({ status: 'refunded', reviewed_at: new Date().toISOString() })
-    .eq('id', row.downpaymentId);
+    .eq('id', row.downpaymentId)
+    .in('status', ['pending', 'approved'])
+    .select('id')
+    .maybeSingle();
   if (error) throw error;
+  if (!updated) throw new Error('This downpayment was already refunded or changed. Refresh the page.');
 
   // Cancels the still-unopened booking/rental alongside (020); FALSE
   // when it was already open or already gone — nothing to close.
@@ -279,7 +303,14 @@ export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void>
     p_rental_id: row.boatRentalId ?? null,
     p_approve: false,
   });
-  if (gateError) throw gateError;
+  if (gateError) {
+    await supabase
+      .from('downpayments')
+      .update({ status: previousStatus, reviewed_at: previousReviewedAt })
+      .eq('id', row.downpaymentId)
+      .eq('status', 'refunded');
+    throw gateError;
+  }
 
   if (row.notifyUserId) {
     await createNotification(

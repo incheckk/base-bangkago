@@ -1,6 +1,10 @@
 /**
  * User management service for web dashboards.
  * Mirrors mobile admin user operations (src/services/admin.service.ts).
+ *
+ * Account status comes from users.is_suspended (migration 065) - the only
+ * flag the app and the portal actually enforce. users.is_verified is NOT
+ * status: the app writes false on every sign-up and reads it nowhere.
  */
 (function() {
   'use strict';
@@ -16,7 +20,10 @@
       phone: row.phone_number,
       role: row.user_role,
       profilePhoto: row.profile_photo,
-      isVerified: row.is_verified,
+      isSuspended: row.is_suspended === true,
+      // Deleted bangkeros can never sign in (fetchUserDoc rejects them), so
+      // the directory must not call them Active. Filled in by the callers.
+      bangkeroDeleted: false,
       createdAt: row.created_at
     };
   }
@@ -26,7 +33,7 @@
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var q = c.from('users').select('*');
     if (options.role) q = q.eq('user_role', options.role);
-    if (options.isVerified !== undefined) q = q.eq('is_verified', options.isVerified);
+    if (options.isSuspended !== undefined) q = q.eq('is_suspended', options.isSuspended);
     if (options.search) {
       var term = options.search.toLowerCase();
       // Phone-first: identity is the PH mobile number (the "email" is a
@@ -35,20 +42,50 @@
     }
     var r = await q.order('created_at', { ascending: false });
     if (r.error) throw r.error;
-    return (r.data || []).map(mapRow);
+
+    var users = (r.data || []).map(mapRow);
+    await markDeletedBangkeros(c, users);
+    return users;
+  }
+
+  // One extra query instead of a users -> bangkeros embed: the reverse
+  // relationship name is not part of any tested path here (same reasoning
+  // as enrichBangkeros).
+  async function markDeletedBangkeros(c, users) {
+    var ids = users.filter(function(u) { return u.role === 'bangkero'; }).map(function(u) { return u.uid; });
+    if (!ids.length) return;
+    var r = await c.from('bangkeros').select('id, is_deleted').in('id', ids);
+    if (r.error) throw r.error;
+    var deleted = {};
+    (r.data || []).forEach(function(row) { if (row.is_deleted) deleted[row.id] = true; });
+    users.forEach(function(u) { u.bangkeroDeleted = deleted[u.uid] === true; });
   }
 
   async function getById(uid) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var r = await c.from('users').select('*').eq('id', uid).maybeSingle();
     if (r.error) throw r.error;
-    return r.data ? mapRow(r.data) : null;
+    if (!r.data) return null;
+    var user = mapRow(r.data);
+    if (user.role === 'bangkero') {
+      var b = await c.from('bangkeros').select('is_deleted').eq('id', uid).maybeSingle();
+      if (b.error) throw b.error;
+      user.bangkeroDeleted = b.data ? b.data.is_deleted === true : false;
+    }
+    return user;
   }
 
-  // Admin: suspend user (sets is_verified = false)
-  async function suspend(uid) {
+  // Admin: suspend / reactivate (users.is_suspended, migration 065)
+  async function setSuspended(uid, suspended) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('users').update({ is_verified: false }).eq('id', uid);
+    // A sole admin who suspends themselves is locked out of the portal.
+    if (suspended) {
+      var auth = await c.auth.getUser();
+      if (auth && auth.data && auth.data.user && auth.data.user.id === uid) {
+        throw new Error('You cannot suspend your own account.');
+      }
+    }
+    var r = await c.from('users').update({ is_suspended: !!suspended }).eq('id', uid);
     if (r.error) throw r.error;
   }
 
@@ -62,5 +99,5 @@
     if (r.error) throw r.error;
   }
 
-  window.bangkagoUsers = { listAll, getById, suspend, assignRole };
+  window.bangkagoUsers = { listAll, getById, setSuspended, assignRole };
 })();

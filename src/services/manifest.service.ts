@@ -97,11 +97,29 @@ export async function getActiveManifest(
   bangkeroId: string,
   includeCompleted = false
 ): Promise<TripManifest | null> {
-  const { data, error } = await supabase
+  let q = supabase
     .from('trip_manifest')
     .select('*')
     .eq('bangkero_id', bangkeroId)
-    .in('status', includeCompleted ? ['draft', 'finalized', 'completed'] : ['draft', 'finalized'])
+    .in('status', includeCompleted ? ['draft', 'finalized', 'completed'] : ['draft', 'finalized']);
+
+  /**
+   * Arrival is the terminal signal, not `status`.
+   *
+   * Arrival is stamped when the Arrived screen opens, but the status only
+   * reaches 'completed' when the bangkero taps through it. Backing out in
+   * between stranded the manifest as 'finalized' WITH an arrival time — and
+   * since this query ranks by generated_at among draft/finalized, that dead
+   * row then won forever. En Route reads `departure && !arrival`, so it
+   * showed "No trip in progress" on every later sailing, and Departure kept
+   * resolving to yesterday's arrived manifest.
+   *
+   * Filtering on the timestamp means a half-finished arrival can no longer
+   * block the next trip, whatever its status says.
+   */
+  if (!includeCompleted) q = q.is('actual_arrival_time', null);
+
+  const { data, error } = await q
     .order('generated_at', { ascending: false })
     .limit(1)
     .maybeSingle();

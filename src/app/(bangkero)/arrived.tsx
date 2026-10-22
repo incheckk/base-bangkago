@@ -40,7 +40,10 @@ export default function ArrivedScreen() {
   // depart/notify flow. Only the explicit buttons leave.
   useLockBack();
   const { user } = useAuth();
-  const { manifest, passengers, loading } = useTripManifest(user?.id ?? null);
+  // includeCompleted, because this screen stamps the arrival itself: without
+  // it, getActiveManifest stops returning the manifest the moment this screen
+  // marks it arrived, and the screen empties under its own write.
+  const { manifest, passengers, loading } = useTripManifest(user?.id ?? null, true);
   const { data: allParcels } = useBangkeroParcels(user?.id ?? null);
   const devFlags = useDevFlags();
 

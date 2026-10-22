@@ -148,7 +148,7 @@
         document.getElementById('userEmail').textContent = user.email || 'N/A';
         document.getElementById('userPhone').textContent = user.phone || 'N/A';
         if (user.bangkeroDeleted) {
-          document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-secondary">Deleted</span>';
+          document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-danger">Suspended</span>';
         } else if (user.isSuspended) {
           document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-danger">Suspended</span>';
         } else {
@@ -157,11 +157,11 @@
         document.getElementById('userJoined').textContent = formatDate(user.createdAt);
         document.getElementById('userId').textContent = user.uid;
 
-        // Deleted bangkeros are restored from Manage Bangkeros; suspension
-        // cannot change their access.
+        // Suspended bangkeros (bangkeros.is_deleted) are reactivated from
+        // Manage Bangkeros; users.is_suspended cannot change their access.
         if (user.bangkeroDeleted) {
           suspendBtn.disabled = true;
-          suspendBtn.innerHTML = '<i class="bi bi-person-x me-2"></i> Deleted Account';
+          suspendBtn.innerHTML = '<i class="bi bi-pause-circle me-2"></i> Suspended Account';
           suspendBtn.classList.replace('btn-danger', 'btn-secondary');
         } else if (user.isSuspended) {
           suspendBtn.disabled = true;

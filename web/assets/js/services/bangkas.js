@@ -374,7 +374,7 @@
         .eq('trip_stat', 'accepted');
       if (trips.error) throw trips.error;
       if ((trips.count || 0) > 0) {
-        throw new Error('This vessel has an accepted booking (today or upcoming). Complete or cancel it before deleting the vessel.');
+        throw new Error('This vessel has an accepted booking (today or upcoming). Complete or cancel it before suspending the vessel.');
       }
     }
     var r = await c.rpc('admin_delete_bangka', { p_bangka_id: id });

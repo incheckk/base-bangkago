@@ -44,7 +44,7 @@
                 <option value="">All Status</option>
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
-                <option value="deleted">Deleted</option>
+                <option value="deleted">Suspended (bangkero)</option>
               </select>
             </div>
             <div class="col-md-2 d-grid">
@@ -180,18 +180,17 @@
 
     function statusBadge(statusKey) {
       if (statusKey === 'active') return 'text-bg-success';
-      if (statusKey === 'suspended') return 'text-bg-danger';
-      return 'text-bg-secondary';
+      return 'text-bg-danger';
     }
 
     function statusLabel(statusKey) {
       if (statusKey === 'active') return 'Active';
-      if (statusKey === 'suspended') return 'Suspended';
-      return 'Deleted';
+      return 'Suspended';
     }
 
-    // One source of truth for the badge and the filter. Deleted wins because
-    // a deleted bangkero cannot sign in even when is_suspended is false.
+    // One source of truth for the badge and the filter. A suspended bangkero
+    // (bangkeros.is_deleted) wins because that account cannot sign in even
+    // when users.is_suspended is false.
     function accountStatus(u) {
       if (u.bangkeroDeleted) return 'deleted';
       return u.isSuspended ? 'suspended' : 'active';
@@ -253,7 +252,7 @@
             <td>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal('${u.uid}')"
-                        ${key === 'deleted' ? 'disabled title="Deleted bangkeros are restored from Manage Bangkeros."' : ''}>
+                        ${key === 'deleted' ? 'disabled title="Suspended bangkeros are reactivated from Manage Bangkeros."' : ''}>
                   <i class="bi bi-toggle-on"></i> Status
                 </button>
                 ${key === 'active' ? `

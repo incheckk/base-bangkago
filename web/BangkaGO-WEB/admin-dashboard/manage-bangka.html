@@ -62,8 +62,8 @@
 
         <div class="cg-card p-3 mt-3">
           <div class="panel-head">
-            <h6 class="mb-0">Deleted Bangkas</h6>
-            <span class="muted-note">Deleted vessels retain their original records and trip history</span>
+            <h6 class="mb-0">Suspended Bangkas</h6>
+            <span class="muted-note">Suspended vessels keep their records and trip history, and can be reactivated</span>
           </div>
           <div class="table-responsive">
             <table class="table table-theme align-middle mb-0">
@@ -72,7 +72,7 @@
                   <th>Vessel</th>
                   <th>Capacity</th>
                   <th>Owner</th>
-                  <th>Deleted</th>
+                  <th>Suspended</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -149,21 +149,21 @@
     </div>
   </div>
 
-  <!-- REMOVE VESSEL MODAL -->
-  <div class="modal fade" id="deactivateModal" tabindex="-1" aria-hidden="true">
+  <!-- SUSPEND VESSEL MODAL -->
+  <div class="modal fade" id="suspendModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
-      <form class="modal-content" id="deactivateForm">
+      <form class="modal-content" id="suspendForm">
         <div class="modal-header">
-          <h5 class="modal-title text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Delete Bangka</h5>
+          <h5 class="modal-title text-danger"><i class="bi bi-pause-circle me-2"></i>Suspend Bangka</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Move <strong id="xVessel">-</strong> to Deleted Bangkas?</p>
-          <p class="text-muted mb-3">The vessel record and trip history will be preserved. Vessels with active bookings or rentals cannot be deleted until their use is complete.</p>
+          <p class="mb-2">Suspend <strong id="xVessel">-</strong>?</p>
+          <p class="text-muted mb-3">The vessel record and trip history are kept, and it can be reactivated from Suspended Bangkas. Suspending takes it off dispatch and out of the rental catalog, and a vessel with an active or upcoming booking or rental cannot be suspended.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-danger">Delete Bangka</button>
+          <button type="submit" class="btn btn-danger">Suspend Bangka</button>
         </div>
       </form>
     </div>
@@ -244,7 +244,7 @@
 
     const viewBangkaModal = new bootstrap.Modal(document.getElementById("viewBangkaModal"));
     const updateStatusModal = new bootstrap.Modal(document.getElementById("updateStatusModal"));
-    const deactivateModal = new bootstrap.Modal(document.getElementById("deactivateModal"));
+    const suspendModal = new bootstrap.Modal(document.getElementById("suspendModal"));
     const addBangkaModal = new bootstrap.Modal(document.getElementById("addBangkaModal"));
 
     const dVessel = document.getElementById("dVessel");
@@ -298,7 +298,7 @@
 
     function ownerStatusLabel(b) {
       if (!b.bangkeroId) return 'Unassigned';
-      if (b.bangkeroDeleted) return 'Deleted';
+      if (b.bangkeroDeleted) return 'Suspended';
       if (b.bangkeroVerification !== 'verified') {
         return b.bangkeroVerification
           ? b.bangkeroVerification.charAt(0).toUpperCase() + b.bangkeroVerification.slice(1)
@@ -329,7 +329,7 @@
       }
       bangkaBody.innerHTML = bangkas.map(function(b) {
         const inUse = b.inUse === true;
-        const cannotDelete = inUse || b.blockedDelete === true;
+        const cannotSuspend = inUse || b.blockedDelete === true;
         return `
           <tr>
             <td>${esc(b.bangkaName)}</td>
@@ -348,9 +348,9 @@
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="openUpdateModal('${b.bangkaId}')">
                   <i class="bi bi-arrow-repeat"></i> Status
                 </button>
-                <button class="btn btn-sm btn-outline-danger action-btn" onclick="openDeactivateModal('${b.bangkaId}')"
-                        ${cannotDelete ? 'disabled title="Complete or cancel the active/upcoming trip or rental first."' : ''}>
-                  <i class="bi bi-trash"></i> Delete
+                <button class="btn btn-sm btn-outline-danger action-btn" onclick="openSuspendModal('${b.bangkaId}')"
+                        ${cannotSuspend ? 'disabled title="Complete or cancel the active/upcoming trip or rental first."' : ''}>
+                  <i class="bi bi-pause-circle"></i> Suspend
                 </button>
               </div>
             </td>
@@ -361,7 +361,7 @@
 
     function renderDeletedTable() {
       if (!deletedBangkas.length) {
-        deletedBangkaBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No deleted bangkas.</td></tr>';
+        deletedBangkaBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No suspended bangkas.</td></tr>';
         return;
       }
       deletedBangkaBody.innerHTML = deletedBangkas.map(function(b) {
@@ -373,7 +373,7 @@
             <td>${formatDate(b.deletedAt)}</td>
             <td>
               <button class="btn btn-sm btn-outline-success action-btn" onclick="restoreBangka('${b.bangkaId}')">
-                <i class="bi bi-arrow-counterclockwise"></i> Restore Bangka
+                <i class="bi bi-arrow-counterclockwise"></i> Reactivate
               </button>
             </td>
           </tr>
@@ -460,16 +460,16 @@
       uBangkeroId.required = activating;
     });
 
-    window.openDeactivateModal = function(id) {
+    window.openSuspendModal = function(id) {
       const b = findBangka(id);
       if (!b) return;
       if (b.inUse || b.blockedDelete) {
-        alert('This vessel has an active or upcoming trip or rental. Complete or cancel it before deleting the vessel.');
+        alert('This vessel has an active or upcoming trip or rental. Complete or cancel it before suspending the vessel.');
         return;
       }
       selectedId = id;
       xVessel.textContent = b.bangkaName;
-      deactivateModal.show();
+      suspendModal.show();
     };
 
     window.openEditModal = function(id) {
@@ -505,13 +505,13 @@
     window.restoreBangka = async function(id) {
       const b = deletedBangkas.find(function(v) { return v.bangkaId === id; });
       if (!b) return;
-      if (!confirm('Restore "' + b.bangkaName + '" to the active vessel list?')) return;
+      if (!confirm('Reactivate "' + b.bangkaName + '" and return it to the vessel list? It only goes back into dispatch if it was active before and its owner is still a verified bangkero; it stays unlisted for rental until the bangkero lists it again.')) return;
       try {
         await window.bangkagoBangkas.restore(id);
         await loadBangkas();
-        alert('Bangka restored.');
+        alert('Bangka reactivated.');
       } catch (e) {
-        alert('Unable to restore Bangka: ' + e.message);
+        alert('Unable to reactivate Bangka: ' + e.message);
       }
     };
 
@@ -546,7 +546,7 @@
       }
     });
 
-    document.getElementById("deactivateForm").addEventListener("submit", async function(e) {
+    document.getElementById("suspendForm").addEventListener("submit", async function(e) {
       e.preventDefault();
       if (selectedId === null) return;
 
@@ -556,13 +556,13 @@
         alert('This vessel has an active or upcoming trip or rental. Complete or cancel it first.');
         return;
       }
-      if (!confirm('Move "' + b.bangkaName + '" to Deleted Bangkas? Its record and trip history will be retained.')) return;
+      if (!confirm('Suspend "' + b.bangkaName + '"? Its record and trip history are kept, and it can be reactivated.')) return;
 
       try {
         await window.bangkagoBangkas.delete(b.bangkaId);
         await loadBangkas();
-        deactivateModal.hide();
-        alert('Bangka moved to Deleted Bangkas. Its history is preserved.');
+        suspendModal.hide();
+        alert('Bangka suspended. Reactivate it from Suspended Bangkas.');
       } catch (err) {
         alert('Error: ' + err.message);
       }

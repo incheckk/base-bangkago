@@ -21,8 +21,9 @@
       role: row.user_role,
       profilePhoto: row.profile_photo,
       isSuspended: row.is_suspended === true,
-      // Deleted bangkeros can never sign in (fetchUserDoc rejects them), so
-      // the directory must not call them Active. Filled in by the callers.
+      // A suspended bangkero (bangkeros.is_deleted) can never sign in
+      // (fetchUserDoc rejects them), so the directory must not call them
+      // Active. Filled in by the callers.
       bangkeroDeleted: false,
       createdAt: row.created_at
     };

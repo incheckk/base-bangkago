@@ -381,12 +381,14 @@ D5. GCASH QR IS STILL EMPTY — app_settings.gcash_qr_url = '' (the
 
 [G] STATIC WEB (web/) — merged 2026-10 from incheckk/BangkaGO-WEB
 --------------------------------------------------------------------------------
-W1. DASHBOARD PAGE DATA IS STILL MOCKED — every admin/coastguard
-    page renders its hardcoded HTML arrays (users[], manifests[],
-    bangkeros[]...). Only login + route guard are wired to Supabase
-    (web/config.js anon key, web/supabase-client.js, guard at the top
-    of each dashboard's assets/js/layout-loader.js). Wire pages to
-    real tables incrementally; never widen RLS to do it.
+W1. SOME DASHBOARD PAGES ARE STILL MOCKED — login, the route guard and
+    the pages named in AGENTS.md Current Development Status are wired to
+    Supabase; older pages may still render hardcoded arrays (users[],
+    manifests[]...). Check a page's <script src> services before trusting
+    it. Wire remaining pages incrementally; never widen RLS to do it.
+    Wired by the 2026-10 truthfulness batches: manage-users,
+    suspend-user, manage-bangka, manage-routes/ports, manage-bookings,
+    downpayments, manage-payments.
 2. ROUTE GUARD IS CLIENT-SIDE ONLY — layout-loader redirects wrong
     roles, but that is UX, not security. Real boundary = RLS (E1-E4).
     No server-side session for static hosting (D2/launch hosting).
@@ -404,6 +406,23 @@ W1. DASHBOARD PAGE DATA IS STILL MOCKED — every admin/coastguard
     cleanUrls:false so serve stops 301-stripping .html (breaks sidebar
     active-link highlighting). Bootstrap/Fonts on the landing page are
     still CDN (cosmetic only).
+6. RESOLVED 2026-10-21 — MANAGE-BANGKEROS.HTML: the served
+   assets/js/services/bangkeros.js exports listDeleted/softDelete/
+   restore and the page loads. The old failure came from editing the
+   stale duplicate web/BangkaGO-WEB/assets/js/services/ copy (now
+   deleted; services load from web/assets/js/services/).
+7. MOBILE MANAGE-PORTS CREATES EMPTY-ID PORTS - (admin)/manage-ports.tsx
+   passes `editId ?? ''` to createPort, so a new port gets an empty TEXT
+   id. The web Manage Ports & Routes generates and freezes a slug id;
+   fix the app screen in the same release.
+8. WEB SUSPENSION NEEDS MIGRATION 065 - Manage Users' Status action
+   writes users.is_suspended. Until 065 is applied, every account reads
+   Active and Suspend fails with a column error (reads are safe because
+   the queries select `*`).
+9. WEB BOOKING CANCEL NEEDS MIGRATION 066 - Manage Bookings' guarded
+   Cancel calls admin_cancel_booking. Until 066 is applied the button
+   fails with "function ... does not exist"; passenger cancel
+   (cancel_own_booking) is unaffected.
 
 [F] SCREENS BUILT BUT NOT REACHABLE (no menu/nav entry)
 --------------------------------------------------------------------------------

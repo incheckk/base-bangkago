@@ -44,13 +44,14 @@
     return e164 ? phoneToAuthEmail(e164) : String(raw || '').trim();
   }
 
-  /* Signed-in user's users.user_role.
-     Three outcomes, because the guards must not bounce a signed-in
-     admin to the login page over a venue-wifi blip:
+  /* Signed-in user's account state from users/.
+     Outcomes, because the guards must not bounce a signed-in admin to the
+     login page over a venue-wifi blip:
        'admin'|'coastguard'|'passenger'|'bangkero'  verified role
+       'suspended'     the account is suspended (065) -> portal shows the reason
        null            genuinely no session (or no client) -> redirect OK
-       'unverified'    session exists but the role lookup failed
-                       after retries -> show a connection error instead */
+       'unverified'    session exists but the lookup failed after retries
+                       -> show a connection error instead */
   async function role() {
     if (!client) return null;
     var session = null;
@@ -65,15 +66,21 @@
     var lastErr = null;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
+        // select('*'): a database that has not run 065 yet must not turn the
+        // missing column into a hard 400 (which would look like a wifi blip).
         var row = await client
           .from('users')
-          .select('user_role')
+          .select('*')
           .eq('id', session.user.id)
           .maybeSingle();
         if (row.error) {
           lastErr = row.error;
+        } else if (!row.data) {
+          return null;
+        } else if (row.data.is_suspended === true) {
+          return 'suspended';
         } else {
-          return row.data ? row.data.user_role : null;
+          return row.data.user_role;
         }
       } catch (e) {
         lastErr = e;

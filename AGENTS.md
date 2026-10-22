@@ -41,6 +41,129 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-21 — Bookings & payments truthfulness batch: guarded admin
+  booking cancel, escrow state transitions, combined date-range payment
+  report (migration 066 PENDING — USER MUST RUN, after 065; gates: tsc
+  clean, lint 0 errors / 133 warnings, all three inline scripts parse,
+  expo-doctor unchanged — only the three known SDK-57 patch drifts).**
+  - **Migration 066 `066_admin_booking_cancel.sql`:** guarded
+    `admin_cancel_booking(booking_id, reason)` RPC. Manage Bookings' old
+    Status/Cancel buttons called a service with no admin UPDATE path, so
+    they updated 0 rows and still reported success. 066 is admin-only,
+    locks the row, allows pending/open/accepted only, refuses departed or
+    boarded trips, refuses while a pending/approved downpayment exists
+    (refund it first), stamps `cancelled_at`/`cancel_reason`, clears the
+    hold, and notifies the passenger. `bookings.js` replaces
+    `updateStatus` with `cancel`.
+  - **Manage Bookings:** status filter/badges now use the DB vocabulary
+    (pending / open / accepted / completed / cancelled) instead of
+    "Confirmed"; customer falls back to the joined `users` name/phone;
+    trip date is pinned to Asia/Manila and falls back to
+    departure/created time; the free-form status modal is gone — only a
+    guarded Cancel action remains (disabled, with the reason, for
+    departed, boarded, completed, already-cancelled, or escrow-held
+    rows); details show the real record id, lifecycle timestamps,
+    downpayment state and cancel reason; manifest trip date uses the same
+    helper.
+  - **Downpayments:** rows are keyed by downpayment id (not the filtered
+    index); the review modal shows the real downpayment status, target
+    trip/rental status, reviewed timestamp and a "refund due" warning
+    when a cancelled trip still holds pending/approved escrow. Approve is
+    disabled for a cancelled target; Refund is available for pending and
+    approved rows. Approve/refund services now do conditional status
+    updates (`.eq('status','pending')` / `.in('status',[pending,
+    approved])`) and restore the row if the 020 gate RPC fails, so a
+    double-click or two admins cannot double-review. Manage Payments
+    deep-links a row here with `?id=`.
+  - **Manage Payments:** now a real combined fare + GCash escrow
+    transaction list (was a mocked array): booking/rental ref, payer,
+    method, target status, Manila date, detail modal, and a status filter
+    that distinguishes fare Paid / Pending / Unpaid (completed trip) /
+    Void (cancelled trip) / Failed / Refunded from escrow rows. "Generate
+    Report" is a real date-range report with count/gross/paid/pending/
+    unpaid/void/escrow/refunded totals and a jsPDF table, replacing the
+    fake single-row receipt. The raw DB status stays in the detail modal.
+  - **Mobile parity:** `src/services/downpayment.service.ts` gets the
+    same conditional approve/refund guard and rollback, so the app and
+    web cannot double-review or overwrite a concurrent decision.
+  - **Next:** run 062 → 063 → 064 → 065 → 066, then with an admin login:
+    cancel an open booking and confirm the passenger notification; try
+    cancelling one with a pending downpayment (must refuse), refund the
+    downpayment on Downpayments, then cancel; approve a pending
+    downpayment twice (second must say already reviewed); refund an
+    approved row; filter Manage Payments to Void/Unpaid and generate a
+    report for a date range containing both fares and downpayments.
+
+- **2026-10-21 — Admin dashboard truthfulness batch: real account suspension,
+  derived vessel status, Manage Ports & Routes (migration 065 PENDING — USER
+  MUST RUN, after 064; gates: tsc clean, lint 0 errors / 133 warnings;
+  expo-doctor reports only three patch-level SDK-57 version drifts, unrelated
+  to this batch).**
+  - **Migration 065 `065_user_suspension.sql`:** `users.is_suspended BOOLEAN
+    NOT NULL DEFAULT false` + `users_guard_suspension` BEFORE UPDATE trigger
+    (only admins, or a null-uid SQL-editor/service-role session, may flip it —
+    `users_update_own` would otherwise let a suspended user clear their own
+    flag). No demo reset; nobody is blocked until an admin suspends them.
+    Enforced in the app (`fetchUserDoc` throws; silent revalidation now
+    surfaces `deleted|suspended`, so a live session dies on the next realtime
+    tick) and on the web (`role()` returns `'suspended'`; the portal signs out
+    and explains). Safe to run late: both select `*`, so before 065 the flag
+    reads absent; only Suspend errors.
+  - **Manage Users:** the status filter/modal now read the enforced flag and
+    show Active / Suspended / **Deleted** (a soft-deleted bangkero can never
+    sign in even with `is_suspended = false`). The old page read
+    `is_verified`, which is false on every app sign-up, so every real user
+    looked Suspended and suspending did nothing. Joined is date-only pinned to
+    Asia/Manila. Status/role writes are keyed by uid, not the filtered-row
+    index. The Suspend deep-link page reads the same rules. Names are
+    HTML-escaped.
+  - **Manage Bangka:** rebuilt on the real tables (045/047/048/049):
+    Capacity and Max Load read/write `bangkas.capacity` / `max_load_kg`;
+    Status is derived, not stored — Unverified (no verified, non-deleted
+    owner) → Unavailable (`is_active = false`) → On Trip / On Rental (today's
+    accepted bookings by `operator_id`, or a live today rental) → Offline
+    (owner `is_available = false`) → Available. Current Use shows
+    `BGO-… · n pax · Port → Port` or `Rental · nh`. New Edit action fixes
+    capacity/max load/fare/owner (photo preserved). Delete calls
+    `admin_delete_bangka`, Restore calls `admin_restore_bangka`, and
+    Deactivate now keeps the owner (the old code nulled `bangkero_id`) while
+    clearing `rental_listed`. Guards: the service refuses unverified/deleted
+    owners and a second boat per bangkero (the app reads their boat with
+    `maybeSingle`), and deletion is blocked while the owner holds any accepted
+    trip — 049 only checks `bookings.bangka_id`, which accepted trips never
+    set. Actions are id-keyed and rows are escaped.
+  - **Manage Routes → Manage Ports & Routes (label only; URL and
+    `data-page` unchanged):** new ports table with add/edit/delete (slug id
+    generated from the name and frozen after creation, coordinates, island
+    group/name, queue radius 50–5000 m, active) validated against the DB
+    CHECKs; Delete explains FK refusals (queues, manifests, schedules, demand)
+    and suggests deactivating. Routes gain a Base Fare column and id-keyed
+    actions; estimated minutes are required 1–600; stop management prefills
+    the next order, rejects duplicate ports/orders and reorders by writing the
+    whole order list; route delete relies on `route_stops`' existing cascade
+    instead of deleting stops first. Sidebar + both layout-loader topbars
+    renamed.
+  - **Served-vs-duplicate fix (found on smoke):** the dashboard services are
+    loaded from `web/assets/js/services/` (`../../assets/js/services/...`),
+    but this batch had edited the stale duplicate copies under
+    `web/BangkaGO-WEB/assets/js/services/` — so `manage-users` and
+    `suspend-user` threw `setSuspended is not a function`, and Manage Bangka /
+    Manage Ports ran on old services. The new `users.js`, `bangkas.js` and
+    `portsRoutes.js` now live in the served tree (`users.js` keeps its
+    phone-first search, `bangkeros.js` needed no change — the served copy is
+    already newer than the duplicate) and the dead duplicate services folder
+    is deleted. G6 was a symptom of that duplicate:
+    `manage-bangkeros.html` is fine, the served `bangkeros.js` exports
+    `listDeleted`/`softDelete`/`restore`. The mobile
+    `(admin)/manage-ports.tsx` still creates ports with an empty id
+    (tracker G7).
+  - **Next:** run 062 → 063 → 064 → 065 → 066 (see the entry above),
+    then: suspend a passenger (app
+    lands on the suspended screen; portal refuses sign-in), reactivate; try
+    deleting a vessel mid-trip (must refuse); deactivate/activate; add a port
+    and edit its coordinates; delete a route with trip history (clean
+    "set inactive" message).
+
 - **2026-10-21 — Demo-readiness batch: booking rules v3, accept desk rebuild,
   Open-Meteo weather on all six surfaces, input validation, map legibility
   (gates green: tsc clean, lint 0 errors / 133 warnings, expo-doctor 21/21).**

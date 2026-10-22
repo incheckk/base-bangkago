@@ -118,7 +118,7 @@
       if (!dateStr) return 'N/A';
       try {
         return new Date(dateStr).toLocaleDateString('en-PH', {
-          month: 'short', day: 'numeric', year: 'numeric'
+          month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila'
         });
       } catch {
         return dateStr;
@@ -147,12 +147,23 @@
         document.getElementById('userRole').innerHTML = '<span class="badge ' + roleBadge(user.role) + '">' + (user.role || 'Unknown').charAt(0).toUpperCase() + (user.role || 'Unknown').slice(1) + '</span>';
         document.getElementById('userEmail').textContent = user.email || 'N/A';
         document.getElementById('userPhone').textContent = user.phone || 'N/A';
-        document.getElementById('userStatus').innerHTML = user.isVerified ? '<span class="badge text-bg-success">Active</span>' : '<span class="badge text-bg-danger">Suspended</span>';
+        if (user.bangkeroDeleted) {
+          document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-secondary">Deleted</span>';
+        } else if (user.isSuspended) {
+          document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-danger">Suspended</span>';
+        } else {
+          document.getElementById('userStatus').innerHTML = '<span class="badge text-bg-success">Active</span>';
+        }
         document.getElementById('userJoined').textContent = formatDate(user.createdAt);
         document.getElementById('userId').textContent = user.uid;
 
-        // Disable button if already suspended
-        if (!user.isVerified) {
+        // Deleted bangkeros are restored from Manage Bangkeros; suspension
+        // cannot change their access.
+        if (user.bangkeroDeleted) {
+          suspendBtn.disabled = true;
+          suspendBtn.innerHTML = '<i class="bi bi-person-x me-2"></i> Deleted Account';
+          suspendBtn.classList.replace('btn-danger', 'btn-secondary');
+        } else if (user.isSuspended) {
           suspendBtn.disabled = true;
           suspendBtn.innerHTML = '<i class="bi bi-person-x me-2"></i> Already Suspended';
           suspendBtn.classList.replace('btn-danger', 'btn-secondary');
@@ -177,7 +188,7 @@
       suspendBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Suspending...';
 
       try {
-        await window.bangkagoUsers.suspend(userId);
+        await window.bangkagoUsers.setSuspended(userId, true);
         
         // Show success and redirect
         alert('User suspended successfully.');

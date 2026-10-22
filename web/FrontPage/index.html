@@ -296,6 +296,18 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Role manuals — open the step-by-step guide for each role -->
+            <div class="how-actions fade-in">
+                <button type="button" class="btn btn-primary-custom how-manual-btn" data-bs-toggle="modal"
+                    data-bs-target="#passengerManual">
+                    <i class="bi bi-person-fill me-1"></i> For Passengers
+                </button>
+                <button type="button" class="btn btn-manual-outline how-manual-btn" data-bs-toggle="modal"
+                    data-bs-target="#bangkeroManual">
+                    <i class="bi bi-water me-1"></i> For Bangkeros
+                </button>
+            </div>
         </div>
     </section>
     <!-- END HOW IT WORKS -->
@@ -539,7 +551,6 @@
                                     <div id="contactSuccess" class="alert alert-success d-none" role="alert">
                                         <i class="bi bi-check-circle-fill me-2"></i>
                                         <strong>Message sent!</strong> Thank you for reaching out.
-                                        hours.
                                     </div>
                                     <div id="contactError" class="alert alert-danger d-none" role="alert">
                                         <i class="bi bi-exclamation-circle-fill me-2"></i>
@@ -639,6 +650,524 @@
         </div>
     </footer>
     <!-- END FOOTER -->
+
+    <!-- ===================== ROLE MANUAL MODALS ===================== -->
+    <!-- Passenger Manual -->
+    <div class="modal fade" id="passengerManual" tabindex="-1" aria-labelledby="passengerManualLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content manual-modal">
+                <div class="modal-header manual-modal-header">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="manual-modal-icon"><i class="bi bi-person-fill"></i></span>
+                        <div>
+                            <span class="manual-modal-eyebrow">Passenger Manual</span>
+                            <h5 class="modal-title" id="passengerManualLabel">Ride, Send &amp; Explore with BangkaGo</h5>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body manual-modal-body">
+                    <p class="manual-intro">New to BangkaGo? Follow these six steps and you'll be on the water in no
+                        time.</p>
+                    <ol class="manual-steps">
+                        <li class="manual-step">
+                            <span class="manual-num">1</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Create your account</h6>
+                                <p class="manual-step-desc">Open the BangkaGo app and sign up with your Philippine
+                                    mobile number (09XX). No email address needed.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span></div>
+                                        <div class="m-content">
+                                            <div>
+                                                <div class="m-title-lg">Create account</div>
+                                                <div class="m-note">Your mobile number is your BangkaGo login.</div>
+                                            </div>
+                                            <div class="m-sec">Account type</div>
+                                            <div class="m-btn-row">
+                                                <div class="m-radio on"><i class="m-rd"></i><div class="m-col"><span class="m-rt">Passenger</span><span class="m-rh">Book boat trips</span></div></div>
+                                                <div class="m-radio"><i class="m-rd"></i><div class="m-col"><span class="m-rt">Bangkero</span><span class="m-rh">Receive trip requests</span></div></div>
+                                            </div>
+                                            <div><span class="m-ilab">FIRST NAME</span><div class="m-input">Juan</div></div>
+                                            <div><span class="m-ilab">LAST NAME</span><div class="m-input">Dela Cruz</div></div>
+                                            <div><span class="m-ilab">MOBILE NUMBER</span><div class="m-input">0917 123 4567</div></div>
+                                            <div><span class="m-ilab">PASSWORD</span><div class="m-input">••••••••<span class="m-show">Show</span></div></div>
+                                            <div class="m-btn primary">Create account</div>
+                                            <div class="m-center m-note">Already have an account? <b class="m-teal">Sign in</b></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">2</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Choose your trip</h6>
+                                <p class="manual-step-desc">Book a boat ride (solo or group), send a parcel with
+                                    <strong>Padala</strong>, reserve an <strong>Island Hopping</strong> package, or
+                                    rent a boat. Pick your departure port, destination, and sail date — today or up
+                                    to 14 days ahead — then add your travel companions.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Book a Ride</span></div>
+                                        <div class="m-content">
+                                            <div class="m-card">
+                                                <div class="m-map"><span class="m-mlab" style="left:10%;top:64%">Mactan</span><span class="m-mlab" style="right:8%;top:14%">Olango</span><span class="m-pin" style="left:22%;top:56%"></span><span class="m-pin end" style="right:20%;top:24%"></span><span class="m-route"></span></div>
+                                                <div class="m-row" style="margin-top:10px">
+                                                    <div class="m-col"><span class="m-lab">Departure</span><span class="m-val">Mactan</span></div>
+                                                    <div class="m-col" style="text-align:right"><span class="m-lab">Destination</span><span class="m-val">Olango</span></div>
+                                                </div>
+                                            </div>
+                                            <div class="m-sec">Sailing date</div>
+                                            <div class="m-dates">
+                                                <div class="m-dt on"><div class="dw">Today</div><div class="dd">21</div></div>
+                                                <div class="m-dt"><div class="dw">Thu</div><div class="dd">22</div></div>
+                                                <div class="m-dt"><div class="dw">Fri</div><div class="dd">23</div></div>
+                                                <div class="m-dt"><div class="dw">Sat</div><div class="dd">24</div></div>
+                                                <div class="m-dt"><div class="dw">Sun</div><div class="dd">25</div></div>
+                                            </div>
+                                            <div class="m-sec">Departure time</div>
+                                            <div class="m-btn-row">
+                                                <div class="m-tp on">7:00 AM</div>
+                                                <div class="m-tp">10:00 AM</div>
+                                                <div class="m-tp">1:00 PM</div>
+                                            </div>
+                                            <div class="m-sec">Passengers</div>
+                                            <div class="m-card">
+                                                <div class="m-row"><span class="m-av">JD</span><div class="m-col" style="flex:1;margin-left:8px"><span class="m-val">Juan Dela Cruz</span><span class="m-note">You — this booking is under your name</span></div></div>
+                                                <div class="m-div"></div>
+                                                <div class="m-add">+ Add passenger</div>
+                                                <div class="m-note" style="margin-top:6px">Up to 12 seats — largest boat available right now</div>
+                                            </div>
+                                            <div class="m-card m-row" style="margin-top:auto;margin-bottom:10px">
+                                                <div class="m-col"><span class="m-note">₱100 per passenger · 1 passenger · discounts on board</span><span class="m-big-amt">₱100</span></div>
+                                                <div class="m-btn primary" style="min-width:150px">Proceed to Payment</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">3</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Pay securely</h6>
+                                <p class="manual-step-desc">Same-day trips are paid on board. For advance bookings,
+                                    send a GCash downpayment to the official BangkaGo QR, upload your receipt in the
+                                    app, and our admin confirms it (held in escrow) to lock in your seat.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Payment</span></div>
+                                        <div class="m-content">
+                                            <div class="m-card">
+                                                <div class="m-sec" style="margin-bottom:6px">Booking summary</div>
+                                                <div class="m-val" style="font-size:16px">Mactan <b class="m-teal">→</b> Olango</div>
+                                                <div class="m-row" style="margin-top:8px"><span class="m-note">Trip date</span><span class="m-val">Oct 25, 2026 · 7:00 AM</span></div>
+                                                <div class="m-row"><span class="m-note">Passengers</span><span class="m-val">1</span></div>
+                                                <div class="m-div"></div>
+                                                <div class="m-row"><span class="m-val">Total to be paid</span><span class="m-big-amt">₱500</span></div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-sec" style="margin-bottom:6px">GCash downpayment (50%)</div>
+                                                <div class="m-row"><span class="m-note">Pay now to the admin's GCash</span><span class="m-val m-teal">₱250</span></div>
+                                                <div class="m-row"><span class="m-note">Collected onboard</span><span class="m-val">₱250</span></div>
+                                                <div class="m-lab" style="margin:8px 0 2px">Scan &amp; pay via GCash</div>
+                                                <div class="m-qr"><div class="m-qrgrid"></div><span class="m-finder" style="left:8px;top:8px"></span><span class="m-finder" style="right:8px;top:8px"></span><span class="m-finder" style="left:8px;bottom:8px"></span></div>
+                                                <div class="m-lab" style="margin:8px 0 4px">GCash receipt screenshot</div>
+                                                <div class="m-btn-row"><div class="m-btn outline sm">Gallery</div><div class="m-btn outline sm">Camera</div></div>
+                                                <div class="m-note" style="margin-top:8px">The admin reviews your payment first — held in escrow until your trip.</div>
+                                            </div>
+                                            <div class="m-btn primary" style="margin-top:auto;margin-bottom:10px">Pay ₱250 &amp; Book</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">4</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Get matched in real time</h6>
+                                <p class="manual-step-desc">Your request is sent instantly to every available
+                                    bangkero. You'll get a notification the moment one accepts your booking.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Booking Details</span></div>
+                                        <div class="m-content">
+                                            <div class="m-row"><span class="m-val" style="letter-spacing:.06em">BG-1234</span><span class="m-pill teal"><span class="m-dot"></span>Bangkero accepted</span></div>
+                                            <div><span class="m-pill teal">Sails today · 7:00 AM</span></div>
+                                            <div class="m-card m-center">
+                                                <div class="m-val" style="font-size:16px">Mactan</div>
+                                                <div class="m-teal" style="font-size:15px;margin:1px 0">↓</div>
+                                                <div class="m-val" style="font-size:16px">Olango</div>
+                                            </div>
+                                            <div class="m-card teal">
+                                                <div class="m-lab m-teal" style="margin-bottom:3px">Your bangkero</div>
+                                                <div class="m-val">Mang Lito</div>
+                                                <div class="m-note">MBCA Sto. Niño · 12 pax</div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-row"><span class="m-note">Sailing schedule</span><span class="m-val">Today · 7:00 AM</span></div>
+                                                <div class="m-row"><span class="m-note">Passengers</span><span class="m-val">2</span></div>
+                                                <div class="m-row"><span class="m-note">Fare</span><span class="m-val m-teal">₱200</span></div>
+                                                <div class="m-row"><span class="m-note">Payment</span><span class="m-note">Pay onboard · Pending</span></div>
+                                            </div>
+                                            <div class="m-col" style="gap:7px;margin-top:auto;margin-bottom:10px">
+                                                <div class="m-btn primary">View trip details</div>
+                                                <div class="m-btn-row"><div class="m-btn outline sm">Show boarding QR</div><div class="m-btn outline sm">Track live trip</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">5</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Board with your QR</h6>
+                                <p class="manual-step-desc">Open <strong>My Bookings</strong> and show your
+                                    boarding-pass QR at the pier; the bangkero scans it to tick you aboard. While
+                                    sailing, follow your boat live on the map with status and ETA updates.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Boarding QR Codes</span></div>
+                                        <div class="m-content">
+                                            <div class="m-note">Show each code to the bangkero at boarding. Everyone in the party must be scanned or ticked off before the trip starts.</div>
+                                            <div class="m-card">
+                                                <div class="m-row">
+                                                    <div class="m-col"><span class="m-val">Juan Dela Cruz</span><span class="m-note">You · BG-1234</span></div>
+                                                    <span class="m-teal" style="font-size:15px;font-weight:700">▾</span>
+                                                </div>
+                                                <div class="m-qr"><div class="m-qrgrid"></div><span class="m-finder" style="left:8px;top:8px"></span><span class="m-finder" style="right:8px;top:8px"></span><span class="m-finder" style="left:8px;bottom:8px"></span></div>
+                                                <div class="m-center m-lab">BG-1234</div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-row">
+                                                    <div class="m-col"><span class="m-val">Maria Santos</span><span class="m-note">Companion</span></div>
+                                                    <span class="m-faint" style="font-size:15px;font-weight:700">›</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">6</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Arrive, settle, and rate</h6>
+                                <p class="manual-step-desc">Pay any remaining balance on board when you arrive, then
+                                    rate your bangkero after the trip to help keep the fleet safe and trusted.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Rate Trip</span></div>
+                                        <div class="m-content">
+                                            <div class="m-card">
+                                                <div class="m-lab">Bangkero</div>
+                                                <div class="m-val" style="margin-bottom:7px">Mang Lito</div>
+                                                <div class="m-lab">Boat</div>
+                                                <div class="m-val" style="margin-bottom:7px">MBCA Sto. Niño</div>
+                                                <div class="m-note">Mactan → Olango · BG-1234</div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-lab" style="margin-bottom:8px">Your Rating</div>
+                                                <div class="m-stars"><span class="m-star on">★</span><span class="m-star on">★</span><span class="m-star on">★</span><span class="m-star on">★</span><span class="m-star">★</span></div>
+                                                <div class="m-center m-teal" style="margin-top:7px;font-weight:700">Great!</div>
+                                            </div>
+                                            <div><span class="m-ilab">Comment (optional)</span><div class="m-input tall">Share your experience...</div></div>
+                                            <div class="m-btn primary" style="margin-top:auto;margin-bottom:10px">Submit Rating</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                    </ol>
+                    <p class="manual-note"><i class="bi bi-info-circle-fill me-1"></i> One active booking per day per
+                        passenger — plan ahead for the whole family by adding companions to a single booking.</p>
+                </div>
+                <div class="modal-footer manual-modal-footer">
+                    <button type="button" class="btn btn-manual-ghost manual-footer-btn"
+                        data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END PASSENGER MANUAL -->
+
+    <!-- Bangkero Manual -->
+    <div class="modal fade" id="bangkeroManual" tabindex="-1" aria-labelledby="bangkeroManualLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content manual-modal">
+                <div class="modal-header manual-modal-header">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="manual-modal-icon"><i class="bi bi-water"></i></span>
+                        <div>
+                            <span class="manual-modal-eyebrow">Bangkero Manual</span>
+                            <h5 class="modal-title" id="bangkeroManualLabel">Accept Trips &amp; Earn with BangkaGo</h5>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body manual-modal-body">
+                    <p class="manual-intro">Ready to bring passengers and parcels across the water? Here's everything
+                        you need to start earning as a certified bangkero.</p>
+                    <ol class="manual-steps">
+                        <li class="manual-step">
+                            <span class="manual-num">1</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Register as a bangkero</h6>
+                                <p class="manual-step-desc">Sign up in the app with your mobile number and upload
+                                    your government ID, boat registration, and required permits from your profile.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Profile</span></div>
+                                        <div class="m-content">
+                                            <div class="m-center">
+                                                <div class="m-av lg">ML</div>
+                                                <div class="m-val" style="font-size:17px;margin-top:6px">Mang Lito</div>
+                                                <div class="m-note">0917 123 4567 · MBCA Sto. Niño</div>
+                                                <div class="m-btn-row" style="margin-top:8px;justify-content:center">
+                                                    <span class="m-pill amber">Upload documents</span>
+                                                    <span class="m-pill gray">No ratings yet</span>
+                                                </div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-row"><span class="m-note">Boat Name</span><span class="m-val">MBCA Sto. Niño</span></div>
+                                                <div class="m-row"><span class="m-note">Capacity</span><span class="m-val">12 pax</span></div>
+                                                <div class="m-row"><span class="m-note">Permit Number</span><span class="m-val">MBCA-0421</span></div>
+                                                <div class="m-row"><span class="m-note">Status</span><span class="m-val m-teal">Online</span></div>
+                                            </div>
+                                            <div class="m-sec">Menu</div>
+                                            <div class="m-menu-card">
+                                                <div class="m-mrow"><span class="m-mico">💰</span><span class="ml">Earnings</span><span class="mc">›</span></div>
+                                                <div class="m-mrow"><span class="m-mico">📋</span><span class="ml">Trip History</span><span class="mc">›</span></div>
+                                                <div class="m-mrow"><span class="m-mico">📄</span><span class="ml">Documents</span><span class="mc">›</span></div>
+                                                <div class="m-mrow"><span class="m-mico">★</span><span class="ml">My Ratings</span><span class="mc">›</span></div>
+                                                <div class="m-mrow red"><span class="m-mico">⚠</span><span class="ml">SOS Alert</span><span class="mc">›</span></div>
+                                            </div>
+                                            <div class="m-btn danger" style="margin-top:auto;margin-bottom:10px">Sign Out</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">2</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Get verified</h6>
+                                <p class="manual-step-desc">The BangkaGo admin reviews your documents. Once approved,
+                                    you're notified right away and your account goes online.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><div class="m-col"><span class="m-eyebrow">Upload documents</span><span class="m-h1">Verify Boat</span></div></div>
+                                        <div class="m-steps">
+                                            <div class="m-sd now"><span class="n">1</span><span class="t">Upload</span></div>
+                                            <div class="m-sd"><span class="n">2</span><span class="t">Review</span></div>
+                                            <div class="m-sd"><span class="n">3</span><span class="t">Approved</span></div>
+                                        </div>
+                                        <div class="m-content">
+                                            <div class="m-note">Take a photo or pick from your gallery. All four documents are required.</div>
+                                            <div class="m-upload done"><span class="uico">✓</span><div class="m-col" style="flex:1"><span class="m-val">Government-Issued ID</span><span class="m-note m-green">✓ Uploaded</span></div><span class="m-btn outline sm" style="margin-left:auto">Replace</span></div>
+                                            <div class="m-upload done"><span class="uico">✓</span><div class="m-col" style="flex:1"><span class="m-val">Boat Registration</span><span class="m-note m-green">✓ Uploaded</span></div><span class="m-btn outline sm" style="margin-left:auto">Replace</span></div>
+                                            <div class="m-upload"><span class="uico">＋</span><div class="m-col" style="flex:1"><span class="m-val">Coastal Permit</span><span class="m-note">Not uploaded</span></div><span class="m-btn primary sm" style="margin-left:auto">Upload</span></div>
+                                            <div class="m-upload"><span class="uico">＋</span><div class="m-col" style="flex:1"><span class="m-val">Barangay Clearance</span><span class="m-note">Not uploaded</span></div><span class="m-btn primary sm" style="margin-left:auto">Upload</span></div>
+                                            <div class="m-row" style="margin-top:auto;margin-bottom:10px"><span class="m-note">2 of 4 uploaded</span><span class="m-btn soft" style="flex:1;margin-left:10px">Submit for Review</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">3</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Set up your boat</h6>
+                                <p class="manual-step-desc">Register your bangka (name, capacity, and permits), keep
+                                    your availability toggle on while you want trips, and optionally list your boat
+                                    for rentals.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-h1" style="margin:0 auto">Verification Result</span></div>
+                                        <div class="m-steps">
+                                            <div class="m-sd done"><span class="n">✓</span><span class="t">Upload</span></div>
+                                            <div class="m-sd done"><span class="n">✓</span><span class="t">Review</span></div>
+                                            <div class="m-sd now"><span class="n">3</span><span class="t">Approved</span></div>
+                                        </div>
+                                        <div class="m-content">
+                                            <div style="margin-top:60px"></div>
+                                            <div class="m-succ">✓</div>
+                                            <div class="m-center" style="margin-top:14px">
+                                                <div class="m-val" style="font-size:19px;font-weight:800">Congratulations!</div>
+                                                <div class="m-teal" style="margin-top:5px;font-weight:700">Your documents have been approved!</div>
+                                                <div class="m-note" style="margin-top:6px">You can now go online, receive requests and earn.</div>
+                                            </div>
+                                            <div class="m-btn primary" style="margin-top:auto;margin-bottom:10px">Go to Dashboard</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">4</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Accept requests live</h6>
+                                <p class="manual-step-desc">Booking requests appear on your home screen in real time
+                                    with the route, passenger count, and fare. Accept or pass — the first bangkero to
+                                    accept gets the booking.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head">
+                                            <div class="m-col"><span class="m-eyebrow">Bangkero</span><span class="m-h1">Kumusta, Juan</span></div>
+                                            <div class="m-right"><span class="m-bell">🔔</span><span class="m-av" style="width:34px;height:34px;font-size:12px">ML</span></div>
+                                        </div>
+                                        <div class="m-content">
+                                            <div class="m-card teal">
+                                                <div class="m-row"><span class="m-pill teal"><span class="m-dot"></span>ONLINE</span><span class="m-switch"></span></div>
+                                                <div class="m-note" style="margin-top:6px">You are receiving booking requests.</div>
+                                                <div class="m-note" style="margin-top:2px">Port queue: <b class="m-teal">#1 at Mactan</b></div>
+                                                <div class="m-div"></div>
+                                                <div class="m-row"><span class="m-val">MBCA Sto. Niño</span><span class="m-pill green">Verified</span></div>
+                                            </div>
+                                            <div class="m-card m-row"><span class="m-val">☀️ 28°C · Partly cloudy</span><span class="m-note">0.4 m waves</span></div>
+                                            <div class="m-row"><span class="m-sec">Incoming requests</span><span class="m-pill teal">1</span></div>
+                                            <div class="m-card">
+                                                <div class="m-row"><span class="m-val">BG-1234</span><span class="m-pill amber"><span class="m-dot"></span>Waiting</span></div>
+                                                <div style="margin:6px 0"><span class="m-pill teal">SOLO</span></div>
+                                                <div class="m-row">
+                                                    <div class="m-col"><span class="m-val">Mactan</span><span class="m-teal">↓</span><span class="m-val">Olango</span></div>
+                                                    <div class="m-col" style="text-align:right"><span class="m-big-amt">₱500</span><span class="m-note">1 pax</span></div>
+                                                </div>
+                                                <div class="m-note" style="margin-top:6px">Juan Dela Cruz · 0917 123 4567</div>
+                                                <div style="margin-top:8px"><span class="m-pill green">Offered to you · 2:45 left</span></div>
+                                                <div class="m-btn-row" style="margin-top:10px"><div class="m-btn outline sm">Decline</div><div class="m-btn primary sm g2">Accept</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">5</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Run the trip</h6>
+                                <p class="manual-step-desc"><strong>Ready to Depart → Depart → Sail.</strong> Scan
+                                    each passenger's boarding QR and review the manifest before leaving the port;
+                                    passengers watch your live position on the way. Tap <strong>I have arrived</strong>,
+                                    then <strong>Complete Trip</strong> at the destination.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><div class="m-col"><span class="m-eyebrow">Manifest &amp; Checklist</span><span class="m-h1">Departure</span></div></div>
+                                        <div class="m-steps">
+                                            <div class="m-sd now"><span class="n">1</span><span class="t">Manifest</span></div>
+                                            <div class="m-sd"><span class="n">2</span><span class="t">Checklist</span></div>
+                                            <div class="m-sd"><span class="n">3</span><span class="t">Weather</span></div>
+                                            <div class="m-sd"><span class="n">4</span><span class="t">Ready</span></div>
+                                        </div>
+                                        <div class="m-content">
+                                            <div class="m-card">
+                                                <div class="m-sec" style="margin-bottom:2px">Passengers</div>
+                                                <div class="m-brow"><span class="m-bico yes">✓</span><div class="m-col"><span class="m-val">Juan Dela Cruz</span><span class="m-note">BG-1234 · 2 pax</span></div><span class="m-note m-green" style="margin-left:auto">aboard</span></div>
+                                                <div class="m-sec" style="margin-top:4px">Not boarded</div>
+                                                <div class="m-brow"><span class="m-bico no">○</span><div class="m-col"><span class="m-val">Pedro Reyes</span><span class="m-note">BG-2301 · still on the pier</span></div><span class="m-btn danger sm" style="margin-left:auto">Didn't board</span></div>
+                                            </div>
+                                            <div class="m-card">
+                                                <div class="m-sec" style="margin-bottom:4px">Trip details</div>
+                                                <div class="m-row"><span class="m-note">Reference</span><span class="m-val">BG-1234</span></div>
+                                                <div class="m-row"><span class="m-note">Passengers</span><span class="m-val">3 (3 pax)</span></div>
+                                                <div class="m-row"><span class="m-note">Manifest Status</span><span class="m-pill amber">Draft</span></div>
+                                            </div>
+                                            <div class="m-card m-row"><span class="m-val">☀️ Partly cloudy</span><span class="m-note m-teal">Safe for departure</span></div>
+                                            <div class="m-card">
+                                                <div class="m-sec" style="margin-bottom:2px">Safety checklist</div>
+                                                <div class="m-chk on"><span class="m-cbox">✓</span>Life jackets accounted for</div>
+                                                <div class="m-chk on"><span class="m-cbox">✓</span>Fuel level sufficient</div>
+                                                <div class="m-chk"><span class="m-cbox"></span>Passenger manifest verified</div>
+                                            </div>
+                                            <div class="m-btn primary" style="margin-top:auto;margin-bottom:10px">Ready to Depart</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                        <li class="manual-step">
+                            <span class="manual-num">6</span>
+                            <div class="manual-step-body">
+                                <h6 class="manual-step-title">Earn and build your rating</h6>
+                                <p class="manual-step-desc">Collect the balance on board, track your completed trips
+                                    and earnings in the app, and grow your bangkero rating with every passenger
+                                    review.</p>
+                            </div>
+                            <figure class="manual-shot">
+                                <div class="mphone-win">
+                                    <div class="mphone">
+                                        <div class="m-status"><span>9:41</span><span class="m-sbi"><i class="m-sig"></i><i class="m-bat"></i></span></div>
+                                        <div class="m-head"><span class="m-back"></span><span class="m-h1">Earnings</span></div>
+                                        <div class="m-content">
+                                            <div class="m-card teal m-center">
+                                                <div class="m-note">Available Balance</div>
+                                                <div style="font-size:30px;font-weight:800;color:#34D6B0;margin-top:2px">₱1,250.00</div>
+                                            </div>
+                                            <div class="m-btn-row">
+                                                <div class="m-card m-center" style="flex:1"><div class="m-note">Today's Earnings</div><div class="m-val m-teal">₱500.00</div></div>
+                                                <div class="m-card m-center" style="flex:1"><div class="m-note">This Week</div><div class="m-val">₱2,400.00</div></div>
+                                            </div>
+                                            <div class="m-btn outline sm" style="align-self:flex-start">Quick Top-Up ₱500</div>
+                                            <div class="m-sec">Transaction history</div>
+                                            <div class="m-card">
+                                                <div class="m-txn"><span class="m-tdot"></span><div class="m-col"><span class="m-val">Credit</span><span class="m-note">BG-1234 · Mactan → Olango</span></div><span class="m-tamt m-green" style="margin-left:auto">+₱500.00</span></div>
+                                                <div class="m-txn"><span class="m-tdot"></span><div class="m-col"><span class="m-val">Credit</span><span class="m-note">BG-2301 · Olango → Mactan</span></div><span class="m-tamt m-green" style="margin-left:auto">+₱750.00</span></div>
+                                                <div class="m-txn"><span class="m-tdot topup"></span><div class="m-col"><span class="m-val">Top-up</span><span class="m-note">GCash</span></div><span class="m-tamt m-amber" style="margin-left:auto">+₱500.00</span></div>
+                                                <div class="m-txn"><span class="m-tdot minus"></span><div class="m-col"><span class="m-val">Debit</span><span class="m-note">Penalty adjustment</span></div><span class="m-tamt m-red" style="margin-left:auto">−₱200.00</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </figure>
+                        </li>
+                    </ol>
+                    <p class="manual-note"><i class="bi bi-info-circle-fill me-1"></i> Tip: complete your documents and
+                        keep your availability on to receive more requests — passengers book up to 14 days ahead.</p>
+                </div>
+                <div class="modal-footer manual-modal-footer">
+                    <button type="button" class="btn btn-manual-ghost manual-footer-btn"
+                        data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END BANGKERO MANUAL -->
 
     <!-- Back to Top -->
     <button id="backToTop" class="back-to-top" aria-label="Back to top">

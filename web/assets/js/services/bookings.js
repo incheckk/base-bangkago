@@ -6,7 +6,22 @@
   'use strict';
   var svc = window.bangkagoServices;
 
+  // Joined context the admin console needs: the account name/phone for
+  // bookings whose denormalized passenger fields are empty, and any GCash
+  // downpayment that must be refunded before the trip can be cancelled.
+  var SELECT = '*, passenger:users!bookings_user_id_fkey(first_name,last_name,phone_number), downpayments(id,status,amount,created_at)';
+
+  function fullName(user) {
+    return user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : '';
+  }
+
   function mapRow(row) {
+    var passenger = row.passenger ?? null;
+    var downs = Array.isArray(row.downpayments) ? row.downpayments : [];
+    var latestDown = downs.slice().sort(function(a, b) {
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    })[0] ?? null;
+
     return {
       bookingId: row.id,
       ref: row.ref,
@@ -24,6 +39,8 @@
       packageId: row.package_id,
       passengerName: row.passenger_name,
       passengerPhone: row.passenger_phone,
+      customerName: row.passenger_name || fullName(passenger) || null,
+      customerPhone: row.passenger_phone || passenger?.phone_number || null,
       fromPortName: row.from_port_name,
       toPortName: row.to_port_name,
       operatorId: row.operator_id,
@@ -39,14 +56,19 @@
       completedAt: row.completed_at,
       cancelledAt: row.cancelled_at,
       scheduledDate: row.scheduled_date,
-      scheduledTime: row.scheduled_time
+      scheduledTime: row.scheduled_time,
+      downpaymentStatus: latestDown?.status ?? null,
+      downpaymentAmount: latestDown ? Number(latestDown.amount) : null,
+      openDownpayment: downs.some(function(d) {
+        return d.status === 'pending' || d.status === 'approved';
+      })
     };
   }
 
   async function listAll(filters) {
     filters = filters || {};
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var q = c.from('bookings').select('*');
+    var q = c.from('bookings').select(SELECT);
     if (filters.status) q = q.eq('trip_stat', filters.status);
     if (filters.userId) q = q.eq('user_id', filters.userId);
     if (filters.operatorId) q = q.eq('operator_id', filters.operatorId);
@@ -61,24 +83,29 @@
 
   async function getById(id) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('bookings').select('*').eq('id', id).maybeSingle();
+    var r = await c.from('bookings').select(SELECT).eq('id', id).maybeSingle();
     if (r.error) throw r.error;
     return r.data ? mapRow(r.data) : null;
   }
 
   async function getByRef(ref) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('bookings').select('*').eq('ref', ref).maybeSingle();
+    var r = await c.from('bookings').select(SELECT).eq('ref', ref).maybeSingle();
     if (r.error) throw r.error;
     return r.data ? mapRow(r.data) : null;
   }
 
-  // Admin: update booking status
-  async function updateStatus(bookingId, newStatus, remarks) {
+  /**
+   * Admin cancellation. The database is the authority: it refuses
+   * departed/boarded trips and any booking holding a live escrow row,
+   * and it notifies the passenger. UI guards are only a convenience.
+   */
+  async function cancel(bookingId, reason) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var allowed = ['open','pending','accepted','completed','cancelled'];
-    if (!allowed.includes(newStatus)) throw new Error('Invalid status');
-    var r = await c.from('bookings').update({ trip_stat: newStatus, cancel_reason: remarks || null }).eq('id', bookingId);
+    var r = await c.rpc('admin_cancel_booking', {
+      p_booking_id: bookingId,
+      p_reason: reason || null
+    });
     if (r.error) throw r.error;
   }
 
@@ -100,5 +127,5 @@
     };
   }
 
-  window.bangkagoBookings = { listAll, getById, getByRef, updateStatus, getStats, mapRow };
+  window.bangkagoBookings = { listAll, getById, getByRef, cancel, getStats, mapRow };
 })();

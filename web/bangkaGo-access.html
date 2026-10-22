@@ -291,6 +291,10 @@
                 window.location.href = "BangkaGO-WEB/admin-dashboard/admin-dashboard.html";
             } else if (role === "coastguard") {
                 window.location.href = "BangkaGO-WEB/coastguard-dashboard/index.html";
+            } else if (role === "suspended") {
+                await window.bangkago.signOut();
+                showError("This account has been suspended. Contact an administrator.");
+                submitBtn.disabled = false;
             } else {
                 await window.bangkago.signOut();
                 showError("This portal is for Admin and Coast Guard accounts only. Use the mobile app.");
@@ -305,6 +309,13 @@
             const role = await window.bangkago.role();
             if (role === "admin") window.location.replace("BangkaGO-WEB/admin-dashboard/admin-dashboard.html");
             else if (role === "coastguard") window.location.replace("BangkaGO-WEB/coastguard-dashboard/index.html");
+            else if (role === "suspended") {
+                await window.bangkago.signOut();
+                showError("This account has been suspended. Contact an administrator.");
+                if (loginModalEl && window.bootstrap) {
+                    window.bootstrap.Modal.getOrCreateInstance(loginModalEl).show();
+                }
+            }
         })();
     </script>
 </body>

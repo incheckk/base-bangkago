@@ -42,8 +42,9 @@
             <div class="col-md-3">
               <select id="statusFilter" class="form-select">
                 <option value="">All Status</option>
-                <option value="verified">Active</option>
-                <option value="unverified">Suspended</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="deleted">Deleted</option>
               </select>
             </div>
             <div class="col-md-2 d-grid">
@@ -91,13 +92,12 @@
           <div class="mb-3">
             <label class="form-label">New Status</label>
             <select id="newStatus" class="form-select" required>
-              <option value="verified">Active</option>
-              <option value="unverified">Suspended</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
             </select>
           </div>
-          <div class="mb-2">
-            <label class="form-label">Notes</label>
-            <textarea id="statusNotes" class="form-control" rows="3" placeholder="Optional note..."></textarea>
+          <div class="muted-note">
+            A suspended account cannot sign in to the mobile app or this portal. Reactivate it here to restore access.
           </div>
         </div>
         <div class="modal-footer">
@@ -150,7 +150,7 @@
 
   <script>
     let users = [];
-    let selectedIndex = null;
+    let selectedUid = null;
 
     const usersBody = document.getElementById('usersBody');
     const userSearch = document.getElementById('userSearch');
@@ -166,7 +166,6 @@
     const roleUserLabel = document.getElementById("roleUserLabel");
     const newStatus = document.getElementById("newStatus");
     const newRole = document.getElementById("newRole");
-    const statusNotes = document.getElementById("statusNotes");
     const roleNotes = document.getElementById("roleNotes");
 
     function roleBadge(role) {
@@ -179,15 +178,33 @@
       return badges[role] || 'text-bg-secondary';
     }
 
-    function statusBadge(isVerified) {
-      return isVerified ? 'text-bg-success' : 'text-bg-danger';
+    function statusBadge(statusKey) {
+      if (statusKey === 'active') return 'text-bg-success';
+      if (statusKey === 'suspended') return 'text-bg-danger';
+      return 'text-bg-secondary';
+    }
+
+    function statusLabel(statusKey) {
+      if (statusKey === 'active') return 'Active';
+      if (statusKey === 'suspended') return 'Suspended';
+      return 'Deleted';
+    }
+
+    // One source of truth for the badge and the filter. Deleted wins because
+    // a deleted bangkero cannot sign in even when is_suspended is false.
+    function accountStatus(u) {
+      if (u.bangkeroDeleted) return 'deleted';
+      return u.isSuspended ? 'suspended' : 'active';
     }
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
       try {
+        // Date only, pinned to Philippine time: the DB stores UTC, and an
+        // admin browsing from another timezone must still see the day the
+        // account was registered.
         return new Date(dateStr).toLocaleDateString('en-PH', {
-          month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+          month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila'
         });
       } catch {
         return dateStr;
@@ -200,7 +217,8 @@
         name: ((u.firstName || '') + ' ' + (u.lastName || '')).trim(),
         phone: u.phone || 'N/A',
         role: u.role || 'Unknown',
-        isVerified: u.isVerified !== false,
+        isSuspended: u.isSuspended === true,
+        bangkeroDeleted: u.bangkeroDeleted === true,
         createdAt: u.createdAt
       };
     }
@@ -216,26 +234,37 @@
       errorState.classList.remove('d-none');
     }
 
+    function esc(value) {
+      return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
+
     function renderTable(data) {
-      usersBody.innerHTML = data.map((u, i) => `
+      usersBody.innerHTML = data.map((u) => {
+        const key = accountStatus(u);
+        return `
           <tr>
-            <td>${u.name}</td>
-            <td>${u.phone}</td>
+            <td>${esc(u.name)}</td>
+            <td>${esc(u.phone)}</td>
             <td><span class="badge ${roleBadge(u.role)}">${u.role.charAt(0).toUpperCase() + u.role.slice(1)}</span></td>
-            <td><span class="badge ${statusBadge(u.isVerified)}">${u.isVerified ? 'Active' : 'Suspended'}</span></td>
+            <td><span class="badge ${statusBadge(key)}">${statusLabel(key)}</span></td>
             <td>${formatDate(u.createdAt)}</td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal('${u.uid}')">
+                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatusModal('${u.uid}')"
+                        ${key === 'deleted' ? 'disabled title="Deleted bangkeros are restored from Manage Bangkeros."' : ''}>
                   <i class="bi bi-toggle-on"></i> Status
                 </button>
+                ${key === 'active' ? `
                 <a href="suspend-user.html?userId=${u.uid}" class="btn btn-sm btn-outline-danger action-btn">
                   <i class="bi bi-person-x"></i> Suspend
-                </a>
+                </a>` : ''}
               </div>
             </td>
           </tr>
-      `).join("");
+        `;
+      }).join("");
     }
 
     function runFilter() {
@@ -246,7 +275,7 @@
       const filtered = users.filter(u => {
         const match = u.name.toLowerCase().includes(q) || u.phone.toLowerCase().includes(q);
         const roleMatch = r ? u.role === r : true;
-        const statusMatch = s ? (s === 'verified' ? u.isVerified : !u.isVerified) : true;
+        const statusMatch = s ? accountStatus(u) === s : true;
         return match && roleMatch && statusMatch;
       });
 
@@ -256,19 +285,19 @@
     // Looked up by uid: the table renders the FILTERED list, so a row
     // index would select a different user whenever a search is active.
     window.openStatusModal = function(uid) {
-      selectedIndex = users.findIndex(u => u.uid === uid);
-      if (selectedIndex === -1) return;
-      const u = users[selectedIndex];
+      const u = users.find(x => x.uid === uid);
+      if (!u) return;
+      if (accountStatus(u) === 'deleted') return;
+      selectedUid = uid;
       statusUserLabel.textContent = `${u.name} (${u.phone})`;
-      newStatus.value = u.isVerified ? 'verified' : 'unverified';
-      statusNotes.value = "";
+      newStatus.value = u.isSuspended ? 'suspended' : 'active';
       statusModal.show();
     }
 
     window.openRoleModal = function(uid) {
-      selectedIndex = users.findIndex(u => u.uid === uid);
-      if (selectedIndex === -1) return;
-      const u = users[selectedIndex];
+      const u = users.find(x => x.uid === uid);
+      if (!u) return;
+      selectedUid = uid;
       roleUserLabel.textContent = `${u.name} (${u.phone})`;
       newRole.value = u.role;
       roleNotes.value = "";
@@ -277,22 +306,14 @@
 
     document.getElementById("statusForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-      if (selectedIndex === null) return;
+      const u = users.find(x => x.uid === selectedUid);
+      if (!u) return;
 
-      const u = users[selectedIndex];
       const newStatusVal = newStatus.value;
 
       try {
-        if (newStatusVal === 'verified') {
-          // Reactivate: set is_verified = true
-          var c = window.bangkagoServices.getClient();
-          var r = await c.from('users').update({ is_verified: true }).eq('id', u.uid);
-          if (r.error) throw r.error;
-        } else {
-          // Suspend: set is_verified = false
-          await window.bangkagoUsers.suspend(u.uid);
-        }
-        u.isVerified = (newStatusVal === 'verified');
+        await window.bangkagoUsers.setSuspended(u.uid, newStatusVal === 'suspended');
+        u.isSuspended = (newStatusVal === 'suspended');
         runFilter();
         statusModal.hide();
         alert("User status updated.");
@@ -303,9 +324,9 @@
 
     document.getElementById("roleForm").addEventListener("submit", async function(e) {
       e.preventDefault();
-      if (selectedIndex === null) return;
+      const u = users.find(x => x.uid === selectedUid);
+      if (!u) return;
 
-      const u = users[selectedIndex];
       const newRoleVal = newRole.value;
 
       try {

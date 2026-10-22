@@ -25,7 +25,7 @@
         <div class="cg-card p-3">
           <div class="panel-head">
             <h6 class="mb-0">Manage Bookings</h6>
-            <span class="muted-note">View details, update booking status, cancel booking, view manifest</span>
+            <span class="muted-note">View details, cancel active bookings, view manifest</span>
           </div>
 
           <div class="row g-2 mb-3 align-items-end">
@@ -35,10 +35,11 @@
             <div class="col-md-2">
               <select id="bookingStatusFilter" class="form-select">
                 <option value="">All Status</option>
-                <option value="Confirmed">Confirmed</option>
-                <option value="Pending">Pending</option>
-                <option value="Cancelled">Cancelled</option>
-                <option value="Completed">Completed</option>
+                <option value="pending">Pending</option>
+                <option value="open">Open</option>
+                <option value="accepted">Accepted</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
             <div class="col-md-2">
@@ -58,7 +59,7 @@
             <table class="table table-theme align-middle mb-0">
               <thead>
                 <tr>
-                  <th>Booking ID</th>
+                  <th>Booking Ref</th>
                   <th>Customer</th>
                   <th>Route</th>
                   <th>Trip Date</th>
@@ -94,34 +95,29 @@
     </div>
   </div>
 
-  <!-- UPDATE BOOKING STATUS MODAL -->
-  <div class="modal fade" id="bookingStatusModal" tabindex="-1" aria-hidden="true">
+  <!-- CANCEL BOOKING MODAL -->
+  <div class="modal fade" id="bookingCancelModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
-      <form class="modal-content" id="bookingStatusForm">
+      <form class="modal-content" id="bookingCancelForm">
         <div class="modal-header">
-          <h5 class="modal-title">Update Booking Status</h5>
+          <h5 class="modal-title">Cancel Booking</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-2"><strong>Booking:</strong> <span id="statusBookingRef">-</span></div>
-          <div class="mb-3">
-            <label class="form-label">New Status</label>
-            <select id="newBookingStatus" class="form-select">
-              <option value="open">Open</option>
-              <option value="pending">Pending</option>
-              <option value="accepted">Accepted</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
+          <div class="mb-2"><strong>Booking:</strong> <span id="cancelBookingRef">-</span></div>
+          <div class="alert alert-warning mb-3">
+            The passenger is notified and this cannot be undone. If this booking has a GCash
+            downpayment, refund it on <a href="downpayments.html">Downpayments</a> first.
           </div>
           <div class="mb-0">
-            <label class="form-label">Remarks</label>
-            <textarea id="statusRemarks" class="form-control" rows="3" placeholder="Optional remarks..."></textarea>
+            <label class="form-label" for="cancelReason">Reason</label>
+            <textarea id="cancelReason" class="form-control" rows="3" maxlength="200"
+              placeholder="Optional reason shown to the passenger..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-bangkago">Save</button>
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Keep booking</button>
+          <button type="submit" class="btn btn-danger">Cancel booking</button>
         </div>
       </form>
     </div>
@@ -158,20 +154,20 @@
 
   <script>
     let bookings = [];
-    let selectedIndex = null;
+    let selectedBookingId = null;
+    let cancelDirty = false;
 
     const bookingBody = document.getElementById('bookingBody');
     const bookingSearch = document.getElementById('bookingSearch');
     const bookingStatusFilter = document.getElementById('bookingStatusFilter');
     const bookingDateFrom = document.getElementById('bookingDateFrom');
     const bookingDateTo = document.getElementById('bookingDateTo');
-    const newBookingStatus = document.getElementById('newBookingStatus');
-    const statusRemarks = document.getElementById('statusRemarks');
+    const cancelReason = document.getElementById('cancelReason');
     const loadingState = document.getElementById('loadingState');
     const errorState = document.getElementById('errorState');
 
     const detailsModal = new bootstrap.Modal('#bookingDetailsModal');
-    const statusModal = new bootstrap.Modal('#bookingStatusModal');
+    const cancelModal = new bootstrap.Modal('#bookingCancelModal');
     const manifestModal = new bootstrap.Modal('#manifestModal');
 
     // Escape user-supplied text before it goes into innerHTML (manifest
@@ -183,36 +179,76 @@
     }
 
     function peso(n){
-      return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+      return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     }
+
+    const STATUS = {
+      pending:   { label: 'Pending',   hint: 'Awaiting downpayment review', badge: 'text-bg-info' },
+      open:      { label: 'Open',      hint: 'Waiting for a bangkero',      badge: 'text-bg-warning' },
+      accepted:  { label: 'Accepted',  hint: 'Bangkero accepted',           badge: 'text-bg-primary' },
+      completed: { label: 'Completed', hint: 'Trip completed',              badge: 'text-bg-success' },
+      cancelled: { label: 'Cancelled', hint: 'Trip cancelled',              badge: 'text-bg-danger' }
+    };
 
     function mapStatusToBadge(status){
-      if(status === 'open') return 'text-bg-warning';
-      if(status === 'pending') return 'text-bg-info';
-      if(status === 'accepted') return 'text-bg-primary';
-      if(status === 'completed') return 'text-bg-success';
-      if(status === 'cancelled') return 'text-bg-danger';
-      return 'text-bg-secondary';
+      return (STATUS[status] || {}).badge || 'text-bg-secondary';
     }
-
     function mapStatusToDisplay(status){
-      const map = {
-        'open': 'Confirmed',
-        'pending': 'Pending',
-        'accepted': 'Accepted',
-        'completed': 'Completed',
-        'cancelled': 'Cancelled'
-      };
-      return map[status] || status;
+      return (STATUS[status] || {}).label || status;
+    }
+    function mapStatusHint(status){
+      return (STATUS[status] || {}).hint || '';
+    }
+    function mapDownpaymentStatus(status){
+      return { pending: 'Awaiting review', approved: 'Approved', refunded: 'Refunded' }[status] || status;
     }
 
-    function formatDate(dateStr) {
-      if (!dateStr) return 'N/A';
-      try {
-        return new Date(dateStr).toLocaleDateString('en-PH');
-      } catch {
-        return dateStr;
+    // All dates are shown in Asia/Manila; date-only fields (scheduled_date)
+    // are handled as calendar days so they never shift through UTC.
+    function manilaDay(value){
+      if (!value) return '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return '';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).formatToParts(d);
+      const get = t => (parts.find(p => p.type === t) || {}).value;
+      return `${get('year')}-${get('month')}-${get('day')}`;
+    }
+    function formatDay(value){
+      if (!value) return 'N/A';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const [y, m, d] = value.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('en-PH', {
+          year: 'numeric', month: 'short', day: 'numeric'
+        });
       }
+      return formatDay(manilaDay(value));
+    }
+    function formatTime(value){
+      if (!value) return '';
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-PH', {
+        timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit'
+      });
+    }
+    function formatDateTime(value){
+      if (!value) return 'N/A';
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? String(value) : d.toLocaleString('en-PH', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
+    }
+    function tripDay(b){
+      return b.scheduledDate || manilaDay(b.departTime || b.createdAt);
+    }
+    function tripDateText(b){
+      const day = tripDay(b);
+      if (!day) return 'N/A';
+      const time = b.scheduledTime || (b.departTime ? formatTime(b.departTime) : '');
+      return formatDay(day) + (time ? ' · ' + time : '');
     }
 
     function showLoading(show) {
@@ -226,32 +262,63 @@
       errorState.classList.remove('d-none');
     }
 
+    function cancelBlockReason(b){
+      if (b.status === 'completed') return 'Completed trips cannot be cancelled.';
+      if (b.status === 'cancelled') return 'This booking is already cancelled.';
+      if (b.departTime) return 'The boat has already departed.';
+      if (b.onboardedAt) return 'Boarding has already started.';
+      if (b.openDownpayment) return 'Refund the GCash downpayment on Downpayments first.';
+      if (!['pending', 'open', 'accepted'].includes(b.status)) return 'This booking cannot be cancelled.';
+      return '';
+    }
+    function canCancelBooking(b){ return !cancelBlockReason(b); }
+
     function renderTable(data){
-      bookingBody.innerHTML = data.map((b, idx) => `
+      if (!data.length) {
+        bookingBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No bookings match.</td></tr>';
+        return;
+      }
+      bookingBody.innerHTML = data.map((b) => {
+        const customer = b.customerName || b.passengerName || 'Unknown';
+        const phone = b.customerPhone || b.passengerPhone || '';
+        const block = cancelBlockReason(b);
+        const downNote = b.downpaymentStatus
+          ? `<div class="small text-muted">Downpayment: ${esc(mapDownpaymentStatus(b.downpaymentStatus))}</div>`
+          : '';
+        return `
           <tr>
-            <td>${b.ref}</td>
-            <td>${b.passengerName || 'Unknown'}</td>
-            <td>${b.fromPortName || ''} → ${b.toPortName || ''}</td>
-            <td>${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}</td>
-            <td><span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></td>
+            <td>
+              <div class="fw-semibold">${esc(b.ref)}</div>
+              <div class="small text-muted">${esc(b.serviceType || 'passenger')}</div>
+            </td>
+            <td>
+              ${esc(customer)}
+              ${phone ? `<div class="small text-muted">${esc(phone)}</div>` : ''}
+            </td>
+            <td>${esc(b.fromPortName || '—')} → ${esc(b.toPortName || '—')}</td>
+            <td>${esc(tripDateText(b))}</td>
+            <td>
+              <span class="badge ${mapStatusToBadge(b.status)}" title="${esc(mapStatusHint(b.status))}">${esc(mapStatusToDisplay(b.status))}</span>
+              ${b.status === 'cancelled' && b.cancelReason ? `<div class="small text-muted">${esc(b.cancelReason)}</div>` : ''}
+              ${downNote}
+            </td>
             <td>
               <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-sm btn-outline-primary action-btn" onclick="openDetails('${b.bookingId}')">
                   <i class="bi bi-eye"></i> Details
                 </button>
-                <button class="btn btn-sm btn-outline-dark action-btn" onclick="openStatus('${b.bookingId}')">
-                  <i class="bi bi-arrow-repeat"></i> Status
-                </button>
                 <button class="btn btn-sm btn-outline-secondary action-btn" onclick="openManifest('${b.bookingId}')">
                   <i class="bi bi-card-list"></i> Manifest
                 </button>
-                <button class="btn btn-sm btn-outline-danger action-btn" onclick="cancelBooking('${b.bookingId}')">
+                <button class="btn btn-sm btn-outline-danger action-btn" onclick="openCancel('${b.bookingId}')"
+                  ${canCancelBooking(b) ? '' : 'disabled'} title="${esc(block || 'Cancel this booking')}">
                   <i class="bi bi-x-circle"></i> Cancel
                 </button>
               </div>
             </td>
           </tr>
-      `).join('');
+        `;
+      }).join('');
     }
 
     // Rows are rendered from the FILTERED list, so every row action is
@@ -266,16 +333,20 @@
 
       const filtered = bookings.filter(b => {
         const textMatch =
-          b.ref.toLowerCase().includes(q) ||
+          (b.ref || '').toLowerCase().includes(q) ||
+          (b.bookingId || '').toLowerCase().includes(q) ||
+          (b.customerName || '').toLowerCase().includes(q) ||
           (b.passengerName || '').toLowerCase().includes(q) ||
+          (b.customerPhone || '').toLowerCase().includes(q) ||
+          (b.passengerPhone || '').toLowerCase().includes(q) ||
           (b.fromPortName || '').toLowerCase().includes(q) ||
           (b.toPortName || '').toLowerCase().includes(q);
 
-        const statusMatch = s ? mapStatusToDisplay(b.status) === s : true;
+        const statusMatch = s ? b.status === s : true;
 
-        // Trip date falls back to created date when no schedule is set.
-        const day = String(b.scheduledDate || b.createdAt || '').slice(0, 10);
-        const dateMatch = (!from || day >= from) && (!to || day <= to);
+        // Trip date falls back to departure/created date when no schedule is set.
+        const day = tripDay(b);
+        const dateMatch = (!from || (day && day >= from)) && (!to || (day && day <= to));
 
         return textMatch && statusMatch && dateMatch;
       });
@@ -284,70 +355,83 @@
     }
 
     window.openDetails = function(id){
-      const idx = bookingIndex(id);
-      if (idx === -1) return;
-      const b = bookings[idx];
+      const b = bookings.find(x => x.bookingId === id);
+      if (!b) return;
+      const customer = b.customerName || b.passengerName || 'Unknown';
+      const phone = b.customerPhone || b.passengerPhone || 'N/A';
+      const downpayment = b.downpaymentStatus
+        ? `<div class="info-box mb-2"><strong>GCash downpayment:</strong> ${esc(mapDownpaymentStatus(b.downpaymentStatus))}${b.downpaymentAmount != null ? ' · ' + peso(b.downpaymentAmount) : ''}</div>`
+        : '';
       document.getElementById('bookingDetailsBox').innerHTML = `
-        <div class="info-box mb-2"><strong>Booking ID:</strong> ${b.bookingId}</div>
-        <div class="info-box mb-2"><strong>Reference:</strong> ${b.ref}</div>
-        <div class="info-box mb-2"><strong>Customer:</strong> ${b.passengerName || 'Unknown'}</div>
-        <div class="info-box mb-2"><strong>Contact:</strong> ${b.passengerPhone || 'N/A'}</div>
-        <div class="info-box mb-2"><strong>Route:</strong> ${b.fromPortName || ''} → ${b.toPortName || ''}</div>
-        <div class="info-box mb-2"><strong>Trip Date:</strong> ${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}</div>
-        <div class="info-box mb-2"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></div>
+        <div class="info-box mb-2"><strong>Booking Ref:</strong> ${esc(b.ref)}</div>
+        <div class="info-box mb-2"><strong>Record ID:</strong> <span class="small">${esc(b.bookingId)}</span></div>
+        <div class="info-box mb-2"><strong>Customer:</strong> ${esc(customer)}</div>
+        <div class="info-box mb-2"><strong>Contact:</strong> ${esc(phone)}</div>
+        <div class="info-box mb-2"><strong>Route:</strong> ${esc(b.fromPortName || '—')} → ${esc(b.toPortName || '—')}</div>
+        <div class="info-box mb-2"><strong>Trip Date:</strong> ${esc(tripDateText(b))}</div>
+        <div class="info-box mb-2"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${esc(mapStatusToDisplay(b.status))}</span></div>
         <div class="info-box mb-2"><strong>Passengers:</strong> ${b.passengerCount}</div>
         <div class="info-box mb-2"><strong>Total Cost:</strong> ${peso(b.totalPrice)}</div>
-        <div class="info-box mb-2"><strong>Operator:</strong> ${b.operatorName || 'Unassigned'}</div>
-        <div class="info-box mb-2"><strong>Boat:</strong> ${b.operatorBoatName || 'N/A'}</div>
-        <div class="info-box mb-0"><strong>Created:</strong> ${formatDate(b.createdAt)}</div>
+        <div class="info-box mb-2"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div>
+        <div class="info-box mb-2"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'N/A')}</div>
+        ${downpayment}
+        <div class="info-box mb-2"><strong>Created:</strong> ${esc(formatDateTime(b.createdAt))}</div>
+        ${b.acceptedAt ? `<div class="info-box mb-2"><strong>Accepted:</strong> ${esc(formatDateTime(b.acceptedAt))}</div>` : ''}
+        ${b.onboardedAt ? `<div class="info-box mb-2"><strong>Boarded:</strong> ${esc(formatDateTime(b.onboardedAt))}</div>` : ''}
+        ${b.completedAt ? `<div class="info-box mb-2"><strong>Completed:</strong> ${esc(formatDateTime(b.completedAt))}</div>` : ''}
+        ${b.cancelledAt ? `<div class="info-box mb-2"><strong>Cancelled:</strong> ${esc(formatDateTime(b.cancelledAt))}</div>` : ''}
+        ${b.cancelReason ? `<div class="info-box mb-0"><strong>Cancel reason:</strong> ${esc(b.cancelReason)}</div>` : ''}
       `;
       detailsModal.show();
     }
 
-    // ---- Status modal: dirty tracking so the X / Cancel can't silently
-    // discard edits (and the X can't submit the form anymore).
-    let statusDirty = false;
-    newBookingStatus.addEventListener('change', () => { statusDirty = true; });
-    statusRemarks.addEventListener('input', () => { statusDirty = true; });
-    document.getElementById('bookingStatusModal').addEventListener('hide.bs.modal', function(ev) {
-      if (!statusDirty) return;
-      if (confirm('You have unsaved changes to this booking status. Discard them?')) {
-        statusDirty = false;
+    // ---- Cancel modal: dirty tracking so the X / Keep booking can't
+    // silently discard a typed reason.
+    cancelReason.addEventListener('input', () => { cancelDirty = true; });
+    document.getElementById('bookingCancelModal').addEventListener('hide.bs.modal', function(ev) {
+      if (!cancelDirty) return;
+      if (confirm('Discard the cancellation reason?')) {
+        cancelDirty = false;
       } else {
         ev.preventDefault();
         ev.stopPropagation();
       }
     });
 
-    window.openStatus = function(id){
-      selectedIndex = bookingIndex(id);
-      if (selectedIndex === -1) return;
-      const b = bookings[selectedIndex];
-      document.getElementById('statusBookingRef').textContent = `${b.ref} — ${b.passengerName || 'Unknown'}`;
-      newBookingStatus.value = b.status;
-      statusRemarks.value = b.cancelReason || '';
-      statusDirty = false; // set programmatically, not user edits
-      statusModal.show();
-    }
+    window.openCancel = function(id){
+      const b = bookings.find(x => x.bookingId === id);
+      if (!b) return;
+      const block = cancelBlockReason(b);
+      if (block) { alert(block); return; }
+      selectedBookingId = id;
+      document.getElementById('cancelBookingRef').textContent =
+        `${b.ref} — ${b.customerName || b.passengerName || 'Unknown'}`;
+      cancelReason.value = '';
+      cancelDirty = false;
+      cancelModal.show();
+    };
 
-    document.getElementById('bookingStatusForm').addEventListener('submit', async function(e){
+    document.getElementById('bookingCancelForm').addEventListener('submit', async function(e){
       e.preventDefault();
-      if(selectedIndex === null) return;
-
-      const b = bookings[selectedIndex];
-      const newStatus = newBookingStatus.value;
-      const remarks = statusRemarks.value.trim();
-
+      if (!selectedBookingId) return;
+      const b = bookings.find(x => x.bookingId === selectedBookingId);
+      if (!b) {
+        alert('This booking is no longer loaded. Refresh the page.');
+        return;
+      }
+      const reason = cancelReason.value.trim();
+      const submit = this.querySelector('button[type="submit"]');
+      submit.disabled = true;
       try {
-        await window.bangkagoBookings.updateStatus(b.bookingId, newStatus, remarks);
-        b.status = newStatus;
-        b.cancelReason = remarks;
-        runFilter();
-        statusDirty = false;
-        statusModal.hide();
-        alert('Booking status updated.');
-      } catch(e) {
-        alert('Error: ' + e.message);
+        await window.bangkagoBookings.cancel(b.bookingId, reason || null);
+        cancelDirty = false;
+        cancelModal.hide();
+        await loadBookings();
+        alert(`Booking ${b.ref} cancelled.`);
+      } catch(err) {
+        alert('Error: ' + err.message);
+      } finally {
+        submit.disabled = false;
       }
     });
 
@@ -362,8 +446,8 @@
       const paxRows = [
         `<tr>
            <td>1</td>
-           <td>${esc(b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
-           <td>${esc(b.passengerPhone || '—')}</td>
+           <td>${esc(b.customerName || b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
+           <td>${esc(b.customerPhone || b.passengerPhone || '—')}</td>
            <td>—</td>
            <td>—</td>
            <td>—</td>
@@ -400,9 +484,9 @@
         <div class="row g-2 mb-3">
           <div class="col-md-6"><div class="info-box"><strong>Booking Ref:</strong> ${esc(b.ref)}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Booker:</strong> ${esc(b.passengerName || 'Unknown')} (${esc(b.passengerPhone || 'no number')})</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Booker:</strong> ${esc(b.customerName || b.passengerName || 'Unknown')} (${esc(b.customerPhone || b.passengerPhone || 'no number')})</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${esc(b.fromPortName || '')} → ${esc(b.toPortName || '')}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)}${b.scheduledTime ? ' — ' + esc(b.scheduledTime) : ''}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${esc(tripDateText(b))}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Passengers:</strong> ${b.passengerCount} booked, ${companions.length} companion${companions.length === 1 ? '' : 's'} listed</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'N/A')}</div></div>
@@ -530,9 +614,9 @@
 
         // Trip summary block
         const info = [
-          ['Booking Ref', b.ref, 'Trip Date', (b.scheduledDate ? formatDate(b.scheduledDate) : formatDate(b.createdAt)) + (b.scheduledTime ? ' ' + b.scheduledTime : '')],
+          ['Booking Ref', b.ref, 'Trip Date', tripDateText(b)],
           ['Route', (b.fromPortName || '') + ' -> ' + (b.toPortName || ''), 'Status', mapStatusToDisplay(b.status)],
-          ['Booker', (b.passengerName || 'Unknown') + ' (' + (b.passengerPhone || 'no number') + ')', 'Passengers', String(b.passengerCount)],
+          ['Booker', (b.customerName || b.passengerName || 'Unknown') + ' (' + (b.customerPhone || b.passengerPhone || 'no number') + ')', 'Passengers', String(b.passengerCount)],
           ['Operator', b.operatorName || 'Unassigned', 'Boat', b.operatorBoatName || 'N/A']
         ];
         doc.setFontSize(9);
@@ -547,7 +631,7 @@
 
         // Passengers table
         const paxBody = [
-          [1, b.passengerName || 'Unknown', b.passengerPhone || '—', '—', 'Booker', '—', b.onboardedAt ? 'Yes' : 'No']
+          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', '—', 'Booker', '—', b.onboardedAt ? 'Yes' : 'No']
         ].concat(data.companions.map(function(p, i) {
           return [
             i + 2,
@@ -609,22 +693,6 @@
       }
     });
 
-    window.cancelBooking = async function(id){
-      const idx = bookingIndex(id);
-      if (idx === -1) return;
-      const b = bookings[idx];
-      if (!confirm(`Cancel booking ${b.ref}?`)) return;
-      
-      try {
-        await window.bangkagoBookings.updateStatus(b.bookingId, 'cancelled', 'Cancelled by admin');
-        b.status = 'cancelled';
-        runFilter();
-        alert(`Booking ${b.ref} cancelled.`);
-      } catch(e) {
-        alert('Error: ' + e.message);
-      }
-    }
-
     bookingSearch.addEventListener('input', runFilter);
     bookingStatusFilter.addEventListener('change', runFilter);
     bookingDateFrom.addEventListener('change', runFilter);
@@ -641,7 +709,7 @@
     async function loadBookings() {
       showLoading(true);
       try {
-        bookings = await window.bangkagoBookings.listAll({ limit: 200 });
+        bookings = await window.bangkagoBookings.listAll({ limit: 500 });
         runFilter(); // keep the admin's active search/status/date filters
         showLoading(false);
       } catch(e) {

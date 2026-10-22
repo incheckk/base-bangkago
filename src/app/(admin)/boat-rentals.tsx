@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
-import { type AdminRentalRow, listAllRentals } from '@/services/rental.service';
+import { type AdminRentalRow, listAllRentals, rentalDurationLabel } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { RentalStatus } from '@/types/models';
 
@@ -108,7 +108,7 @@ export default function AdminBoatRentalsScreen() {
                   {row.renterName ?? 'Passenger'} · {row.operatorName ?? 'Bangkero'}
                 </Text>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {formatDate(row.rentalDate)} · {row.hours}h · ₱{row.totalPrice}
+                  {formatDate(row.rentalDate)} · {rentalDurationLabel(row.hours)} · ₱{row.totalPrice}
                 </Text>
 
                 {row.status === 'awaiting_payment' && (

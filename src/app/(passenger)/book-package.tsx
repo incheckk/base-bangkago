@@ -19,8 +19,9 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
  * Package booking: companions are named right here (shared form) so the
  * bangkero's manifest shows who is sailing; pax = 1 booker + companions.
  * The itinerary's first→last ports become the booking's route, so
- * nothing downstream changes. Money: total = price × pax, 50% GCash
- * escrow now, rest onboard.
+ * nothing downstream changes. Money: island_packages.price is the
+ * whole-boat price (no × pax), 50% GCash escrow for advance dates,
+ * rest onboard.
  */
 export default function BookPackage() {
   const { profile } = useAuth();
@@ -63,7 +64,7 @@ export default function BookPackage() {
   const portName = (id: string) =>
     ports.data.find((p) => p.portId === id)?.portName ?? id;
 
-  const total = pkg ? pkg.price * pax : 0;
+  const total = pkg ? pkg.price : 0;
   const down = Math.round(total * 0.5);
   const remainder = total - down;
   // Escrow follows the date (020): same-day hop = pay onboard like any
@@ -160,7 +161,7 @@ export default function BookPackage() {
             <Text style={styles.pkgName} numberOfLines={2}>{pkg.packageName}</Text>
             <View style={styles.priceWrap}>
               <Text style={styles.price}>₱{pkg.price}</Text>
-              <Text style={styles.priceUnit}>per pax</Text>
+              <Text style={styles.priceUnit}>per boat</Text>
             </View>
           </View>
           {!!pkg.description && <Text style={styles.pkgDesc}>{pkg.description}</Text>}
@@ -205,7 +206,7 @@ export default function BookPackage() {
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
         <View style={styles.card}>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Total ({pax} × ₱{pkg.price})</Text>
+            <Text style={styles.sumLabel}>Total (whole boat · {pax} pax)</Text>
             <Text style={styles.sumValue}>₱{total}</Text>
           </View>
           {advance ? (

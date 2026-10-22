@@ -52,7 +52,7 @@
       capacity: row.capacity,
       maxLoadKg: row.max_load_kg,
       bangkeroId: row.bangkero_id,
-      hourlyRate: row.hourly_rate,
+      standardPrice: row.standard_price ?? null,
       isActive: row.is_active !== false,
       rentalListed: row.rental_listed === true,
       isDeleted: row.is_deleted === true,
@@ -277,8 +277,8 @@
     if (data.maxLoadKg !== null && data.maxLoadKg !== undefined && !(Number(data.maxLoadKg) >= 0)) {
       throw new Error('Max load must be zero or more kilograms.');
     }
-    if (data.hourlyRate !== null && data.hourlyRate !== undefined && !(Number(data.hourlyRate) >= 0)) {
-      throw new Error('Hourly rate must be zero or more.');
+    if (data.standardPrice !== null && data.standardPrice !== undefined && !(Number(data.standardPrice) > 0)) {
+      throw new Error('Standard price must be more than zero.');
     }
     await assertVerifiedOwner(c, data.bangkeroId);
 
@@ -290,7 +290,8 @@
       capacity: capacity,
       max_load_kg: data.maxLoadKg === null || data.maxLoadKg === undefined ? null : Number(data.maxLoadKg),
       bangkero_id: data.bangkeroId,
-      hourly_rate: data.hourlyRate === null || data.hourlyRate === undefined ? 500 : Number(data.hourlyRate),
+      // NULL = use the capacity tier (068); never a hidden 500 default.
+      standard_price: data.standardPrice === null || data.standardPrice === undefined ? null : Number(data.standardPrice),
       is_active: true
     }).select(SELECT).single();
     if (r.error) throw r.error;
@@ -321,11 +322,12 @@
       }
       updateData.max_load_kg = data.maxLoadKg === null ? null : Number(data.maxLoadKg);
     }
-    if (data.hourlyRate !== undefined) {
-      if (data.hourlyRate !== null && !(Number(data.hourlyRate) >= 0)) {
-        throw new Error('Hourly rate must be zero or more.');
+    if (data.standardPrice !== undefined) {
+      if (data.standardPrice !== null && !(Number(data.standardPrice) > 0)) {
+        throw new Error('Standard price must be more than zero.');
       }
-      updateData.hourly_rate = data.hourlyRate === null ? 500 : Number(data.hourlyRate);
+      // NULL clears the price back to the capacity tier.
+      updateData.standard_price = data.standardPrice === null ? null : Number(data.standardPrice);
     }
     if (data.bangkeroId !== undefined) {
       await assertVerifiedOwner(c, data.bangkeroId, id);

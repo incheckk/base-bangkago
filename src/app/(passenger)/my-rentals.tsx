@@ -11,7 +11,7 @@ import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
 import { getDownpaymentByRental } from '@/services/downpayment.service';
 import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
-import { cancelRental, getMyRentals, type PassengerRentalRow } from '@/services/rental.service';
+import { cancelRental, getMyRentals, rentalDurationLabel, type PassengerRentalRow } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { DownpaymentDoc, PassengerDetailDoc, RentalStatus } from '@/types/models';
 
@@ -86,7 +86,7 @@ export default function MyRentalsScreen() {
   function askCancel(row: PassengerRentalRow) {
     Alert.alert(
       'Cancel this rental?',
-      `${row.boatName ?? 'The boat'} on ${row.rentalDate} for ${row.hours}h will be released. If you filed a downpayment, ask the admin for a refund.`,
+      `${row.boatName ?? 'The boat'} on ${row.rentalDate} (${rentalDurationLabel(row.hours)}) will be released. If you filed a downpayment, ask the admin for a refund.`,
       [
         { text: 'Keep it', style: 'cancel' },
         { text: 'Cancel rental', style: 'destructive', onPress: () => void doCancel(row) },
@@ -104,7 +104,6 @@ export default function MyRentalsScreen() {
         notifyUserId: row.operatorId,
         boatName: row.boatName ?? 'the boat',
         rentalDate: row.rentalDate,
-        hours: row.hours,
         eventName: row.eventName,
       });
       await load();
@@ -172,7 +171,7 @@ export default function MyRentalsScreen() {
                   <Text style={styles.event} numberOfLines={1}>{row.eventName}</Text>
                 )}
                 <Text style={styles.meta} numberOfLines={1}>
-                  {formatDate(row.rentalDate)} · {row.hours}h · ₱{total}
+                  {formatDate(row.rentalDate)} · {rentalDurationLabel(row.hours)} · ₱{total}
                   {row.operatorName ? ` · ${row.operatorName}` : ''}
                 </Text>
                 {rideList.length > 0 && (

@@ -41,11 +41,11 @@ Open-Meteo weather, validation, map legibility).
    on the LOCAL list before filing — companions remain INSERT-only in
    the DB (E7), so they cannot be corrected AFTER the booking exists.
 
-5. BOAT RENTAL HOURLY RATE DEFAULT (Phase 4C)
-   bangkas.hourly_rate defaults to ₱500 (migration 016) when a
-   operator never set one; rates are editable per boat in
-   (bangkero)/rentals. Confirm real per-boat pricing with operators
-   before launch.
+5. BOAT RENTAL PRICE TIER DEFAULT (Phase 4C, updated 2026-10-22)
+   A boat with no saved bangkas.standard_price (migration 068) quotes
+   the demo capacity tier: under 15 pax ₱3,500, 15+ ₱7,000. Prices are
+   editable per boat in (bangkero)/rentals and web Manage Bangka.
+   Confirm real per-boat whole-day pricing with operators before launch.
 
 6. ADMIN AUDIT TRAIL SKIPS SQL-EDITOR WRITES (web batch 2026-10-16)
    audit_log (migration 038) is trigger-based, so it only sees writes

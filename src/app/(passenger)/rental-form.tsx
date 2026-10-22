@@ -14,7 +14,7 @@ import { friendlyError } from '@/services/booking.service';
 import { pickImage } from '@/services/documents.service';
 import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
 import { createPassengerDetail } from '@/services/passenger-detail.service';
-import { createRental, getBangkaBlockedDates } from '@/services/rental.service';
+import { createRental, getBangkaBlockedDates, tierStandardPrice } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 /** The next 7 days starting TOMORROW — rentals are always advance, so they always escrow. */
@@ -33,12 +33,12 @@ function nextDays(count: number): { iso: string; label: string }[] {
 
 /**
  * Rental request + 50% GCash escrow in one screen (Phase 4C): pick a
- * date and hours (days the boat is already booked are crossed out —
- * 027), file the admin QR payment (receipt screenshot — the admin
- * reads the Ref No. off it; no manual reference input). The
- * request waits in awaiting_payment; the bangkero hears about it when
- * the admin approves the escrow. The remainder is collected in person
- * when the charter completes.
+ * date (days the boat is already booked are crossed out — 027), file
+ * the admin QR payment (receipt screenshot — the admin reads the Ref
+ * No. off it; no manual reference input). One flat whole-day price per
+ * boat (068), no hourly math. The request waits in awaiting_payment;
+ * the bangkero hears about it when the admin approves the escrow. The
+ * remainder is collected in person when the charter completes.
  */
 export default function RentalFormScreen() {
   const { profile } = useAuth();
@@ -51,11 +51,10 @@ export default function RentalFormScreen() {
     capacity: string;
   }>();
 
-  const rate = Number(params.rate) || 500;
+  const rate = Number(params.rate) || tierStandardPrice(Number(params.capacity) || 0);
   const days = nextDays(7);
 
   const [date, setDate] = useState(() => days[0]?.iso ?? '');
-  const [hours, setHours] = useState(2);
   const [eventName, setEventName] = useState('');
   const [companions, setCompanions] = useState<Companion[]>([]);
   // Days this boat/operator is already committed to (027) — dehighlighted below.
@@ -105,7 +104,7 @@ export default function RentalFormScreen() {
     };
   }, [params.bangkaId]);
 
-  const total = rate * hours;
+  const total = rate;
   const down = Math.round(total * 0.5);
   const remainder = total - down;
   const maxPax = Number(params.capacity) || 12;
@@ -147,7 +146,6 @@ export default function RentalFormScreen() {
         bangkaId: params.bangkaId,
         eventName: eventName.trim() || undefined,
         rentalDate: date,
-        hours,
       });
 
       // Companions ride under this charter (026 boat_rental_id). A failed
@@ -219,7 +217,7 @@ export default function RentalFormScreen() {
           <Text style={styles.boatMeta} numberOfLines={1}>
             by {params.operatorName ?? 'Bangkero'} · up to {params.capacity ?? '—'} pax
           </Text>
-          <Text style={styles.boatRate}>₱{rate} per hour</Text>
+          <Text style={styles.boatRate}>₱{rate} for the whole day</Text>
         </View>
 
         <Text style={styles.sectionLabel}>RENTAL DETAILS</Text>
@@ -264,42 +262,6 @@ export default function RentalFormScreen() {
               Crossed-out dates are already booked for this boat.
             </Text>
           )}
-
-          <View style={styles.hoursRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.fieldLabel}>HOURS</Text>
-              <Text style={styles.hoursHint}>Minimum 1 hour</Text>
-            </View>
-            <View style={styles.stepper}>
-              <Pressable
-                onPress={() => setHours((h) => Math.max(1, h - 1))}
-                disabled={hours <= 1}
-                accessibilityRole="button"
-                accessibilityLabel="Fewer hours"
-                style={({ pressed }) => [
-                  styles.stepBtn,
-                  hours <= 1 && styles.stepBtnOff,
-                  pressed && hours > 1 && styles.stepBtnPressed,
-                ]}
-              >
-                <Text style={[styles.stepBtnText, hours <= 1 && styles.stepBtnTextOff]}>−</Text>
-              </Pressable>
-              <Text style={styles.stepValue}>{hours}</Text>
-              <Pressable
-                onPress={() => setHours((h) => Math.min(24, h + 1))}
-                disabled={hours >= 24}
-                accessibilityRole="button"
-                accessibilityLabel="More hours"
-                style={({ pressed }) => [
-                  styles.stepBtn,
-                  hours >= 24 && styles.stepBtnOff,
-                  pressed && hours < 24 && styles.stepBtnPressed,
-                ]}
-              >
-                <Text style={[styles.stepBtnText, hours >= 24 && styles.stepBtnTextOff]}>+</Text>
-              </Pressable>
-            </View>
-          </View>
         </View>
 
         <Text style={styles.sectionLabel}>PASSENGERS</Text>
@@ -315,7 +277,7 @@ export default function RentalFormScreen() {
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
         <View style={styles.card}>
           <View style={styles.sumRow}>
-            <Text style={styles.sumLabel}>Total ({hours}h × ₱{rate})</Text>
+            <Text style={styles.sumLabel}>Whole-day charter</Text>
             <Text style={styles.sumValue}>₱{total}</Text>
           </View>
           <View style={styles.sumDivider} />
@@ -437,25 +399,6 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.primary, fontWeight: '700' },
   chipTextOff: { color: colors.textMuted, textDecorationLine: 'line-through' },
   dateHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
-
-  hoursRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.lg, gap: spacing.md },
-  hoursHint: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  stepBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepBtnOff: { opacity: 0.4 },
-  stepBtnPressed: { borderColor: colors.primary },
-  stepBtnText: { fontSize: 20, fontWeight: '700', color: colors.primary },
-  stepBtnTextOff: { color: colors.textMuted },
-  stepValue: { ...typography.title, minWidth: 28, textAlign: 'center' },
 
   sumRow: {
     flexDirection: 'row',

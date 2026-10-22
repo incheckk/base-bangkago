@@ -45,7 +45,7 @@ export default function IslandPackages() {
     <ScreenContainer padded={false}>
       <PassengerScreenHeader
         title="Island Hopping"
-        subtitle="Curated island tours — pay a 50% GCash downpayment to hold your seats."
+        subtitle="Curated island tours — one whole-boat price, 50% GCash downpayment for advance dates."
       />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -67,14 +67,14 @@ export default function IslandPackages() {
                   })
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`${pkg.packageName}, ${pkg.price} pesos per person`}
+                accessibilityLabel={`${pkg.packageName}, ${pkg.price} pesos for the whole boat`}
                 style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.cardName} numberOfLines={2}>{pkg.packageName}</Text>
                   <View style={styles.priceWrap}>
                     <Text style={styles.price}>₱{pkg.price}</Text>
-                    <Text style={styles.priceUnit}>per pax</Text>
+                    <Text style={styles.priceUnit}>per boat</Text>
                   </View>
                 </View>
 

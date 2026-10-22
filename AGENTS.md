@@ -41,6 +41,41 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-22 — Category 4 pricing batch: whole-boat island hop + flat
+  whole-day rentals with capacity tiers (migration 068 PENDING — USER MUST
+  RUN, after 067; gates: tsc clean, lint 0 errors / 135 warnings, changed
+  web scripts parse, expo-doctor unchanged — only the three known SDK-57
+  patch drifts).**
+  - **Island hop:** `island_packages.price` is now the whole-boat price —
+    `book-package.tsx` no longer multiplies by pax and the catalog/summary
+    read "per boat". Pax still rides as the booking's seat count, so
+    dispatch/capacity are unchanged. No package rows were reseeded; the
+    existing prices now mean per boat (admin keeps editing them).
+  - **Rentals:** one flat whole-day charter price per boat instead of
+    `hourly_rate × hours`. Migration 068 adds nullable
+    `bangkas.standard_price` (positive CHECK, no demo reset). Effective
+    price = saved `standard_price`, else the demo capacity tier — under 15
+    pax ₱3,500, 15+ ₱7,000 (`tierStandardPrice` in `rental.service`). The
+    hours stepper is gone from rental-form; `createRental` re-reads the
+    price server-side and records `boat_rentals.hours = CHARTER_HOURS (8)`
+    because the column is NOT NULL. Historical rows keep their hours (cards
+    show "Whole day" at 8h+, otherwise "Nh"); `hourly_rate` stays for
+    history only.
+  - **Bangkero desk:** "Save price" writes `standard_price`; the card shows
+    the boat's capacity and its tier default. The passenger catalog, rental
+    form and My Rentals all read the effective whole-day price.
+  - **Web admin Manage Bangka:** the stale Hourly Rate field became
+    Standard Price (blank = tier; detail shows "Tier · ₱3,500/₱7,000");
+    `bangkas.js` maps/writes `standard_price`, `vessels.js` dropped its dead
+    `hourlyRate`. Admin web boat-rentals rows keep `{hours}h`.
+  - **Safe to run late:** the app reads `bangkas` with `*`, so before 068
+    every boat falls back to its tier; only saving a price errors.
+  - **Next:** run 062 → 063 → 064 → 065 → 066 → 067 → **068**, then: book
+    an island hop with 3 pax (total = package price, not ×3); charter a
+    <15-pax boat (₱3,500) and a 15+ boat (₱7,000); edit a bangkero's
+    standard price and confirm the passenger catalog shows it; clear the
+    price in web Manage Bangka and confirm the tier shows again.
+
 - **2026-10-21 — Bookings & payments truthfulness batch: guarded admin
   booking cancel, escrow state transitions, combined date-range payment
   report (migration 066 PENDING — USER MUST RUN, after 065; gates: tsc
@@ -640,5 +675,6 @@ here again, wire or delete it.
 
 **Product rules to revisit (A)** — strict queue-only can stall requests
 forever; 3-min hold / 5-min dwell / 3-min freshness are demo numbers;
-`bangkas.hourly_rate` defaults to ₱500. (A4 island-hop companion list —
-shipped M5.)
+`bangkas.standard_price` falls back to the capacity tier (₱3,500 under
+15 pax, ₱7,000 at 15+); `island_packages.price` now means the whole boat.
+(A4 island-hop companion list — shipped M5.)

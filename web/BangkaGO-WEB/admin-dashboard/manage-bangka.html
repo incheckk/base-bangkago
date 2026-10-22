@@ -99,7 +99,7 @@
             <div class="col-md-6"><div class="form-control bg-light"><strong>Capacity:</strong> <span id="dCapacity">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Max Load (kg):</strong> <span id="dMaxLoad">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Permit #:</strong> <span id="dPermit">-</span></div></div>
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Hourly Rate:</strong> <span id="dHourlyRate">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Standard Price:</strong> <span id="dStandardPrice">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Owner:</strong> <span id="dOwner">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Owner Status:</strong> <span id="dOwnerStatus">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Computed Status:</strong> <span id="dStatus">-</span></div></div>
@@ -196,8 +196,9 @@
               <input type="number" class="form-control" id="aMaxLoad" min="0" placeholder="500">
             </div>
             <div class="col-md-4">
-              <label class="form-label">Hourly Rate (₱)</label>
-              <input type="number" class="form-control" id="aHourlyRate" min="0" step="0.01" placeholder="500">
+              <label class="form-label">Standard Price (₱ per whole-day charter)</label>
+              <input type="number" class="form-control" id="aStandardPrice" min="0.01" step="0.01" placeholder="3500">
+              <div class="form-text">Leave blank to use the capacity tier: ₱3,500 under 15 pax, ₱7,000 at 15+.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Permit Number</label>
@@ -252,7 +253,7 @@
     const dCapacity = document.getElementById("dCapacity");
     const dMaxLoad = document.getElementById("dMaxLoad");
     const dPermit = document.getElementById("dPermit");
-    const dHourlyRate = document.getElementById("dHourlyRate");
+    const dStandardPrice = document.getElementById("dStandardPrice");
     const dOwner = document.getElementById("dOwner");
     const dOwnerStatus = document.getElementById("dOwnerStatus");
     const dStatus = document.getElementById("dStatus");
@@ -433,7 +434,9 @@
       dCapacity.textContent = b.capacity;
       dMaxLoad.textContent = b.maxLoadKg === null || b.maxLoadKg === undefined ? '—' : b.maxLoadKg + ' kg';
       dPermit.textContent = b.permitNumber || '—';
-      dHourlyRate.textContent = (b.hourlyRate === null || b.hourlyRate === undefined) ? '—' : '₱' + Number(b.hourlyRate);
+      dStandardPrice.textContent = (b.standardPrice === null || b.standardPrice === undefined)
+        ? 'Tier · ₱' + (Number(b.capacity) >= 15 ? 7000 : 3500)
+        : '₱' + Number(b.standardPrice);
       dOwner.textContent = b.bangkeroName || 'Unassigned';
       dOwnerStatus.textContent = ownerStatusLabel(b);
       dStatus.textContent = b.status;
@@ -482,7 +485,7 @@
       document.getElementById("aType").value = b.bangkaType || '';
       document.getElementById("aCapacity").value = b.capacity ?? '';
       document.getElementById("aMaxLoad").value = b.maxLoadKg ?? '';
-      document.getElementById("aHourlyRate").value = b.hourlyRate ?? '';
+      document.getElementById("aStandardPrice").value = b.standardPrice ?? '';
       document.getElementById("aPermit").value = b.permitNumber || '';
 
       // Keep an unverified/deleted owner visible in the select: the dropdown
@@ -578,7 +581,7 @@
         bangkaType: document.getElementById("aType").value.trim() || null,
         capacity: parseInt(document.getElementById("aCapacity").value, 10),
         maxLoadKg: document.getElementById("aMaxLoad").value === '' ? null : parseFloat(document.getElementById("aMaxLoad").value),
-        hourlyRate: document.getElementById("aHourlyRate").value === '' ? null : parseFloat(document.getElementById("aHourlyRate").value),
+        standardPrice: document.getElementById("aStandardPrice").value === '' ? null : parseFloat(document.getElementById("aStandardPrice").value),
         permitNumber: document.getElementById("aPermit").value.trim() || null,
         bangkeroId: aBangkeroId.value
       };

@@ -11,7 +11,7 @@
   }
 
   function mapBangka(row) {
-    return { bangkaId: row.id, bangkaName: row.bangka_name, bangkaType: row.bangka_type, capacity: row.capacity, maxLoadKg: row.max_load_kg, permitNumber: row.permit_number, bangkaPhoto: row.bangka_photo, bangkeroId: row.bangkero_id, hourlyRate: row.hourly_rate };
+    return { bangkaId: row.id, bangkaName: row.bangka_name, bangkaType: row.bangka_type, capacity: row.capacity, maxLoadKg: row.max_load_kg, permitNumber: row.permit_number, bangkaPhoto: row.bangka_photo, bangkeroId: row.bangkero_id };
   }
 
   async function getAllBangkas() {

@@ -18,8 +18,10 @@ import {
   declineRental,
   getOwnBangkas,
   getRentalsForBangkero,
-  setHourlyRate,
+  rentalDurationLabel,
   setRentalListed,
+  setStandardPrice,
+  tierStandardPrice,
 } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { PassengerDetailDoc, RentalStatus } from '@/types/models';
@@ -33,9 +35,9 @@ const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: strin
 };
 
 /**
- * The bangkero's charter desk (Phase 4C): listing toggle + hourly
- * rate per boat, incoming rental requests with Confirm / Decline,
- * confirmed ones to Complete once the day is done (remainder
+ * The bangkero's charter desk (Phase 4C): listing toggle + one flat
+ * whole-day price per boat, incoming rental requests with Confirm /
+ * Decline, confirmed ones to Complete once the day is done (remainder
  * collected in person). A rental day is locked once accepted (027).
  */
 export default function BangkeroRentalsScreen() {
@@ -71,7 +73,7 @@ export default function BangkeroRentalsScreen() {
       setRateDraft((prev) => {
         const next = { ...prev };
         for (const b of own) {
-          if (next[b.bangkaId] === undefined) next[b.bangkaId] = String(b.hourlyRate);
+          if (next[b.bangkaId] === undefined) next[b.bangkaId] = String(b.standardPrice);
         }
         return next;
       });
@@ -87,7 +89,7 @@ export default function BangkeroRentalsScreen() {
     void load();
   }, [load]);
 
-  // Boat rows (rate/listing) change the desk too — a rate edit from
+  // Boat rows (price/listing) change the desk too — a price edit from
   // another device must refresh the drafts and totals.
   useRealtimeQuery(load, [{ table: 'boat_rentals' }, { table: 'bangkas' }]);
 
@@ -96,7 +98,6 @@ export default function BangkeroRentalsScreen() {
     notifyUserId: row.userId,
     boatName: row.boatName ?? 'your boat',
     rentalDate: row.rentalDate,
-    hours: row.hours,
     eventName: row.eventName,
   });
 
@@ -150,19 +151,19 @@ export default function BangkeroRentalsScreen() {
     })();
   }
 
-  async function saveRate(boat: OwnBangka) {
+  async function savePrice(boat: OwnBangka) {
     if (savingRate) return;
     // A cleared field reads as Number('') === 0 — stop it here with a
-    // clear message instead of letting a ₱0 rate reach the service.
+    // clear message instead of letting a ₱0 price reach the service.
     const raw = (rateDraft[boat.bangkaId] ?? '').trim();
     if (!raw) {
-      setActionError('Enter an hourly rate above ₱0.');
+      setActionError('Enter a standard price above ₱0.');
       return;
     }
     setSavingRate(boat.bangkaId);
     setActionError(null);
     try {
-      await setHourlyRate(boat.bangkaId, Number(raw));
+      await setStandardPrice(boat.bangkaId, Number(raw));
       await load();
     } catch (e) {
       setActionError(friendlyError(e));
@@ -233,31 +234,34 @@ export default function BangkeroRentalsScreen() {
           </Text>
         </View>
 
-        {/* Charter rate + catalog visibility — what passengers see and pay. */}
+        {/* Whole-day price + catalog visibility — what passengers see and pay. */}
         {boats.map((b) => (
           <View key={b.bangkaId} style={styles.rateCard}>
             <View style={styles.rateHead}>
               <Text style={styles.rateBoat} numberOfLines={1}>{b.bangkaName}</Text>
-              <Text style={styles.rateLabel}>per hour</Text>
+              <Text style={styles.rateLabel}>per whole day</Text>
             </View>
             <View style={styles.rateRow}>
               <TextInput
-                value={rateDraft[b.bangkaId] ?? String(b.hourlyRate)}
+                value={rateDraft[b.bangkaId] ?? String(b.standardPrice)}
                 onChangeText={(v) => setRateDraft((prev) => ({ ...prev, [b.bangkaId]: v }))}
                 keyboardType="numeric"
-                placeholder="500"
+                placeholder="3500"
                 placeholderTextColor={colors.textMuted}
                 style={styles.rateInput}
               />
               <PrimaryButton
-                label="Save rate"
+                label="Save price"
                 variant="secondary"
-                onPress={() => void saveRate(b)}
+                onPress={() => void savePrice(b)}
                 loading={savingRate === b.bangkaId}
                 disabled={savingRate !== null || togglingId !== null}
                 style={styles.rateBtn}
               />
             </View>
+            <Text style={styles.rateHint}>
+              {b.capacity} pax · default for this size is ₱{tierStandardPrice(b.capacity)}.
+            </Text>
             <View style={styles.listRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.listLabel}>Visible to passengers</Text>
@@ -388,7 +392,7 @@ function RentalCard({
         </View>
       </View>
       <Text style={styles.cardMeta} numberOfLines={1}>
-        {row.boatName ?? 'Boat'} · {formatDate(row.rentalDate)} · {row.hours}h · ₱{row.totalPrice}
+        {row.boatName ?? 'Boat'} · {formatDate(row.rentalDate)} · {rentalDurationLabel(row.hours)} · ₱{row.totalPrice}
       </Text>
       {riders.length > 0 && (
         <Text style={styles.cardMeta} numberOfLines={2}>
@@ -443,6 +447,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   rateBtn: { minWidth: 110, minHeight: 44 },
+  rateHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
 
   howCard: {
     backgroundColor: colors.surface,

@@ -13,9 +13,9 @@ import { colors, elevation, radii, spacing, typography } from '@/theme/tokens';
 
 /**
  * Boat Rental catalog (Phase 4C): every verified operator's boat with
- * its hourly charter rate (016). Tapping a boat opens the rental
- * form; "My Rentals" is where filed requests and their escrow status
- * live.
+ * its flat whole-day charter price (016/068). Tapping a boat opens the
+ * rental form; "My Rentals" is where filed requests and their escrow
+ * status live.
  */
 export default function BoatRentalScreen() {
   const [boats, setBoats] = useState<RentableBangka[]>([]);
@@ -61,7 +61,7 @@ export default function BoatRentalScreen() {
     <ScreenContainer padded={false}>
       <PassengerScreenHeader
         title="Boat Rental"
-        subtitle="Charter a boat by the hour — 50% GCash downpayment holds your date."
+        subtitle="Charter a boat for the whole day — 50% GCash downpayment holds your date."
       />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -96,13 +96,13 @@ export default function BoatRentalScreen() {
                       boatName: b.bangkaName,
                       operatorName: b.displayName,
                       bangkeroId: b.bangkeroId,
-                      rate: String(b.hourlyRate),
+                      rate: String(b.standardPrice),
                       capacity: String(b.capacity),
                     },
                   })
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`${b.bangkaName}, ${b.hourlyRate} pesos per hour`}
+                accessibilityLabel={`${b.bangkaName}, ${b.standardPrice} pesos for the whole day`}
                 style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               >
                 <View style={styles.cardTop}>
@@ -111,8 +111,8 @@ export default function BoatRentalScreen() {
                     <Text style={styles.cardOperator} numberOfLines={1}>by {b.displayName}</Text>
                   </View>
                   <View style={styles.priceWrap}>
-                    <Text style={styles.price}>₱{b.hourlyRate}</Text>
-                    <Text style={styles.priceUnit}>per hour</Text>
+                    <Text style={styles.price}>₱{b.standardPrice}</Text>
+                    <Text style={styles.priceUnit}>per whole day</Text>
                   </View>
                 </View>
                 <View style={styles.metaRow}>

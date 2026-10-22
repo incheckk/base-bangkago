@@ -8,7 +8,24 @@ import { supabase } from './supabase';
 // then completed when the day is done. Money stays out of `payments`
 // entirely — 50% is filed as a downpayments escrow row (015, admin
 // QR) and the remainder is collected IN PERSON at completion.
+//
+// Pricing (068): one flat whole-day price per boat, not hourly.
 // =============================================================
+
+/** A charter is sold as one whole day. `boat_rentals.hours` is NOT NULL,
+ *  so the flat price still records the day it covers. */
+export const CHARTER_HOURS = 8;
+
+/** Demo capacity tiers, used until the bangkero saves a price:
+ *  under 15 pax ₱3,500, 15+ ₱7,000. */
+export function tierStandardPrice(capacity: number): number {
+  return capacity >= 15 ? 7000 : 3500;
+}
+
+/** Old hourly rows keep their hours; a full charter day reads "Whole day". */
+export function rentalDurationLabel(hours: number): string {
+  return hours >= CHARTER_HOURS ? 'Whole day' : `${hours}h`;
+}
 
 function mapRentalRow(row: any): BoatRentalDoc {
   return {
@@ -25,7 +42,7 @@ function mapRentalRow(row: any): BoatRentalDoc {
 }
 
 // -------------------------------------------------------------
-// Catalog — every verified bangkero's boat with its charter rate.
+// Catalog — every verified bangkero's boat with its whole-day price.
 // -------------------------------------------------------------
 
 export interface RentableBangka {
@@ -34,7 +51,7 @@ export interface RentableBangka {
   bangkaType: string | null;
   bangkaPhoto: string | null;
   capacity: number;
-  hourlyRate: number;
+  standardPrice: number;
   bangkeroId: string;
   displayName: string;
 }
@@ -42,6 +59,8 @@ export interface RentableBangka {
 export async function getRentableBangkas(): Promise<RentableBangka[]> {
   const { data, error } = await supabase
     .from('bangkas')
+    // `*` so a DB without 068 still reads (standard_price is then absent
+    // and every boat falls back to its capacity tier).
     .select('*, bangkeros!inner(id, display_name, verification_stat, is_deleted)')
     .eq('bangkeros.verification_stat', 'verified')
     .eq('bangkeros.is_deleted', false)
@@ -49,7 +68,7 @@ export async function getRentableBangkas(): Promise<RentableBangka[]> {
     // Boat Rentals screen (rental_listed, 027).
     .eq('rental_listed', true)
     .eq('is_active', true)
-    .order('hourly_rate');
+    .order('capacity');
 
   if (error) throw error;
   return (data ?? []).map((row: any) => ({
@@ -58,15 +77,15 @@ export async function getRentableBangkas(): Promise<RentableBangka[]> {
     bangkaType: row.bangka_type,
     bangkaPhoto: row.bangka_photo ?? null,
     capacity: Number(row.capacity),
-    hourlyRate: Number(row.hourly_rate ?? 500),
+    standardPrice: Number(row.standard_price ?? tierStandardPrice(Number(row.capacity))),
     bangkeroId: row.bangkero_id,
     displayName: row.bangkeros?.display_name ?? 'Bangkero',
   }));
 }
 
 // -------------------------------------------------------------
-// Create — rate is re-read server-side so a stale form never bills
-// the wrong hourly price.
+// Create — the flat price is re-read server-side so a stale form
+// never bills the wrong charter price.
 // -------------------------------------------------------------
 
 export interface CreateRentalArgs {
@@ -75,11 +94,9 @@ export interface CreateRentalArgs {
   eventName?: string;
   /** Manually picked YYYY-MM-DD — rides are same-day but rentals are not. */
   rentalDate: string;
-  hours: number;
 }
 
 export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDoc> {
-  if (args.hours < 1) throw new Error('Pick at least one hour.');
   if (!args.rentalDate) throw new Error('Pick a rental date.');
 
   // Same boat, same day, still live. The passenger only sees their own
@@ -99,14 +116,15 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
 
   const { data: bangka, error: bangkaError } = await supabase
     .from('bangkas')
-    .select('hourly_rate, is_active')
+    .select('*')
     .eq('id', args.bangkaId)
     .single();
   if (bangkaError) throw bangkaError;
   if (!bangka?.is_active) throw new Error('This boat is unavailable. Choose another boat.');
 
-  const hourly = Number(bangka?.hourly_rate ?? 500);
-  const total = Math.round(hourly * args.hours);
+  const total = Number(
+    bangka.standard_price ?? tierStandardPrice(Number(bangka.capacity))
+  );
 
   const { data, error } = await supabase
     .from('boat_rentals')
@@ -115,7 +133,7 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
       bangka_id: args.bangkaId,
       event_name: args.eventName?.trim() || null,
       rental_date: args.rentalDate,
-      hours: args.hours,
+      hours: CHARTER_HOURS,
       total_price: total,
       // Rental dates start tomorrow (020), so every charter is advance:
       // escrow first, admin flips it to 'pending', then it hits the desk.
@@ -222,12 +240,11 @@ export interface RentalNotifyContext {
   notifyUserId: string | null;
   boatName: string;
   rentalDate: string;
-  hours: number;
   eventName?: string | null;
 }
 
 const rentalWhat = (ctx: RentalNotifyContext) =>
-  `${ctx.boatName}${ctx.eventName ? ` (${ctx.eventName})` : ''} on ${ctx.rentalDate}, ${ctx.hours}h`;
+  `${ctx.boatName}${ctx.eventName ? ` (${ctx.eventName})` : ''} on ${ctx.rentalDate} (whole day)`;
 
 /**
  * Guarded status transition: the UPDATE only lands when the row is still
@@ -318,41 +335,44 @@ export async function cancelRental(ctx: RentalNotifyContext): Promise<void> {
 }
 
 // -------------------------------------------------------------
-// Own boats (rate editing — bangkas_update_own, 002)
+// Own boats (price editing — bangkas_update_own, 002)
 // -------------------------------------------------------------
 
 export interface OwnBangka {
   bangkaId: string;
   bangkaName: string;
-  hourlyRate: number;
+  capacity: number;
+  standardPrice: number;
   rentalListed: boolean;
 }
 
 export async function getOwnBangkas(bangkeroUid: string): Promise<OwnBangka[]> {
   const { data, error } = await supabase
     .from('bangkas')
-    .select('id, bangka_name, hourly_rate, rental_listed')
+    // `*` keeps this working before 068 (standard_price reads absent).
+    .select('*')
     .eq('bangkero_id', bangkeroUid)
     .order('bangka_name');
 
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+  return (data ?? []).map((row: any) => ({
     bangkaId: row.id,
     bangkaName: row.bangka_name,
-    hourlyRate: Number(row.hourly_rate ?? 500),
+    capacity: Number(row.capacity),
+    standardPrice: Number(row.standard_price ?? tierStandardPrice(Number(row.capacity))),
     rentalListed: !!row.rental_listed,
   }));
 }
 
-export async function setHourlyRate(bangkaId: string, hourlyRate: number): Promise<void> {
+export async function setStandardPrice(bangkaId: string, standardPrice: number): Promise<void> {
   // Blank inputs arrive as Number('') === 0 — reject those alongside
   // negatives, NaN and infinities before anything reaches the DB.
-  if (!Number.isFinite(hourlyRate) || hourlyRate <= 0) {
-    throw new Error('Enter an hourly rate above ₱0.');
+  if (!Number.isFinite(standardPrice) || standardPrice <= 0) {
+    throw new Error('Enter a standard price above ₱0.');
   }
   const { error } = await supabase
     .from('bangkas')
-    .update({ hourly_rate: hourlyRate })
+    .update({ standard_price: standardPrice })
     .eq('id', bangkaId);
   if (error) throw error;
 }

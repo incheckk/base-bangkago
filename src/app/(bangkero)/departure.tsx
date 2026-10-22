@@ -14,9 +14,7 @@ import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
-import {
-  friendlyError, resolveGroupNoShow, setOnboarded, stampBookingDepart,
-} from '@/services/booking.service';
+import { friendlyError, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
 import { cancelActiveManifests, createManifest, populateManifestDeparture } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import {
@@ -25,7 +23,7 @@ import {
 import { supabase } from '@/services/supabase';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { BookingDoc, ParcelDoc, PaymentDoc, PaymentMethod } from '@/types/models';
+import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
 
 const CHECKLIST_ITEMS = [
   { key: 'lifeJackets', label: 'Life jackets accounted for', icon: '🦺' },
@@ -91,7 +89,6 @@ export default function DepartureScreen() {
   const anyoneAboard = boardedTrips.length > 0;
   const [noShowId, setNoShowId] = useState<string | null>(null);
   const [actedNoShow, setActedNoShow] = useState<Set<string>>(new Set());
-  const [parcelBoardId, setParcelBoardId] = useState<string | null>(null);
 
   // No-shows scoped to this trip: everything since the draft manifest was
   // generated (start of the Manila day before that) so yesterday's
@@ -163,25 +160,6 @@ export default function DepartureScreen() {
           (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId))),
     );
   }, [acceptedTrips, allParcels]);
-
-  /** Cargo stub booking id → its approved piggyback parcel. */
-  const piggybackParcelByStubId = useMemo(() => {
-    const map = new Map<string, ParcelDoc>();
-    for (const p of liveParcels) {
-      if (
-        p.deliveryType === 'piggyback' &&
-        p.approvalStatus === 'accepted' &&
-        p.piggybackBookingId &&
-        p.bookingId
-      ) {
-        map.set(p.bookingId, p);
-      }
-    }
-    return map;
-  }, [liveParcels]);
-
-  const piggybackParcelOf = (t: BookingDoc): ParcelDoc | null =>
-    t.serviceType === 'cargo' ? piggybackParcelByStubId.get(t.bookingId) ?? null : null;
 
   const livePassengers = useMemo(() => {
     const passengerBookingIds = new Set(
@@ -296,18 +274,6 @@ export default function DepartureScreen() {
       setGenError(friendlyError(e));
     }
     setNoShowId(null);
-  }
-
-  async function confirmParcelBoarded(t: BookingDoc) {
-    if (parcelBoardId === t.bookingId) return;
-    setParcelBoardId(t.bookingId);
-    setGenError(null);
-    try {
-      await setOnboarded(t.bookingId, true);
-    } catch (e) {
-      setGenError(friendlyError(e));
-    }
-    setParcelBoardId(null);
   }
 
   async function handleGenerate() {
@@ -430,24 +396,19 @@ export default function DepartureScreen() {
           <>
             <Text style={styles.sectionLabel}>{allCargo ? 'CARGO' : 'PASSENGERS'}</Text>
             <View style={styles.boardCard}>
-              {boardedTrips.map((t) => {
-                const parcel = piggybackParcelOf(t);
-                return (
-                  <View key={t.bookingId} style={styles.boardRow}>
-                    <Text style={styles.boardCheck}>✓</Text>
-                    <View style={styles.boardBody}>
-                      <Text style={styles.boardName} numberOfLines={1}>
-                        {parcel
-                          ? `Parcel (Receiver: ${parcel.receiverName})`
-                          : `${t.passengerName ?? 'Passengers'} · ${paxLabel(t)}`}
-                      </Text>
-                      <Text style={styles.boardSub} numberOfLines={1}>
-                        {parcel ? `${t.ref} · piggyback · aboard` : `${t.ref} · aboard`}
-                      </Text>
-                    </View>
+              {boardedTrips.map((t) => (
+                <View key={t.bookingId} style={styles.boardRow}>
+                  <Text style={styles.boardCheck}>✓</Text>
+                  <View style={styles.boardBody}>
+                    <Text style={styles.boardName} numberOfLines={1}>
+                      {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
+                    </Text>
+                    <Text style={styles.boardSub} numberOfLines={1}>
+                      {t.ref} · aboard
+                    </Text>
                   </View>
-                );
-              })}
+                </View>
+              ))}
 
               {waitingTrips.length > 0 && (
                 <>
@@ -456,7 +417,6 @@ export default function DepartureScreen() {
                   {waitingTrips.map((t) => {
                     // Partial no-show / dispute (022): resolved, nothing to tap.
                     const resolved = !!t.noShowAt || !!t.disputedAt;
-                    const parcel = piggybackParcelOf(t);
                     return (
                       <View key={t.bookingId} style={styles.boardRow}>
                         <Text style={resolved ? styles.boardMiss : styles.boardWait}>
@@ -464,26 +424,13 @@ export default function DepartureScreen() {
                         </Text>
                         <View style={styles.boardBody}>
                           <Text style={styles.boardName} numberOfLines={1}>
-                            {parcel
-                              ? `Parcel (Receiver: ${parcel.receiverName})`
-                              : `${t.passengerName ?? 'Passengers'} · ${paxLabel(t)}`}
+                            {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
                           </Text>
                           <Text style={styles.boardSub} numberOfLines={1}>
-                            {parcel
-                              ? `${t.ref} · piggyback · ${resolved ? 'marked absent' : 'still on the pier'}`
-                              : `${t.ref} · ${resolved ? 'marked absent' : 'still on the pier'}`}
+                            {t.ref} · {resolved ? 'marked absent' : 'still on the pier'}
                           </Text>
-                          {!resolved && parcel && (
-                            <PrimaryButton
-                              label="Confirm Parcel Boarded"
-                              onPress={() => void confirmParcelBoarded(t)}
-                              loading={parcelBoardId === t.bookingId}
-                              disabled={parcelBoardId !== null}
-                              style={styles.parcelBoardBtn}
-                            />
-                          )}
                         </View>
-                        {!resolved && !parcel && (
+                        {!resolved && (
                           <View style={styles.boardAction}>
                             <PrimaryButton
                               label="Didn't board"
@@ -933,5 +880,4 @@ const styles = StyleSheet.create({
   boardGroupLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.xs },
   boardAction: { width: 120 },
   noShowBtn: { minHeight: 36 },
-  parcelBoardBtn: { marginTop: spacing.sm, minHeight: 40 },
 });

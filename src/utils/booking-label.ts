@@ -20,10 +20,8 @@ export function bookingTypeLabel(b: BookingDoc, pkgName?: string): string {
     parts.push(`PADALA · ${b.cargoMode ? CARGO_MODE[b.cargoMode] ?? b.cargoMode.toUpperCase() : 'CARGO'}`);
   } else if (b.serviceType === 'rental') {
     parts.push('BOAT RENTAL');
-  } else if (b.serviceType === 'passenger') {
-    parts.push(
-      b.numOfPassenger === 1 ? 'PASSENGER' : `PASSENGER · ${b.numOfPassenger} pax`
-    );
+  } else {
+    parts.push(b.numOfPassenger === 1 ? 'SOLO' : `GROUP · ${b.numOfPassenger} pax`);
   }
 
   if (b.packageId) {

@@ -14,9 +14,9 @@
 -- holder, demo bypass, FCFS queue); refresh_holds now also sweeps a
 -- LIVE hold held by one — today it only revisits expired holds.
 --
--- Advance accepts are untouched: assign_next_hold only runs for
--- trip_stat = 'open' same-day rows; advance rows are 'pending' and take
--- the v_advance path in accept_booking_hold.
+-- The replacement body is 050's verbatim (020's advance early-return
+-- and 050's is_dispatchable guard included — parcel stubs and future
+-- dates must never enter the cascade) plus the at-sea exclusions.
 --
 -- Run manually in the SQL editor, after 066.
 -- No demo reset.
@@ -46,7 +46,7 @@ GRANT EXECUTE ON FUNCTION bangkero_at_sea(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION bangkero_at_sea(UUID) TO service_role;
 
 -- -------------------------------------------------------------
--- assign_next_hold — 019's body verbatim, plus the at-sea exclusion
+-- assign_next_hold — 050's body verbatim, plus the at-sea exclusion
 -- on the live-holder gate and both selection branches.
 -- -------------------------------------------------------------
 CREATE OR REPLACE FUNCTION assign_next_hold(p_booking_id UUID)
@@ -68,6 +68,23 @@ BEGIN
   END IF;
 
   IF v.trip_stat <> 'open' THEN
+    IF v.held_by IS NOT NULL OR v.hold_expires_at IS NOT NULL THEN
+      UPDATE bookings SET held_by = NULL, hold_expires_at = NULL WHERE id = p_booking_id;
+    END IF;
+    RETURN;
+  END IF;
+
+  -- Option B (050): parcel-mode stubs are not dispatchable.
+  IF NOT COALESCE(v.is_dispatchable, true) THEN
+    IF v.held_by IS NOT NULL OR v.hold_expires_at IS NOT NULL THEN
+      UPDATE bookings SET held_by = NULL, hold_expires_at = NULL WHERE id = p_booking_id;
+    END IF;
+    RETURN;
+  END IF;
+
+  -- Advance booking: free accept, no hold cascade.
+  IF v.scheduled_date IS NOT NULL
+     AND v.scheduled_date > (now() AT TIME ZONE 'Asia/Manila')::date THEN
     IF v.held_by IS NOT NULL OR v.hold_expires_at IS NOT NULL THEN
       UPDATE bookings SET held_by = NULL, hold_expires_at = NULL WHERE id = p_booking_id;
     END IF;
@@ -148,6 +165,11 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION assign_next_hold(UUID) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION assign_next_hold(UUID) FROM anon;
+GRANT EXECUTE ON FUNCTION assign_next_hold(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION assign_next_hold(UUID) TO service_role;
 
 -- -------------------------------------------------------------
 -- refresh_holds — 008's loop, plus: a LIVE hold held by a boat that

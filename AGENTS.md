@@ -41,6 +41,36 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-22 — Demo-bug batch 1: fresh manifests, departure gate, no
+  holds while sailing, live strait weather (migration 067 PENDING — USER
+  MUST RUN, after 066; gates: tsc clean, lint 0 errors / 135 warnings).**
+  - **1.1 fresh manifests:** `getActiveManifest` has a date floor; a
+    departed manifest survives midnight and `cancelActiveManifests` skips
+    departed rows; `stampManifestDeparture()` is a hard gate before En
+    Route; named bookers/companions populate manifest rows (no ghost
+    passengers or cancelled stubs).
+  - **1.2–1.3:** "Start Trip" → "Prepare Departure"; the manifest shows the
+    real parcel count.
+  - **1.4 no holds at sea (067):** `bangkero_at_sea()` plus exclusions in
+    `assign_next_hold` (live-holder gate, demo bypass, FCFS queue) and
+    `refresh_holds` sweeps a live hold from a boat that has departed.
+    **067 was corrected before its first run:** its `assign_next_hold`
+    body is 050's verbatim (keeps `is_dispatchable` for parcel stubs and
+    020's advance early-return) + the at-sea checks, with the execute
+    grants. The hold is released on departure.
+  - **1.5:** Sail is disabled until every same-day booking has an
+    `onboardedAt`; "Open departure checklist" stays enabled.
+  - **2.1–2.3:** Finalize stays manual; Departure shows live Open-Meteo
+    weather at the route midpoint; Weather sits below Checklist; the step
+    highlight is scroll-linked (footer = Ready at the bottom).
+  - **3.1–3.2:** One shared strait point (10.27, 124.03), explicit WMO
+    labels (drizzle/showers/rain split), one-line sailing advice (care at
+    25 km/h or 1 m; rough at 40 km/h or 1.5 m), mirrored in web
+    `sea-weather.js` + the admin dashboard strip.
+  - **Next:** run 067 → 068, then smoke: a second same-day request while
+    sailing (no offer to that boat), Sail gated until boarding completes,
+    strait weather card, flat island-hop price, rental tier.
+
 - **2026-10-22 — Category 4 pricing batch: whole-boat island hop + flat
   whole-day rentals with capacity tiers (migration 068 PENDING — USER MUST
   RUN, after 067; gates: tsc clean, lint 0 errors / 135 warnings, changed

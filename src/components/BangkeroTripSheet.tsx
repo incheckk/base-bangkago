@@ -11,6 +11,9 @@ import type { BookingDoc } from '../types/models';
  * scanner — this sheet shows the booking just accepted plus everything already
  * on the boat, sectioned so a solo ride is never confused with a group, and
  * the bangkero can keep accepting from the home list behind it.
+ *
+ * Sail is deliberately not tappable until every same-day booking is confirmed
+ * aboard; boarding happens on the checklist this sheet links to.
  */
 
 const isSameDay = (b: BookingDoc) => !b.scheduledDate || b.scheduledDate <= todayIso();
@@ -46,11 +49,13 @@ interface Props {
   onClose: () => void;
   onNotify: () => void;
   onScan: (b: BookingDoc) => void;
+  /** The departure checklist — the only place a booking can be ticked aboard. */
+  onOpenDeparture: () => void;
   onSail: () => void;
 }
 
 export function BangkeroTripSheet({
-  visible, trips, focusId, capacity, notifying, onClose, onNotify, onScan, onSail,
+  visible, trips, focusId, capacity, notifying, onClose, onNotify, onScan, onOpenDeparture, onSail,
 }: Props) {
   const focus = trips.find((t) => t.bookingId === focusId) ?? null;
   const dayTrips = trips.filter(isSameDay);
@@ -59,6 +64,11 @@ export function BangkeroTripSheet({
   const group = dayTrips.filter((t) => t.numOfPassenger > 1);
   const full = capacity !== null && load >= capacity;
   const focusIsAdvance = !!focus && !isSameDay(focus);
+  // Sail is gated on boarding: every same-day booking must be confirmed
+  // aboard (QR scan or the departure checklist tick). Same flag Departure's
+  // "Ready to Depart" uses, so the two screens can never disagree.
+  const notBoarded = dayTrips.filter((t) => !t.onboardedAt);
+  const boardingDone = notBoarded.length === 0;
 
   const section = (title: string, rows: BookingDoc[]) =>
     rows.length > 0 ? (
@@ -169,14 +179,27 @@ export function BangkeroTripSheet({
                   />
                   <View style={styles.gap} />
                   <PrimaryButton
-                    label={full ? 'Ready to sail' : 'Sail now'}
-                    onPress={onSail}
+                    label="Open departure checklist"
+                    variant="secondary"
+                    onPress={onOpenDeparture}
                   />
-                  {!full && capacity !== null && (
+                  <View style={styles.gap} />
+                  <PrimaryButton
+                    label={!boardingDone ? 'Board everyone first' : full ? 'Ready to sail' : 'Sail now'}
+                    onPress={onSail}
+                    disabled={!boardingDone}
+                  />
+                  {!boardingDone ? (
+                    <Text style={styles.sailWarn}>
+                      {notBoarded.length} of {dayTrips.length} booking
+                      {dayTrips.length === 1 ? '' : 's'} not confirmed aboard — scan each
+                      boarding QR or tick them on the departure checklist before sailing.
+                    </Text>
+                  ) : !full && capacity !== null ? (
                     <Text style={styles.sailHint}>
                       Boat not full ({load}/{capacity}) — you will be asked before sailing.
                     </Text>
-                  )}
+                  ) : null}
                 </>
               )}
               <View style={styles.gap} />
@@ -268,6 +291,10 @@ const styles = StyleSheet.create({
 
   actions: { marginTop: spacing.xl },
   sailHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
+  sailWarn: {
+    ...typography.caption, color: colors.warning, marginTop: spacing.sm,
+    textAlign: 'center', lineHeight: 18,
+  },
   closeBtn: { minHeight: touchTarget, alignItems: 'center', justifyContent: 'center' },
   closeText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
 });

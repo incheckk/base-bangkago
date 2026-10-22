@@ -138,10 +138,11 @@ export default function BookingStatus() {
   const companionsResolved = companions.every((c) => c.boardedAt || c.noShowAt);
 
   // Advance/slot bookings (020): the accepted row sits until its sailing
-  // time — Start Trip and no-show both stay locked until the slot arrives.
-  // The slot is a Manila wall time (schedules are Asia/Manila); parsing it
-  // in the device zone skews the lock by the UTC offset on foreign phones.
-  // Manila has no DST, so +08:00 is exact. Unparseable → stay locked.
+  // time — Prepare Departure and no-show both stay locked until the slot
+  // arrives. The slot is a Manila wall time (schedules are Asia/Manila);
+  // parsing it in the device zone skews the lock by the UTC offset on
+  // foreign phones. Manila has no DST, so +08:00 is exact. Unparseable →
+  // stay locked.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15000);
@@ -158,7 +159,7 @@ export default function BookingStatus() {
       : null;
   // Same-day trips carry scheduledDate = today with NO time (the picker
   // clears slots for today) — they must never lock. Only a FUTURE
-  // sailing slot gates Start Trip (020); the old date!=null fallback
+  // sailing slot gates Prepare Departure (020); the old date!=null fallback
   // locked every same-day booking forever.
   const advanceTrip =
     !!booking?.scheduledDate && booking.scheduledDate > todayIso();
@@ -327,8 +328,11 @@ export default function BookingStatus() {
   }
 
   const isCargo = booking?.serviceType === 'cargo';
-  // A cargo booking carries one parcel row; null keeps the "?? 1" fallback.
-  const parcelCount = parcel ? 1 : null;
+  // A cargo booking carries one parcel row; batched/solo carrier trips carry
+  // the parcels matched by carrier/piggyback booking id. Count what is
+  // actually attached instead of assuming one.
+  const parcelCount =
+    attachedParcels.length > 0 ? attachedParcels.length : parcel ? 1 : 0;
 
   async function handleAccept() {
     if (!uid || !booking) return;
@@ -506,7 +510,7 @@ export default function BookingStatus() {
             {booking.status === 'accepted' && !!booking.disputedAt && (
               <View style={styles.banner}>
                 <Text style={styles.bannerText}>
-                  {booking.passengerName ?? 'The passenger'} reports they were NOT on board. The trip continues — tick who actually sailed, then Start Trip.
+                  {booking.passengerName ?? 'The passenger'} reports they were NOT on board. The trip continues — tick who actually sailed, then Prepare Departure.
                 </Text>
               </View>
             )}
@@ -525,7 +529,7 @@ export default function BookingStatus() {
               </Text>
               <Text style={styles.cardSub} numberOfLines={1}>
                 {isCargo
-                  ? `${parcelCount ?? 1} parcel${(parcelCount ?? 1) === 1 ? '' : 's'} · ₱${booking.totalPrice}`
+                  ? `${parcelCount} parcel${parcelCount === 1 ? '' : 's'} · ₱${booking.totalPrice}`
                   : `${booking.numOfPassenger} pax · ₱${booking.totalPrice}`}
               </Text>
             </View>
@@ -662,7 +666,7 @@ export default function BookingStatus() {
                     style={styles.actionBtn}
                   />
                   <PrimaryButton
-                    label="Start Trip"
+                    label="Prepare Departure"
                     onPress={handleStartTrip}
                     loading={pending}
                     disabled={!canStart}
@@ -694,12 +698,12 @@ export default function BookingStatus() {
               <>
                 <Text style={styles.gateHint}>
                   {advanceLocked
-                    ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Start Trip opens when the slot arrives.`
+                    ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Prepare Departure opens when the slot arrives.`
                     : isCargo
-                      ? 'Confirm the cargo is loaded to start the trip.'
+                      ? 'Confirm the cargo is loaded to prepare departure.'
                       : bookerResolved && !companionsResolved
-                        ? 'Tick every passenger who is aboard to start the trip.'
-                        : 'Confirm everyone is on board to start the trip.'}
+                        ? 'Tick every passenger who is aboard to prepare departure.'
+                        : 'Confirm everyone is on board to prepare departure.'}
                 </Text>
                 {/* Nobody missed a boat that has not left yet. Cargo has no
                     passenger to no-show — hide it for cargo bookings. */}

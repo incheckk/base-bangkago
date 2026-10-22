@@ -1,3 +1,4 @@
+import { manilaDayStartMs, manilaTodayIso } from '../utils/date';
 import { supabase } from './supabase';
 
 export interface TripManifest {
@@ -116,8 +117,18 @@ export async function getActiveManifest(
    *
    * Filtering on the timestamp means a half-finished arrival can no longer
    * block the next trip, whatever its status says.
+   *
+   * Date floor: a draft/finalized manifest from an earlier day that never
+   * sailed is abandoned (ghost trip — yesterday's passengers, totals and
+   * "Finalized" button reappearing). A boat that genuinely departed stays
+   * visible until it arrives, so a sailing across midnight is not lost.
    */
-  if (!includeCompleted) q = q.is('actual_arrival_time', null);
+  if (!includeCompleted) {
+    const todayStart = new Date(manilaDayStartMs(manilaTodayIso())).toISOString();
+    q = q
+      .is('actual_arrival_time', null)
+      .or(`actual_departure_time.not.is.null,generated_at.gte.${todayStart}`);
+  }
 
   const { data, error } = await q
     .order('generated_at', { ascending: false })
@@ -149,15 +160,37 @@ export async function completeManifest(manifest: TripManifest): Promise<void> {
 }
 
 /** Archive every live draft/finalized manifest so the next insert is the
- *  only one getActiveManifest will surface. */
+ *  only one getActiveManifest will surface. A manifest that already sailed
+ *  is never cancelled — that would orphan the sailing record. */
 export async function cancelActiveManifests(bangkeroId: string): Promise<void> {
   const { error } = await supabase
     .from('trip_manifest')
     .update({ status: 'cancelled' })
     .eq('bangkero_id', bangkeroId)
-    .in('status', ['draft', 'finalized']);
+    .in('status', ['draft', 'finalized'])
+    .is('actual_departure_time', null);
 
   if (error) throw error;
+}
+
+/**
+ * The sailing clock. Single small write, verified on the way back: Departure
+ * only navigates to En Route once this returns a timestamp, so a boat can
+ * never reach the water with a null departure time (En Route reads
+ * `departure && !arrival`).
+ */
+export async function stampManifestDeparture(manifest: TripManifest): Promise<string> {
+  if (manifest.actualDepartureTime) return manifest.actualDepartureTime;
+  const { data, error } = await supabase
+    .from('trip_manifest')
+    .update({ actual_departure_time: new Date().toISOString() })
+    .eq('id', manifest.manifestId)
+    .eq('bangkero_id', manifest.bangkeroId)
+    .select('actual_departure_time')
+    .single();
+  if (error) throw error;
+  if (!data?.actual_departure_time) throw new Error('departure time was not saved');
+  return data.actual_departure_time as string;
 }
 
 export interface BoardedBooking {
@@ -189,18 +222,74 @@ export async function populateManifestDeparture(
   const now = new Date().toISOString();
   const uniqueBoarding = [...new Map(boarded.map((b) => [b.bookingId, b])).values()];
   const seatedByBooking = new Map<string, number>();
+  const namedByBooking = new Map<string, Set<string>>();
   for (const p of existingPax) {
     seatedByBooking.set(p.bookingId, (seatedByBooking.get(p.bookingId) ?? 0) + 1);
+    if (p.passengerId) {
+      const seen = namedByBooking.get(p.bookingId) ?? new Set<string>();
+      seen.add(p.passengerId);
+      namedByBooking.set(p.bookingId, seen);
+    }
   }
+
+  // Named rows, not ghost names: each seat is filled with the booker or a
+  // recorded companion who did not no-show. Only seats with no detail row
+  // fall back to "Passengers" (booked but the party was never named).
+  const sailingBookingIds = uniqueBoarding
+    .filter((b) => b.serviceType !== 'cargo' || b.cargoMode === 'accompanied')
+    .map((b) => b.bookingId);
+  const companionsByBooking = new Map<
+    string,
+    { id: string; name: string; noShow: boolean }[]
+  >();
+  if (sailingBookingIds.length) {
+    const { data: details, error: detailErr } = await supabase
+      .from('passenger_details')
+      .select('id, booking_id, first_name, last_name, no_show_at')
+      .in('booking_id', sailingBookingIds);
+    // A schema/RLS refusal must not block departure — rows fall back to the
+    // booker name.
+    if (detailErr) {
+      if (__DEV__) console.warn('[manifest] companion lookup skipped:', detailErr.message);
+    } else {
+      for (const c of details ?? []) {
+        const list = companionsByBooking.get(c.booking_id) ?? [];
+        list.push({
+          id: c.id as string,
+          name: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim(),
+          noShow: !!c.no_show_at,
+        });
+        companionsByBooking.set(c.booking_id, list);
+      }
+    }
+  }
+
   const paxRows: Record<string, unknown>[] = [];
   for (const b of uniqueBoarding) {
     // Stub cargo (piggyback/batched/solo) has nobody aboard; an accompanied
     // sender rides with the parcel, so it counts as one passenger.
     if (b.serviceType === 'cargo' && b.cargoMode !== 'accompanied') continue;
-    const missing = b.numOfPassenger - (seatedByBooking.get(b.bookingId) ?? 0);
+    const alreadySeated = seatedByBooking.get(b.bookingId) ?? 0;
+    const missing = b.numOfPassenger - alreadySeated;
+    if (missing <= 0) continue;
+
+    const alreadyNamed = namedByBooking.get(b.bookingId) ?? new Set<string>();
+    const companionRows = (companionsByBooking.get(b.bookingId) ?? []).filter(
+      (c) => !c.noShow && !alreadyNamed.has(c.id),
+    );
+    const pool: { name: string; passengerId: string | null }[] = [
+      { name: b.passengerName?.trim() || 'Passengers', passengerId: null },
+      ...companionRows.map((c) => ({ name: c.name || 'Passengers', passengerId: c.id })),
+    ];
+    // Seats already written by an earlier populate start with the booker —
+    // never add a second row for the same person.
+    if (alreadySeated > 0) pool.shift();
+
     for (let i = 0; i < missing; i++) {
+      const person = pool[i];
       paxRows.push({
-        passenger_name: b.passengerName?.trim() || 'Passengers',
+        passenger_name: person?.name ?? 'Passengers',
+        passenger_id: person?.passengerId ?? null,
         manifest_id: manifest.manifestId,
         booking_id: b.bookingId,
         boarded_at: now,

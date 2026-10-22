@@ -14,8 +14,10 @@ import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
-import { friendlyError, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
-import { cancelActiveManifests, createManifest, populateManifestDeparture } from '@/services/manifest.service';
+import { friendlyError, rejectBooking, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
+import {
+  cancelActiveManifests, createManifest, populateManifestDeparture, stampManifestDeparture,
+} from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
 import {
   getPaymentsForBookings, markBookingPaid,
@@ -64,6 +66,11 @@ export default function DepartureScreen() {
   const [genError, setGenError] = useState<string | null>(null);
   const [routeContext, setRouteContext] = useState<{ from: string; to: string } | null>(null);
   const [hasBangka, setHasBangka] = useState<boolean | null>(null);
+  // A manifest from a previous day that never sailed is ignored by
+  // getActiveManifest, so the screen can show "No manifest" while accepted
+  // trips exist. Draft one automatically, once per mount; the button below
+  // stays as the retry path when the network dropped.
+  const autoDraftTried = useRef(false);
 
   // Boarding split: who is confirmed aboard, and who is still on the pier.
   // A partial no-show / dispute (022) keeps the booking accepted with
@@ -307,6 +314,18 @@ export default function DepartureScreen() {
     setGenerating(false);
   }
 
+  // Fresh draft for today's accepted trips when no live manifest resolves.
+  // handleGenerate cancels stale actives first and never touches a manifest
+  // that already sailed.
+  useEffect(() => {
+    if (autoDraftTried.current || loading || generating || manifest) return;
+    if (!routeContext || hasBangka !== true || acceptedTrips.length === 0) return;
+    autoDraftTried.current = true;
+    void handleGenerate();
+    // handleGenerate changes identity every render; the ref guard makes the
+    // extra runs no-ops.
+  }, [acceptedTrips.length, generating, handleGenerate, hasBangka, loading, manifest, routeContext]);
+
   async function handleFinalize() {
     if (finalizeInFlight.current || !manifest) return;
     finalizeInFlight.current = true;
@@ -325,19 +344,50 @@ export default function DepartureScreen() {
     setFinalizing(false);
   }
 
+  /** Best effort: a request still held by this boat must not sit out its
+   *  3-minute hold while we are at sea — hand it to the next boat. The DB
+   *  excludes at-sea boats from new offers (067); this closes the race. */
+  async function releaseMyHolds() {
+    if (!bangkeroId) return;
+    try {
+      const { data } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('held_by', bangkeroId)
+        .eq('trip_stat', 'open');
+      await Promise.all((data ?? []).map((b) => rejectBooking(b.id as string).catch(() => {})));
+    } catch {
+      // best effort — a stale hold simply expires on its own
+    }
+  }
+
   async function handleDepart() {
-    if (departInFlight.current) return;
+    if (departInFlight.current || !manifest) return;
     departInFlight.current = true;
     setDeparting(true);
-    // Best effort: the manifest must record who sailed for Trip Summary to
-    // report real numbers — but never block the departure over it.
-    if (manifest) {
-      try {
-        await populateManifestDeparture(manifest, manifestTrips);
-      } catch (e) {
-        setGenError(`Could not record everyone aboard: ${friendlyError(e)}`);
-      }
+    setGenError(null);
+
+    // 1. Who is aboard — best effort. A snapshot failure must not strand the
+    //    boat at the pier; the boarding state is already on the bookings.
+    try {
+      await populateManifestDeparture(manifest, manifestTrips, { stampDeparture: false });
+    } catch (e) {
+      if (__DEV__) console.warn('[departure] manifest snapshot failed:', e);
     }
+
+    // 2. The sailing clock — required. En Route reads `departure &&
+    //    !arrival`, so leaving without a stamp lands on "No trip in
+    //    progress". Stay here and let the bangkero retry instead.
+    try {
+      await stampManifestDeparture(manifest);
+    } catch (e) {
+      setGenError(`Departure was not recorded — ${friendlyError(e)} Try again.`);
+      departInFlight.current = false;
+      setDeparting(false);
+      return;
+    }
+
+    // 3. Per-booking stamps + notifications — best effort.
     if (bangkeroId) {
       // Only today's sailing — future advance bookings sail another day
       // and must not be stamped or notified now.
@@ -375,7 +425,10 @@ export default function DepartureScreen() {
           // ignore — departure still proceeds, manifest is the record
         }
       }
+      void releaseMyHolds();
     }
+    departInFlight.current = false;
+    setDeparting(false);
     router.push('/(bangkero)/en-route');
   }
 

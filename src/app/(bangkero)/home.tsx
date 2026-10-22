@@ -225,8 +225,10 @@ export default function BangkeroHome() {
     [accepted.data, isCargoStub],
   );
   const hasActiveTrip = activeTrips.length > 0;
-  /** The trip currently at sea — has a departure stamp and no completion. */
-  const sailingTrip = activeTrips.find((b) => !!b.departTime) ?? null;
+  /** The trip currently at sea — departed, not yet arrived. A completed
+   *  trip keeps its depart stamp forever, so arrival must be checked too or
+   *  the home screen claims "SAILING NOW" on every past trip. */
+  const sailingTrip = activeTrips.find((b) => !!b.departTime && !b.arrivalTime) ?? null;
 
   // Port-queue presence + the clocks the chips tick against. `now`
   // advances every second; the boat's own fix is re-read every 15s so
@@ -558,6 +560,13 @@ export default function BangkeroHome() {
   /** Sail gate: confirm whether the bangkero realises the boat is not full. */
   function askSail() {
     const dayTrips = activeTrips.filter((t) => !isAdvance(t));
+    // Sail is gated on boarding — same rule the sheet's disabled button and
+    // Departure's "Ready to Depart" enforce.
+    if (dayTrips.some((t) => !t.onboardedAt)) {
+      closeSheet();
+      router.push('/(bangkero)/departure');
+      return;
+    }
     const load = dayTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
     const full = myCapacity !== null && load >= myCapacity;
     Alert.alert(
@@ -591,6 +600,12 @@ export default function BangkeroHome() {
   function closeSheet() {
     setSheetBooking(null);
     setSheetOpen(false);
+  }
+
+  /** Boarding lives on the departure checklist — the sheet only links to it. */
+  function openDepartureChecklist() {
+    closeSheet();
+    router.push('/(bangkero)/departure');
   }
 
   // Earnings count only trips that actually completed AND got paid,
@@ -1108,6 +1123,7 @@ export default function BangkeroHome() {
         onClose={closeSheet}
         onNotify={notifyPassengers}
         onScan={openScan}
+        onOpenDeparture={openDepartureChecklist}
         onSail={askSail}
       />
     </ScreenContainer>

@@ -20,10 +20,13 @@ export default function TripSummary() {
   const { user } = useAuth();
   // includeCompleted: arrived marks the manifest 'completed' before this
   // screen opens — without it the summary would render empty.
-  const { manifest, passengers, parcels, loading, error } = useTripManifest(user?.id ?? null, true);
+  const { manifest, parcels, loading, error } = useTripManifest(user?.id ?? null, true);
   const { data: ports } = usePorts();
   const [passengerFare, setPassengerFare] = useState(0);
   const [parcelFare, setParcelFare] = useState(0);
+  // Seats actually on the manifest; cancelled bookings' leftover rows are
+  // not passengers (they used to inflate the headline count).
+  const [passengerCount, setPassengerCount] = useState(0);
   const [fareLoading, setFareLoading] = useState(true);
   const [fareError, setFareError] = useState<string | null>(null);
   // No fare rows at all (not ₱0 of real fares) — a distinct empty state so
@@ -47,7 +50,8 @@ export default function TripSummary() {
           .select('booking_id')
           .eq('manifest_id', manifest.manifestId);
         if (seatErr) throw seatErr;
-        const seatIds = [...new Set((seatRows ?? []).map((r) => r.booking_id))];
+        const allSeats = seatRows ?? [];
+        const seatIds = [...new Set(allSeats.map((r) => r.booking_id))];
 
         // Cargo leg: manifest_parcels -> parcels.booking_id -> bookings.
         const parcelIds = [...new Set(parcels.map((p) => p.parcelId))];
@@ -66,23 +70,30 @@ export default function TripSummary() {
         if (ids.length === 0) {
           setPassengerFare(0);
           setParcelFare(0);
+          setPassengerCount(0);
           setFareEmpty(true);
           return;
         }
         setFareEmpty(false);
         const { data: bookings, error: bkErr } = await supabase
           .from('bookings')
-          .select('service_type, total_price')
+          .select('id, service_type, total_price, trip_stat')
           .in('id', ids);
         if (bkErr) throw bkErr;
         if (cancelled || !bookings) return;
+        // A booking cancelled after the manifest was written still has seat
+        // rows — it is not revenue for this sailing.
+        const sailed = bookings.filter((b) => b.trip_stat !== 'cancelled');
+        setPassengerCount(
+          allSeats.filter((r) => sailed.some((b) => b.id === r.booking_id)).length
+        );
         setPassengerFare(
-          bookings
+          sailed
             .filter((b) => b.service_type !== 'cargo')
             .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
         );
         setParcelFare(
-          bookings
+          sailed
             .filter((b) => b.service_type === 'cargo')
             .reduce((sum, b) => sum + Number(b.total_price ?? 0), 0)
         );
@@ -184,7 +195,7 @@ export default function TripSummary() {
 
         <View style={styles.statsRow}>
           <View style={styles.stat}>
-            <Text style={styles.statValue}>{passengers.length}</Text>
+            <Text style={styles.statValue}>{passengerCount}</Text>
             <Text style={styles.statLabel}>Passengers</Text>
           </View>
           <View style={styles.stat}>
@@ -200,7 +211,7 @@ export default function TripSummary() {
         <View style={styles.fareCard}>
           <Text style={styles.fareTitle}>Fare Breakdown</Text>
           <View style={styles.fareRow}>
-            <Text style={styles.fareLabel}>Passengers ({passengers.length})</Text>
+            <Text style={styles.fareLabel}>Passengers ({passengerCount})</Text>
             <Text style={styles.fareValue}>₱{passengerFare.toFixed(2)}</Text>
           </View>
           <View style={styles.fareRow}>

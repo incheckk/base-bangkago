@@ -41,6 +41,27 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-22 — Wording-only suspension rename (no migration, no
+  behaviour change; gates: tsc clean, lint 0 errors / 133 warnings, the
+  four edited page scripts parse).**
+  Manage Bangkeros and Manage Bangka no longer say Delete/Deleted/Restore:
+  the row action is **Suspend** (`admin_delete_bangkero` /
+  `admin_delete_bangka`, unchanged) the lower card is **Suspended
+  Bangkeros / Suspended Bangkas**, and its action is **Reactivate**. Copy
+  now states what the RPCs actually do (record + trip history kept, boat off
+  dispatch and the rental catalog, port queue closed, app sign-in blocked,
+  in-use vessels refuse). `manage-bangka`'s modal ids renamed
+  `deactivateModal/deactivateForm/openDeactivateModal` → `suspend*` so they
+  stop colliding with the separate Status → Deactivate action, which still
+  means `is_active = false`. Manage Users labels a suspended bangkero as
+  **Suspended** (badge red; filter option "Suspended (bangkero)" keeps the
+  `deleted` value because that row is reactivated from Manage Bangkeros,
+  not from the Status modal), `suspend-user.html` matches, and
+  `fetchUserDoc` now says "suspended" instead of "deleted" for
+  `bangkeros.is_deleted`. Left as is: the 048/049 RPC error strings still
+  say "already in Deleted Bangkeros" (double-click only; changing them
+  needs a migration) and the internal `listDeleted` / `softDelete` /
+  `delete` service names.
 - **2026-10-21 — Bookings & payments truthfulness batch: guarded admin
   booking cancel, escrow state transitions, combined date-range payment
   report (migration 066 PENDING — USER MUST RUN, after 065; gates: tsc

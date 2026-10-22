@@ -51,8 +51,8 @@
 
         <div class="cg-card p-3 mt-3">
           <div class="panel-head">
-            <h6 class="mb-0">Deleted Bangkeros</h6>
-            <span class="muted-note">Records are retained with their trip history and can be restored</span>
+            <h6 class="mb-0">Suspended Bangkeros</h6>
+            <span class="muted-note">Suspended accounts keep their records and trip history, and can be reactivated</span>
           </div>
           <div class="table-responsive">
             <table class="table table-theme align-middle mb-0">
@@ -61,7 +61,7 @@
                   <th>Bangkero</th>
                   <th>ID</th>
                   <th>Verification</th>
-                  <th>Deleted</th>
+                  <th>Suspended</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -195,8 +195,8 @@
                 <button class="btn btn-sm btn-bangkago" onclick="openDecisionModal(${i})">
                   <i class="bi bi-check2-square"></i> Update Application
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteBangkero(${i})">
-                  <i class="bi bi-person-x"></i> Delete
+                <button class="btn btn-sm btn-outline-danger" onclick="suspendBangkero(${i})">
+                  <i class="bi bi-pause-circle"></i> Suspend
                 </button>
               </div>
             </td>
@@ -206,7 +206,7 @@
 
     function renderDeletedTable(){
       if (!deletedBangkeros.length) {
-        deletedBangkeroBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No deleted bangkeros.</td></tr>';
+        deletedBangkeroBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No suspended bangkeros.</td></tr>';
         return;
       }
       deletedBangkeroBody.innerHTML = deletedBangkeros.map((b, i) => `
@@ -217,7 +217,7 @@
           <td>${b.deletedAt ? new Date(b.deletedAt).toLocaleDateString('en-PH') : '—'}</td>
           <td>
             <button class="btn btn-sm btn-outline-success" onclick="restoreBangkero(${i})">
-              <i class="bi bi-arrow-counterclockwise"></i> Restore Bangkero
+              <i class="bi bi-arrow-counterclockwise"></i> Reactivate
             </button>
           </td>
         </tr>
@@ -255,14 +255,17 @@
       }
     }
 
-    window.deleteBangkero = async function(index){
+    // 048/049 admin_delete_bangkero: keeps the record, takes the boat off
+    // dispatch and the rental catalog, closes the port queue and blocks app
+    // sign-in.
+    window.suspendBangkero = async function(index){
       const b = bangkeros[index];
-      if (!b || !confirm(`Move ${b.displayName} to Deleted Bangkeros? Their account and trip history will be retained.`)) return;
+      if (!b || !confirm(`Suspend ${b.displayName}? Their boat leaves dispatch and the rental catalog, they are removed from the port queue, and they cannot sign in to the app until reactivated.`)) return;
       try {
         await window.bangkagoBangkeros.softDelete(b.uid);
         await loadBangkeros();
       } catch(e) {
-        alert('Unable to delete bangkero: ' + e.message);
+        alert('Unable to suspend bangkero: ' + e.message);
       }
     };
 
@@ -273,7 +276,7 @@
         await window.bangkagoBangkeros.restore(b.uid);
         await loadBangkeros();
       } catch(e) {
-        alert('Unable to restore bangkero: ' + e.message);
+        alert('Unable to reactivate bangkero: ' + e.message);
       }
     };
 

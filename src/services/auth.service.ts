@@ -145,7 +145,7 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
       .maybeSingle();
     if (operatorError) throw operatorError;
     if (operator?.is_deleted) {
-      throw new Error('This Bangkero account has been deleted. Contact an administrator.');
+      throw new Error('This Bangkero account has been suspended. Contact an administrator.');
     }
   }
 

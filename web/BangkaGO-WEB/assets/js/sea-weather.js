@@ -17,21 +17,41 @@
   var kpi = document.getElementById('kpiWeather');
   if (!el && !kpi) return;
 
-  var lat = Number((el && el.dataset.lat) || 10.3022);
-  var lon = Number((el && el.dataset.lon) || 124.0184);
-  var place = (el && el.dataset.place) || 'Mactan';
+  var lat = Number((el && el.dataset.lat) || 10.27);
+  var lon = Number((el && el.dataset.lon) || 124.03);
+  var place = (el && el.dataset.place) || 'Mactan\u2013Olango';
 
   function describe(code) {
-    if (code === 0) return 'Clear';
-    if (code <= 3) return 'Partly cloudy';
-    if (code === 45 || code === 48) return 'Foggy';
-    if (code >= 95) return 'Thunderstorm';
-    if (code >= 80 || (code >= 51 && code <= 67)) return 'Rain';
-    return 'Cloudy';
+    // WMO codes in plain words — 3 is overcast, not "partly cloudy".
+    var WMO = {
+      0: 'Clear sky', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Fog', 48: 'Freezing fog',
+      51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle',
+      61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
+      80: 'Light showers', 81: 'Rain showers', 82: 'Heavy showers',
+      95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Severe thunderstorm'
+    };
+    return WMO[code] || (code >= 51 ? 'Rain' : 'Cloudy');
+  }
+
+  // Same thresholds as the app's WeatherCard: 25 km/h or 1 m is "take care",
+  // 40 km/h or 1.5 m is "consider delaying".
+  function advice(label, wind, wave) {
+    if (/thunderstorm/i.test(label) || wind >= 40 || (wave != null && wave >= 1.5)) {
+      return { cls: 'text-danger', text: 'Rough sea \u2014 consider delaying the trip.' };
+    }
+    if (wind >= 25 || (wave != null && wave >= 1)) {
+      return { cls: 'text-warning', text: 'Choppy \u2014 sail with care, life jackets on.' };
+    }
+    if (wave == null) {
+      return { cls: 'text-muted', text: 'Light wind \u2014 good to sail. Wave height unavailable.' };
+    }
+    return { cls: 'text-success', text: 'Calm sea, light wind \u2014 good to sail.' };
   }
 
   function paint(w, stale) {
     var waves = w.wave == null ? 'waves n/a' : w.wave + ' m waves';
+    var tip = advice(w.label, w.wind, w.wave);
     if (kpi) {
       kpi.textContent = w.temp + '\u00B0C \u00B7 ' + w.label;
       var detail = document.getElementById('kpiWeatherDetail');
@@ -50,6 +70,7 @@
           'Wind ' + w.wind + ' km/h ' + w.dir + '<br>' + waves +
         '</div>' +
       '</div>' +
+      '<div class="' + tip.cls + ' small fw-semibold mt-2">' + tip.text + '</div>' +
       '<div class="text-muted" style="font-size:10px;margin-top:4px">' +
         (stale ? 'Cached reading \u00B7 ' : '') +
         'Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>' +

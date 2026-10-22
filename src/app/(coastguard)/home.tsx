@@ -10,6 +10,7 @@ import { useAllPorts } from '@/hooks/useAllPorts';
 import { useAllPortQueues, usePorts } from '@/hooks/useSupabase';
 import { useRoutes } from '@/hooks/useRoutes';
 import { DWELL_MS } from '@/services/queue.service';
+import { STRAIT_POINT } from '@/services/weather.service';
 import { colors, numeric, radii, spacing, typography } from '@/theme/tokens';
 
 /** m:ss for the dwell countdowns on the queue rows. */
@@ -119,7 +120,7 @@ export default function CoastguardHome() {
       />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.weatherWrap}>
-          <WeatherCard latitude={10.26} longitude={124.0} place="Cebu Strait" />
+          <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
         </View>
 
         {/* ---------- waiting now ---------- */}

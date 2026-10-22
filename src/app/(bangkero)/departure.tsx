@@ -2,17 +2,19 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert, ScrollView, StyleSheet, Text, TextInput, View,
+  type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { WeatherCard } from '@/components/WeatherCard';
+import { useAllPorts } from '@/hooks/useAllPorts';
 import { useAuth } from '@/hooks/useAuth';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
-import { useWeatherData } from '@/hooks/useWeatherData';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
 import { friendlyError, rejectBooking, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
 import {
@@ -23,6 +25,7 @@ import {
   getPaymentsForBookings, markBookingPaid,
 } from '@/services/payment.service';
 import { supabase } from '@/services/supabase';
+import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
@@ -46,7 +49,9 @@ export default function DepartureScreen() {
   const { user } = useAuth();
   const bangkeroId = user?.id ?? null;
   const { manifest, passengers, parcels, loading, error: manifestError, finalizeManifest } = useTripManifest(bangkeroId);
-  const { data: weather, loading: weatherLoading } = useWeatherData(manifest?.departurePortId ?? null);
+  // Sea weather runs on the live Open-Meteo reading for the route (below),
+  // not the never-populated weather_data table.
+  const { data: ports } = useAllPorts();
   // Live working set: accepted only, no 10-row cap — older-created accepted
   // bookings used to fall outside the slice and split silently.
   // Future-dated (advance) bookings are excluded — today's departure list
@@ -156,6 +161,24 @@ export default function DepartureScreen() {
 
   const allChecked = CHECKLIST_ITEMS.every((item) => checked[item.key]);
   const manifestFinalized = manifest?.status === 'finalized';
+
+  // Midpoint of the sailing route's ports — the strait the boat actually
+  // crosses. Ports still missing coordinates (pre-063) fall back to the same
+  // point the other weather surfaces use.
+  const weatherPoint = useMemo(() => {
+    const points: { lat: number; lon: number }[] = [];
+    for (const id of [manifest?.departurePortId, manifest?.arrivalPortId]) {
+      const port = id ? ports.find((p) => p.portId === id) : undefined;
+      if (port && typeof port.latitude === 'number' && typeof port.longitude === 'number') {
+        points.push({ lat: port.latitude, lon: port.longitude });
+      }
+    }
+    if (points.length === 0) return { lat: STRAIT_POINT.lat, lon: STRAIT_POINT.lon };
+    return {
+      lat: points.reduce((sum, p) => sum + p.lat, 0) / points.length,
+      lon: points.reduce((sum, p) => sum + p.lon, 0) / points.length,
+    };
+  }, [manifest?.arrivalPortId, manifest?.departurePortId, ports]);
 
   const liveParcels = useMemo(() => {
     const sailingIds = new Set(acceptedTrips.map((t) => t.bookingId));
@@ -433,16 +456,39 @@ export default function DepartureScreen() {
   }
 
   const steps = ['Manifest', 'Checklist', 'Weather', 'Ready'];
-  const currentStep = manifestFinalized
-    ? allChecked && allBoarded && anyoneAboard ? 3 : 2
-    : 0;
+  // The highlight follows the section on screen, not the phase state: the
+  // labels name sections, so tapping a checklist box used to leave "Weather"
+  // lit while the checklist was in view. Offsets are measured on layout.
+  const stepOffsets = useRef<Record<number, number>>({});
+  const [currentStep, setCurrentStep] = useState(0);
+  function handleScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    let next = 0;
+    for (let i = 1; i < steps.length; i++) {
+      const y = stepOffsets.current[i];
+      if (y !== undefined && y <= contentOffset.y + 140) next = i;
+    }
+    // The footer can never cross the top of the viewport — the bottom of the
+    // scroll is the Ready step.
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 24) {
+      next = steps.length - 1;
+    }
+    setCurrentStep((prev) => (prev === next ? prev : next));
+  }
 
   return (
     <ScreenContainer padded={false}>
       <BangkeroScreenHeader eyebrow="MANIFEST & CHECKLIST" title="Departure" />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
 
         <ProgressBar steps={steps} current={currentStep} />
+
+        <View onLayout={(e) => { stepOffsets.current[0] = e.nativeEvent.layout.y; }}>
 
         {/* ---------- boarding split ---------- */}
         {acceptedTrips.length > 0 && (
@@ -606,42 +652,28 @@ export default function DepartureScreen() {
               />
             )}
 
-            <Text style={styles.sectionLabel}>WEATHER CHECK</Text>
-            <View style={styles.weatherCard}>
-              {weatherLoading ? (
-                <Text style={styles.weatherText}>Checking conditions…</Text>
-              ) : weather ? (
-                <View style={styles.weatherRow}>
-                  <Text style={styles.weatherIcon}>{weather.isSafe ? '☀️' : '⛈️'}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.weatherLabel}>
-                      {weather.weatherCondition ?? 'Unknown'}
+            <View onLayout={(e) => { stepOffsets.current[1] = e.nativeEvent.layout.y; }}>
+              <Text style={styles.sectionLabel}>SAFETY CHECKLIST</Text>
+              <View style={styles.checklist}>
+                {CHECKLIST_ITEMS.map((item) => {
+                  const isChecked = !!checked[item.key];
+                  return (
+                    <Text
+                      key={item.key}
+                      onPress={() => toggleCheck(item.key)}
+                      style={[styles.checkItem, isChecked && styles.checkItemDone]}
+                    >
+                      <Text style={styles.checkIcon}>{isChecked ? '✅' : item.icon}</Text>
+                      {' '}{item.label}
                     </Text>
-                    <Text style={[styles.weatherStatus, weather.isSafe ? styles.weatherSafe : styles.weatherUnsafe]}>
-                      {weather.isSafe ? 'Conditions are safe for departure' : 'Unsafe conditions — consider delaying'}
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <Text style={styles.weatherText}>Weather data unavailable</Text>
-              )}
+                  );
+                })}
+              </View>
             </View>
 
-            <Text style={styles.sectionLabel}>SAFETY CHECKLIST</Text>
-            <View style={styles.checklist}>
-              {CHECKLIST_ITEMS.map((item) => {
-                const isChecked = !!checked[item.key];
-                return (
-                  <Text
-                    key={item.key}
-                    onPress={() => toggleCheck(item.key)}
-                    style={[styles.checkItem, isChecked && styles.checkItemDone]}
-                  >
-                    <Text style={styles.checkIcon}>{isChecked ? '✅' : item.icon}</Text>
-                    {' '}{item.label}
-                  </Text>
-                );
-              })}
+            <View onLayout={(e) => { stepOffsets.current[2] = e.nativeEvent.layout.y; }}>
+              <Text style={styles.sectionLabel}>WEATHER CHECK</Text>
+              <WeatherCard latitude={weatherPoint.lat} longitude={weatherPoint.lon} />
             </View>
 
             {/* ---------- payment (pay-on-board, 012) ---------- */}
@@ -711,7 +743,10 @@ export default function DepartureScreen() {
               </>
             )}
 
-            <View style={styles.footer}>
+            <View
+              style={styles.footer}
+              onLayout={(e) => { stepOffsets.current[3] = e.nativeEvent.layout.y; }}
+            >
               <PrimaryButton
                 label="Ready to Depart"
                 onPress={handleDepart}
@@ -758,6 +793,7 @@ export default function DepartureScreen() {
             )}
           </View>
         )}
+        </View>
       </ScrollView>
     </ScreenContainer>
   );
@@ -821,21 +857,6 @@ const styles = StyleSheet.create({
   tripValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
   tripValueOk: { color: colors.primary },
   divider: { height: 1, backgroundColor: colors.borderSubtle },
-
-  weatherCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: spacing.lg,
-  },
-  weatherRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  weatherIcon: { flexShrink: 1, fontSize: 28 },
-  weatherLabel: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
-  weatherStatus: { flexShrink: 1, fontSize: 12, marginTop: 2 },
-  weatherSafe: { color: colors.primary },
-  weatherUnsafe: { color: colors.danger },
-  weatherText: { color: colors.textMuted, fontSize: 14 },
 
   checklist: {
     backgroundColor: colors.surface,

@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 import { Icon, type IconName } from './Icon';
 import { useLiveWeather } from '../hooks/useLiveWeather';
+import type { LiveWeather } from '../services/weather.service';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 /**
@@ -27,6 +28,24 @@ const TINT_FOR = {
   rain: colors.info,
   storm: colors.danger,
 } as const;
+
+/**
+ * One sentence a bangkero can act on. Wind and wave height decide it — the
+ * WMO code only colors the icon. Thresholds are the demo's: 25 km/h or 1 m
+ * is "take care", 40 km/h or 1.5 m is "consider delaying".
+ */
+function sailingAdvice(w: LiveWeather): { color: string; text: string } {
+  if (w.kind === 'storm' || w.windKmh >= 40 || (w.waveM ?? 0) >= 1.5) {
+    return { color: colors.danger, text: 'Rough sea — consider delaying the trip.' };
+  }
+  if (w.windKmh >= 25 || (w.waveM ?? 0) >= 1.0) {
+    return { color: colors.warning, text: 'Choppy — sail with care, life jackets on.' };
+  }
+  if (w.waveM === null) {
+    return { color: colors.textSecondary, text: 'Light wind — good to sail. Wave height unavailable.' };
+  }
+  return { color: colors.primary, text: 'Calm sea, light wind — good to sail.' };
+}
 
 interface Props {
   latitude: number;
@@ -63,6 +82,7 @@ export function WeatherCard({ latitude, longitude, place, variant = 'card', styl
   }
 
   const waves = data.waveM !== null ? `${data.waveM} m waves` : 'waves n/a';
+  const advice = sailingAdvice(data);
 
   if (variant === 'bar') {
     return (
@@ -99,6 +119,8 @@ export function WeatherCard({ latitude, longitude, place, variant = 'card', styl
         <Text style={styles.metric}>{waves}</Text>
       </View>
 
+      <Text style={[styles.advice, { color: advice.color }]}>{advice.text}</Text>
+
       <Text style={styles.credit}>
         {data.stale ? 'Cached reading · ' : ''}Weather data by Open-Meteo
       </Text>
@@ -121,6 +143,7 @@ const styles = StyleSheet.create({
   place: { ...typography.label, color: colors.textMuted, flexShrink: 0 },
   metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, marginTop: spacing.md },
   metric: { ...typography.bodyStrong, color: colors.textSecondary, fontSize: 13 },
+  advice: { ...typography.bodyStrong, fontSize: 13, marginTop: spacing.sm },
   credit: { ...typography.caption, color: colors.textMuted, fontSize: 10, marginTop: spacing.sm },
 
   bar: {

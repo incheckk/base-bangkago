@@ -63,13 +63,43 @@ export interface LiveWeather {
 const WEATHER_TTL_MS = 15 * 60 * 1000;
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
+/** Middle of the Mactan–Olango crossing. Every surface quotes this point so
+ *  two screens can never show different weather for the same sea. */
+export const STRAIT_POINT = { lat: 10.27, lon: 124.03 };
+
+/**
+ * WMO codes Open-Meteo returns, in words a passenger understands. Code 3 is
+ * overcast (the old range check called 1–3 all "Partly cloudy"), and drizzle
+ * vs showers vs rain were all flattened to "Rain".
+ */
+const WMO: Record<number, { kind: LiveWeather['kind']; condition: string }> = {
+  0: { kind: 'clear', condition: 'Clear sky' },
+  1: { kind: 'clear', condition: 'Mostly clear' },
+  2: { kind: 'partly', condition: 'Partly cloudy' },
+  3: { kind: 'cloud', condition: 'Overcast' },
+  45: { kind: 'fog', condition: 'Fog' },
+  48: { kind: 'fog', condition: 'Freezing fog' },
+  51: { kind: 'rain', condition: 'Light drizzle' },
+  53: { kind: 'rain', condition: 'Drizzle' },
+  55: { kind: 'rain', condition: 'Heavy drizzle' },
+  61: { kind: 'rain', condition: 'Light rain' },
+  63: { kind: 'rain', condition: 'Rain' },
+  65: { kind: 'rain', condition: 'Heavy rain' },
+  80: { kind: 'rain', condition: 'Light showers' },
+  81: { kind: 'rain', condition: 'Rain showers' },
+  82: { kind: 'rain', condition: 'Heavy showers' },
+  95: { kind: 'storm', condition: 'Thunderstorm' },
+  96: { kind: 'storm', condition: 'Thunderstorm with hail' },
+  99: { kind: 'storm', condition: 'Severe thunderstorm' },
+};
+
 function describe(code: number): { kind: LiveWeather['kind']; condition: string } {
-  if (code === 0) return { kind: 'clear', condition: 'Clear' };
-  if (code <= 3) return { kind: 'partly', condition: 'Partly cloudy' };
-  if (code === 45 || code === 48) return { kind: 'fog', condition: 'Foggy' };
-  if (code >= 95) return { kind: 'storm', condition: 'Thunderstorm' };
-  if (code >= 80 || (code >= 51 && code <= 67)) return { kind: 'rain', condition: 'Rain' };
-  return { kind: 'cloud', condition: 'Cloudy' };
+  // Snow/sleet codes never happen here; the range fallback keeps them sane.
+  return WMO[code]
+    ?? {
+      kind: code >= 95 ? 'storm' : code >= 51 ? 'rain' : 'cloud',
+      condition: code >= 51 ? 'Rain' : 'Cloudy',
+    };
 }
 
 async function fetchJson(url: string): Promise<any> {

@@ -33,6 +33,7 @@ import {
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
 import { supabase } from '@/services/supabase';
+import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models';
@@ -899,7 +900,7 @@ export default function BangkeroHome() {
         )}
 
         <View style={styles.weatherWrap}>
-          <WeatherCard latitude={10.3022} longitude={124.0184} variant="bar" />
+          <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} variant="bar" />
         </View>
 
         {!!actionError && (

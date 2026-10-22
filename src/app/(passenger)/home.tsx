@@ -23,6 +23,7 @@ import {
 import { scheduleLocalNotification } from '@/services/notification.service';
 import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
 import { supabase } from '@/services/supabase';
+import { STRAIT_POINT } from '@/services/weather.service';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, ParcelDoc, PortDoc } from '@/types/models';
 
@@ -580,7 +581,7 @@ export default function PassengerHome() {
           </ScrollView>
 
           <View style={styles.weatherWrap}>
-            <WeatherCard latitude={10.3022} longitude={124.0184} variant="bar" />
+            <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} variant="bar" />
           </View>
 
           <View style={styles.sectionHead}>

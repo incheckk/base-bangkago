@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useAuth } from '@/hooks/useAuth';
+import { STRAIT_POINT } from '@/services/weather.service';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 /**
@@ -150,7 +151,7 @@ export default function AdminHome() {
             {/* Surface 2 of 2. Group labels sit outside the card so the card
                 itself stays one unbroken list to run a thumb down. */}
             <View style={styles.weatherWrap}>
-              <WeatherCard latitude={10.3022} longitude={124.0184} place="Mactan" />
+              <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
             </View>
 
             <View style={styles.section}>

@@ -10,12 +10,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
+import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
 import { WeatherCard } from '@/components/WeatherCard';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useActiveCargoDeliveries, useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings,
@@ -94,9 +96,48 @@ function deliveryNeedsAttention(parcel: ParcelDoc): boolean {
     (parcel.approvalStatus === 'rejected' || parcel.approvalStatus === 'timeout');
 }
 
+/** Five taps around the real home screen — the order a passenger uses it in. */
+const PASSENGER_COACH: CoachStep[] = [
+  {
+    target: 'p.status',
+    title: 'Boats available now',
+    body: 'This bar shows how many operators are online and how many are waiting at the port nearest you. If it reads zero, nobody can accept yet.',
+  },
+  {
+    target: 'p.cta',
+    title: 'Start here to book',
+    body: 'Tap Book a ride to choose your departure and destination ports. The fare is set per route, so you see the price before you confirm.',
+    action: 'Next',
+  },
+  {
+    target: 'p.tiles',
+    title: 'Other services',
+    body: 'Island hopping, Padala parcel delivery, and whole-boat rental. Swipe sideways to see them all.',
+  },
+  {
+    target: 'p.sheet',
+    title: 'Drag for your trips',
+    body: 'Pull this handle up to see your recent bookings, or down to get the full map back.',
+  },
+  {
+    target: 'p.menu',
+    title: 'Everything else lives here',
+    body: 'Your bookings, rentals, profile and sign out. That is the whole app — tap Got it and book your first trip.',
+  },
+];
+
 export default function PassengerHome() {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
+  const tour = useOnboarding(user?.id ?? null);
+  const coachRects = useCoachRects();
+  // Each of these marks one real control on this screen, measured where it
+  // actually sits — nothing in the tutorial is a drawing of the UI.
+  const tMenu = useCoachTarget('p.menu');
+  const tStatus = useCoachTarget('p.status');
+  const tSheet = useCoachTarget('p.sheet');
+  const tCta = useCoachTarget('p.cta');
+  const tTiles = useCoachTarget('p.tiles');
   const ports = usePorts();
   const bangkeros = useAvailableBangkeroCount();
   const bookings = useRecentBookings(user?.id ?? null, 10);
@@ -375,14 +416,16 @@ export default function PassengerHome() {
               </View>
             )}
           </Pressable>
-          <Pressable
-            onPress={() => setDrawerOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Open menu"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="menu" size={22} color={colors.text} />
-          </Pressable>
+          <View {...tMenu}>
+            <Pressable
+              onPress={() => setDrawerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open menu"
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="menu" size={22} color={colors.text} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -392,7 +435,7 @@ export default function PassengerHome() {
           unrelated alerts and ate 36pt more of the map than they needed to.
           They are one fact — "what's available near me" — so they share one
           bar, split by a rule. The queue segment only exists with a GPS fix. */}
-      <View style={[styles.statusBar, { top: insets.top + 76 }]}>
+      <View {...tStatus} style={[styles.statusBar, { top: insets.top + 76 }]}>
         <View style={styles.statusSeg}>
           <View style={[styles.dot, bangkeros.data === 0 && styles.dotOff]} />
           <Text style={styles.statusText} numberOfLines={1}>
@@ -517,7 +560,7 @@ export default function PassengerHome() {
       <Animated.View style={[styles.sheet, sheetStyle]}>
         <GestureDetector gesture={handleGesture}>
           {/* Padded well beyond the 4pt bar so the drag target is finger-sized. */}
-          <View style={styles.handleZone}>
+          <View {...tSheet} style={styles.handleZone}>
             <Animated.View style={[styles.grabber, grabberStyle]} />
           </View>
         </GestureDetector>
@@ -532,6 +575,7 @@ export default function PassengerHome() {
           {/* Primary action leads the sheet. It used to sit below the tile row,
               so the one thing 90% of passengers open this app to do was the
               second thing they saw. */}
+          <View {...tCta}>
           <Pressable
             onPress={() => router.push('/(passenger)/quick-ride')}
             accessibilityRole="button"
@@ -547,7 +591,9 @@ export default function PassengerHome() {
             </View>
             <Icon name="forward" size={20} color={colors.primaryText} />
           </Pressable>
+          </View>
 
+          <View {...tTiles}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -579,6 +625,7 @@ export default function PassengerHome() {
               </Pressable>
             ))}
           </ScrollView>
+          </View>
 
           <View style={styles.weatherWrap}>
             <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} variant="bar" />
@@ -674,6 +721,16 @@ export default function PassengerHome() {
           </View>
         </View>
       </Modal>
+
+      {/* First run only, keyed off the signed-in uid so a shared demo phone
+          gives each account its own. Mounted last so the dimmers sit above
+          the sheet and the map. */}
+      <CoachOverlay
+        visible={tour.show}
+        steps={PASSENGER_COACH}
+        rects={coachRects}
+        onDone={tour.dismiss}
+      />
     </View>
   );
 }
@@ -939,5 +996,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   noticeActions: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch' },
+
   noticeActionBtn: { flex: 1 },
 });

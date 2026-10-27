@@ -57,12 +57,18 @@ const MARKER_ACTIVE_COLOR = colors.mapMarkerActive;
 const ROUTE_COLOR = colors.primary;
 const VESSEL_COLOR = colors.danger;
 
+/**
+ * The page is built from the PORT LIST ONLY.
+ *
+ * Selection, the route line and vessel positions used to be baked into this
+ * string, which meant tapping a port produced a new html prop, reloaded the
+ * WebView, and re-ran `setView` — so the map snapped back to the default
+ * corridor and threw away whatever the passenger had panned or zoomed to.
+ * Those now arrive through `window.__apply`, which redraws the markers and
+ * never touches the view.
+ */
 function buildLeafletHTML(
   ports: PortDoc[],
-  fromPortId: string | null,
-  toPortId: string | null,
-  selectedPortId: string | null,
-  vessels: { latitude: number; longitude: number; speed?: number | null; bangkaId?: string }[],
   tappable: boolean,
   draggable: boolean,
 ): string {
@@ -78,51 +84,18 @@ function buildLeafletHTML(
    * structure: a quiet ring when idle, a filled core on the route, and a
    * pulsing halo under the selected one.
    */
+  // Ports are emitted once, with no state. `window.__apply` paints them.
   const portMarkers = validPorts.map((p) => {
-    const isOnRoute = p.portId === fromPortId || p.portId === toPortId;
-    const isSelected = p.portId === selectedPortId;
-    const state = isSelected ? 'sel' : isOnRoute ? 'route' : 'idle';
     const label = p.portName.replace(/'/g, "\\'");
     const id = p.portId.replace(/'/g, "\\'");
-    // When the screen owns the tap, it draws its own callout — a Leaflet
-    // popup on top of that would be the same fact rendered twice.
     const behaviour = tappable
       ? `.on('click', function () { send({ type: 'portPress', portId: '${id}' }); })`
       : `.bindPopup('<b>${label}</b>')`;
-    // Names only for the ports that matter right now. Nine permanent labels
-    // at zoom 11 overlap into an unreadable stack.
-    const tip = state === 'idle'
-      ? ''
-      : `.bindTooltip('${label}', { permanent: true, direction: 'top', offset: [0, -14], className: 'portTip' })`;
     return `
-      L.marker([${p.latitude}, ${p.longitude}], {
-        icon: pinIcon('${state}'),
-        keyboard: false,
-        riseOnHover: true
-      }).addTo(map)${behaviour}${tip};
-    `;
-  }).join('\n');
-
-  // Route line between selected ports
-  const from = validPorts.find((p) => p.portId === fromPortId);
-  const to = validPorts.find((p) => p.portId === toPortId);
-  const routeLine = from && to
-    ? `L.polyline([[${from.latitude}, ${from.longitude}], [${to.latitude}, ${to.longitude}]], {
-        color: '${ROUTE_COLOR}', weight: 3, dashArray: '8 6', opacity: 0.8
-      }).addTo(map);`
-    : '';
-
-  // Vessel position markers
-  const vesselMarkers = vessels.map((v, i) => {
-    const speedLabel = v.speed != null ? `${v.speed.toFixed(1)} knots` : 'N/A';
-    const idLabel = v.bangkaId ? v.bangkaId.slice(0, 8) : `Vessel ${i + 1}`;
-    // A boat is a live reading, so it pulses. A port never does.
-    return `
-      L.marker([${v.latitude}, ${v.longitude}], {
-        icon: pinIcon('vessel'),
-        keyboard: false,
-        zIndexOffset: 1000
-      }).addTo(map).bindPopup('<b>${idLabel}</b><br/>Speed: ${speedLabel}');
+      PORTS['${id}'] = { name: '${label}', marker:
+        L.marker([${p.latitude}, ${p.longitude}], {
+          icon: pinIcon('idle'), keyboard: false, riseOnHover: true
+        }).addTo(map)${behaviour} };
     `;
   }).join('\n');
 
@@ -273,9 +246,45 @@ function buildLeafletHTML(
               maxZoom: 19
             }).addTo(map);
 
+            var PORTS = {}, ROUTE = null, VESSELS = [];
             ${portMarkers}
-            ${routeLine}
-            ${vesselMarkers}
+
+            /*
+             * Repaint markers in place. Called on every selection change
+             * instead of rebuilding the page, so the passenger's pan and
+             * zoom survive a tap. Nothing here calls setView.
+             */
+            window.__apply = function (s) {
+              Object.keys(PORTS).forEach(function (id) {
+                var p = PORTS[id];
+                var state = id === s.selected ? 'sel'
+                  : (id === s.from || id === s.to) ? 'route' : 'idle';
+                p.marker.setIcon(pinIcon(state));
+                // Names only for the ports that matter right now; nine
+                // permanent labels at zoom 11 overlap into a stack.
+                if (p.marker.getTooltip()) p.marker.unbindTooltip();
+                if (state !== 'idle') {
+                  p.marker.bindTooltip(p.name, {
+                    permanent: true, direction: 'top',
+                    offset: [0, -14], className: 'portTip'
+                  });
+                }
+              });
+
+              if (ROUTE) { map.removeLayer(ROUTE); ROUTE = null; }
+              if (s.line && s.line.length === 2) {
+                ROUTE = L.polyline(s.line, {
+                  color: '${ROUTE_COLOR}', weight: 3, dashArray: '8 6', opacity: 0.8
+                }).addTo(map);
+              }
+
+              VESSELS.forEach(function (m) { map.removeLayer(m); });
+              VESSELS = (s.vessels || []).map(function (v) {
+                return L.marker([v.lat, v.lng], {
+                  icon: pinIcon('vessel'), keyboard: false, zIndexOffset: 1000
+                }).addTo(map).bindPopup('<b>' + v.label + '</b><br/>Speed: ' + v.speed);
+              });
+            };
 
             send({ type: 'ready' });
           } catch (e) {
@@ -303,12 +312,40 @@ export function OSMMap({
   const webRef = useRef<WebView>(null);
   const failedRef = useRef(false);
 
+  // Depends on the port list and the two static flags only. Selection is NOT
+  // in here on purpose: adding it back would reload the page on every tap and
+  // reset the view, which is the bug this shape exists to prevent.
   const html = useMemo(
-    () => buildLeafletHTML(
-      ports, fromPortId, toPortId, selectedPortId, vessels, !!onPortPress, draggable,
-    ),
-    [ports, fromPortId, toPortId, selectedPortId, vessels, onPortPress, draggable],
+    () => buildLeafletHTML(ports, !!onPortPress, draggable),
+    [ports, onPortPress, draggable],
   );
+
+  /** Marker state, pushed into the live page rather than re-rendered into it. */
+  const applyState = useCallback(() => {
+    const valid = ports.filter((p) => p.latitude && p.longitude);
+    const from = valid.find((p) => p.portId === fromPortId);
+    const to = valid.find((p) => p.portId === toPortId);
+    const payload = {
+      from: fromPortId,
+      to: toPortId,
+      selected: selectedPortId,
+      line: from && to
+        ? [[from.latitude, from.longitude], [to.latitude, to.longitude]]
+        : null,
+      vessels: vessels.map((v, i) => ({
+        lat: v.latitude,
+        lng: v.longitude,
+        label: v.bangkaId ? v.bangkaId.slice(0, 8) : `Vessel ${i + 1}`,
+        speed: v.speed != null ? `${v.speed.toFixed(1)} knots` : 'N/A',
+      })),
+    };
+    webRef.current?.injectJavaScript(
+      `window.__apply && window.__apply(${JSON.stringify(payload)}); true;`
+    );
+  }, [ports, fromPortId, toPortId, selectedPortId, vessels]);
+
+  // Repaint whenever selection or vessel positions change.
+  useEffect(() => { applyState(); }, [applyState]);
 
   /** Fires once — a tile error and a load timeout can both arrive. */
   const fail = useCallback(() => {
@@ -334,6 +371,9 @@ export function OSMMap({
       return;
     }
     if (msg.type === 'ready') {
+      // The page just finished building its markers; paint the current
+      // selection into it. Anything injected before this is dropped.
+      applyState();
       readyRef.current = true;
       return;
     }
@@ -347,7 +387,7 @@ export function OSMMap({
       const port = ports.find((p) => p.portId === msg.portId);
       if (port) onPortPress?.(port);
     }
-  }, [ports, onPortPress, fail]);
+  }, [ports, onPortPress, fail, applyState]);
 
   return (
     <View style={fill ? styles.fill : [styles.wrap, { height }]}>

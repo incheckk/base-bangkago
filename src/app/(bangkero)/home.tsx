@@ -6,6 +6,7 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { BangkeroTripSheet } from '@/components/BangkeroTripSheet';
 import { DemandBadge } from '@/components/DemandBadge';
 import { EarningsCard } from '@/components/EarningsCard';
+import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { Icon } from '@/components/Icon';
@@ -14,6 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { WeatherCard } from '@/components/WeatherCard';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
@@ -68,8 +70,39 @@ function categoryLabel(b: BookingDoc, pkgName?: string): string | null {
 }
 
 
+/** Three taps on the controls a bangkero actually needs on day one. */
+const BANGKERO_COACH: CoachStep[] = [
+  {
+    target: 'b.status',
+    title: 'Go online to get work',
+    body: 'Flip this switch to start receiving requests. While you are offline nothing reaches you, and it locks itself during an active trip so you cannot disappear mid-sail.',
+  },
+  {
+    target: 'b.gates',
+    title: 'What you need cleared',
+    // These rows are a readout, not controls — the copy used to say "tap any
+    // red one to fix it", which promised something GateRow cannot do. The
+    // actual way out of a red Documents row is the button below this card.
+    body: 'Documents, rating, boat and GPS. All four must pass before you can accept a trip. A red row blocks you, and the button to fix it appears below this card.',
+  },
+  {
+    // Was the earnings row, which reads zero for a new bangkero — a final
+    // step pointing at an empty figure teaches nothing. The profile button
+    // is always there and is where the rest of the app lives, since this
+    // role has no side menu.
+    target: 'b.profile',
+    title: 'Everything else is here',
+    body: 'Your trips, earnings, boat documents, ratings and the SOS alert all live in your profile. That is the whole app — tap Got it and go online.',
+  },
+];
+
 export default function BangkeroHome() {
   const { user, profile } = useAuth();
+  const tour = useOnboarding(user?.id ?? null);
+  const coachRects = useCoachRects();
+  const tStatus = useCoachTarget('b.status');
+  const tGates = useCoachTarget('b.gates');
+  const tProfile = useCoachTarget('b.profile');
   const uid = user?.id ?? null;
 
   const notifications = useNotifications(uid);
@@ -775,14 +808,16 @@ export default function BangkeroHome() {
                 </View>
               )}
             </Pressable>
-            <Pressable
-              onPress={() => router.replace('/(bangkero)/profile')}
-              accessibilityRole="button"
-              accessibilityLabel="Profile"
-              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            >
-              <Icon name="profile" size={20} color={colors.text} />
-            </Pressable>
+            <View {...tProfile}>
+              <Pressable
+                onPress={() => router.replace('/(bangkero)/profile')}
+                accessibilityRole="button"
+                accessibilityLabel="Profile"
+                style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+              >
+                <Icon name="profile" size={20} color={colors.text} />
+              </Pressable>
+            </View>
           </View>
         }
       />
@@ -799,13 +834,19 @@ export default function BangkeroHome() {
               {available ? 'ONLINE' : 'OFFLINE'}
             </Text>
             <View style={styles.statusSpacer} />
-            <Switch
-              value={available}
-              onValueChange={toggle}
-              disabled={bangkero.loading || !bangkero.data || hasActiveTrip || gatesLocked}
-              trackColor={{ false: colors.border, true: colors.primaryDark }}
-              thumbColor={available ? colors.primary : colors.textMuted}
-            />
+            {/* The coach mark rings the switch, not the card around it: the
+                step says "flip this switch", so anything wider would point
+                at the wrong thing. Switch has its own ref type, hence the
+                wrapper. */}
+            <View {...tStatus}>
+              <Switch
+                value={available}
+                onValueChange={toggle}
+                disabled={bangkero.loading || !bangkero.data || hasActiveTrip || gatesLocked}
+                trackColor={{ false: colors.border, true: colors.primaryDark }}
+                thumbColor={available ? colors.primary : colors.textMuted}
+              />
+            </View>
           </View>
 
           <Text style={styles.statusHint}>
@@ -853,7 +894,7 @@ export default function BangkeroHome() {
               decide whether the switch can move, documents + rating
               decide whether offers and Accept unlock. Rows always show
               the real state — bypass changes behaviour, not the truth. */}
-          <View style={styles.gateWrap}>
+          <View {...tGates} style={styles.gateWrap}>
             <Text style={styles.gateTitle}>READINESS</Text>
             <GateRow
               ok={gatesBypass || verified}
@@ -1127,6 +1168,14 @@ export default function BangkeroHome() {
         onOpenDeparture={openDepartureChecklist}
         onSail={askSail}
       />
+
+      {/* First run only — see the passenger home for the keying rationale. */}
+      <CoachOverlay
+        visible={tour.show}
+        steps={BANGKERO_COACH}
+        rects={coachRects}
+        onDone={tour.dismiss}
+      />
     </ScreenContainer>
   );
 }
@@ -1220,6 +1269,7 @@ function RequestBody({
 }
 
 const styles = StyleSheet.create({
+
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
 
   // ---------- header ----------

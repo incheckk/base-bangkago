@@ -54,7 +54,16 @@
         .portal-head {
             background: linear-gradient(135deg, var(--blue-900), var(--blue-800));
             color: #fff;
-            padding: 1.1rem 1.25rem
+            padding: 1.1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: .85rem
+        }
+
+        .portal-logo {
+            width: 52px;
+            height: 52px;
+            flex-shrink: 0
         }
 
         .portal-head h1 {
@@ -170,8 +179,11 @@
 <body>
     <div class="portal-wrap">
         <div class="portal-head">
-            <h1>BangkaGo Access Portal</h1>
-            <p>Role-based routing: Admin or LGU/Coast Guard</p>
+            <img class="portal-logo" src="assets/img/brand/seal.svg" alt="" />
+            <div>
+                <h1>BangkaGo Access Portal</h1>
+                <p>Role-based routing: Admin or LGU/Coast Guard</p>
+            </div>
         </div>
 
         <div class="portal-body">

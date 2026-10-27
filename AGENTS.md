@@ -41,6 +41,36 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-27 — Brand system: one boat, three frames (no migration;
+  gates: tsc clean, lint 0 errors / 136 warnings, expo-doctor 20/21 — the
+  four SDK-57 patch drifts: expo, expo-location, expo-notifications,
+  expo-router, all pre-existing; do NOT `expo install --check`).**
+  - `src/components/Logo.tsx` (`variant: 'mark' | 'tile' | 'seal'`) plus
+    `colors.hull / cream / sun` in `tokens.ts`. The boat geometry is shared
+    with `web/assets/img/brand/{mark,tile,seal}.svg` and
+    `brand-preview.html` — redraw in all three or not at all.
+  - **Welcome screen** swaps the 96px ring + Ionicons `boat` for the seal at
+    112px; the title splits `Bangka` + teal `Go`. The bare mark is for light
+    grounds only — the navy hull vanishes on `#0A1620`.
+  - **Icon / splash / favicon replaced** (were Expo template art): `icon.png`
+    is the cream tile, Android foreground + monochrome are the transparent
+    boat at 58.6% (inside the 66dp safe circle), `splash-icon.png` is the
+    rounded tile at `imageWidth` 140 on `#0A1620`, `adaptiveIcon` is
+    `#F7F8F6` with no `backgroundImage` (file deleted).
+  - **Web:** landing loader = seal, nav + footer = tile, both dashboard
+    sidebars = tile (logo box 80→64px, img 74→56px, teal halo → soft
+    shadow), portal login header = seal (it had no logo at all). The kayak
+    `logo-BangkaGo.png` copies are deleted, and a real `images/favicon.png`
+    now backs the 27 dashboard `<link rel="icon">` tags that 404'd.
+  - **Animation is preview-only** (`brand-preview.html` §7, anchored
+    `#animation`): A · Moored and B · Under way, CSS keyframes, both stop
+    under `prefers-reduced-motion`. Nothing in the app or web moves until
+    it is approved; the app would animate the same two groups with
+    Reanimated (already installed).
+  - **Next:** Expo Go caches the app icon — run `npx expo start -c` and
+    relaunch before judging it; check the welcome seal at 112px on the demo
+    phone.
+
 - **2026-10-22 — Demo-bug batch 1: fresh manifests, departure gate, no
   holds while sailing, live strait weather (migration 067 PENDING — USER
   MUST RUN, after 066; gates: tsc clean, lint 0 errors / 135 warnings).**

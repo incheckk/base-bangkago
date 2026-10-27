@@ -31,8 +31,8 @@
   --focus-ring:0 0 0 3px rgba(21,101,192,.14);
 
   /* BRAND CONTROLS */
-  --brand-logo-box:80px;
-  --brand-logo-img:74px;
+  --brand-logo-box:64px;
+  --brand-logo-img:56px;
   --brand-title-size:1.1rem;
   --brand-subtitle-size:.78rem;
   --brand-gap:.70rem;
@@ -224,8 +224,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   object-fit:contain;
   display:block;
   transform:none;
-  filter:drop-shadow(0 0 6px rgba(34,196,196,.55))
-          drop-shadow(0 0 16px rgba(34,196,196,.30));
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.35));
 }
 .cg-brand .brand-text{ min-width:0; line-height:1.15; }
 .cg-brand .brand-text h5{

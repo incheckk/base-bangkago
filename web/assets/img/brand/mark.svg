@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1012 700" width="1012" height="700" role="img" aria-label="BangkaGo">
+  <!-- Boat only, transparent. For light grounds only — the navy hull disappears
+       on the app's #0A1620. Coordinates mirror src/components/Logo.tsx. -->
+  <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round">
+    <path d="M317 468 L271 578"/>
+    <path d="M612 468 L567 578"/>
+  </g>
+  <path d="M533 284 L679.3 120.4 Q694 104 716 104 L845 104 Q858 104 858 117 L858 284 Z" fill="#34D6B0"/>
+  <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+  <rect x="136" y="578" width="542" height="66" rx="33" fill="#FFC24D"/>
+</svg>

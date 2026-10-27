@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BangkaGo — brand system + animation preview</title>
+<style>
+  :root{
+    --bg:#0A1620; --surface:#101E28; --line:#24404D; --text:#F2F5F4; --muted:#7592A0;
+    --teal:#34D6B0; --cream:#F7F8F6; --navy:#0D3346; --sun:#FFC24D;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:56px 32px 96px}
+  header{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:46px}
+  .kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:31px;line-height:1.18;margin:10px 0 12px;font-weight:800;letter-spacing:-.5px}
+  header p{margin:0;color:var(--muted);font-size:15px;line-height:1.7;max-width:800px}
+  header p b{color:var(--text);font-weight:600}
+  h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 18px}
+  section{margin-bottom:54px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:28px}
+
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media (max-width:820px){.duo{grid-template-columns:1fr}}
+  .slot{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;display:flex;flex-direction:column}
+  .slot-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
+  .slot-name{font-size:15px;font-weight:700}
+  .slot-tag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--teal);
+            background:rgba(52,214,176,.12);border:1px solid rgba(52,214,176,.35);padding:4px 8px;border-radius:999px;white-space:nowrap}
+  .stage{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:26px;display:grid;place-items:center}
+  .slot p{margin:16px 0 0;font-size:12.5px;line-height:1.7;color:var(--muted)}
+  .slot p b{color:var(--text);font-weight:600}
+
+  .badge{width:176px;height:176px;border-radius:40px;background:var(--cream);display:grid;place-items:center;
+         box-shadow:0 16px 44px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06)}
+  .badge svg{width:84%;height:auto;display:block}
+  .seal{display:grid;place-items:center}
+  .seal svg{width:100%;height:auto;display:block;filter:drop-shadow(0 16px 44px rgba(0,0,0,.5))}
+  .wordmark{font-size:42px;font-weight:800;letter-spacing:-1.2px;line-height:1;white-space:nowrap}
+  .wordmark span{color:var(--teal)}
+  .sub{font-size:13px;color:var(--muted);margin-top:9px}
+
+  .brandline{display:flex;align-items:center;gap:26px;flex-wrap:wrap;justify-content:center}
+  .brandstack{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+  .brandstack .sub{margin-top:0}
+
+  .sq{background:var(--cream);border-radius:22.4%;display:grid;place-items:center;overflow:hidden}
+  .sq svg{width:84%;height:auto;display:block}
+  .sq.full svg{width:100%}
+  .sq.navy{background:var(--navy)}
+  .row{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:9px}
+  .cell b{font-size:11px;color:var(--muted);font-weight:600}
+  .iconblock{margin-bottom:26px}
+  .iconblock:last-child{margin-bottom:0}
+  .iconblock .lead{font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.6}
+  .iconblock .lead b{color:var(--text);font-weight:600}
+
+  .lists{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media (max-width:820px){.lists{grid-template-columns:1fr}}
+  .lists h3{font-size:14px;font-weight:700;margin:0 0 12px}
+  .lists ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.8;color:var(--muted)}
+  .lists li{margin-bottom:6px}
+  .lists li b{color:var(--text);font-weight:600}
+  .same{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;line-height:1.75;color:var(--muted)}
+  .same b{color:var(--text);font-weight:600}
+
+  .tries{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media (max-width:820px){.tries{grid-template-columns:1fr}}
+  .try{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .try .plate{background:var(--cream);border-radius:9px;padding:10px;display:grid;place-items:center}
+  .try .plate svg{width:100%;height:auto;display:block}
+  .try .verdict{margin:12px 0 0;font-size:12px;line-height:1.6;color:var(--muted)}
+  .try .verdict b{display:block;color:var(--text);font-weight:600;margin-bottom:3px}
+
+  ol{margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;line-height:1.95}
+  ol b{color:var(--text);font-weight:600}
+  .fine{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.7}
+
+  .swatches{display:flex;gap:14px;flex-wrap:wrap}
+  .sw{flex:1;min-width:130px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+  .sw .chip{height:56px}
+  .sw .meta{padding:10px 12px;background:var(--surface);font-size:12px;line-height:1.45}
+  .sw .meta b{display:block;font-size:12px;font-weight:600}
+  .sw .meta code{color:var(--muted);font-size:11px}
+
+  /* ---- animation preview (section 7) ---- */
+  .anim-card .sq{width:220px;height:220px}
+  .anim-boat .float-group,.anim-boat .hull-group,.anim-boat .ripple{
+    transform-box:fill-box;transform-origin:center;
+  }
+  .anim-boat .float-group{animation:anim-float 4.2s ease-in-out infinite alternate}
+  .anim-boat .hull-group{animation:anim-hull 4.2s ease-in-out .35s infinite alternate}
+  .anim-boat .ripple{animation:anim-ripple 3.6s ease-in-out infinite alternate}
+  .anim-boat .ripple.back{animation-delay:-1.8s;opacity:.3}
+  @keyframes anim-float{from{transform:translateY(-6px) rotate(-1.2deg)}to{transform:translateY(6px) rotate(1.2deg)}}
+  @keyframes anim-hull{from{transform:translateY(-3.5px)}to{transform:translateY(3.5px)}}
+  @keyframes anim-ripple{from{transform:translateX(-14px)}to{transform:translateX(14px)}}
+  @media (prefers-reduced-motion: reduce){.anim-boat *{animation:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">Two directions · same boat</div>
+    <h1>Same boat. Two frames.</h1>
+    <p>
+      <b>V1</b> is your PNG traced 1:1 — corners rounded, grey bars gone, the sail on the app's teal.
+      <b>V2</b> leaves that boat exactly as it is and changes the frame instead: a cream seal with a thin teal
+      ring, the wordmark stacked underneath, and a navy icon tile. Same hull, same sail, same outrigger,
+      same three colours. Shipped as three assets — the bare mark, the cream tile and the seal — each used
+      where it reads.
+    </p>
+  </header>
+
+  <!-- ============ SIDE BY SIDE ============ -->
+  <section>
+    <h2>1 · Side by side, on the app background</h2>
+    <div class="duo">
+      <div class="slot">
+        <div class="slot-head">
+          <div class="slot-name">V1 · the mark</div>
+          <div class="slot-tag">approved</div>
+        </div>
+        <div class="stage">
+          <div class="badge" style="width:280px;height:280px;border-radius:62px">
+            <svg viewBox="0 0 1012 700"><use href="#mark"/></svg>
+          </div>
+        </div>
+        <p><b>Your boat, bare.</b> It sits in a cream squircle because the hull is navy — on
+           <code>#0A1620</code> it would vanish. The squircle is the same shape as the app icon, so the
+           badge and the icon are one object.</p>
+      </div>
+
+      <div class="slot">
+        <div class="slot-head">
+          <div class="slot-name">V2 · the seal</div>
+          <div class="slot-tag">new</div>
+        </div>
+        <div class="stage">
+          <div class="seal" style="width:280px;height:280px">
+            <svg viewBox="0 0 620 620"><use href="#seal"/></svg>
+          </div>
+        </div>
+        <p><b>The same boat in a round seal.</b> A cream disc, a thin teal ring, the boat untouched
+           inside it. Round instead of square reads as an emblem — closer to a coast-guard stamp than
+           to an app sticker.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LOCKUP ============ -->
+  <section>
+    <h2>2 · With the wordmark</h2>
+    <div class="card">
+      <div class="duo">
+        <div class="brandline">
+          <div class="badge" style="width:150px;height:150px;border-radius:34px">
+            <svg viewBox="0 0 1012 700"><use href="#mark"/></svg>
+          </div>
+          <div>
+            <div class="wordmark" style="font-size:38px">Bangka<span>Go</span></div>
+            <div class="sub">Sea travel between Mactan and Olango.</div>
+          </div>
+        </div>
+
+        <div class="brandstack">
+          <div class="seal" style="width:156px;height:156px">
+            <svg viewBox="0 0 620 620"><use href="#seal"/></svg>
+          </div>
+          <div class="wordmark" style="font-size:32px">Bangka<span>Go</span></div>
+          <div class="sub">Sea travel between Mactan and Olango.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ICON ============ -->
+  <section>
+    <h2>3 · The app icon — what Expo Go shows at launch</h2>
+    <div class="card">
+      <div class="iconblock">
+        <p class="lead"><b>V1 — cream tile.</b> The mark at 84%, the same squircle everywhere.</p>
+        <div class="row">
+          <div class="cell"><div class="sq" style="width:132px;height:132px"><svg viewBox="0 0 1012 700"><use href="#mark"/></svg></div><b>132</b></div>
+          <div class="cell"><div class="sq" style="width:96px;height:96px"><svg viewBox="0 0 1012 700"><use href="#mark"/></svg></div><b>96</b></div>
+          <div class="cell"><div class="sq" style="width:66px;height:66px"><svg viewBox="0 0 1012 700"><use href="#mark"/></svg></div><b>66</b></div>
+          <div class="cell"><div class="sq" style="width:48px;height:48px"><svg viewBox="0 0 1012 700"><use href="#mark"/></svg></div><b>48</b></div>
+          <div class="cell"><div class="sq" style="width:32px;height:32px"><svg viewBox="0 0 1012 700"><use href="#mark"/></svg></div><b>32</b></div>
+        </div>
+      </div>
+
+      <div class="iconblock">
+        <p class="lead"><b>V2 — navy tile, cream seal.</b> The ring costs a little boat size at 32px; from 48 up it reads clean.</p>
+        <div class="row">
+          <div class="cell"><div class="sq navy full" style="width:132px;height:132px"><svg viewBox="0 0 1000 1000"><use href="#icon-seal"/></svg></div><b>132</b></div>
+          <div class="cell"><div class="sq navy full" style="width:96px;height:96px"><svg viewBox="0 0 1000 1000"><use href="#icon-seal"/></svg></div><b>96</b></div>
+          <div class="cell"><div class="sq navy full" style="width:66px;height:66px"><svg viewBox="0 0 1000 1000"><use href="#icon-seal"/></svg></div><b>66</b></div>
+          <div class="cell"><div class="sq navy full" style="width:48px;height:48px"><svg viewBox="0 0 1000 1000"><use href="#icon-seal"/></svg></div><b>48</b></div>
+          <div class="cell"><div class="sq navy full" style="width:32px;height:32px"><svg viewBox="0 0 1000 1000"><use href="#icon-seal"/></svg></div><b>32</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIFFERENCES ============ -->
+  <section>
+    <h2>4 · What actually changes</h2>
+    <div class="card">
+      <div class="lists">
+        <div>
+          <h3>V1 · the mark</h3>
+          <ul>
+            <li><b>No frame.</b> The boat is the logo; a cream squircle appears only where the ground is dark.</li>
+            <li><b>Horizontal lockup.</b> Badge on the left, wordmark on the right.</li>
+            <li><b>Light icon.</b> Cream tile — bright on the home screen.</li>
+            <li><b>Feels like:</b> a sticker. Friendly, app-native, the thing you already approved.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>V2 · the seal</h3>
+          <ul>
+            <li><b>A ring, not a tile.</b> Cream disc with a thin teal ring; the boat sits inside it untouched.</li>
+            <li><b>Stacked lockup.</b> Wordmark centred underneath — a crest, not a banner.</li>
+            <li><b>Dark icon.</b> Navy tile with the cream seal — calm next to other apps.</li>
+            <li><b>Feels like:</b> an emblem. Sober, official, the thing a coast guard would stamp.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="same">
+        <b>Identical in both:</b> the hull, the sail, the outrigger, the float and their coordinates;
+        the three colours <code>#0D3346</code> / <code>#34D6B0</code> / <code>#FFC24D</code>; the rounding
+        (hull 26, sail peak 22); and no grey bars. V2 moves nothing — it only puts a frame around it.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REJECTED ============ -->
+  <section>
+    <h2>5 · Redraws I tried, and why V2 is a frame instead</h2>
+    <div class="tries">
+      <div class="try">
+        <div class="plate">
+          <svg viewBox="0 0 1012 700">
+            <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round"><path d="M300 460 L270 578"/><path d="M690 460 L720 578"/></g>
+            <path d="M445.7 271.6 L687 97.4 Q700 88 714.4 94.9 Q830 150 821.3 240.1 Q820 254 806 254 L440 256 Z" fill="#34D6B0"/>
+            <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+            <rect x="225" y="578" width="590" height="66" rx="33" fill="#FFC24D"/>
+          </svg>
+        </div>
+        <p class="verdict"><b>Wind-filled lateen</b>At 48px the billow closes up and the sail reads as a fin.</p>
+      </div>
+
+      <div class="try">
+        <div class="plate">
+          <svg viewBox="0 0 1012 700">
+            <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round"><path d="M400 470 L365 578"/><path d="M690 465 L725 578"/></g>
+            <path d="M403.1 330.3 L810.3 129.7 Q830 120 821.5 140.3 L764.7 275 Q760 286 748.1 287.1 L400.1 319.8 Z" fill="#34D6B0"/>
+            <path d="M130.7 360.8 Q110 345 135.9 342.6 L951.1 266.3 Q965 265 957.1 276.5 L822.5 471.9 Q810 490 788.2 492.9 Q545 525 321.8 493.1 Q300 490 282.5 476.7 Z" fill="#0D3346"/>
+            <rect x="252" y="578" width="560" height="66" rx="33" fill="#FFC24D"/>
+          </svg>
+        </div>
+        <p class="verdict"><b>Curved keel</b>Your trapezoid is what makes it a hull; curved, it turns into a leaf and the stern disappears.</p>
+      </div>
+
+      <div class="try">
+        <div class="plate">
+          <svg viewBox="0 0 1012 700">
+            <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round"><path d="M300 460 L270 578"/><path d="M690 460 L720 578"/></g>
+            <path d="M501.3 277.4 L662.5 75.6 Q675 60 687.4 75.7 L823.8 248.2 Q830 256 820 256 L490 256 Z" fill="#34D6B0"/>
+            <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+            <rect x="225" y="578" width="590" height="66" rx="33" fill="#FFC24D"/>
+          </svg>
+        </div>
+        <p class="verdict"><b>Centred triangle sail</b>Symmetric, it reads as a mountain on a boat — the flat top of your sail is what says "sail".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PALETTE ============ -->
+  <section>
+    <h2>6 · Colour — unchanged in both</h2>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#0D3346"></div><div class="meta"><b>Hull</b><code>#0D3346 · yours</code></div></div>
+      <div class="sw"><div class="chip" style="background:#34D6B0"></div><div class="meta"><b>Sail · ring · "Go"</b><code>#34D6B0 · app primary</code></div></div>
+      <div class="sw"><div class="chip" style="background:#FFC24D"></div><div class="meta"><b>Float</b><code>#FFC24D · new sun token</code></div></div>
+      <div class="sw"><div class="chip" style="background:#F7F8F6"></div><div class="meta"><b>Ground</b><code>#F7F8F6 · cream</code></div></div>
+    </div>
+  </section>
+
+  <!-- ============ ANIMATION ============ -->
+  <section id="animation">
+    <h2>7 · Animation — preview only</h2>
+    <div class="duo anim-card">
+      <div class="slot">
+        <div class="slot-head">
+          <div class="slot-name">A · Moored</div>
+          <div class="slot-tag">recommended</div>
+        </div>
+        <div class="stage">
+          <div class="sq" style="width:220px;height:220px">
+            <svg class="anim-boat" viewBox="0 0 1012 700" aria-label="BangkaGo boat, bobbing gently">
+              <g class="hull-group">
+                <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round">
+                  <path d="M317 468 L271 578"/>
+                  <path d="M612 468 L567 578"/>
+                </g>
+                <path d="M533 284 L679.3 120.4 Q694 104 716 104 L845 104 Q858 104 858 117 L858 284 Z" fill="#34D6B0"/>
+                <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+              </g>
+              <g class="float-group">
+                <rect x="136" y="578" width="542" height="66" rx="33" fill="#FFC24D"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+        <p><b>The boat rests.</b> The float drifts ±6 and tilts 1.2°; the hull follows 0.35 s behind at ±3.5.
+           A 4.2 s loop. Nothing spins, nothing bounces — it reads as breathing.</p>
+      </div>
+
+      <div class="slot">
+        <div class="slot-head">
+          <div class="slot-name">B · Under way</div>
+          <div class="slot-tag">loader only</div>
+        </div>
+        <div class="stage">
+          <div class="sq" style="width:220px;height:220px">
+            <svg class="anim-boat" viewBox="0 0 1012 700" aria-label="BangkaGo boat on a moving wave">
+              <g class="ripple back" fill="none" stroke="#34D6B0" stroke-width="6" stroke-linecap="round" opacity=".35">
+                <path d="M120 648 q 40 -12 80 0 t 80 0 t 80 0 t 80 0 t 80 0 t 80 0"/>
+              </g>
+              <g class="ripple" fill="none" stroke="#34D6B0" stroke-width="8" stroke-linecap="round">
+                <path d="M60 668 q 40 -14 80 0 t 80 0 t 80 0 t 80 0 t 80 0 t 80 0 t 80 0 t 80 0"/>
+              </g>
+              <g class="hull-group">
+                <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round">
+                  <path d="M317 468 L271 578"/>
+                  <path d="M612 468 L567 578"/>
+                </g>
+                <path d="M533 284 L679.3 120.4 Q694 104 716 104 L845 104 Q858 104 858 117 L858 284 Z" fill="#34D6B0"/>
+                <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+              </g>
+              <g class="float-group">
+                <rect x="136" y="578" width="542" height="66" rx="33" fill="#FFC24D"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+        <p><b>Same motion, plus water.</b> Two thin teal waves slide under the float. Busier — it belongs in the
+           web loader, which already draws waves, not on the app's welcome screen.</p>
+      </div>
+    </div>
+    <div class="same">
+      <b>Both stop dead under <code>prefers-reduced-motion</code>.</b> This is a preview — the app and the web are
+      not animated yet. If you want it, the app animates the same two groups with Reanimated (already installed,
+      no new dependency) and the web loader takes concept B.
+    </div>
+  </section>
+
+  <!-- ============ NEXT ============ -->
+  <section>
+    <div class="card">
+      <h2>Already wired</h2>
+      <ol>
+        <li><b>Icon + splash</b> — cream tile, transparent Android foreground, favicon.</li>
+        <li><b>Welcome screen</b> — the seal at 112px, the wordmark split Bangka + Go.</li>
+        <li><b>Web</b> — landing loader = seal, nav + footer and both dashboard sidebars = tile, portal login = seal.</li>
+      </ol>
+      <div class="fine">
+        The three SVGs live in <code>web/assets/img/brand/</code>; the app draws the same paths from
+        <code>src/components/Logo.tsx</code>. The only thing still waiting on you is the animation above.
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============================================================
+     Built from IP SUM_StartupLogo_PSC11.png at its own coords.
+     Canvas 1012 × 700.  #0D3346 hull · #34D6B0 sail · #FFC24D float
+     Draw order: struts → sail → hull → float.
+     ============================================================ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+
+  <!-- the approved boat, unchanged -->
+  <g id="boat">
+    <g stroke="#34D6B0" stroke-width="34" stroke-linecap="round">
+      <path d="M317 468 L271 578"/>
+      <path d="M612 468 L567 578"/>
+    </g>
+    <path d="M533 284 L679.3 120.4 Q694 104 716 104 L845 104 Q858 104 858 117 L858 284 Z" fill="#34D6B0"/>
+    <path d="M104.7 275.4 Q90 254 116 254 L927 254 Q953 254 936.4 274 L781.6 460 Q765 480 739 480 L271 480 Q245 480 230.3 458.6 Z" fill="#0D3346"/>
+    <rect x="136" y="578" width="542" height="66" rx="33" fill="#FFC24D"/>
+  </g>
+
+  <!-- V1: the bare mark -->
+  <symbol id="mark" viewBox="0 0 1012 700">
+    <use href="#boat"/>
+  </symbol>
+
+  <!-- V2: the seal (cream disc + teal ring, boat at 57%) -->
+  <symbol id="seal" viewBox="0 0 620 620">
+    <circle cx="310" cy="310" r="310" fill="#F7F8F6"/>
+    <circle cx="310" cy="310" r="288" fill="none" stroke="#34D6B0" stroke-width="12"/>
+    <g transform="translate(12.745 96.82) scale(0.57)"><use href="#boat"/></g>
+  </symbol>
+
+  <!-- V2 icon: navy tile, cream seal, boat at 75% -->
+  <symbol id="icon-seal" viewBox="0 0 1000 1000">
+    <rect width="1000" height="1000" fill="#0D3346"/>
+    <circle cx="500" cy="500" r="418" fill="#F7F8F6"/>
+    <circle cx="500" cy="500" r="392" fill="none" stroke="#34D6B0" stroke-width="16"/>
+    <g transform="translate(108.875 219.5) scale(0.75)"><use href="#boat"/></g>
+  </symbol>
+
+</defs></svg>
+</body>
+</html>

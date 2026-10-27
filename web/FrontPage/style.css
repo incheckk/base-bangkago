@@ -222,14 +222,13 @@ a {
   padding-bottom: .5rem;
 }
 
-/* Logo — transparent PNG, no frame; glow traces the boat silhouette */
+/* Logo — cream tile. No teal halo: the tile is already opaque. */
 .nav-logo {
     height: 40px;              /* matches the navbar's text scale */
     width: auto;               /* prevents distortion */
     display: block;            /* removes baseline/descender gaps */
     object-fit: contain;
-    filter: drop-shadow(0 0 6px rgba(34,196,196,.55))
-            drop-shadow(0 0 18px rgba(34,196,196,.30));
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.35));
 }
 
 /* Brand name text */
@@ -1083,8 +1082,7 @@ a {
     height: 44px;
     width: auto;
     object-fit: contain;
-    filter: drop-shadow(0 0 5px rgba(34,196,196,.55))
-            drop-shadow(0 0 14px rgba(34,196,196,.30));
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.35));
 }
 
 .footer-brand-text {

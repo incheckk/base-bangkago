@@ -2,9 +2,10 @@ import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { Logo } from '@/components/Logo';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
-import { colors, elevation, radii, spacing, typography } from '@/theme/tokens';
+import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const FEATURES: { icon: 'boat' | 'route' | 'cash'; text: string }[] = [
   { icon: 'boat', text: 'Book a bangka in seconds' },
@@ -16,16 +17,15 @@ export default function Welcome() {
   return (
     <ScreenContainer>
       <View style={styles.hero}>
-        {/* A vector mark in a branded ring, not a 64pt emoji — the OS draws
-            emoji differently on every device, which is the last thing a brand
-            mark should do. */}
-        <View style={styles.markRing}>
-          <View style={styles.markInner}>
-            <Icon name="boat" size={38} color={colors.primary} />
-          </View>
+        {/* The seal, not the bare mark: the hull is navy and would vanish on
+            this screen's dark background. */}
+        <View style={styles.mark}>
+          <Logo variant="seal" size={112} />
         </View>
 
-        <Text style={styles.title}>BangkaGo</Text>
+        <Text style={styles.title}>
+          Bangka<Text style={styles.titleGo}>Go</Text>
+        </Text>
         <Text style={styles.tagline}>
           Sea travel between Mactan and Olango, booked from your phone.
         </Text>
@@ -61,21 +61,10 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   hero: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-  markRing: {
-    width: 96, height: 96, borderRadius: radii.pill,
-    backgroundColor: colors.primaryTint,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: spacing.xl,
-  },
-  markInner: {
-    width: 72, height: 72, borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1, borderColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    ...elevation.e2,
-  },
+  mark: { marginBottom: spacing.xl },
 
   title: { ...typography.display, letterSpacing: -0.5, marginBottom: spacing.sm },
+  titleGo: { color: colors.primary },
   tagline: {
     ...typography.body,
     color: colors.textSecondary,

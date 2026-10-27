@@ -12,6 +12,12 @@ export const colors = {
   primaryDark: '#1FA88A',
   primaryText: '#04241D',
 
+  // Brand mark only — not UI chrome. Keep in sync with Logo.tsx and
+  // web/assets/img/brand/*.svg.
+  hull: '#0D3346',
+  cream: '#F7F8F6',
+  sun: '#FFC24D',
+
   accent: '#E8593C',
   warning: '#E8A93C',
   danger: '#E05252',

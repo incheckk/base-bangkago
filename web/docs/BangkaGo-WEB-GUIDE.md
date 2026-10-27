@@ -35,7 +35,7 @@ BangkaGo/
 │   ├── style.css               # public theme (tokens, buttons, hero, cards, responsive)
 │   ├── script.js               # public JS (nav scroll, active link, smooth scroll, search, forms, fade-in, back-to-top)
 │   ├── bangkaGo-access.html    # portal chooser + login modal (demo auth, routes to dashboards)
-│   ├── images/logo-BangkaGo.png
+│   ├── images/favicon.png          # tab icon (logos live in ../assets/img/brand/)
 │   ├── images/map.jpg
 │   ├── image/*                 # Hopping.jpg, View_beach.jpg, Marigondon-view.png, coast_guard.jpg
 │   ├── admin-dashboard/

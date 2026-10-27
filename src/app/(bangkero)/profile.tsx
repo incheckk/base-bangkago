@@ -10,6 +10,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
+import { requestReplay } from '@/hooks/useOnboarding';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
@@ -44,7 +45,6 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
   // The header burger is gone (3D) — SOS still has to be one tap away, and
   // it is the one row here that should not look like the others.
   { key: 'sos', label: 'SOS Alert', icon: 'sos', danger: true },
-  { key: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
 const ROUTE_MAP: Record<string, string> = {
@@ -58,7 +58,6 @@ const ROUTE_MAP: Record<string, string> = {
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
   sos: '/(bangkero)/sos-alert',
-  settings: '/(bangkero)/profile',
 };
 
 export default function BangkeroProfileScreen() {
@@ -379,6 +378,30 @@ export default function BangkeroProfileScreen() {
               </Pressable>
             );
           })}
+
+          {/* Development only. The tutorial is once per account, so without
+              this a copy change means registering a new bangkero to see it.
+              It clears the flag and sends you to the screen that runs it. */}
+          {__DEV__ && (
+            <Pressable
+              onPress={() => {
+                void requestReplay(user?.id ?? null);
+                router.replace('/(bangkero)/home');
+              }}
+              accessibilityRole="button"
+              style={({ pressed }) => [
+                styles.menuItem,
+                styles.menuBorder,
+                pressed && styles.menuPressed,
+              ]}
+            >
+              <View style={styles.menuIcon}>
+                <Icon name="guide" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.menuLabel} numberOfLines={1}>Replay tutorial</Text>
+              <Icon name="forward" size={16} color={colors.textMuted} />
+            </Pressable>
+          )}
         </View>
 
         {!!error && (

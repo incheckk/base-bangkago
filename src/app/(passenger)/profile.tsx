@@ -7,6 +7,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
+import { requestReplay } from '@/hooks/useOnboarding';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { friendlyError as profileFriendlyError, updateName } from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -15,7 +16,7 @@ import { nameError } from '@/utils/validation';
 import { useState } from 'react';
 
 export default function PassengerProfile() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,6 +153,19 @@ export default function PassengerProfile() {
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{error}</Text>
           </View>
+        )}
+
+        {/* Development only. The tutorial is once per account, so without
+            this a copy change means registering a new passenger to see it.
+            It clears the flag and sends you to the screen that runs it. */}
+        {__DEV__ && (
+          <MenuItem
+            label="Replay tutorial"
+            onPress={() => {
+              void requestReplay(user?.id ?? null);
+              router.replace('/(passenger)/home');
+            }}
+          />
         )}
 
         {/* Sign out */}

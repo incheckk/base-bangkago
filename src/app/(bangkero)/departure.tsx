@@ -633,9 +633,9 @@ export default function DepartureScreen() {
 
             {manifestFinalized && (
               <PrimaryButton
-                label="View Manifest"
+                label="View Trip & Manifest"
                 variant="secondary"
-                onPress={() => router.push('/(bangkero)/manifest')}
+                onPress={() => router.push('/(bangkero)/trips')}
                 style={styles.mt}
               />
             )}

@@ -41,6 +41,71 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-10-29 — Mobile operations batch: trip history, plain weather,
+  guide merge, gated quick login, map bounds, shared route card, two-step
+  rentals, admin reports, coastguard console (migration 069 PENDING — USER
+  MUST RUN, after 067 and 068; gates: tsc clean, lint 0 errors / 135
+  warnings, expo-doctor unchanged — the two new warnings are the known
+  demoted `set-state-in-effect` pattern in `useSailingAdvisory` and
+  `useAlertFeed`).**
+  - **1 · Trip history:** the bangkero Manifest tab is gone. `trips.tsx` is
+    one list (All / Active / Completed / Cancelled) and every sailing opens
+    `sailing.tsx` — one accepted trip is one manifest with its solo/group
+    passengers, parcels and payments. Cancelled requests expand inline with
+    reason + date. `manifest.tsx` deleted; the departure screen's link now
+    targets trips.
+  - **2 · Plain weather:** `WeatherCard` leads with a verdict strip
+    ("Good to sail" / "Take care" / "Do not sail") and the numbers move
+    below it; `sailVerdict()` in `weather.service` is the single rule. The
+    bangkero Weather tab, `weather.tsx` and `useWeatherData.ts` are deleted.
+  - **3 · Guide + quick login:** `quick-guide.tsx` is "Guide & Tutorial"
+    with the Replay button (the profile replay row is gone). Migration 069
+    part 1 adds `dev_flags.show_quick_login`, an anon-safe
+    `demo_quick_login_enabled()` reader and admin-only
+    `set_show_quick_login()`; the sign-in chips read that flag and
+    Developer Options has the switch.
+  - **4 · Map:** `OSMMap` frames the port network with `fitBounds`, padded
+    `maxBounds` and a derived `minZoom`, so the passenger map opens on
+    Lapu-Lapu/Olango and cannot be panned away.
+  - **5 · Padala route UI:** Book Ride's map + two-leg card is now
+    `RouteLegPicker`; Book Delivery uses the same component (zeroed
+    margins), so both forms ask the route one way and a blocked port still
+    says why.
+  - **6 · Rentals:** `rental-form.tsx` is step 1 (boat, event, date chips,
+    passengers, summary) ending on "Proceed to Downpayment"; the new
+    `rental-payment.tsx` owns the GCash QR, receipt upload and the
+    createRental / createDownpayment / createPassengerDetail calls.
+  - **7 · Reports:** `(admin)/reports.tsx` rebuilt — Today / 7 days /
+    30 days / 6 months / 1 year on Manila day boundaries, KPI grid, revenue
+    and completed-trip bars (`react-native-svg`, already installed), request
+    status split, top routes by revenue and a live network strip. No emoji
+    tiles. `getAdminStats` no longer slices a UTC date for "today".
+  - **8 · Coastguard console:** six tabs with `WatchList` rows — Overview
+    (greeting, tappable waiting/at-sea/alerts counters, weather, previews,
+    profile on the header), Fleet (`fleet.tsx`, live map + named boats with
+    a freshness dot), Port Queues, Departures (today's accepted trips
+    grouped per boat), Routes & Fares, Alerts. `getFleetBoats()` names the
+    boats; the drawer lists all six.
+  - **9 · Sailing advisory (069 parts 2–3):** `sailing_advisory` (one row),
+    `sailing_suspended()`, `set_sailing_advisory()` (cancels TODAY's
+    pending/open/accepted trips with no `depart_time`, notifies passengers,
+    bangkeros and admins), `maybe_auto_clear_advisory()` (weather-sourced
+    rows only, when the strait reads "good"), 6-hour `expires_at` fallback,
+    and BEFORE UPDATE triggers that block a trip from becoming `accepted`
+    or stamping a departure while suspended. Coastguard Overview carries the
+    suspend/resume card; bangkero home shows a red banner; Developer
+    Options has the admin "lift suspension" override. `alert_feed()` scrubs
+    other boats' SOS messages to severity + port + time for bangkeros; admin
+    and coastguard keep full detail.
+  - **Next:** run 067 → 068 → **069**, then smoke: open a sailing from Trip
+    History (one manifest per accepted trip), the weather verdict on both
+    homes, Guide & Tutorial replay, the map at first paint, a padala route
+    change, a rental step 1 → step 2, Reports on each range, then the six
+    coastguard tabs; suspend sailing (today's un-sailed trips cancel and
+    both phones get the banner), try accepting/sailing while suspended
+    (blocked), resume from the coastguard and from Developer Options, and
+    let a weather-sourced advisory clear itself when the sea reads good.
+
 - **2026-10-27 — Brand system: one boat, three frames (no migration;
   gates: tsc clean, lint 0 errors / 136 warnings, expo-doctor 20/21 — the
   four SDK-57 patch drifts: expo, expo-location, expo-notifications,

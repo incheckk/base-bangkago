@@ -1,234 +1,227 @@
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { Icon } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
+import { WatchRow, WatchSection } from '@/components/WatchList';
+import { SailingAdvisoryCard } from '@/components/SailingAdvisoryCard';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAllPorts } from '@/hooks/useAllPorts';
-import { useAllPortQueues, usePorts } from '@/hooks/useSupabase';
-import { useRoutes } from '@/hooks/useRoutes';
+import { useAllTrips } from '@/hooks/useAllTrips';
+import { useAllPortQueues } from '@/hooks/useSupabase';
+import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
+import { useAuth } from '@/hooks/useAuth';
 import { DWELL_MS } from '@/services/queue.service';
 import { STRAIT_POINT } from '@/services/weather.service';
-import { colors, numeric, radii, spacing, typography } from '@/theme/tokens';
+import type { AlertSeverity } from '@/types/models';
+import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
-/** m:ss for the dwell countdowns on the queue rows. */
-const clock = (ms: number) => {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+const SEVERITY_COLOR: Record<AlertSeverity, string> = {
+  low: colors.textMuted,
+  medium: colors.warning,
+  high: colors.danger,
+  critical: colors.danger,
 };
 
+/** "3m ago" — alerts and last-seen times. */
+function ago(iso: string, now: number): string {
+  const min = Math.round((now - new Date(iso).getTime()) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  return `${Math.round(min / 60)}h ago`;
+}
+
 /**
- * Coastguard / LGU home (B12) — view-only. The two screens the papers
- * promise: live port queues (same data as Admin → Manage Ports' queue
- * block) and the routes/fares table (Admin → Manage Routes, minus every
- * write control). One screen, two sections; nothing here can mutate.
+ * Coastguard / LGU home: what is happening in the strait right now, then the
+ * two things worth tapping. Each figure and preview opens its own tab, so
+ * this stays a summary instead of a second copy of every list.
  */
 export default function CoastguardHome() {
-  const allPorts = useAllPorts();
-  const activePorts = usePorts();
+  const { profile } = useAuth();
+  const ports = useAllPorts();
   const queues = useAllPortQueues();
-  const routes = useRoutes();
+  const trips = useAllTrips('accepted');
+  const alerts = useSafetyAlerts(null);
 
-  const [query, setQuery] = useState('');
-
-  // Dwell countdowns tick while any queue row exists (same as manage-ports).
+  /**
+   * One clock for the dwell countdowns and the alert ages. Reading Date.now()
+   * during render is impure (React Compiler flags it) and the values only
+   * need minute precision.
+   */
   const [now, setNow] = useState(() => Date.now());
-  const hasQueues = queues.data.length > 0;
   useEffect(() => {
-    if (!hasQueues) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(id);
-  }, [hasQueues]);
+  }, []);
 
-  const portName = (id: string) =>
-    allPorts.data.find((p) => p.portId === id)?.portName ?? id;
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  })();
 
-  /**
-   * Boats, not ports.
-   *
-   * This rendered a bordered card per port — nine of them, and on a normal
-   * day seven read "No boats waiting." A watch screen should show what is
-   * happening, not enumerate every place where nothing is. The ports with
-   * nothing at them collapse into one muted line underneath.
-   */
-  const waiting = useMemo(() => {
-    const rows = queues.data.map((r) => ({
-      ...r,
-      port: portName(r.portId),
-      dwellLeft: DWELL_MS - (now - new Date(r.enteredAt).getTime()),
-      listedAt: new Date(r.enteredAt).toLocaleTimeString([], {
-        hour: '2-digit', minute: '2-digit',
-      }),
-    }));
-    // Ready boats first, then the ones still serving their dwell.
-    return rows.sort((a, b) => a.dwellLeft - b.dwellLeft);
-  }, [queues.data, now, allPorts.data]);
+  const portName = (id: string | null) =>
+    id ? ports.data.find((p) => p.portId === id)?.portName ?? id : null;
 
-  const busyPortIds = new Set(queues.data.map((r) => r.portId));
-  const quietPorts = activePorts.data.filter((p) => !busyPortIds.has(p.portId));
+  const waiting = useMemo(
+    () => [...queues.data].sort(
+      (a, b) => new Date(a.enteredAt).getTime() - new Date(b.enteredAt).getTime()
+    ),
+    [queues.data]
+  );
 
-  /**
-   * Forty routes was forty bordered cards in a single column. Grouped by
-   * departure port it becomes nine short blocks, and the filter means you
-   * never scroll to find one — a fare lookup is a search, not a browse.
-   */
-  const routeGroups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matching = routes.data.filter((r) => {
-      if (!q) return true;
-      return `${portName(r.startPortId)} ${portName(r.endPortId)}`.toLowerCase().includes(q);
-    });
-    const byOrigin = new Map<string, typeof matching>();
-    for (const r of matching) {
-      const list = byOrigin.get(r.startPortId) ?? [];
-      list.push(r);
-      byOrigin.set(r.startPortId, list);
-    }
-    // Follow the ports' own sort order rather than insertion order.
-    return activePorts.data
-      .filter((p) => byOrigin.has(p.portId))
-      .map((p) => ({ portId: p.portId, name: p.portName, routes: byOrigin.get(p.portId)! }));
-  }, [routes.data, query, activePorts.data, allPorts.data]);
+  // trip_stat stays 'accepted' through the whole sailing; depart_time is the sea clock.
+  const atSea = trips.data.filter((b) => !!b.departTime);
+  const openAlerts = useMemo(
+    () => alerts.data
+      .filter((a) => !a.isResolved)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [alerts.data]
+  );
 
-  if (allPorts.loading || routes.loading) {
-    return (
-      <ScreenContainer>
-        <AdminScreenHeader role="coastguard" title="Coastguard Watch" showBack={false} />
-        <LoadingState label="Loading watch data…" />
-      </ScreenContainer>
-    );
-  }
-
-  if (routes.error) {
-    return (
-      <ScreenContainer>
-        <AdminScreenHeader role="coastguard" title="Coastguard Watch" showBack={false} />
-        <ErrorState message={routes.error} />
-      </ScreenContainer>
-    );
-  }
+  const STATS = [
+    { label: 'Waiting', value: waiting.length, route: '/(coastguard)/queues', flag: undefined as string | undefined },
+    { label: 'At sea', value: atSea.length, route: '/(coastguard)/departures', flag: undefined as string | undefined },
+    {
+      label: 'Alerts', value: openAlerts.length, route: '/(coastguard)/alerts',
+      flag: openAlerts.length > 0 ? colors.danger : undefined,
+    },
+  ];
 
   return (
     <ScreenContainer padded={false}>
+      {/* Outside the ScrollView: SideDrawer's overlay is absolute. */}
       <AdminScreenHeader
-        role="coastguard"
-        title="Coastguard Watch"
-        subtitle="View-only · live queues and fares"
+        eyebrow="COASTGUARD / LGU"
+        title={`${greeting}, ${profile?.firstName ?? 'Officer'}`}
         showBack={false}
+        right={
+          <Pressable
+            onPress={() => router.push('/(coastguard)/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Profile"
+            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+          >
+            <Icon name="profile" size={20} color={colors.text} />
+          </Pressable>
+        }
       />
+
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <View style={styles.weatherWrap}>
-          <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
-        </View>
-
-        {/* ---------- waiting now ---------- */}
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionLabel}>WAITING NOW</Text>
-          <Text style={styles.sectionCount}>
-            {waiting.length} boat{waiting.length === 1 ? '' : 's'} · {busyPortIds.size} port
-            {busyPortIds.size === 1 ? '' : 's'}
-          </Text>
-        </View>
-
-        {waiting.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <EmptyState
-              icon="anchor"
-              title="No boats waiting"
-              message="Boats appear here the moment they join a port queue."
-            />
-          </View>
+        {queues.loading || trips.loading || alerts.loading ? (
+          <View style={styles.stateBox}><LoadingState label="Reading the strait…" /></View>
+        ) : queues.error ? (
+          <View style={styles.stateBox}><ErrorState message={queues.error} /></View>
         ) : (
-          <View style={styles.card}>
-            {waiting.map((r, i) => (
-              <View key={r.queueId} style={[styles.row, i > 0 && styles.rowBorder]}>
-                {/* One dot, two states. The old pill repeated the word
-                    "online" on every row to say what a colour already says. */}
-                <View
-                  style={[
-                    styles.dot,
-                    { backgroundColor: r.isAvailable ? colors.primary : colors.textOnDisabled },
-                  ]}
-                />
-                <View style={styles.rowBody}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {r.displayName ?? 'Boat'}
-                  </Text>
-                  <Text style={styles.rowMeta} numberOfLines={1}>
-                    {r.port}
-                    {!r.isAvailable && ' · offline'}
-                  </Text>
-                </View>
-                <Text
-                  style={[styles.rowStat, r.dwellLeft > 0 && styles.rowStatPending]}
-                  numberOfLines={1}
-                >
-                  {r.dwellLeft > 0 ? `dwell ${clock(r.dwellLeft)}` : `ready ${r.listedAt}`}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {quietPorts.length > 0 && (
-          <Text style={styles.quietNote}>
-            No boats at {quietPorts.map((p) => p.portName).join(', ')}.
-          </Text>
-        )}
-
-        {/* ---------- routes & fares ---------- */}
-        <View style={[styles.sectionHead, styles.sectionGap]}>
-          <Text style={styles.sectionLabel}>ROUTES &amp; FARES</Text>
-          <Text style={styles.sectionCount}>{routes.data.length} routes</Text>
-        </View>
-
-        <View style={styles.search}>
-          <Icon name="port" size={16} color={colors.textMuted} />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Filter by port"
-            placeholderTextColor={colors.textMuted}
-            style={styles.searchInput}
-            autoCorrect={false}
-            returnKeyType="search"
-          />
-        </View>
-
-        {routeGroups.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <EmptyState
-              icon="route"
-              title="No matching routes"
-              message={`Nothing sails to or from "${query.trim()}".`}
-            />
-          </View>
-        ) : (
-          routeGroups.map((g) => (
-            <View key={g.portId} style={styles.group}>
-              <Text style={styles.groupLabel} numberOfLines={1}>FROM {g.name.toUpperCase()}</Text>
-              <View style={styles.card}>
-                {g.routes.map((r, i) => (
-                  <View key={r.routeId} style={[styles.row, i > 0 && styles.rowBorder]}>
-                    <View style={styles.rowBody}>
-                      <Text style={styles.rowTitle} numberOfLines={1}>
-                        {portName(r.endPortId)}
-                      </Text>
-                      <Text style={styles.rowMeta} numberOfLines={1}>
-                        {r.estimatedMinutes ? `${r.estimatedMinutes} min` : 'Duration not set'}
-                        {!r.isActive && ' · not running'}
-                      </Text>
+          <>
+            <View style={styles.summary}>
+              <View style={styles.statStrip}>
+                {STATS.map((st, i) => (
+                  <Pressable
+                    key={st.label}
+                    onPress={() => router.push(st.route as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${st.label}: ${st.value}`}
+                    style={({ pressed }) => [styles.stat, pressed && styles.statPressed]}
+                  >
+                    {i > 0 && <View style={styles.statRule} />}
+                    <Text style={styles.statValue} numberOfLines={1}>{st.value}</Text>
+                    <View style={styles.statLabelRow}>
+                      {!!st.flag && <View style={[styles.statDot, { backgroundColor: st.flag }]} />}
+                      <Text style={styles.statLabel} numberOfLines={1}>{st.label}</Text>
                     </View>
-                    {/* Plain white, tabular. Forty amber fares in a column
-                        made the accent meaningless and the numbers ragged. */}
-                    <Text style={styles.fare}>₱{r.baseFare}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </View>
-          ))
+
+            <View style={styles.weatherWrap}>
+              <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
+            </View>
+
+            {/* The one control on this screen: hold everything, or let it go. */}
+            <View style={styles.advisoryWrap}>
+              <SailingAdvisoryCard />
+            </View>
+
+            {/* ---------- waiting now ---------- */}
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>WAITING NOW</Text>
+              <Pressable
+                onPress={() => router.push('/(coastguard)/queues')}
+                accessibilityRole="button"
+                accessibilityLabel="Open port queues"
+                hitSlop={8}
+              >
+                <Text style={styles.link}>Port queues ›</Text>
+              </Pressable>
+            </View>
+
+            {waiting.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <EmptyState
+                  icon="anchor"
+                  title="No boats waiting"
+                  message="Boats appear here the moment they join a port queue."
+                />
+              </View>
+            ) : (
+              <WatchSection label="BOATS" meta={`${waiting.length}`}>
+                {waiting.slice(0, 4).map((r, i) => {
+                  const dwellLeft = DWELL_MS - (now - new Date(r.enteredAt).getTime());
+                  return (
+                    <WatchRow
+                      key={r.queueId}
+                      first={i === 0}
+                      dot={r.isAvailable ? colors.primary : colors.textMuted}
+                      title={r.displayName ?? 'Boat'}
+                      meta={portName(r.portId) ?? 'Port'}
+                      right={
+                        <Text style={styles.rowStat} numberOfLines={1}>
+                          {dwellLeft > 0 ? 'dwell' : 'ready'}
+                        </Text>
+                      }
+                    />
+                  );
+                })}
+              </WatchSection>
+            )}
+
+            {/* ---------- alerts ---------- */}
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionLabel}>SAFETY ALERTS</Text>
+              <Pressable
+                onPress={() => router.push('/(coastguard)/alerts')}
+                accessibilityRole="button"
+                accessibilityLabel="Open alerts"
+                hitSlop={8}
+              >
+                <Text style={styles.link}>All alerts ›</Text>
+              </Pressable>
+            </View>
+
+            {openAlerts.length === 0 ? (
+              <Text style={styles.quiet}>No open alerts.</Text>
+            ) : (
+              <WatchSection label="OPEN" meta={`${openAlerts.length}`}>
+                {openAlerts.slice(0, 3).map((a, i) => (
+                  <WatchRow
+                    key={a.alertId}
+                    first={i === 0}
+                    wrap
+                    dot={SEVERITY_COLOR[a.severity]}
+                    title={a.message}
+                    meta={[a.severity.toUpperCase(), portName(a.portId), ago(a.createdAt, now)]
+                      .filter(Boolean).join(' · ')}
+                  />
+                ))}
+              </WatchSection>
+            )}
+          </>
         )}
       </ScrollView>
     </ScreenContainer>
@@ -236,74 +229,53 @@ export default function CoastguardHome() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.huge },
+  scroll: { paddingBottom: spacing.huge, paddingHorizontal: spacing.xl },
+
+  iconBtn: {
+    width: touchTarget, height: touchTarget,
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: radii.pill,
+    backgroundColor: colors.scrim,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    ...elevation.e1,
+  },
+  iconBtnPressed: { backgroundColor: colors.surfaceAlt },
+
+  stateBox: { minHeight: 240, justifyContent: 'center' },
+
+  summary: {
+    backgroundColor: colors.bgElevated,
+    borderRadius: radii.lg,
+    borderWidth: 1, borderColor: colors.borderSubtle,
+    paddingVertical: spacing.lg,
+    ...elevation.e1,
+  },
+  statStrip: { flexDirection: 'row' },
+  stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs, paddingHorizontal: spacing.sm },
+  statPressed: { opacity: 0.6 },
+  statRule: {
+    position: 'absolute', left: 0, top: 4, bottom: 4,
+    width: 1, backgroundColor: colors.borderSubtle,
+  },
+  statValue: { ...typography.h2, ...numeric },
+  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  statDot: { width: 6, height: 6, borderRadius: radii.pill },
+  statLabel: { ...typography.caption, color: colors.textMuted },
+
+  weatherWrap: { marginTop: spacing.lg },
+  advisoryWrap: { marginTop: spacing.lg },
 
   sectionHead: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: spacing.md, marginTop: spacing.lg, marginBottom: spacing.sm,
+    gap: spacing.md, marginTop: spacing.xl, marginBottom: spacing.sm,
   },
-  sectionGap: { marginTop: spacing.xxl },
   sectionLabel: { ...typography.label },
-  weatherWrap: { marginBottom: spacing.xl },
-  sectionCount: { flexShrink: 1, ...typography.label, ...numeric, fontWeight: '400', letterSpacing: 0 },
+  link: { ...typography.caption, color: colors.primary, fontWeight: '600' },
 
-  // One card per block, rows inside it. Previously every single port and
-  // every single route carried its own border, shadow and corner radius —
-  // forty-nine surfaces on one scroll.
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    minHeight: 56,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  rowBorder: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowTitle: { flexShrink: 1, ...typography.bodyStrong, lineHeight: 20 },
-  rowMeta: {
-    flexShrink: 1, ...typography.label,
-    fontWeight: '400', letterSpacing: 0,
-  },
   rowStat: { flexShrink: 1, ...typography.label, ...numeric, letterSpacing: 0 },
-  rowStatPending: { color: colors.textOnDisabled },
-
-  dot: { width: 8, height: 8, borderRadius: radii.pill },
-
-  quietNote: {
-    ...typography.label,
-    fontWeight: '400',
-    letterSpacing: 0,
-    marginTop: spacing.sm,
-    lineHeight: 18,
+  quiet: {
+    ...typography.label, fontWeight: '400', letterSpacing: 0,
+    color: colors.textMuted, lineHeight: 18, marginTop: spacing.sm,
   },
-
-  // ---------- routes ----------
-  search: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    paddingHorizontal: spacing.md,
-    height: 44,
-    marginBottom: spacing.lg,
-  },
-  searchInput: {
-    flex: 1, minWidth: 0,
-    ...typography.body,
-    padding: 0,
-  },
-
-  group: { marginBottom: spacing.lg },
-  groupLabel: { ...typography.label, marginBottom: spacing.sm },
-  fare: { flexShrink: 1, ...typography.bodyStrong, ...numeric },
-
-  emptyBox: { minHeight: 180, justifyContent: 'center' },
+  emptyBox: { minHeight: 140, justifyContent: 'center' },
 });

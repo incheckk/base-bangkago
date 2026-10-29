@@ -48,7 +48,6 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'rental', label: 'Boat Rentals', route: '/(bangkero)/rentals' },
     { icon: 'star', label: 'My Ratings', route: '/(bangkero)/ratings' },
     { icon: 'cash', label: 'Earnings', route: '/(bangkero)/earnings' },
-    { icon: 'weather', label: 'Weather', route: '/(bangkero)/weather' },
     { icon: 'sos', label: 'SOS Alert', route: '/(bangkero)/sos-alert', danger: true },
   ],
   /**
@@ -81,9 +80,15 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
 
     { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options', section: 'SYSTEM' },
   ],
-  // B12 view-only tier: see queues and fares, change nothing.
+  // B12 monitoring tier: the six tabs the web dashboard has, plus the
+  // advisory controls on Overview. Nothing here writes money.
   coastguard: [
-    { icon: 'home', label: 'Home', route: '/(coastguard)/home' },
+    { icon: 'home', label: 'Overview', route: '/(coastguard)/home' },
+    { icon: 'boat', label: 'Fleet', route: '/(coastguard)/fleet' },
+    { icon: 'anchor', label: 'Port Queues', route: '/(coastguard)/queues' },
+    { icon: 'route', label: 'Departures', route: '/(coastguard)/departures' },
+    { icon: 'port', label: 'Routes & Fares', route: '/(coastguard)/routes' },
+    { icon: 'sos', label: 'Alerts', route: '/(coastguard)/alerts' },
   ],
 };
 
@@ -119,9 +124,9 @@ export function menuFor(role: UserRole | 'admin'): MenuItem[] {
     onPress: () => router.replace(e.route as never),
   }));
 
-  // Bangkero has a profile icon on the home screen header — no need in sidebar.
-  // Admin has one too (admin home header), so both skip this row.
-  if (role !== 'bangkero' && role !== 'admin') {
+  // Roles whose home header carries a profile button skip the drawer row:
+  // bangkero, admin and coastguard each open Profile from that icon.
+  if (role !== 'bangkero' && role !== 'admin' && role !== 'coastguard') {
     items.unshift({
       icon: 'profile',
       label: 'Profile',

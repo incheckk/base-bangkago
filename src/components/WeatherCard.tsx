@@ -2,13 +2,15 @@ import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native'
 
 import { Icon, type IconName } from './Icon';
 import { useLiveWeather } from '../hooks/useLiveWeather';
-import type { LiveWeather } from '../services/weather.service';
+import { sailVerdict, type LiveWeather } from '../services/weather.service';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 /**
  * Sea-weather strip backed by Open-Meteo (free for non-commercial use, no key).
- * Wind and wave height are the two numbers that decide whether a bangka sails;
- * the credit line is required by CC BY 4.0 and must stay.
+ * The verdict is written for someone who will never read a wind speed: a
+ * plain "good / be careful / don't go" sentence first, the numbers second.
+ * Wind and wave height still decide it (sailVerdict), and the CC BY credit
+ * line is required and must stay.
  */
 
 const ICON_FOR = {
@@ -29,22 +31,33 @@ const TINT_FOR = {
   storm: colors.danger,
 } as const;
 
-/**
- * One sentence a bangkero can act on. Wind and wave height decide it — the
- * WMO code only colors the icon. Thresholds are the demo's: 25 km/h or 1 m
- * is "take care", 40 km/h or 1.5 m is "consider delaying".
- */
-function sailingAdvice(w: LiveWeather): { color: string; text: string } {
-  if (w.kind === 'storm' || w.windKmh >= 40 || (w.waveM ?? 0) >= 1.5) {
-    return { color: colors.danger, text: 'Rough sea — consider delaying the trip.' };
+const VERDICT = {
+  good: {
+    title: 'Good day to sail',
+    short: 'Good to sail',
+    sentence: 'The sea is calm and the wind is light.',
+    color: colors.primary,
+  },
+  care: {
+    title: 'Sail with care',
+    short: 'Sail with care',
+    sentence: 'The water is choppy. Wear life vests and go slowly.',
+    color: colors.warning,
+  },
+  rough: {
+    title: 'Not safe to sail',
+    short: 'Not safe today',
+    sentence: 'Big waves and strong wind. Wait until the sea calms down.',
+    color: colors.danger,
+  },
+} as const;
+
+function plainAdvice(w: LiveWeather) {
+  const v = VERDICT[sailVerdict(w)];
+  if (v === VERDICT.good && w.waveM === null) {
+    return { ...v, sentence: 'The wind is light. Wave height is not available right now.' };
   }
-  if (w.windKmh >= 25 || (w.waveM ?? 0) >= 1.0) {
-    return { color: colors.warning, text: 'Choppy — sail with care, life jackets on.' };
-  }
-  if (w.waveM === null) {
-    return { color: colors.textSecondary, text: 'Light wind — good to sail. Wave height unavailable.' };
-  }
-  return { color: colors.primary, text: 'Calm sea, light wind — good to sail.' };
+  return v;
 }
 
 interface Props {
@@ -52,7 +65,7 @@ interface Props {
   longitude: number;
   /** Shown on the right, e.g. "Mactan". */
   place?: string;
-  /** `bar` = one dense line for dashboards; default is the card. */
+  /** `bar` = the two-line home strip; default is the card. */
   variant?: 'card' | 'bar';
   style?: ViewStyle;
 }
@@ -81,22 +94,28 @@ export function WeatherCard({ latitude, longitude, place, variant = 'card', styl
     );
   }
 
-  const waves = data.waveM !== null ? `${data.waveM} m waves` : 'waves n/a';
-  const advice = sailingAdvice(data);
+  const waves = data.waveM !== null ? `${data.waveM} m waves` : 'wave height unavailable';
+  const advice = plainAdvice(data);
+  const details = `${data.tempC}°C · wind ${data.windKmh} km/h ${data.windDir} · ${waves}`;
 
   if (variant === 'bar') {
     return (
       <Pressable
         onPress={() => void refresh()}
         accessibilityRole="button"
-        accessibilityLabel={`Sea weather: ${data.condition}, ${data.tempC} degrees, wind ${data.windKmh} km/h ${data.windDir}, ${waves}`}
+        accessibilityLabel={`${advice.title}. ${advice.sentence} ${details}`}
         style={[styles.bar, style]}
       >
-        <Icon name={ICON_FOR[data.kind] as IconName} size={16} color={TINT_FOR[data.kind]} />
-        <Text style={styles.barText} numberOfLines={1}>
-          {data.tempC}°C · {data.condition} · {data.windKmh} km/h {data.windDir} · {waves}
-          {data.stale ? ' · cached' : ''}
-        </Text>
+        <Icon name={ICON_FOR[data.kind] as IconName} size={20} color={TINT_FOR[data.kind]} />
+        <View style={styles.barBody}>
+          <Text style={[styles.barTitle, { color: advice.color }]} numberOfLines={1}>
+            {advice.short}
+          </Text>
+          <Text style={styles.barSub} numberOfLines={1}>
+            {data.stale ? 'Saved reading · ' : ''}{advice.sentence}
+          </Text>
+        </View>
+        <Text style={styles.barTemp} numberOfLines={1}>{data.tempC}°</Text>
       </Pressable>
     );
   }
@@ -112,15 +131,10 @@ export function WeatherCard({ latitude, longitude, place, variant = 'card', styl
         {!!place && <Text style={styles.place} numberOfLines={1}>{place}</Text>}
       </View>
 
-      <View style={styles.metrics}>
-        <Text style={styles.metric}>
-          Wind {data.windKmh} km/h {data.windDir}
-        </Text>
-        <Text style={styles.metric}>{waves}</Text>
-      </View>
+      <Text style={[styles.verdict, { color: advice.color }]}>{advice.title}</Text>
+      <Text style={styles.sentence}>{advice.sentence}</Text>
 
-      <Text style={[styles.advice, { color: advice.color }]}>{advice.text}</Text>
-
+      <Text style={styles.metrics}>{details}</Text>
       <Text style={styles.credit}>
         {data.stale ? 'Cached reading · ' : ''}Weather data by Open-Meteo
       </Text>
@@ -141,17 +155,21 @@ const styles = StyleSheet.create({
   temp: { ...typography.h2 },
   condition: { ...typography.caption, color: colors.textSecondary },
   place: { ...typography.label, color: colors.textMuted, flexShrink: 0 },
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, marginTop: spacing.md },
-  metric: { ...typography.bodyStrong, color: colors.textSecondary, fontSize: 13 },
-  advice: { ...typography.bodyStrong, fontSize: 13, marginTop: spacing.sm },
-  credit: { ...typography.caption, color: colors.textMuted, fontSize: 10, marginTop: spacing.sm },
+
+  verdict: { ...typography.title, fontSize: 18, marginTop: spacing.md },
+  sentence: { ...typography.body, color: colors.textSecondary, lineHeight: 20, marginTop: 2 },
+  metrics: { ...typography.caption, color: colors.textMuted, marginTop: spacing.md },
+  credit: { ...typography.caption, color: colors.textMuted, fontSize: 10, marginTop: spacing.xs },
 
   bar: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    minHeight: 32, paddingHorizontal: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radii.sm,
+    minHeight: 56, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: radii.md,
     borderWidth: 1, borderColor: colors.borderSubtle,
   },
-  barText: { ...typography.caption, color: colors.textSecondary, flex: 1, minWidth: 0 },
+  barBody: { flex: 1, minWidth: 0 },
+  barTitle: { ...typography.bodyStrong, fontSize: 14 },
+  barSub: { ...typography.caption, color: colors.textMuted, fontSize: 11, marginTop: 1 },
+  barTemp: { ...typography.bodyStrong, color: colors.textSecondary, flexShrink: 0 },
   muted: { ...typography.caption, color: colors.textMuted },
 });

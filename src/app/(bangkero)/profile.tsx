@@ -10,7 +10,6 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
-import { requestReplay } from '@/hooks/useOnboarding';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
@@ -38,8 +37,6 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
   { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
   { key: 'ratings', label: 'My Ratings', icon: 'star' },
   { key: 'documents', label: 'Documents', icon: 'document' },
-  { key: 'passengers', label: 'Manifest', icon: 'people' },
-  { key: 'weather', label: 'Weather', icon: 'weather' },
   { key: 'qr', label: 'GCash QR', icon: 'qr' },
   { key: 'guide', label: 'Quick Guide', icon: 'guide' },
   // The header burger is gone (3D) — SOS still has to be one tap away, and
@@ -53,8 +50,6 @@ const ROUTE_MAP: Record<string, string> = {
   rentals: '/(bangkero)/rentals',
   ratings: '/(bangkero)/ratings',
   documents: '/(bangkero)/verify-boat',
-  passengers: '/(bangkero)/manifest',
-  weather: '/(bangkero)/weather',
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
   sos: '/(bangkero)/sos-alert',
@@ -378,30 +373,6 @@ export default function BangkeroProfileScreen() {
               </Pressable>
             );
           })}
-
-          {/* Development only. The tutorial is once per account, so without
-              this a copy change means registering a new bangkero to see it.
-              It clears the flag and sends you to the screen that runs it. */}
-          {__DEV__ && (
-            <Pressable
-              onPress={() => {
-                void requestReplay(user?.id ?? null);
-                router.replace('/(bangkero)/home');
-              }}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.menuItem,
-                styles.menuBorder,
-                pressed && styles.menuPressed,
-              ]}
-            >
-              <View style={styles.menuIcon}>
-                <Icon name="guide" size={18} color={colors.primary} />
-              </View>
-              <Text style={styles.menuLabel} numberOfLines={1}>Replay tutorial</Text>
-              <Icon name="forward" size={16} color={colors.textMuted} />
-            </Pressable>
-          )}
         </View>
 
         {!!error && (

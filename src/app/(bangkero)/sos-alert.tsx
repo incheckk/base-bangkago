@@ -9,7 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusCard } from '@/components/StatusCard';
 import { useAuth } from '@/hooks/useAuth';
-import { useSafetyAlerts } from '@/hooks/useSafetyAlerts';
+import { useAlertFeed } from '@/hooks/useSafetyAlerts';
 import { useMyPortQueue, usePorts } from '@/hooks/useSupabase';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { friendlyError } from '@/services/booking.service';
@@ -38,9 +38,9 @@ export default function SosAlertScreen() {
     ? ports.data.find((p) => p.portId === resolvedPortId)?.portName ?? resolvedPortId
     : null;
 
-  // Recent alerts unfiltered — filtering by a single (possibly null) port
-  // would hide the bangkero's own history.
-  const { data: alerts } = useSafetyAlerts(null);
+  // Bangkero feed (069): own alerts keep the full message, other boats show
+  // severity + port + time only. Unfiltered so own history is never hidden.
+  const { data: alerts } = useAlertFeed();
 
   const [alertState, setAlertState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);

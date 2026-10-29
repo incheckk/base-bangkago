@@ -54,6 +54,19 @@ export async function getAlerts(
   return (data ?? []).map(mapRow);
 }
 
+/**
+ * Bangkero-facing feed (migration 069). Own alerts and admin/coastguard
+ * callers keep the full message; every other bangkero gets severity + port +
+ * time with a generic line, so a name or GPS never leaks between boats.
+ * Before 069 runs the RPC is missing — fall back to today's full read rather
+ * than silently emptying the SOS history.
+ */
+export async function getAlertFeed(): Promise<SafetyAlertDoc[]> {
+  const { data, error } = await supabase.rpc('alert_feed');
+  if (error) return getAlerts(undefined, true);
+  return (data ?? []).map(mapRow);
+}
+
 export async function resolveAlert(alertId: string): Promise<void> {
   const { error } = await supabase
     .from('safety_alerts')

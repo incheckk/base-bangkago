@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRealtimeQuery } from './useRealtimeQuery';
-import { getTrackingByBangka, getAllVesselPositions, logPosition } from '../services/tracking.service';
+import { getTrackingByBangka, getAllVesselPositions, logPosition, getFleetBoats } from '../services/tracking.service';
+import type { FleetBoat } from '../services/tracking.service';
 import type { VesselTrackingDoc } from '../types/models';
 
 export function useVesselTracking(bangkaId: string | null) {
@@ -41,6 +42,25 @@ export function useVesselTracking(bangkaId: string | null) {
   };
 
   return { data, loading, error, updatePosition };
+}
+
+/**
+ * Boat names for the fleet screen. These change rarely, so they are fetched
+ * once per visit — the live part of that screen is vessel_tracking.
+ */
+export function useFleetBoats() {
+  const [data, setData] = useState<FleetBoat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    getFleetBoats()
+      .then((rows) => { if (alive) { setData(rows); setLoading(false); } })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  return { data, loading };
 }
 
 export function useAllVesselTracking() {

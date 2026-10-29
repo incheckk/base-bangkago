@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -9,12 +9,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { ScrollHintBar } from '@/components/ScrollHintBar';
 import { ErrorState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
-import { getAdminGcashQr } from '@/services/app-settings.service';
-import { friendlyError } from '@/services/booking.service';
-import { pickImage } from '@/services/documents.service';
-import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
-import { createPassengerDetail } from '@/services/passenger-detail.service';
-import { createRental, getBangkaBlockedDates, tierStandardPrice } from '@/services/rental.service';
+import { getBangkaBlockedDates, tierStandardPrice } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 /** The next 7 days starting TOMORROW — rentals are always advance, so they always escrow. */
@@ -32,13 +27,11 @@ function nextDays(count: number): { iso: string; label: string }[] {
 }
 
 /**
- * Rental request + 50% GCash escrow in one screen (Phase 4C): pick a
- * date (days the boat is already booked are crossed out — 027), file
- * the admin QR payment (receipt screenshot — the admin reads the Ref
- * No. off it; no manual reference input). One flat whole-day price per
- * boat (068), no hourly math. The request waits in awaiting_payment;
- * the bangkero hears about it when the admin approves the escrow. The
- * remainder is collected in person when the charter completes.
+ * Step 1 of renting a boat: who rides, when, how many (Phase 4C). The GCash
+ * QR and receipt moved to rental-payment.tsx, so this ends on "Proceed to
+ * Downpayment" like the island-hop flow instead of scrolling past a payment
+ * nobody has agreed to the dates for yet. One flat whole-day price per boat
+ * (068), no hourly math.
  */
 export default function RentalFormScreen() {
   const { profile } = useAuth();
@@ -59,30 +52,6 @@ export default function RentalFormScreen() {
   const [companions, setCompanions] = useState<Companion[]>([]);
   // Days this boat/operator is already committed to (027) — dehighlighted below.
   const [blocked, setBlocked] = useState<string[]>([]);
-
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [qrLoaded, setQrLoaded] = useState(false);
-  const [proofUri, setProofUri] = useState<string | null>(null);
-
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getAdminGcashQr()
-      .then((v) => {
-        if (alive) setQrUrl(v);
-      })
-      .catch(() => {
-        // placeholder explains what to do when no QR exists yet
-      })
-      .finally(() => {
-        if (alive) setQrLoaded(true);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -110,91 +79,21 @@ export default function RentalFormScreen() {
   const maxPax = Number(params.capacity) || 12;
   const bookerName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'You';
 
-  async function chooseProof(source: 'camera' | 'gallery') {
-    try {
-      const uri = await pickImage(source);
-      if (uri) setProofUri(uri);
-    } catch (e) {
-      setError(friendlyError(e));
-    }
-  }
-
-  async function submit() {
-    if (busy || !profile) return;
-    if (!params.bangkaId) {
-      setError('No boat selected. Go back and choose one.');
-      return;
-    }
-    if (!date) {
-      setError('Pick a rental date.');
-      return;
-    }
-    if (!proofUri) {
-      setError('Attach your GCash receipt screenshot.');
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-    try {
-      // Proof first: a rental must never exist without the screenshot
-      // that documents its downpayment (same order as the package flow).
-      const proofPath = await uploadDownpaymentProof(proofUri);
-
-      const rental = await createRental({
-        userId: profile.uid,
+  function proceed() {
+    if (!params.bangkaId || !date) return;
+    router.push({
+      pathname: '/(passenger)/rental-payment',
+      params: {
         bangkaId: params.bangkaId,
-        eventName: eventName.trim() || undefined,
-        rentalDate: date,
-      });
-
-      // Companions ride under this charter (026 boat_rental_id). A failed
-      // insert must never block the request — the rental already exists.
-      await Promise.all(
-        companions.map((c) =>
-          createPassengerDetail({
-            firstName: c.firstName,
-            lastName: c.lastName,
-            age: c.age,
-            sex: c.sex,
-            contactNumber: c.contact,
-            address: c.address,
-            passengerType: 'regular',
-            boatRentalId: rental.rentalId,
-          }).catch(() => null),
-        ),
-      );
-
-      // Escrow row — booking already exists, so a failed insert only
-      // flags the confirmation instead of blocking it.
-      let downWarning = false;
-      try {
-        await createDownpayment({
-          amount: down,
-          // No manual ref input (prof's rule): the admin reads the
-          // Ref No. off the attached receipt while verifying in GCash.
-          referenceNum: '',
-          proofUrl: proofPath,
-          boatRentalId: rental.rentalId,
-        });
-      } catch {
-        downWarning = true;
-      }
-
-      // No notification here on purpose: the request sits in
-      // awaiting_payment where the bangkero cannot act on it. They are
-      // notified the moment the admin approves the escrow (020/027).
-      router.replace({
-        pathname: '/(passenger)/my-rentals',
-        params: {
-          rentalId: rental.rentalId,
-          ...(downWarning ? { downWarning: '1' } : {}),
-        },
-      });
-    } catch (e) {
-      setError(friendlyError(e));
-      setBusy(false);
-    }
+        boatName: params.boatName ?? 'Boat',
+        operatorName: params.operatorName ?? 'Bangkero',
+        rate: String(rate),
+        capacity: String(maxPax),
+        date,
+        eventName: eventName.trim(),
+        companionsJson: JSON.stringify(companions),
+      },
+    });
   }
 
   if (!params.bangkaId) {
@@ -208,7 +107,11 @@ export default function RentalFormScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <PassengerScreenHeader title="Rent a Boat" showDrawer={false} />
+      <PassengerScreenHeader
+        title="Rent a Boat"
+        subtitle="Step 1 of 2 · Trip details"
+        showDrawer={false}
+      />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* The boat being rented */}
@@ -253,9 +156,9 @@ export default function RentalFormScreen() {
                   <Text style={[styles.chipText, active && styles.chipTextActive, off && styles.chipTextOff]}>
                     {d.label}
                   </Text>
-              </Pressable>
-            );
-          })}
+                </Pressable>
+              );
+            })}
           </ScrollHintBar>
           {blocked.length > 0 && (
             <Text style={styles.dateHint}>
@@ -284,7 +187,7 @@ export default function RentalFormScreen() {
           <View style={styles.sumRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.sumLabelStrong}>GCash downpayment (50%)</Text>
-              <Text style={styles.sumHint}>Paid now to the admin&apos;s QR · held in escrow</Text>
+              <Text style={styles.sumHint}>Paid next step to the admin&apos;s QR · held in escrow</Text>
             </View>
             <Text style={styles.sumDown}>₱{down}</Text>
           </View>
@@ -294,59 +197,16 @@ export default function RentalFormScreen() {
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>GCASH DOWNPAYMENT (50%)</Text>
-        {qrUrl ? (
-          <Image source={{ uri: qrUrl }} style={styles.qrImage} resizeMode="contain" />
-        ) : (
-          <View style={styles.qrPlaceholder}>
-            <Text style={styles.qrPlaceholderText}>
-              {qrLoaded
-                ? 'The admin has not uploaded their GCash QR yet. Ask them to set it up in Admin → GCash QR.'
-                : 'Loading QR…'}
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
-        <Text style={styles.proofHint}>
-          Attach the digital receipt of your Express Send — the admin reads the
-          Ref No. straight from this image.
-        </Text>
-        <View style={styles.proofRow}>
-          <Pressable
-            onPress={() => void chooseProof('gallery')}
-            disabled={busy}
-            style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
-          >
-            <Text style={styles.proofBtnText}>🖼 Gallery</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => void chooseProof('camera')}
-            disabled={busy}
-            style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
-          >
-            <Text style={styles.proofBtnText}>📷 Camera</Text>
-          </Pressable>
-        </View>
-        {proofUri && <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />}
-
         <Text style={styles.escrowHint}>
           The bangkero is notified once the admin approves your downpayment, then confirms or
           declines. Nothing is charged in the app — the remainder is paid in person.
         </Text>
 
-        {!!error && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-
         <View style={styles.footer}>
           <PrimaryButton
-            label={`Pay ₱${down} & request rental`}
-            onPress={submit}
-            loading={busy}
-            disabled={busy || !profile || !proofUri}
+            label="Proceed to Downpayment"
+            onPress={proceed}
+            disabled={!profile || !date}
           />
         </View>
       </ScrollView>
@@ -414,62 +274,13 @@ const styles = StyleSheet.create({
   sumValue: { ...typography.bodyStrong, flexShrink: 1 },
   sumDown: { ...typography.bodyStrong, color: colors.primary, flexShrink: 1 },
 
-  qrImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  qrPlaceholder: {
-    minHeight: 120,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  qrPlaceholderText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
-
-  inputLabel: { ...typography.label, marginTop: spacing.lg, marginBottom: spacing.sm },
-  proofHint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.sm },
-
-  proofRow: { flexDirection: 'row', gap: spacing.md },
-  proofBtn: {
-    flex: 1,
-    minHeight: 46,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  proofBtnPressed: { borderColor: colors.primary },
-  proofBtnText: { color: colors.primary, fontSize: 14, fontWeight: '600' },
-  proofPreview: { width: '100%', height: 160, borderRadius: radii.md, marginTop: spacing.md },
-
   escrowHint: {
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 11,
     lineHeight: 16,
-    marginTop: spacing.md,
-  },
-
-  errorBanner: {
-    backgroundColor: colors.dangerTint,
-    borderColor: colors.danger,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.md,
     marginTop: spacing.lg,
   },
-  errorText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
 
   footer: { marginTop: spacing.xl },
 });

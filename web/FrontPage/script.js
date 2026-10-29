@@ -17,6 +17,37 @@ const frontpageClient = window.supabase && window.BANGKAGO_WEB
 
 const frontpageLoader = document.getElementById('frontpageLoader');
 
+/* ——————————————————————————————————————————————
+   LANDING STATS
+   Live counts from anon-readable tables only; the
+   HTML fallbacks stay if the fetch fails.
+   —————————————————————————————————————————————─ */
+function setStat(key, value) {
+    const el = document.querySelector('[data-stat="' + key + '"]');
+    if (el) el.textContent = value;
+}
+
+async function loadPublicStats() {
+    if (!frontpageClient) return;
+
+    const [ports, routes] = await Promise.all([
+        frontpageClient.from('ports').select('id').eq('is_active', true),
+        frontpageClient.from('routes').select('base_fare').eq('is_active', true),
+    ]);
+
+    if (!ports.error && ports.data) {
+        setStat('ports', ports.data.length.toLocaleString('en-PH'));
+    }
+
+    if (!routes.error && routes.data && routes.data.length) {
+        setStat('routes', routes.data.length.toLocaleString('en-PH'));
+        const fares = routes.data.map(r => Number(r.base_fare)).filter(n => n > 0);
+        if (fares.length) setStat('fare', '₱' + Math.min(...fares).toLocaleString('en-PH'));
+    }
+}
+
+loadPublicStats();
+
 if (frontpageLoader) {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const minimumDuration = reducedMotion ? 250 : 1200;

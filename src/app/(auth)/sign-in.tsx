@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
@@ -9,6 +9,7 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { TextField } from '@/components/TextField';
 import { friendlyAuthError, signIn } from '@/services/auth.service';
+import { getShowQuickLogin } from '@/services/dev.service';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import { normalizePhone } from '@/utils/phone';
 
@@ -31,6 +32,17 @@ export default function SignIn() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Admin-controlled demo switch (Admin → Developer Options, 069). Off means
+  // the seeded-account chips disappear on every phone, dev builds included.
+  const [showDemo, setShowDemo] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getShowQuickLogin()
+      .then((v) => { if (alive) setShowDemo(v); })
+      .catch(() => { if (alive) setShowDemo(true); });
+    return () => { alive = false; };
+  }, []);
 
   async function submit(rawPhone: string, rawPassword: string) {
     setFormError(null);
@@ -121,7 +133,7 @@ export default function SignIn() {
             </Pressable>
           </View>
 
-          {__DEV__ && (
+          {__DEV__ && showDemo && (
             <View style={styles.devBox}>
               <Text style={styles.devLabel}>DEV QUICK LOGIN</Text>
               <View style={styles.devRow}>

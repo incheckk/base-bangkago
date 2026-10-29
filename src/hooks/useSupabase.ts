@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getArrivalBypass, getDispatchBypass, getGatesBypass } from '../services/dev.service';
+import {
+  getArrivalBypass, getDispatchBypass, getGatesBypass, getShowQuickLogin,
+} from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { mapRow as mapParcelRow } from '../services/parcel.service';
 import {
@@ -538,6 +540,8 @@ export interface DevFlags {
   gatesBypass: boolean;
   /** Admin demo switch: true lets the arrived screen close out unboarded trips (026). */
   arrivalBypass: boolean;
+  /** Demo quick-login chips on sign-in (069). Not a rule bypass. */
+  showQuickLogin: boolean;
 }
 
 /**
@@ -547,7 +551,7 @@ export interface DevFlags {
  * screen re-reads immediately instead of waiting for the realtime echo.
  */
 export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
-  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false, arrivalBypass: false });
+  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false, arrivalBypass: false, showQuickLogin: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
@@ -557,13 +561,19 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
     // Each flag tolerates its own migration being unrun: pre-009 reads
     // OFF, and a 009-only database still shows the dispatch switch for
     // real while gates/arrival read OFF.
-    const [dispatch, gates, arrival] = await Promise.all([
+    const [dispatch, gates, arrival, quickLogin] = await Promise.all([
       getDispatchBypass().catch(() => false),
       getGatesBypass().catch(() => false),
       getArrivalBypass().catch(() => false),
+      getShowQuickLogin().catch(() => true),
     ]);
     if (id !== seq.current) return;
-    setData({ dispatchBypass: dispatch, gatesBypass: gates, arrivalBypass: arrival });
+    setData({
+      dispatchBypass: dispatch,
+      gatesBypass: gates,
+      arrivalBypass: arrival,
+      showQuickLogin: quickLogin,
+    });
     setError(null);
     setLoading(false);
   }, []);

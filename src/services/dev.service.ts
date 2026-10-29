@@ -63,3 +63,21 @@ export async function setArrivalBypass(on: boolean): Promise<void> {
   const { error } = await supabase.rpc('set_arrival_bypass', { p_on: on });
   if (error) throw error;
 }
+
+/**
+ * Demo quick-login chips on the sign-in screen (migration 069). The reader is
+ * a SECURITY DEFINER RPC because the sign-in screen has no session yet.
+ * Pre-069 the function is missing — show the chips (the old behaviour) rather
+ * than break the development flow.
+ */
+export async function getShowQuickLogin(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('demo_quick_login_enabled');
+  if (error) return true;
+  return data !== false;
+}
+
+/** Admin-only — enforced inside the RPC (users.user_role = 'admin'). */
+export async function setShowQuickLogin(on: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_show_quick_login', { p_on: on });
+  if (error) throw error;
+}

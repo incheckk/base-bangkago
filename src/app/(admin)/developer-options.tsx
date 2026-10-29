@@ -6,7 +6,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { useDevFlags } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
-import { setArrivalBypass, setDispatchBypass, setGatesBypass } from '@/services/dev.service';
+import { setArrivalBypass, setDispatchBypass, setGatesBypass, setShowQuickLogin } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const LIFTED = [
@@ -40,14 +40,16 @@ export default function DeveloperOptions() {
   const dispatchOn = flags.data.dispatchBypass;
   const gatesOn = flags.data.gatesBypass;
   const arrivalOn = flags.data.arrivalBypass;
+  const quickLoginOn = flags.data.showQuickLogin;
   const on = dispatchOn || gatesOn || arrivalOn;
 
-  async function toggle(which: 'dispatch' | 'gates' | 'arrival', next: boolean) {
+  async function toggle(which: 'dispatch' | 'gates' | 'arrival' | 'quicklogin', next: boolean) {
     setBusy(which);
     setActionError(null);
     try {
       if (which === 'dispatch') await setDispatchBypass(next);
       else if (which === 'gates') await setGatesBypass(next);
+      else if (which === 'quicklogin') await setShowQuickLogin(next);
       else await setArrivalBypass(next);
       flags.refresh();
     } catch (e) {
@@ -153,6 +155,32 @@ export default function DeveloperOptions() {
                 : arrivalOn
                   ? 'ON — unboarded trips can close out'
                   : 'OFF — onboarding enforced'}
+            </Text>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Show demo quick login</Text>
+                <Text style={styles.rowHint}>
+                  The seeded-account chips on the sign-in screen. Demo only — turn this off
+                  after the presentation so nobody signs in as another role by accident.
+                </Text>
+              </View>
+              <Switch
+                value={quickLoginOn}
+                onValueChange={(next) => void toggle('quicklogin', next)}
+                disabled={busy !== null}
+                trackColor={{ false: colors.border, true: colors.warningTint }}
+                thumbColor={quickLoginOn ? colors.warning : colors.surface}
+              />
+            </View>
+            <Text style={[styles.rowStatus, { color: quickLoginOn ? colors.danger : colors.textMuted }]}>
+              {busy === 'quicklogin'
+                ? 'Saving…'
+                : quickLoginOn
+                  ? 'ON — chips are visible on sign-in'
+                  : 'OFF — chips are hidden'}
             </Text>
           </View>
         )}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRealtimeQuery } from './useRealtimeQuery';
-import { getAlerts, resolveAlert } from '../services/safety-alert.service';
+import { getAlerts, getAlertFeed, resolveAlert } from '../services/safety-alert.service';
 import type { SafetyAlertDoc } from '../types/models';
 
 interface Result {
@@ -44,4 +44,29 @@ export function useSafetyAlerts(portId: string | null): Result {
   };
 
   return { data, loading, error, resolveAlert: doResolveAlert };
+}
+
+/**
+ * Read-only, role-scrubbed feed for the bangkero SOS screen (see
+ * getAlertFeed). Admin and coastguard keep using useSafetyAlerts.
+ */
+export function useAlertFeed() {
+  const [data, setData] = useState<SafetyAlertDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await getAlertFeed());
+      setError(null);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load alerts');
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+  useRealtimeQuery(load, [{ table: 'safety_alerts' }]);
+
+  return { data, loading, error };
 }

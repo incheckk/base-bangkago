@@ -20,6 +20,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import {
   useAcceptedBookings, useBangkero, useDevFlags, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
 } from '@/hooks/useSupabase';
@@ -280,6 +281,7 @@ export default function BangkeroHome() {
   const devFlags = useDevFlags();
   const bypass = devFlags.data.dispatchBypass;
   const gatesBypass = devFlags.data.gatesBypass;
+  const { advisory, active: advisoryActive } = useSailingAdvisory();
   const [now, setNow] = useState(() => Date.now());
   const [myFix, setMyFix] = useState<{ latitude: number; longitude: number } | null>(null);
   const lastFixFetchRef = useRef(0);
@@ -943,6 +945,16 @@ export default function BangkeroHome() {
         <View style={styles.weatherWrap}>
           <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} variant="bar" />
         </View>
+
+        {/* The coastguard's call outranks every other state on this screen. */}
+        {advisoryActive && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              Sailing is suspended: {advisory?.reason ?? 'coastguard advisory'}. You cannot
+              accept new trips or sail until the coastguard resumes sailing.
+            </Text>
+          </View>
+        )}
 
         {!!actionError && (
           <View style={styles.banner}>

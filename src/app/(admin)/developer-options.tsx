@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState } from '@/components/States';
 import { useDevFlags } from '@/hooks/useSupabase';
+import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
+import { setSailingAdvisory } from '@/services/advisory.service';
 import { friendlyError } from '@/services/booking.service';
 import { setArrivalBypass, setDispatchBypass, setGatesBypass, setShowQuickLogin } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -34,6 +37,7 @@ const KEPT = [
  */
 export default function DeveloperOptions() {
   const flags = useDevFlags();
+  const { advisory, active: advisoryActive, refresh: refreshAdvisory } = useSailingAdvisory();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -52,6 +56,19 @@ export default function DeveloperOptions() {
       else if (which === 'quicklogin') await setShowQuickLogin(next);
       else await setArrivalBypass(next);
       flags.refresh();
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setBusy(null);
+  }
+
+  /** Admin escape hatch: the coastguard's advisory is theirs to lift too. */
+  async function liftAdvisory() {
+    setBusy('advisory');
+    setActionError(null);
+    try {
+      await setSailingAdvisory({ suspended: false, source: 'admin_override' });
+      await refreshAdvisory();
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -182,6 +199,25 @@ export default function DeveloperOptions() {
                   ? 'ON — chips are visible on sign-in'
                   : 'OFF — chips are hidden'}
             </Text>
+          </View>
+        )}
+
+        {advisoryActive && (
+          <View style={styles.card}>
+            <Text style={styles.rowLabel}>Sailing suspended</Text>
+            <Text style={styles.rowHint}>
+              {advisory?.reason ?? 'Coastguard advisory'} —{' '}
+              {advisory?.source === 'weather'
+                ? 'raised by the weather reading'
+                : 'set by the coastguard'}.
+              Lifting this reopens accepts and departures immediately.
+            </Text>
+            <PrimaryButton
+              label="Lift suspension (admin override)"
+              variant="secondary"
+              onPress={() => void liftAdvisory()}
+              loading={busy === 'advisory'}
+            />
           </View>
         )}
 

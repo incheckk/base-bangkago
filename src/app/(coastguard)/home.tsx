@@ -7,6 +7,7 @@ import { Icon } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { WatchRow, WatchSection } from '@/components/WatchList';
+import { SailingAdvisoryCard } from '@/components/SailingAdvisoryCard';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAllPorts } from '@/hooks/useAllPorts';
 import { useAllTrips } from '@/hooks/useAllTrips';
@@ -142,6 +143,11 @@ export default function CoastguardHome() {
               <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
             </View>
 
+            {/* The one control on this screen: hold everything, or let it go. */}
+            <View style={styles.advisoryWrap}>
+              <SailingAdvisoryCard />
+            </View>
+
             {/* ---------- waiting now ---------- */}
             <View style={styles.sectionHead}>
               <Text style={styles.sectionLabel}>WAITING NOW</Text>
@@ -257,6 +263,7 @@ const styles = StyleSheet.create({
   statLabel: { ...typography.caption, color: colors.textMuted },
 
   weatherWrap: { marginTop: spacing.lg },
+  advisoryWrap: { marginTop: spacing.lg },
 
   sectionHead: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

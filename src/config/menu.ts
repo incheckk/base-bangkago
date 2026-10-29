@@ -48,7 +48,6 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'rental', label: 'Boat Rentals', route: '/(bangkero)/rentals' },
     { icon: 'star', label: 'My Ratings', route: '/(bangkero)/ratings' },
     { icon: 'cash', label: 'Earnings', route: '/(bangkero)/earnings' },
-    { icon: 'weather', label: 'Weather', route: '/(bangkero)/weather' },
     { icon: 'sos', label: 'SOS Alert', route: '/(bangkero)/sos-alert', danger: true },
   ],
   /**

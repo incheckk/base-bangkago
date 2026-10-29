@@ -63,6 +63,21 @@ export interface LiveWeather {
 const WEATHER_TTL_MS = 15 * 60 * 1000;
 const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
+export type SailVerdict = 'good' | 'care' | 'rough';
+
+/**
+ * One shared decision, so the home card and the coastguard advisory cannot
+ * disagree. Demo thresholds: 25 km/h or 1 m is "take care", 40 km/h or
+ * 1.5 m is "do not sail".
+ */
+export function sailVerdict(
+  w: Pick<LiveWeather, 'kind' | 'windKmh' | 'waveM'>
+): SailVerdict {
+  if (w.kind === 'storm' || w.windKmh >= 40 || (w.waveM ?? 0) >= 1.5) return 'rough';
+  if (w.windKmh >= 25 || (w.waveM ?? 0) >= 1.0) return 'care';
+  return 'good';
+}
+
 /** Middle of the Mactan–Olango crossing. Every surface quotes this point so
  *  two screens can never show different weather for the same sea. */
 export const STRAIT_POINT = { lat: 10.27, lon: 124.03 };

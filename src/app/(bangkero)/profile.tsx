@@ -38,7 +38,6 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
   { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
   { key: 'ratings', label: 'My Ratings', icon: 'star' },
   { key: 'documents', label: 'Documents', icon: 'document' },
-  { key: 'weather', label: 'Weather', icon: 'weather' },
   { key: 'qr', label: 'GCash QR', icon: 'qr' },
   { key: 'guide', label: 'Quick Guide', icon: 'guide' },
   // The header burger is gone (3D) — SOS still has to be one tap away, and
@@ -52,7 +51,6 @@ const ROUTE_MAP: Record<string, string> = {
   rentals: '/(bangkero)/rentals',
   ratings: '/(bangkero)/ratings',
   documents: '/(bangkero)/verify-boat',
-  weather: '/(bangkero)/weather',
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
   sos: '/(bangkero)/sos-alert',

@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
-import { PortSelect } from '@/components/PortSelect';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { RouteLegPicker } from '@/components/RouteLegPicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { TextField } from '@/components/TextField';
@@ -186,40 +186,21 @@ export default function BookDelivery() {
       <PassengerScreenHeader title="Book Delivery" subtitle="Send parcels and cargo between ports" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        {/* Two dropdowns, not eighteen chips.
-            Nine ports per leg filled most of the first screen with
-            near-identical pills before the form had asked anything, and the
-            grid grows every time the LGU adds a port. A blocked port now says
-            why instead of only dimming. */}
-        <PortSelect
-          label="DEPARTURE"
-          sheetTitle="Pick up from"
+        {/* Same route card as Book a Ride — one map, one picker per leg, and
+            a blocked port says why ("no route from Marigondon"). */}
+        <RouteLegPicker
           ports={ports.data}
-          value={fromId}
-          onChange={setFromId}
-          placeholder="Select a departure port"
-          isDisabled={(id) => (id === toId ? 'Same as destination' : null)}
-        />
-
-        <View style={styles.fieldGap} />
-
-        <PortSelect
-          label="DESTINATION"
-          sheetTitle="Deliver to"
-          ports={ports.data}
-          value={toId}
-          onChange={setToId}
-          // Destination has no meaning until there is an origin to route from.
-          locked={!fromId}
-          placeholder="Select a destination"
-          disabledHint="Pick a departure first"
-          isDisabled={(id) => {
-            if (id === fromId) return 'Same as departure';
-            if (!routeFor(fromId, id)) {
-              return `No route from ${fromPort?.portName ?? 'your departure port'}`;
-            }
-            return null;
-          }}
+          fromId={fromId}
+          toId={toId}
+          onChange={(leg, id) => (leg === 'from' ? setFromId(id) : setToId(id))}
+          fromSheetTitle="Pick up from"
+          toSheetTitle="Deliver to"
+          style={{ marginHorizontal: 0 }}
+          isDisabled={(id, leg) =>
+            leg === 'to' && !routeFor(fromId, id)
+              ? `No route from ${fromPort?.portName ?? 'your departure port'}`
+              : null
+          }
         />
 
         <Text style={[styles.sectionLabel, styles.mt]}>DELIVERY MODE</Text>
@@ -436,7 +417,6 @@ const styles = StyleSheet.create({
   sectionLabel: { ...typography.label, marginBottom: spacing.md },
   mt: { marginTop: spacing.xl },
 
-  fieldGap: { height: spacing.lg },
   itemCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

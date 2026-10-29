@@ -116,6 +116,32 @@ export async function getAllVesselPositions(): Promise<VesselTrackingDoc[]> {
   return latest;
 }
 
+export interface FleetBoat {
+  bangkaId: string;
+  bangkaName: string;
+  capacity: number;
+  operatorName: string | null;
+}
+
+/**
+ * Names for the coastguard fleet list. Tracking rows only carry a boat id;
+ * a watch officer reads boat names, not UUIDs.
+ */
+export async function getFleetBoats(): Promise<FleetBoat[]> {
+  const { data, error } = await supabase
+    .from('bangkas')
+    .select('id, bangka_name, capacity, bangkeros(display_name)')
+    .order('bangka_name');
+
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    bangkaId: row.id,
+    bangkaName: row.bangka_name ?? 'Boat',
+    capacity: Number(row.capacity ?? 0),
+    operatorName: row.bangkeros?.display_name ?? null,
+  }));
+}
+
 export async function getLatestPosition(
   bangkaId: string
 ): Promise<VesselTrackingDoc | null> {

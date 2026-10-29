@@ -27,26 +27,25 @@ interface Props {
   onFail?: () => void;
 }
 
-// Center of the Mactan-Olango corridor
+// Center of the Mactan-Olango corridor — only a fallback when the port list
+// has no coordinates; the real view is fit to the ports on load.
 const CENTER_LAT = 10.3157;
 const CENTER_LNG = 124.0150;
 const ZOOM = 11;
-const MIN_ZOOM = 10;
 // Was 15, which stopped short of seeing a pier at all. 17 is close enough to
 // pick out the individual jetty you are being told to walk to.
 const MAX_ZOOM = 17;
 /*
- * There are deliberately no maxBounds any more.
+ * The map is framed by the ports, not by a hardcoded camera.
  *
- * The old box spanned 0.20 degrees of longitude, but at zoom 11 a phone
- * viewport covers about 0.27 — wider than the box. Leaflet then has no legal
- * position for the centre and clamps it back on every drag, so panning either
- * did nothing (at viscosity 1.0) or sprang back (at 0.6). Sizing a bounds box
- * correctly means knowing the viewport, which varies per device, so any fixed
- * box reintroduces this on some phone.
- *
- * minZoom keeps the corridor from shrinking to a dot, and the recentre button
- * is the way back if you wander. Panning now works the same on every screen.
+ * The old view opened on a fixed centre/zoom, which on some phones landed
+ * outside the corridor entirely, and it had no maxBounds — so a stray drag
+ * could leave the strait for another island with no way back (the recentre
+ * button was removed). Now: fitBounds(ports) sets the opening view, maxBounds
+ * is that box padded generously (the viewport must always have a legal centre
+ * or Leaflet snaps every drag), and minZoom is derived from the fit so the
+ * corridor cannot shrink to a dot. framePorts() runs again after the WebView
+ * settles because the first paint can measure a zero-height container.
  */
 
 /** Leaflet never showed up — almost always the CDN blocked on venue wifi. */
@@ -98,6 +97,7 @@ function buildLeafletHTML(
         }).addTo(map)${behaviour} };
     `;
   }).join('\n');
+  const portPoints = JSON.stringify(validPorts.map((p) => [p.latitude, p.longitude]));
 
   return `
     <!DOCTYPE html>
@@ -231,13 +231,15 @@ function buildLeafletHTML(
             var map = L.map('map', {
               zoomControl: false,
               attributionControl: true,
-              minZoom: ${MIN_ZOOM},
               maxZoom: ${MAX_ZOOM},
               // Half-steps: pinching feels continuous rather than notched.
               zoomSnap: 0.5,
               zoomDelta: 0.5,
               touchZoom: true,
               doubleClickZoom: true,
+              // Soft clamp: the view resists leaving the corridor instead of
+              // hard-locking at the edge, which felt broken when dragging.
+              maxBoundsViscosity: 0.85,
               dragging: ${draggable}
             }).setView([${CENTER_LAT}, ${CENTER_LNG}], ${ZOOM});
 
@@ -247,7 +249,30 @@ function buildLeafletHTML(
             }).addTo(map);
 
             var PORTS = {}, ROUTE = null, VESSELS = [];
+            var PORT_POINTS = ${portPoints};
             ${portMarkers}
+
+            /*
+             * Frame the ports, then keep the view near them.
+             *
+             * maxBounds is the port box padded 60% each side (~2.2x the span),
+             * which is always wider than the phone viewport at the fitted
+             * zoom — a tighter box leaves Leaflet no legal centre and every
+             * drag springs back. minZoom follows the fit so the corridor
+             * cannot shrink to a dot. Runs twice: the WebView can measure a
+             * zero-height container on first paint.
+             */
+            var PORT_BOUNDS = L.latLngBounds(PORT_POINTS);
+            window.__framePorts = function () {
+              map.invalidateSize();
+              if (!PORT_BOUNDS.isValid()) return;
+              map.setMaxBounds(PORT_BOUNDS.pad(0.60));
+              map.fitBounds(PORT_BOUNDS, { padding: [26, 26], maxZoom: 13 });
+              map.setMinZoom(Math.max(8.5, map.getZoom() - 0.5));
+            };
+            window.__framePorts();
+            setTimeout(window.__framePorts, 250);
+            window.addEventListener('resize', function () { map.invalidateSize(); });
 
             /*
              * Repaint markers in place. Called on every selection change

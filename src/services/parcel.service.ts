@@ -36,6 +36,27 @@ export function mapRow(row: any): ParcelDoc {
   };
 }
 
+/**
+ * One rule for every caller (payment, createBooking and createParcel):
+ * a parcel line has a non-blank name, a whole quantity >= 1, and a weight
+ * between 1 and 50 kg. Kept here so the screen, the fare recompute and the
+ * insert can never disagree about what a valid line is.
+ */
+export function validateParcelItems(
+  items: { itemName: string; quantity: number; kilogram: number }[]
+): void {
+  if (items.length === 0) throw new Error('Add at least one item to your parcel.');
+  for (const item of items) {
+    if (!item.itemName.trim()) throw new Error('Every item needs a name.');
+    if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+      throw new Error('Each item needs a quantity of 1 or more.');
+    }
+    if (!Number.isFinite(item.kilogram) || item.kilogram < 1 || item.kilogram > 50) {
+      throw new Error('Each item must weigh between 1 and 50 kg.');
+    }
+  }
+}
+
 export async function createParcel(parcel: {
   receiverName: string;
   receiverContact?: string;
@@ -52,6 +73,14 @@ export async function createParcel(parcel: {
   batchedDeadlineAt?: string | null;
   batchingRouteKey?: string | null;
 }): Promise<ParcelDoc> {
+  validateParcelItems(parcel.items);
+  if (
+    parcel.totalWeightKg != null &&
+    (!Number.isFinite(parcel.totalWeightKg) || parcel.totalWeightKg < 1)
+  ) {
+    throw new Error('Parcel weight is invalid.');
+  }
+
   const { data, error } = await supabase
     .from('parcels')
     .insert({

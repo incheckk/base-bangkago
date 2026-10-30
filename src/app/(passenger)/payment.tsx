@@ -11,7 +11,7 @@ import { getAdminGcashQr } from '@/services/app-settings.service';
 import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
-import { createParcel } from '@/services/parcel.service';
+import { createParcel, validateParcelItems } from '@/services/parcel.service';
 import { assignToBatch } from '@/services/parcel-batching.service';
 import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
@@ -72,8 +72,11 @@ export default function PaymentScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const paxCount = parseInt(params.count ?? '1', 10);
-  const fare = parseInt(params.fare ?? '0', 10);
+  // Display-only quotes. createBooking recomputes the real fare and passenger
+  // count server-side, so editing these URL params can no longer change what
+  // is stored or collected.
+  const paxCount = Math.max(1, parseInt(params.count ?? '1', 10) || 1);
+  const fare = Math.max(0, parseInt(params.fare ?? '0', 10) || 0);
   const serviceType = params.serviceType === 'cargo' ? 'cargo' : 'passenger';
 
   const deliveryMode: 'accompanied' | 'piggyback' | 'batched' | 'solo' =
@@ -165,13 +168,34 @@ export default function PaymentScreen() {
         }
       }
 
-      const { bookingId, ref } = await createBooking({
+      // Cargo lines are parsed and validated BEFORE the booking exists: the
+      // fare is recomputed from them, and a bad line must not leave a booking
+      // (or a paid-downpayment booking) behind.
+      let cargoItems: { itemName: string; quantity: number; kilogram: number }[] = [];
+      if (serviceType === 'cargo') {
+        if (!params.receiverName) throw new Error('Missing receiver details. Go back and try again.');
+        let parsed: { itemName?: string; quantity: string | number; kilogram: string | number }[];
+        try {
+          parsed = JSON.parse(params.itemsJson ?? '[]') as typeof parsed;
+        } catch {
+          throw new Error('Item details are invalid. Go back and check them.');
+        }
+        cargoItems = parsed.map((i) => ({
+          itemName: String(i.itemName ?? '').trim(),
+          quantity: Number(i.quantity),
+          kilogram: Number(i.kilogram),
+        }));
+        validateParcelItems(cargoItems);
+      }
+
+      const { bookingId, ref, totalPrice } = await createBooking({
         passenger: profile,
         fromPort: { portId: params.fromId, portName: params.fromName },
         toPort: { portId: params.toId, portName: params.toName },
         passengerCount: serviceType === 'cargo' ? 1 : paxCount,
         serviceType,
-        totalFare: fare,
+        items: serviceType === 'cargo' ? cargoItems : undefined,
+        deliveryType: deliveryMode,
         // Option B (045): only accompanied cargo is a real crossing.
         // Piggyback/batched/solo stubs stay invisible to FCFS until the
         // carrier link (or create_solo_sailing) promotes them.
@@ -181,6 +205,11 @@ export default function PaymentScreen() {
           ? { scheduledDate: params.scheduledDate, scheduledTime: params.scheduledTime || undefined }
           : {}),
       });
+
+      // The server-recomputed fare is the only amount this screen records.
+      const actualFare = totalPrice;
+      const actualDownAmount = Math.round(totalPrice / 2);
+      const actualRemainder = totalPrice - actualDownAmount;
 
       // Companions ride under this booking. A failed insert must never block
       // the confirmation screen — the booking itself already exists.
@@ -218,13 +247,13 @@ export default function PaymentScreen() {
       let payWarning = false;
       if (isEscrow) {
         try {
-          await createPayment(bookingId, onboardRemainder, 'cash');
+          await createPayment(bookingId, actualRemainder, 'cash');
         } catch {
           payWarning = true;
         }
       } else {
         try {
-          await createPayment(bookingId, fare, method);
+          await createPayment(bookingId, actualFare, method);
         } catch {
           payWarning = true;
         }
@@ -232,40 +261,21 @@ export default function PaymentScreen() {
 
       let parcelId: string | undefined;
       let parcelWarning = false;
-      if (serviceType === 'cargo' && params.receiverName) {
-        let items: { itemName: string; quantity: number; kilogram: number }[] = [];
-        if (params.itemsJson) {
-          try {
-            const parsed = JSON.parse(params.itemsJson) as {
-              itemName: string;
-              quantity: string | number;
-              kilogram: string | number;
-            }[];
-            items = parsed
-              .filter((i) => i.itemName?.trim())
-              .map((i) => ({
-                itemName: i.itemName.trim(),
-                quantity: Number(i.quantity) || 1,
-                kilogram: Number(i.kilogram) || 1,
-              }));
-          } catch {
-            items = [];
-          }
-        }
+      if (serviceType === 'cargo') {
         try {
           const parcel = await createParcel({
-            receiverName: params.receiverName,
+            receiverName: params.receiverName ?? '',
             receiverContact: params.receiverContact || undefined,
-            totalPrice: fare,
+            totalPrice: actualFare,
             userId: profile.uid,
             bookingId,
-            items,
+            items: cargoItems,
             deliveryType: deliveryMode,
             piggybackBookingId,
-            totalWeightKg: items.reduce((sum, i) => sum + (Number(i.kilogram) || 0), 0) || null,
+            totalWeightKg: cargoItems.reduce((sum, i) => sum + i.kilogram, 0) || null,
             originIsland,
             destinationIsland,
-            quotedFare: Number.isFinite(fare) ? fare : null,
+            quotedFare: actualFare,
           });
           parcelId = parcel.parcelId;
           // Batched mode: put the parcel in the batch queue. Never blocks
@@ -312,7 +322,7 @@ export default function PaymentScreen() {
       if (isEscrow && proofPath) {
         try {
           await createDownpayment({
-            amount: downAmount,
+            amount: actualDownAmount,
             // No manual ref input (prof's rule): the admin reads the
             // Ref No. off the attached receipt while verifying in GCash.
             referenceNum: '',
@@ -340,6 +350,7 @@ export default function PaymentScreen() {
         pathname: '/(passenger)/booking-confirmed',
         params: {
           ...params,
+          fare: String(actualFare),
           paymentMethod: isEscrow ? 'cash' : method,
           bookingId,
           ref,
@@ -349,8 +360,8 @@ export default function PaymentScreen() {
           ...(isEscrow
             ? {
                 downStatus: 'pending',
-                downAmount: String(downAmount),
-                remainder: String(onboardRemainder),
+                downAmount: String(actualDownAmount),
+                remainder: String(actualRemainder),
                 ...(downWarning ? { downWarning: '1' } : {}),
               }
             : {}),

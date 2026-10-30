@@ -98,10 +98,13 @@ export async function getTrackingByBangka(
 }
 
 export async function getAllVesselPositions(): Promise<VesselTrackingDoc[]> {
+  // Newest 1000 fixes globally (same cap as the web fleet map); the table
+  // grows forever, and an unbounded fetch eventually stalls the map.
   const { data, error } = await supabase
     .from('vessel_tracking')
     .select('*')
-    .order('recorded_at', { ascending: false });
+    .order('recorded_at', { ascending: false })
+    .limit(1000);
 
   if (error) throw error;
 

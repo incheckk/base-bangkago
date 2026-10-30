@@ -84,8 +84,8 @@ export default function BookDelivery() {
   }, [deliveryMode, fromPort?.portId, toPort?.portId]);
 
   const totalKg = items.reduce((sum, i) => {
-    const kg = parseFloat(i.kilogram);
-    // 1-50 kg clamp per item; NaN/negative/zero contribute 0 (ready-gate blocks).
+    const kg = Number(i.kilogram);
+    // Invalid weights contribute 0 here; itemWeightError rejects them below.
     return sum + (Number.isFinite(kg) && kg >= 1 && kg <= 50 ? kg : 0);
   }, 0);
   const fareResult =
@@ -116,6 +116,28 @@ export default function BookDelivery() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function itemNameError(item: ParcelItem): string | null {
+    if (!item.itemName.trim()) return 'Item name is required';
+    return textError(item.itemName);
+  }
+
+  function itemQuantityError(item: ParcelItem): string | null {
+    return /^\d+$/.test(item.quantity.trim()) && Number(item.quantity) > 0
+      ? null
+      : 'Enter a quantity of 1 or more';
+  }
+
+  function itemWeightError(item: ParcelItem): string | null {
+    const kg = Number(item.kilogram);
+    return Number.isFinite(kg) && kg >= 1 && kg <= 50 ? null : 'Weight must be 1–50 kg';
+  }
+
+  // Every line must be complete — a blank or invalid line is never silently
+  // dropped at payment, which used to overcharge for an item that was not saved.
+  const itemsValid = items.every(
+    (i) => !itemNameError(i) && !itemQuantityError(i) && !itemWeightError(i)
+  );
+
   const ready =
     !!fromId &&
     !!toId &&
@@ -124,8 +146,7 @@ export default function BookDelivery() {
     totalKg > 0 &&
     !nameError(receiverName) &&
     !!normalizePhone(receiverContact) &&
-    items.some((i) => i.itemName.trim() && !textError(i.itemName)) &&
-    items.every((i) => /^\d+$/.test(i.quantity.trim()) && Number(i.quantity) > 0) &&
+    itemsValid &&
     piggybackReady;
 
   if (ports.loading || routesLoading) {
@@ -288,14 +309,14 @@ export default function BookDelivery() {
               onChangeText={(v) => updateItem(idx, 'itemName', v)}
               placeholder="e.g. Box of vegetables"
               autoCapitalize="sentences"
-              error={item.itemName ? textError(item.itemName) : null}
+              error={item.itemName ? itemNameError(item) : null}
             />
             <View style={styles.itemRow}>
               <View style={styles.itemHalf}>
-                <TextField label="Qty" value={item.quantity} onChangeText={(v) => updateItem(idx, 'quantity', v)} placeholder="1" keyboardType="number-pad" maxLength={4} />
+                <TextField label="Qty" value={item.quantity} onChangeText={(v) => updateItem(idx, 'quantity', v)} placeholder="1" keyboardType="number-pad" maxLength={4} error={itemQuantityError(item)} />
               </View>
               <View style={styles.itemHalf}>
-                <TextField label="Weight (kg)" value={item.kilogram} onChangeText={(v) => updateItem(idx, 'kilogram', v)} placeholder="1" keyboardType="numeric" />
+                <TextField label="Weight (kg)" value={item.kilogram} onChangeText={(v) => updateItem(idx, 'kilogram', v)} placeholder="1" keyboardType="numeric" error={itemWeightError(item)} />
               </View>
             </View>
           </View>

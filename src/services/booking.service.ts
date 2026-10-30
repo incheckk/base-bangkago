@@ -1,8 +1,11 @@
 import type { BangkeroDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
 import { manilaTodayIso } from '../utils/date';
 import { friendlyAuthError } from './auth.service';
+import { getIslandPackage } from './island-package.service';
 import { mapRouteRow } from './mappers';
 import { createNotification } from './notification.service';
+import { calculateParcelFare, type DeliveryType } from './parcel-pricing.service';
+import { validateParcelItems } from './parcel.service';
 import { getPassengerDetailsByBooking } from './passenger-detail.service';
 import { supabase } from './supabase';
 
@@ -30,6 +33,8 @@ export async function fetchRoute(
 export interface CreateBookingResult {
   bookingId: string;
   ref: string;
+  /** Server-recomputed fare stored on the booking. */
+  totalPrice: number;
 }
 
 /**
@@ -118,7 +123,10 @@ interface CreateArgs {
   toPort: Pick<PortDoc, 'portId' | 'portName'>;
   passengerCount: number;
   serviceType?: 'passenger' | 'cargo';
-  totalFare?: number;
+  /** Cargo only: validated lines, used to recompute the fare server-side. */
+  items?: { itemName: string; quantity: number; kilogram: number }[];
+  /** Cargo only: pricing mode for the recomputed fare. */
+  deliveryType?: DeliveryType;
   /** Island-hopping package the booking belongs to (stored for itinerary display). */
   packageId?: string;
   /** Sailing date (YYYY-MM-DD) and slot; future dates escrow first (020). */
@@ -139,14 +147,68 @@ export function isAdvanceDate(scheduledDate?: string | null): boolean {
 }
 
 /**
+ * Fare stopgap (TODO: move the whole create path into an RPC): the payment
+ * screen's URL params are display-only. Rides reprice from the route,
+ * packages from the live package row, and cargo from the validated item
+ * lines plus the ports' island groups.
+ */
+async function computeBookingFare(args: {
+  serviceType: 'passenger' | 'cargo';
+  route: RouteDoc;
+  pax: number;
+  packageId?: string;
+  items?: { itemName: string; quantity: number; kilogram: number }[];
+  deliveryType: DeliveryType;
+  fromPortId: string;
+  toPortId: string;
+}): Promise<number> {
+  if (args.serviceType === 'cargo') {
+    const items = args.items ?? [];
+    validateParcelItems(items);
+    const totalKg = items.reduce((sum, item) => sum + item.kilogram, 0);
+
+    const { data, error } = await supabase
+      .from('ports')
+      .select('id, island_group')
+      .in('id', [args.fromPortId, args.toPortId]);
+    if (error) throw error;
+
+    const groupById = new Map<string, 'mactan' | 'olango'>();
+    for (const row of data ?? []) {
+      groupById.set(row.id, row.island_group === 'olango' ? 'olango' : 'mactan');
+    }
+    const fromGroup = groupById.get(args.fromPortId);
+    const toGroup = groupById.get(args.toPortId);
+    if (!fromGroup || !toGroup) throw new Error('Port details could not be loaded.');
+
+    const result = calculateParcelFare({
+      fromPort: { portId: args.fromPortId, islandGroup: fromGroup },
+      toPort: { portId: args.toPortId, islandGroup: toGroup },
+      totalKg,
+      deliveryType: args.deliveryType,
+    });
+    if (result.blockedReason) throw new Error(result.blockedReason);
+    return result.fare;
+  }
+
+  if (args.packageId) {
+    const pkg = await getIslandPackage(args.packageId);
+    if (!pkg) throw new Error('That package no longer exists.');
+    return pkg.price;
+  }
+
+  return Math.round(args.route.baseFare * args.pax);
+}
+
+/**
  * Creates a booking. id and ref are filled by the set_booking_ref trigger.
- * totalFare (screen-computed, includes discounts/cargo multiplier) is
- * honored after the route is validated. A future sailing date lands the
- * row in 'pending' until the admin clears the escrow (020).
+ * The fare is recomputed here from the route, package or parcel lines — the
+ * screen's quote is advisory and is never trusted. A future sailing date
+ * lands the row in 'pending' until the admin clears the escrow (020).
  */
 export async function createBooking({
-  passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', totalFare, packageId,
-  scheduledDate, scheduledTime, isDispatchable,
+  passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', items, deliveryType,
+  packageId, scheduledDate, scheduledTime, isDispatchable,
 }: CreateArgs): Promise<CreateBookingResult> {
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
@@ -155,6 +217,8 @@ export async function createBooking({
   const route = await fetchRoute(fromPort.portId, toPort.portId);
   if (!route) throw new Error('No route runs between those two ports.');
   if (!route.isActive) throw new Error('That route is not running right now.');
+
+  const pax = Number.isFinite(passengerCount) ? Math.max(1, Math.floor(passengerCount)) : 1;
 
   const active = await getActiveBooking(passenger.uid, { scheduledDate, scheduledTime });
   if (active) {
@@ -172,11 +236,21 @@ export async function createBooking({
     );
   }
 
-  const totalPrice = totalFare ?? route.baseFare * passengerCount;
   const advance = isAdvanceDate(scheduledDate);
   if (advance && !scheduledTime) {
     throw new Error('Pick a departure time for your sailing date.');
   }
+
+  const totalPrice = await computeBookingFare({
+    serviceType,
+    route,
+    pax,
+    packageId,
+    items,
+    deliveryType: deliveryType ?? 'accompanied',
+    fromPortId: fromPort.portId,
+    toPortId: toPort.portId,
+  });
 
   const bookingFields: Record<string, unknown> = {
     user_id: passenger.uid,
@@ -184,7 +258,7 @@ export async function createBooking({
     passenger_phone: passenger.phone,
     from_port_name: fromPort.portName,
     to_port_name: toPort.portName,
-    num_of_passenger: passengerCount,
+    num_of_passenger: pax,
     total_price: totalPrice,
     route_id: route.routeId,
     service_type: serviceType,
@@ -230,7 +304,7 @@ export async function createBooking({
     await supabase.rpc('assign_next_hold', { p_booking_id: data.id });
   }
 
-  return { bookingId: data.id, ref: data.ref };
+  return { bookingId: data.id, ref: data.ref, totalPrice };
 }
 
 /**

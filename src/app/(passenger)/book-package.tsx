@@ -91,7 +91,7 @@ export default function BookPackage() {
       setNotice(null);
       try {
         const [active, banInfo] = await Promise.all([
-          getActiveBooking(profile.uid),
+          getActiveBooking(profile.uid, { scheduledDate, scheduledTime }),
           getBookingBan(profile.uid),
         ]);
         if (banInfo) {

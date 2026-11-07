@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -11,7 +11,7 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
-import { useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
+import { useAcceptedBookings, useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
 import {
   acceptBooking, rejectBooking, friendlyError, resolveGroupNoShow, setOnboarded,
   setPassengerBoarded, verifyBoardingQr,
@@ -22,9 +22,10 @@ import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.se
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { IslandPackageDoc, ParcelDoc, PassengerDetailDoc } from '@/types/models';
+import type { BookingDoc, IslandPackageDoc, ParcelDoc, PassengerDetailDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { safeBack } from '@/utils/navigation';
+import { groupAcceptedBookings } from '@/utils/trip-groups';
 
 export default function BookingStatus() {
   const params = useLocalSearchParams<{ bookingId?: string | string[] }>();
@@ -33,109 +34,159 @@ export default function BookingStatus() {
   const rawId = params.bookingId;
   const bookingId = (Array.isArray(rawId) ? rawId[0] : rawId) ?? '';
   const { user } = useAuth();
+  const uid = user?.id ?? null;
   const { data: booking, loading, error } = useBooking(bookingId ?? null);
-  const bangkero = useBangkero(user?.id ?? null);
+  const accepted = useAcceptedBookings(uid);
+  const bangkero = useBangkero(uid);
+  const ports = usePorts();
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const uid = user?.id ?? null;
-  const ports = usePorts();
+  // 071: accepted bookings share a group id. Home opens the group with its
+  // oldest member, so the status screen must expand back to every accepted
+  // booking on the same boat/route/sailing slot.
+  const members = useMemo(() => {
+    if (!booking) return [];
+    if (!booking.groupBookingId) return [booking];
+    const group = groupAcceptedBookings(accepted.data)
+      .find((g) => g.groupBookingId === booking.groupBookingId);
+    if (!group) return [booking];
+    return group.bookings.some((b) => b.bookingId === booking.bookingId)
+      ? group.bookings
+      : [booking, ...group.bookings];
+  }, [accepted.data, booking]);
+  const passengerMembers = useMemo(
+    () => members.filter((m) => m.serviceType !== 'cargo'),
+    [members]
+  );
+  const cargoMembers = useMemo(
+    () => members.filter((m) => m.serviceType === 'cargo'),
+    [members]
+  );
+  const passengerIdsKey = passengerMembers.map((m) => m.bookingId).join(',');
+  const cargoIdsKey = cargoMembers.map((m) => m.bookingId).join(',');
+  const memberIdsKey = members.map((m) => m.bookingId).join(',');
+  const groupLoaded =
+    !booking?.groupBookingId ||
+    accepted.data.some((m) => m.groupBookingId === booking.groupBookingId);
 
-  // Island-hop bookings: show every stop so the crew knows the full run.
+  // Island-hop bookings: show every stop so the crew knows the full run. The
+  // package may sit on a different group member than the one opened.
+  const packageId = members.find((m) => m.packageId)?.packageId
+    ?? booking?.packageId
+    ?? null;
   const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
   useEffect(() => {
-    if (!booking?.packageId) return;
+    if (!packageId) return;
     let alive = true;
-    getIslandPackage(booking.packageId)
+    getIslandPackage(packageId)
       .then((p) => { if (alive) setPkg(p); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [booking?.packageId]);
+  }, [packageId]);
 
-  /**
-   * Latched the moment a no-show lands. The row flips to cancelled a beat
-   * later through realtime — without this, a second tap re-runs the RPC.
-   */
-  const [noShowDone, setNoShowDone] = useState(false);
   /** B7: counter-report sent for the current dispute — latch the button. */
   const [counterSent, setCounterSent] = useState(false);
+  /** Latched per passenger member so a second tap cannot re-run the RPC. */
+  const [noShowDoneByBookingId, setNoShowDoneByBookingId] =
+    useState<Record<string, boolean>>({});
 
-  // Companions ride under the booker as one boarding group. Re-fetched after
-  // a partial no-show (022) so absent companions show their stamped state.
-  const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
+  // Companions ride under their own booker. null means the read failed, so
+  // the gate stays closed until the roster is actually known.
+  const [companionsByBookingId, setCompanionsByBookingId] =
+    useState<Record<string, PassengerDetailDoc[] | null>>({});
   useEffect(() => {
-    if (!bookingId) return;
+    const ids = passengerIdsKey ? passengerIdsKey.split(',') : [];
+    if (ids.length === 0) return;
     let alive = true;
-    getPassengerDetailsByBooking(bookingId)
-      .then((rows) => { if (alive) setCompanions(rows); })
-      .catch(() => {
-        // the tree still renders the booker without names
-      });
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          return [id, await getPassengerDetailsByBooking(id)] as const;
+        } catch {
+          return [id, null] as const;
+        }
+      })
+    ).then((entries) => {
+      if (alive) setCompanionsByBookingId(Object.fromEntries(entries));
+    });
     return () => { alive = false; };
-  }, [bookingId, noShowDone]);
+  }, [passengerIdsKey]);
 
   // Cargo (Option B): the sender's booking carries no receiver data — read
-  // it off the parcel so the crew sees who to hand the cargo to.
-  const [parcel, setParcel] = useState<ParcelDoc | null>(null);
+  // it off each cargo member's parcel.
+  const [parcelByBookingId, setParcelByBookingId] =
+    useState<Record<string, ParcelDoc | null>>({});
   useEffect(() => {
-    if (!bookingId) return;
+    const ids = cargoIdsKey ? cargoIdsKey.split(',') : [];
+    if (ids.length === 0) return;
     let alive = true;
-    getParcelByBooking(bookingId)
-      .then((p) => { if (alive) setParcel(p); })
-      .catch(() => {
-        // receiver info stays hidden; the booking text still renders
-      });
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          return [id, await getParcelByBooking(id)] as const;
+        } catch {
+          return [id, null] as const;
+        }
+      })
+    ).then((entries) => {
+      if (alive) setParcelByBookingId(Object.fromEntries(entries));
+    });
     return () => { alive = false; };
-  }, [bookingId]);
+  }, [cargoIdsKey]);
 
-  // Riding-along parcels for this booking: matched by carrier_booking_id
+  // Riding-along parcels for every member: matched by carrier_booking_id
   // (045) or piggyback_booking_id (pre-045). A pre-045 schema has no carrier
-  // column, so the combined query fails — fall back to the piggyback key
-  // rather than losing the section entirely.
-  const [attachedParcels, setAttachedParcels] = useState<ParcelDoc[]>([]);
+  // column, so the combined query fails — fall back to the piggyback key.
+  const [attachedParcelsByBookingId, setAttachedParcelsByBookingId] =
+    useState<Record<string, ParcelDoc[]>>({});
   useEffect(() => {
-    if (!bookingId) { setAttachedParcels([]); return; }
+    const ids = memberIdsKey ? memberIdsKey.split(',') : [];
+    if (ids.length === 0) return;
     let alive = true;
     (async () => {
-      if (__DEV__) console.log('[cargo-debug] Fetching parcels for bookingId:', bookingId);
       const combined = await supabase
         .from('parcels')
         .select('*')
-        .or(`piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId}`);
-      if (!alive) return;
-      if (__DEV__) console.log('[cargo-debug] Attached parcels found:', combined.data?.length ?? 0);
+        .or(ids.flatMap((id) => [
+          `piggyback_booking_id.eq.${id}`,
+          `carrier_booking_id.eq.${id}`,
+        ]).join(','));
+      let rows: ParcelDoc[] = [];
       if (!combined.error) {
-        setAttachedParcels((combined.data ?? []).map(mapParcelRow));
-        return;
+        rows = (combined.data ?? []).map(mapParcelRow);
+      } else {
+        if (__DEV__) {
+          console.warn('[parcel] attached-parcel carrier query skipped:', combined.error.message);
+        }
+        const fallback = await supabase
+          .from('parcels')
+          .select('*')
+          .or(ids.map((id) => `piggyback_booking_id.eq.${id}`).join(','));
+        if (!fallback.error) {
+          rows = (fallback.data ?? []).map(mapParcelRow);
+        }
       }
-      if (__DEV__) {
-        console.warn('[parcel] attached-parcel carrier query skipped:', combined.error.message);
-      }
-      const fallback = await supabase
-        .from('parcels')
-        .select('*')
-        .eq('piggyback_booking_id', bookingId);
       if (!alive) return;
-      if (!fallback.error) {
-        setAttachedParcels((fallback.data ?? []).map(mapParcelRow));
+      const byBooking: Record<string, ParcelDoc[]> = {};
+      for (const id of ids) {
+        byBooking[id] = rows.filter(
+          (p) => p.carrierBookingId === id || p.piggybackBookingId === id
+        );
       }
+      setAttachedParcelsByBookingId(byBooking);
     })().catch(() => {
-      if (alive) setAttachedParcels([]);
+      if (alive) setAttachedParcelsByBookingId({});
     });
     return () => { alive = false; };
-  }, [bookingId]);
+  }, [memberIdsKey]);
 
-  // Optimistic boarding state; the server value catches up through realtime.
-  const [boardOverride, setBoardOverride] = useState<boolean | null>(null);
-  useEffect(() => { setBoardOverride(null); }, [booking?.onboardedAt]);
-  const boarded = boardOverride ?? !!booking?.onboardedAt;
+  // Optimistic boarding state per member; the server value catches up through
+  // realtime. The override only bridges the gap after a successful RPC.
+  const [boardOverrides, setBoardOverrides] = useState<Record<string, boolean>>({});
+  const boardedFor = (m: BookingDoc) =>
+    boardOverrides[m.bookingId] ?? !!m.onboardedAt;
   const [boardPending, setBoardPending] = useState(false);
-
-  // Booker resolved = confirmed aboard, OR reported NOT aboard (022 dispute),
-  // OR marked absent while companions sailed (022 partial no-show).
-  const bookerResolved = boarded || !!booking?.disputedAt || !!booking?.noShowAt;
-  /** Everyone resolved = booker resolved + every companion boarded or no-showed. */
-  const companionsResolved = companions.every((c) => c.boardedAt || c.noShowAt);
 
   // Advance/slot bookings (020): the accepted row sits until its sailing
   // time — Prepare Departure and no-show both stay locked until the slot
@@ -165,7 +216,41 @@ export default function BookingStatus() {
     !!booking?.scheduledDate && booking.scheduledDate > todayIso();
   const advanceLocked =
     advanceTrip && (scheduledAt === null || now < scheduledAt);
-  const canStart = bookerResolved && companionsResolved && !advanceLocked;
+
+  const companionsFor = (m: BookingDoc) => companionsByBookingId[m.bookingId];
+  const attachedParcelsFor = (m: BookingDoc) =>
+    attachedParcelsByBookingId[m.bookingId] ?? [];
+  const parcelFor = (m: BookingDoc) => parcelByBookingId[m.bookingId] ?? null;
+  const parcelCountFor = (m: BookingDoc) => {
+    const attached = attachedParcelsFor(m);
+    const base = parcelFor(m);
+    return attached.length > 0 ? attached.length : base ? 1 : 0;
+  };
+
+  // Booker resolved = confirmed aboard, OR reported NOT aboard (022 dispute),
+  // OR marked absent while companions sailed (022 partial no-show). Cargo is
+  // resolved only by its own Cargo Ready tick.
+  const memberResolved = (m: BookingDoc) => {
+    if (m.serviceType === 'cargo') return boardedFor(m);
+    const companions = companionsFor(m);
+    return !!companions
+      && (boardedFor(m) || !!m.disputedAt || !!m.noShowAt)
+      && companions.every((c) => c.boardedAt || c.noShowAt);
+  };
+  const canStart =
+    groupLoaded && members.length > 0 && members.every(memberResolved) && !advanceLocked;
+  const contactPassenger =
+    passengerMembers.find((m) => !memberResolved(m) && !!m.passengerPhone)
+    ?? passengerMembers.find((m) => !!m.passengerPhone)
+    ?? null;
+  const disputedMember =
+    passengerMembers.find((m) => !!m.disputedAt)
+    ?? (booking?.disputedAt ? booking : null);
+  const groupUnavailable =
+    booking?.status === 'accepted'
+    && !!booking.groupBookingId
+    && !accepted.loading
+    && !groupLoaded;
 
   // QR scanner: one scan at a time — `scanLatch` releases ONLY when the
   // scanner reopens, never after a success: the fade-out Modal keeps the
@@ -205,25 +290,29 @@ export default function BookingStatus() {
   /** Manual tick for one companion row (undo with a second tap).
    *  No-showed rows are terminal (022 partial no-show) — tapping them must
    *  not resurrect boardedAt over noShowAt. */
-  async function toggleCompanion(c: PassengerDetailDoc) {
+  async function toggleCompanion(member: BookingDoc, c: PassengerDetailDoc) {
     if (c.noShowAt) return;
     const next = !c.boardedAt;
     const prevIso = c.boardedAt;
-    setCompanions((rows) =>
-      rows.map((x) =>
+    const updateRows = (rows: PassengerDetailDoc[] | null | undefined) =>
+      (rows ?? []).map((x) =>
         x.passengerId === c.passengerId
           ? { ...x, boardedAt: next ? new Date().toISOString() : null }
           : x
-      )
-    );
+      );
+    setCompanionsByBookingId((prev) => ({
+      ...prev,
+      [member.bookingId]: updateRows(prev[member.bookingId]),
+    }));
     try {
       await setPassengerBoarded(c.passengerId, next ? 'boarded' : 'pending');
     } catch (e) {
-      setCompanions((rows) =>
-        rows.map((x) =>
+      setCompanionsByBookingId((prev) => ({
+        ...prev,
+        [member.bookingId]: (prev[member.bookingId] ?? []).map((x) =>
           x.passengerId === c.passengerId ? { ...x, boardedAt: prevIso } : x
-        )
-      );
+        ),
+      }));
       setActionError(friendlyError(e));
     }
   }
@@ -254,16 +343,16 @@ export default function BookingStatus() {
       return;
     }
 
-    // Companion payloads are 'PAX'+token; anything else must be the booking
-    // ref. Branch on the SHAPE — the old code fell back to "booker" whenever
-    // the local companion list was stale, so scanning a companion ticked the
-    // wrong row. The RPC stamps the correct row server-side; the refetch
-    // below just brings the list back in sync.
+    // Companion payloads are 'PAX'+token; anything else must be one of the
+    // passenger members' booking refs. Branch on the SHAPE — never assume the
+    // opened booking is the one whose ticket was scanned. The RPC stamps the
+    // correct row server-side; the local map just follows it.
     const isCompanionPayload = result.data.startsWith('PAX');
-    const isBookerPayload =
-      !!booking?.ref && result.data.toUpperCase() === booking.ref.toUpperCase();
+    const refMember = passengerMembers.find(
+      (m) => m.ref.toUpperCase() === result.data.toUpperCase()
+    );
 
-    if (!isCompanionPayload && !isBookerPayload) {
+    if (!isCompanionPayload && !refMember) {
       setScanMessage({ ok: false, text: 'That QR code does not belong to this trip.' });
       armScanRetry();
       return;
@@ -274,31 +363,47 @@ export default function BookingStatus() {
       scannedRef.current.add(result.data);
 
       if (isCompanionPayload) {
-        let hit = companions.find((c) => `PAX${c.qrToken}` === result.data);
-        if (!hit) {
-          // List was stale — refetch, then match again before giving up.
-          try {
-            const fresh = await getPassengerDetailsByBooking(bookingId);
-            setCompanions(fresh);
-            hit = fresh.find((c) => `PAX${c.qrToken}` === result.data);
-          } catch {
-            // fall through to the not-on-this-trip message
+        let hitMember: BookingDoc | null = null;
+        let hitCompanion: PassengerDetailDoc | null = null;
+        for (const m of passengerMembers) {
+          const hit = (companionsByBookingId[m.bookingId] ?? [])
+            .find((c) => `PAX${c.qrToken}` === result.data);
+          if (hit) { hitMember = m; hitCompanion = hit; break; }
+        }
+        if (!hitCompanion) {
+          // A list was stale — refetch each passenger's roster, then match.
+          for (const m of passengerMembers) {
+            try {
+              const fresh = await getPassengerDetailsByBooking(m.bookingId);
+              setCompanionsByBookingId((prev) => ({
+                ...prev,
+                [m.bookingId]: fresh,
+              }));
+              const hit = fresh.find((c) => `PAX${c.qrToken}` === result.data);
+              if (hit) { hitMember = m; hitCompanion = hit; break; }
+            } catch {
+              // try the next passenger member
+            }
           }
         }
-        if (!hit) {
+        if (!hitMember || !hitCompanion) {
           setScanMessage({ ok: false, text: 'That QR code is not on this trip.' });
           armScanRetry();
           return;
         }
-        const pid = hit.passengerId;
-        setCompanions((rows) =>
-          rows.map((x) =>
-            x.passengerId === pid ? { ...x, boardedAt: new Date().toISOString() } : x
-          )
-        );
-      } else {
-        // The booker's ticket — the RPC stamped bookings.onboarded_at.
-        setBoardOverride(true);
+        const memberBookingId = hitMember.bookingId;
+        const passengerId = hitCompanion.passengerId;
+        setCompanionsByBookingId((prev) => ({
+          ...prev,
+          [memberBookingId]: (prev[memberBookingId] ?? []).map((x) =>
+            x.passengerId === passengerId
+              ? { ...x, boardedAt: new Date().toISOString() }
+              : x
+          ),
+        }));
+      } else if (refMember) {
+        // The booker's ticket — the RPC stamped that member's onboarded_at.
+        setBoardOverrides((prev) => ({ ...prev, [refMember.bookingId]: true }));
       }
       setScanMessage({ ok: true, text: `${name} checked in` });
       setScanOpen(false);
@@ -326,13 +431,6 @@ export default function BookingStatus() {
     setScanBusy(false);
     setScanOpen(true);
   }
-
-  const isCargo = booking?.serviceType === 'cargo';
-  // A cargo booking carries one parcel row; batched/solo carrier trips carry
-  // the parcels matched by carrier/piggyback booking id. Count what is
-  // actually attached instead of assuming one.
-  const parcelCount =
-    attachedParcels.length > 0 ? attachedParcels.length : parcel ? 1 : 0;
 
   async function handleAccept() {
     if (!uid || !booking) return;
@@ -366,24 +464,26 @@ export default function BookingStatus() {
     setPending(false);
   }
 
-  async function toggleBoarded(next: boolean) {
-    if (!booking) return;
+  async function toggleBoarded(member: BookingDoc, next: boolean) {
     setBoardPending(true);
     setActionError(null);
     try {
-      await setOnboarded(booking.bookingId, next);
-      setBoardOverride(next);
+      await setOnboarded(member.bookingId, next);
+      setBoardOverrides((prev) => ({ ...prev, [member.bookingId]: next }));
       if (next) {
         // Confirmation both ways: if the passenger is actually still on the
         // pier, this is their cue to shout before the boat leaves.
+        const cargo = member.serviceType === 'cargo';
         createNotification(
-          booking.userId,
-          'You are confirmed on board',
-          `The crew confirmed everyone on ${booking.ref} is aboard. If you are NOT on board, open this booking and tap "I'm NOT on board" right away.`
+          member.userId,
+          cargo ? 'Cargo confirmed loaded' : 'You are confirmed on board',
+          cargo
+            ? `The crew confirmed the cargo on ${member.ref} is loaded.`
+            : `The crew confirmed everyone on ${member.ref} is aboard. If you are NOT on board, open this booking and tap "I'm NOT on board" right away.`
         ).catch(() => {});
         scheduleLocalNotification(
-          'Passengers confirmed aboard',
-          `Everyone on ${booking.ref} is on board — you're clear to depart.`
+          cargo ? 'Cargo confirmed loaded' : 'Passengers confirmed aboard',
+          `The crew confirmed ${member.ref} is ready to sail.`
         ).catch(() => {});
       }
     } catch (e) {
@@ -392,25 +492,36 @@ export default function BookingStatus() {
     setBoardPending(false);
   }
 
-  function confirmNoShow() {
-    if (!booking || noShowDone) return;
+  function confirmNoShow(member: BookingDoc) {
+    if (noShowDoneByBookingId[member.bookingId]) return;
     Alert.alert(
       'Passenger(s) didn’t board',
-      `The boat leaves with everyone who boarded on ${booking.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
+      `The boat leaves with everyone who boarded on ${member.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
       [
         { text: 'Go back', style: 'cancel' },
-        { text: 'Mark no-show', style: 'destructive', onPress: () => void handleNoShow() },
+        {
+          text: 'Mark no-show',
+          style: 'destructive',
+          onPress: () => void handleNoShow(member),
+        },
       ]
     );
   }
 
-  async function handleNoShow() {
-    if (!booking || noShowDone) return;
+  async function handleNoShow(member: BookingDoc) {
+    if (noShowDoneByBookingId[member.bookingId]) return;
     setBoardPending(true);
     setActionError(null);
     try {
-      await resolveGroupNoShow(booking);
-      setNoShowDone(true);
+      await resolveGroupNoShow(member);
+      setNoShowDoneByBookingId((prev) => ({ ...prev, [member.bookingId]: true }));
+      const fresh = await getPassengerDetailsByBooking(member.bookingId).catch(() => null);
+      if (fresh) {
+        setCompanionsByBookingId((prev) => ({
+          ...prev,
+          [member.bookingId]: fresh,
+        }));
+      }
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -422,19 +533,19 @@ export default function BookingStatus() {
    * bangkero gets one fixed-response line to their record.
    */
   function confirmCounterReport() {
-    if (!booking?.userId) return;
+    if (!disputedMember?.userId) return;
     Alert.alert(
       'Counter-report',
-      `Tell ${booking.passengerName ?? 'the passenger'} you dispute their report? They are notified that the boat waited and their party was called to board.`,
+      `Tell ${disputedMember.passengerName ?? 'the passenger'} you dispute their report? They are notified that the boat waited and their party was called to board.`,
       [
         { text: 'Go back', style: 'cancel' },
         {
           text: 'Send counter-report',
           onPress: () => {
             createNotification(
-              booking.userId,
+              disputedMember.userId,
               'Bangkero counters your report',
-              `The captain disputes your not-aboard report on ${booking.ref}: the boat waited at ${booking.fromPortName} and your party was called to board. Coastguard will review both statements.`
+              `The captain disputes your not-aboard report on ${disputedMember.ref}: the boat waited at ${disputedMember.fromPortName} and your party was called to board. Coastguard will review both statements.`
             )
               .then(() => setCounterSent(true))
               .catch(() => setActionError('Could not send the counter-report — try again.'));
@@ -463,11 +574,189 @@ export default function BookingStatus() {
   }
 
   function handleContactPassenger() {
-    if (!booking?.passengerPhone) return;
-    const phone = booking.passengerPhone.replace(/[^+\d]/g, '');
+    const phone = contactPassenger?.passengerPhone;
     if (!phone) return;
-    Linking.openURL(`tel:${phone}`).catch(() =>
-      setActionError(`Could not open the dialer — call ${booking.passengerPhone} manually.`)
+    const dialable = phone.replace(/[^+\d]/g, '');
+    if (!dialable) return;
+    Linking.openURL(`tel:${dialable}`).catch(() =>
+      setActionError(`Could not open the dialer — call ${phone} manually.`)
+    );
+  }
+
+  function renderAttachedParcels(member: BookingDoc, label: string) {
+    const attached = attachedParcelsFor(member);
+    if (attached.length === 0) return null;
+    return (
+      <View style={styles.memberSection}>
+        <Text style={styles.cardLabel}>{label}</Text>
+        {attached.map((p) => (
+          <View key={p.parcelId} style={styles.boardRow}>
+            <Icon name="parcel" size={16} color={colors.primary} />
+            <View style={styles.boardText}>
+              <Text style={styles.boardName} numberOfLines={1}>{p.receiverName}</Text>
+              <Text style={styles.boardSub} numberOfLines={1}>
+                {p.totalWeightKg != null ? `${p.totalWeightKg} kg · ` : ''}
+                {p.deliveryType ?? 'accompanied'}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  function renderPassengerCard(member: BookingDoc) {
+    const companions = companionsFor(member);
+    const boarded = boardedFor(member);
+    const resolved = memberResolved(member);
+    const noShowDone = !!noShowDoneByBookingId[member.bookingId];
+    return (
+      <View key={member.bookingId} style={styles.card}>
+        <Text style={styles.cardLabel}>PASSENGER INFO · {member.ref}</Text>
+        <Text style={styles.cardValue} numberOfLines={1}>
+          {member.passengerName ?? 'N/A'}
+        </Text>
+        <Text style={styles.cardSub}>
+          {member.passengerPhone ? formatPhone(member.passengerPhone) : ''}
+        </Text>
+        <Text style={styles.cardSub} numberOfLines={1}>
+          {member.numOfPassenger} pax · ₱{member.totalPrice}
+        </Text>
+
+        {renderAttachedParcels(member, 'RIDING ALONG PARCELS')}
+
+        {member.status === 'accepted' && (
+          <View style={styles.boardSection}>
+            <Text style={styles.cardLabel}>PASSENGERS ON BOARD</Text>
+            <Pressable
+              onPress={() => void toggleBoarded(member, !boarded)}
+              disabled={boardPending}
+              style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: boarded }}
+              accessibilityLabel="Passengers on board"
+            >
+              <View style={[styles.checkbox, boarded && styles.checkboxOn]}>
+                {boarded && <Icon name="check" size={14} color={colors.primaryText} />}
+              </View>
+              <View style={styles.boardText}>
+                <Text style={styles.boardName} numberOfLines={1}>
+                  {member.passengerName ?? 'Passengers'}
+                </Text>
+                <Text style={styles.boardSub}>
+                  {member.noShowAt
+                    ? 'Marked no-show — companions sailed'
+                    : member.disputedAt
+                      ? 'Reported NOT aboard — trip continues'
+                      : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
+                </Text>
+              </View>
+            </Pressable>
+            {(companions ?? []).map((c) => (
+              <Pressable
+                key={c.passengerId}
+                onPress={() => void toggleCompanion(member, c)}
+                disabled={!!c.noShowAt}
+                style={({ pressed }) => [
+                  styles.boardRow,
+                  pressed && !c.noShowAt && styles.boardRowPressed,
+                ]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: !!c.boardedAt, disabled: !!c.noShowAt }}
+                accessibilityLabel={`${c.firstName} ${c.lastName} on board`}
+              >
+                <View style={[styles.checkbox, c.boardedAt && styles.checkboxOn]}>
+                  {c.boardedAt && <Icon name="check" size={14} color={colors.primaryText} />}
+                </View>
+                <View style={styles.boardText}>
+                  <Text style={styles.boardName} numberOfLines={1}>
+                    {c.firstName} {c.lastName}
+                    {c.passengerType !== 'regular' ? ` (${c.passengerType})` : ''}
+                  </Text>
+                  <Text style={styles.boardSub}>
+                    {c.noShowAt
+                      ? 'Marked no-show'
+                      : c.boardedAt
+                        ? 'Boarded'
+                        : 'Not boarded yet'}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+            {companions === null && (
+              <Text style={styles.cardSub}>
+                Could not load this party&apos;s companions — reopen the screen to retry.
+              </Text>
+            )}
+            {!advanceTrip && (
+              <PrimaryButton
+                label="Scan boarding QR"
+                variant="secondary"
+                onPress={() => void openScanner()}
+                style={styles.scanBtn}
+              />
+            )}
+            {!advanceLocked && companions != null && !resolved && (
+              <PrimaryButton
+                label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
+                variant="danger"
+                onPress={() => confirmNoShow(member)}
+                loading={boardPending}
+                disabled={noShowDone}
+                style={styles.noShowBtn}
+              />
+            )}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  function renderCargoCard(member: BookingDoc) {
+    const parcel = parcelFor(member);
+    const parcelCount = parcelCountFor(member);
+    const boarded = boardedFor(member);
+    return (
+      <View key={member.bookingId} style={styles.card}>
+        <Text style={styles.cardLabel}>RECEIVER / CARGO INFO · {member.ref}</Text>
+        <Text style={styles.cardValue} numberOfLines={1}>
+          {parcel?.receiverName ?? member.passengerName ?? 'N/A'}
+        </Text>
+        <Text style={styles.cardSub}>
+          {parcel?.receiverContact ? formatPhone(parcel.receiverContact) : ''}
+        </Text>
+        <Text style={styles.cardSub} numberOfLines={1}>
+          {parcelCount} parcel{parcelCount === 1 ? '' : 's'} · ₱{member.totalPrice}
+        </Text>
+
+        {renderAttachedParcels(member, 'CARGO ON BOARD')}
+
+        {member.status === 'accepted' && (
+          <View style={styles.boardSection}>
+            <Text style={styles.cardLabel}>CARGO READY</Text>
+            <Pressable
+              onPress={() => void toggleBoarded(member, !boarded)}
+              disabled={boardPending}
+              style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: boarded }}
+              accessibilityLabel="Cargo loaded"
+            >
+              <View style={[styles.checkbox, boarded && styles.checkboxOn]}>
+                {boarded && <Icon name="check" size={14} color={colors.primaryText} />}
+              </View>
+              <View style={styles.boardText}>
+                <Text style={styles.boardName} numberOfLines={1}>
+                  Cargo
+                </Text>
+                <Text style={styles.boardSub}>
+                  Cargo trip · {boarded ? 'loaded' : 'not loaded yet'}
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
+      </View>
     );
   }
 
@@ -507,126 +796,28 @@ export default function BookingStatus() {
               </View>
             )}
 
-            {booking.status === 'accepted' && !!booking.disputedAt && (
+            {booking.status === 'accepted' && !!disputedMember && (
               <View style={styles.banner}>
                 <Text style={styles.bannerText}>
-                  {booking.passengerName ?? 'The passenger'} reports they were NOT on board. The trip continues — tick who actually sailed, then Prepare Departure.
+                  {disputedMember.passengerName ?? 'The passenger'} reports they were NOT on board. The trip continues — tick who actually sailed, then Prepare Departure.
                 </Text>
               </View>
             )}
 
-            <View style={styles.card}>
-              <Text style={styles.cardLabel}>{isCargo ? 'RECEIVER / CARGO INFO' : 'PASSENGER INFO'}</Text>
-              <Text style={styles.cardValue} numberOfLines={1}>
-                {isCargo
-                  ? parcel?.receiverName ?? booking.passengerName ?? 'N/A'
-                  : booking.passengerName ?? 'N/A'}
-              </Text>
-              <Text style={styles.cardSub}>
-                {isCargo
-                  ? parcel?.receiverContact ? formatPhone(parcel.receiverContact) : ''
-                  : booking.passengerPhone ? formatPhone(booking.passengerPhone) : ''}
-              </Text>
-              <Text style={styles.cardSub} numberOfLines={1}>
-                {isCargo
-                  ? `${parcelCount} parcel${parcelCount === 1 ? '' : 's'} · ₱${booking.totalPrice}`
-                  : `${booking.numOfPassenger} pax · ₱${booking.totalPrice}`}
-              </Text>
-            </View>
-
-            {attachedParcels.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>
-                  {isCargo ? 'CARGO ON BOARD' : 'RIDING ALONG PARCELS'}
+            {groupUnavailable && (
+              <View style={styles.banner}>
+                <Text style={styles.bannerText}>
+                  Could not load every booking in this group. Prepare Departure stays locked until the whole group loads.
                 </Text>
-                {attachedParcels.map((p) => (
-                  <View key={p.parcelId} style={styles.boardRow}>
-                    <Icon name="parcel" size={16} color={colors.primary} />
-                    <View style={styles.boardText}>
-                      <Text style={styles.boardName} numberOfLines={1}>{p.receiverName}</Text>
-                      <Text style={styles.boardSub} numberOfLines={1}>
-                        {p.totalWeightKg != null ? `${p.totalWeightKg} kg · ` : ''}
-                        {p.deliveryType ?? 'accompanied'}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
               </View>
             )}
+
+            {passengerMembers.map(renderPassengerCard)}
+            {cargoMembers.map(renderCargoCard)}
 
             {!!actionError && (
               <View style={styles.banner}>
                 <Text style={styles.bannerText}>{actionError}</Text>
-              </View>
-            )}
-
-            {booking.status === 'accepted' && (
-              <View style={styles.card}>
-                <Text style={styles.cardLabel}>{isCargo ? 'CARGO READY' : 'PASSENGERS ON BOARD'}</Text>
-                {/* The booker speaks for the party; every companion gets its
-                    own tick so the crew can see exactly who is aboard. */}
-                <Pressable
-                  onPress={() => toggleBoarded(!boarded)}
-                  disabled={boardPending}
-                  style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: boarded }}
-                  accessibilityLabel={isCargo ? 'Cargo loaded' : 'Passengers on board'}
-                >
-                  <View style={[styles.checkbox, boarded && styles.checkboxOn]}>
-                    {boarded && <Icon name="check" size={14} color={colors.primaryText} />}
-                  </View>
-                  <View style={styles.boardText}>
-                    <Text style={styles.boardName} numberOfLines={1}>
-                      {isCargo ? 'Cargo' : booking.passengerName ?? 'Passengers'}
-                    </Text>
-                    <Text style={styles.boardSub}>
-                      {isCargo
-                        ? `Cargo trip · ${boarded ? 'loaded' : 'not loaded yet'}`
-                        : booking.disputedAt
-                          ? 'Reported NOT aboard — trip continues'
-                          : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
-                    </Text>
-                  </View>
-                </Pressable>
-                {companions.map((c) => (
-                  <Pressable
-                    key={c.passengerId}
-                    onPress={() => void toggleCompanion(c)}
-                    disabled={!!c.noShowAt}
-                    style={({ pressed }) => [styles.boardRow, pressed && !c.noShowAt && styles.boardRowPressed]}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: !!c.boardedAt, disabled: !!c.noShowAt }}
-                    accessibilityLabel={`${c.firstName} ${c.lastName} on board`}
-                  >
-                    <View style={[styles.checkbox, c.boardedAt && styles.checkboxOn]}>
-                      {c.boardedAt && <Icon name="check" size={14} color={colors.primaryText} />}
-                    </View>
-                    <View style={styles.boardText}>
-                      <Text style={styles.boardName} numberOfLines={1}>
-                        {c.firstName} {c.lastName}
-                        {c.passengerType !== 'regular' ? ` (${c.passengerType})` : ''}
-                      </Text>
-                      <Text style={styles.boardSub}>
-                        {c.noShowAt
-                          ? 'Marked no-show'
-                          : c.boardedAt
-                            ? 'Boarded'
-                            : 'Not boarded yet'}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ))}
-                {/* Cargo has no boarding pass to scan — the loaded checkbox
-                    is the whole gate. */}
-                {!isCargo && !advanceTrip && (
-                  <PrimaryButton
-                    label="Scan boarding QR"
-                    variant="secondary"
-                    onPress={() => void openScanner()}
-                    style={styles.scanBtn}
-                  />
-                )}
               </View>
             )}
 
@@ -659,12 +850,14 @@ export default function BookingStatus() {
 
               {booking.status === 'accepted' && (
                 <>
-                  <PrimaryButton
-                    label="Contact Passenger"
-                    variant="secondary"
-                    onPress={handleContactPassenger}
-                    style={styles.actionBtn}
-                  />
+                  {!!contactPassenger?.passengerPhone && (
+                    <PrimaryButton
+                      label="Contact Passenger"
+                      variant="secondary"
+                      onPress={handleContactPassenger}
+                      style={styles.actionBtn}
+                    />
+                  )}
                   <PrimaryButton
                     label="Prepare Departure"
                     onPress={handleStartTrip}
@@ -684,7 +877,7 @@ export default function BookingStatus() {
             </View>
 
             {/* B7 — the passenger filed a not-aboard dispute; one reply. */}
-            {booking.status === 'accepted' && !!booking.disputedAt && (
+            {booking.status === 'accepted' && !!disputedMember && (
               <PrimaryButton
                 label={counterSent ? 'Counter-report sent' : 'Counter-report passenger'}
                 variant="danger"
@@ -695,29 +888,17 @@ export default function BookingStatus() {
             )}
 
             {booking.status === 'accepted' && !canStart && (
-              <>
-                <Text style={styles.gateHint}>
-                  {advanceLocked
-                    ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Prepare Departure opens when the slot arrives.`
-                    : isCargo
-                      ? 'Confirm the cargo is loaded to prepare departure.'
-                      : bookerResolved && !companionsResolved
-                        ? 'Tick every passenger who is aboard to prepare departure.'
-                        : 'Confirm everyone is on board to prepare departure.'}
-                </Text>
-                {/* Nobody missed a boat that has not left yet. Cargo has no
-                    passenger to no-show — hide it for cargo bookings. */}
-                {!advanceLocked && !isCargo && (
-                  <PrimaryButton
-                    label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
-                    variant="danger"
-                    onPress={confirmNoShow}
-                    loading={boardPending}
-                    disabled={noShowDone}
-                    style={styles.noShowBtn}
-                  />
-                )}
-              </>
+              <Text style={styles.gateHint}>
+                {advanceLocked
+                  ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Prepare Departure opens when the slot arrives.`
+                  : !groupLoaded
+                    ? groupUnavailable
+                      ? 'Could not load the rest of this group — Prepare Departure stays locked.'
+                      : 'Loading the other bookings in this group…'
+                    : cargoMembers.some((m) => !memberResolved(m))
+                      ? 'Tick Cargo Ready for every cargo booking to prepare departure.'
+                      : 'Tick every passenger who is aboard to prepare departure.'}
+              </Text>
             )}
           </>
         )}
@@ -821,6 +1002,18 @@ const styles = StyleSheet.create({
   cardValue: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   cardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
   itineraryStop: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 22 },
+  memberSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
+  boardSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+  },
 
   banner: {
     backgroundColor: colors.dangerTint,

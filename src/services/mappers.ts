@@ -138,5 +138,7 @@ export function mapBookingRow(row: any): BookingDoc {
     // ?? defaults keep this working before migrations 050/052 add the columns
     cargoMode: row.cargo_mode ?? null,
     isDispatchable: row.is_dispatchable ?? true,
+    // ?? null keeps this working before migration 071 adds the column
+    groupBookingId: row.group_booking_id ?? null,
   };
 }

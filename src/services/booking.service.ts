@@ -66,10 +66,41 @@ export async function getActiveBooking(
 
   const { data, error } = await q
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(20);
   if (error) throw error;
-  return data ? { bookingId: data.id, ref: data.ref } : null;
+
+  const rows = (data ?? []) as { id: string; ref: string }[];
+  if (rows.length === 0) return null;
+
+  // 071: a consolidated batched stub is still open, but it is not a real
+  // trip for this sender — the promoted master carries their parcel. Do
+  // not let that stub block the sender's next booking.
+  const { data: parcelRows, error: parcelErr } = await supabase
+    .from('parcels')
+    .select('booking_id, carrier_booking_id, batching_status')
+    .in('booking_id', rows.map((r) => r.id))
+    .eq('batching_status', 'batched');
+
+  if (parcelErr) {
+    // If we cannot verify, keep the old conservative behaviour and block.
+    if (__DEV__) {
+      console.warn('[booking] consolidated stub check skipped:', parcelErr.message);
+    }
+    return { bookingId: rows[0].id, ref: rows[0].ref };
+  }
+
+  const consolidated = new Set(
+    ((parcelRows ?? []) as {
+      booking_id: string;
+      carrier_booking_id: string | null;
+      batching_status: string | null;
+    }[])
+      .filter((p) => p.carrier_booking_id && p.carrier_booking_id !== p.booking_id)
+      .map((p) => p.booking_id),
+  );
+
+  const active = rows.find((r) => !consolidated.has(r.id));
+  return active ? { bookingId: active.id, ref: active.ref } : null;
 }
 
 export interface BookingBan {

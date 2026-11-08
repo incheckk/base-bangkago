@@ -19,12 +19,7 @@ import { createNotification } from '@/services/notification.service';
 import { supabase } from '@/services/supabase';
 import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { ParcelDoc, ParcelStatus } from '@/types/models';
-
-const NEXT_STATUS: Partial<Record<ParcelStatus, { label: string; next: ParcelStatus }>> = {
-  pending: { label: 'Mark In Transit', next: 'in_transit' },
-  in_transit: { label: 'Mark Delivered', next: 'delivered' },
-};
+import type { ParcelDoc } from '@/types/models';
 
 /** Cargo display token: mode + weight, not a passenger count.
  *  accompanied = the sender rides along; the rest are cargo-only. */
@@ -44,7 +39,7 @@ export default function ArrivedScreen() {
   // it, getActiveManifest stops returning the manifest the moment this screen
   // marks it arrived, and the screen empties under its own write.
   const { manifest, passengers, loading } = useTripManifest(user?.id ?? null, true);
-  const { data: allParcels } = useBangkeroParcels(user?.id ?? null);
+  const { data: allParcels, refresh: refreshParcels } = useBangkeroParcels(user?.id ?? null);
   const devFlags = useDevFlags();
 
   // Scope parcels to THIS sailing: the hook returns full history, but the
@@ -75,16 +70,23 @@ export default function ArrivedScreen() {
   const parcels = sailingIds
     ? allParcels.filter(
         (p) =>
-          (p.deliveryType === 'accompanied' && sailingIds.includes(p.bookingId)) ||
-          (p.carrierBookingId != null && sailingIds.includes(p.carrierBookingId)) ||
-          (p.piggybackBookingId != null && sailingIds.includes(p.piggybackBookingId)),
+          (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted') &&
+          ((p.deliveryType === 'accompanied' && sailingIds.includes(p.bookingId)) ||
+            (p.carrierBookingId != null && sailingIds.includes(p.carrierBookingId)) ||
+            (p.piggybackBookingId != null && sailingIds.includes(p.piggybackBookingId))),
       )
     : allParcels;
 
   const [completing, setCompleting] = useState(false);
-  const [parcelBusy, setParcelBusy] = useState<string | null>(null);
+  const [deliveringAll, setDeliveringAll] = useState(false);
   const [parcelError, setParcelError] = useState<string | null>(null);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const deliverableParcels = sailingIds === null ? [] : parcels.filter(
+    (p) =>
+      p.deliveryType !== 'accompanied'
+      && (p.status === 'pending' || p.status === 'in_transit')
+      && (p.loadedAt != null || p.status === 'in_transit')
+  );
 
   // Opening this screen IS the arrival — stamp it once (idempotent) so the
   // trip duration and Trip Summary get real times.
@@ -105,40 +107,34 @@ export default function ArrivedScreen() {
     ? Math.round((endTime.getTime() - departureTime.getTime()) / 60000)
     : null;
 
-  async function advanceParcel(parcel: ParcelDoc) {
-    const step = NEXT_STATUS[parcel.status];
-    if (!step || parcelBusy) return;
-    setParcelBusy(parcel.parcelId);
+  async function markAllDelivered() {
+    if (deliveringAll || deliverableParcels.length === 0) return;
+    setDeliveringAll(true);
     setParcelError(null);
-    try {
-      await updateParcelStatus(parcel.parcelId, step.next);
-
-      // Best-effort notify — failures don't block the status update
-      if (parcel.userId) {
-        const title =
-          step.next === 'in_transit'
-            ? 'Your parcel is on the way'
-            : step.next === 'delivered'
-              ? 'Parcel delivered'
-              : null;
-        const body =
-          step.next === 'in_transit'
-            ? `Departed for ${parcel.receiverName}.`
-            : step.next === 'delivered'
-              ? `Parcel for ${parcel.receiverName} has been delivered.`
-              : null;
-        if (title && body) {
+    const results = await Promise.allSettled(
+      deliverableParcels.map(async (parcel) => {
+        await updateParcelStatus(parcel.parcelId, 'delivered');
+        if (parcel.userId) {
           try {
-            await createNotification(parcel.userId, title, body);
+            await createNotification(
+              parcel.userId,
+              'Parcel delivered',
+              `Parcel for ${parcel.receiverName} has been delivered.`
+            );
           } catch {
             /* swallow — notification is best-effort */
           }
         }
-      }
-    } catch (e) {
-      setParcelError(friendlyError(e));
+      })
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    await refreshParcels().catch(() => {});
+    if (failed > 0) {
+      setParcelError(
+        `Delivered ${deliverableParcels.length - failed} of ${deliverableParcels.length} parcels. Tap Mark All Delivered to retry the rest.`
+      );
     }
-    setParcelBusy(null);
+    setDeliveringAll(false);
   }
 
   /** Completion is irreversible and sweeps every trip accepted today —
@@ -285,33 +281,35 @@ export default function ArrivedScreen() {
                     <Text style={styles.bannerText}>{parcelError}</Text>
                   </View>
                 )}
-                {parcels.map((p) => {
-                  const step = NEXT_STATUS[p.status];
-                  return (
-                    <View key={p.parcelId} style={styles.parcelCard}>
-                      <View style={styles.parcelTop}>
-                        <Text style={styles.parcelName}>{p.receiverName}</Text>
-                        <Text style={[
-                          styles.parcelStatus,
-                          p.status === 'delivered' && styles.parcelStatusOk,
-                          p.status === 'returned' && styles.parcelStatusBad,
-                        ]}>
-                          {p.status.replace('_', ' ')}
-                        </Text>
-                      </View>
-                      <Text style={styles.parcelMeta}>₱{p.totalPrice} · {parcelMode(p)}</Text>
-                      {step && (
-                        <PrimaryButton
-                          label={step.label}
-                          onPress={() => advanceParcel(p)}
-                          loading={parcelBusy === p.parcelId}
-                          disabled={!!parcelBusy}
-                          style={styles.parcelBtn}
-                        />
-                      )}
+                {sailingIds !== null && parcels.some(
+                  (p) => p.deliveryType !== 'accompanied' && p.status !== 'returned'
+                ) && (
+                  <PrimaryButton
+                    label="Mark All Delivered"
+                    onPress={() => void markAllDelivered()}
+                    loading={deliveringAll}
+                    disabled={deliveringAll || deliverableParcels.length === 0}
+                    style={styles.markAllBtn}
+                  />
+                )}
+                <Text style={styles.deliveryHint}>
+                  Only cargo checked as loaded is delivered. Unloaded parcels stay at the pier.
+                </Text>
+                {parcels.map((p) => (
+                  <View key={p.parcelId} style={styles.parcelCard}>
+                    <View style={styles.parcelTop}>
+                      <Text style={styles.parcelName}>{p.receiverName}</Text>
+                      <Text style={[
+                        styles.parcelStatus,
+                        p.status === 'delivered' && styles.parcelStatusOk,
+                        p.status === 'returned' && styles.parcelStatusBad,
+                      ]}>
+                        {p.status.replace('_', ' ')}
+                      </Text>
                     </View>
-                  );
-                })}
+                    <Text style={styles.parcelMeta}>₱{p.totalPrice} · {parcelMode(p)}</Text>
+                  </View>
+                ))}
               </>
             )}
 
@@ -437,8 +435,13 @@ const styles = StyleSheet.create({
   },
   parcelStatusOk: { color: colors.primary },
   parcelStatusBad: { color: colors.danger },
-  parcelMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginBottom: spacing.md },
-  parcelBtn: { marginTop: spacing.xs },
+  parcelMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted },
+  markAllBtn: { marginBottom: spacing.sm },
+  deliveryHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.md,
+  },
 
   footer: { marginTop: spacing.xxl },
 });

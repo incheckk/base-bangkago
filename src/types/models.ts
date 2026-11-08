@@ -272,6 +272,8 @@ export interface ParcelDoc {
   scheduledDepartureAt: string | null;
   estimatedArrivalAt: string | null;
   actualArrivalAt: string | null;
+  /** 073: checked aboard by the bangkero. NULL = not loaded / returned. */
+  loadedAt: string | null;
 }
 
 export interface PiggybackCandidate {

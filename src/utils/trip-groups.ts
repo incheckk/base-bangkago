@@ -34,7 +34,8 @@ export function groupAcceptedBookings(trips: BookingDoc[]): TripGroup[] {
       map.set(key, g);
     }
     g.bookings.push(b);
-    g.pax += b.numOfPassenger;
+    // Cargo stubs carry a synthetic 1 pax; only people count as seats.
+    g.pax += b.serviceType === 'cargo' ? 0 : b.numOfPassenger;
     if (b.serviceType === 'cargo') g.cargoCount += 1;
     g.totalPrice += b.totalPrice;
     g.refs.push(b.ref);

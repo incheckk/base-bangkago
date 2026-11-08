@@ -303,10 +303,27 @@ export async function populateManifestDeparture(
   // Option B: parcels can reach this sailing three ways — their own cargo
   // booking (accompanied), a carrier link (batched / solo), or the ride they
   // piggyback on. Merge them so every mode is counted exactly once.
-  type ParcelRow = { id: string; receiver_name: string; total_weight_kg: number | null };
+  type ParcelRow = {
+    id: string;
+    receiver_name: string;
+    total_weight_kg: number | null;
+    delivery_type?: string | null;
+    /** Missing on a pre-073 database; null means intentionally not loaded. */
+    loaded_at?: string | null;
+  };
   const parcelById = new Map<string, ParcelRow>();
   const addParcelRows = (rows: ParcelRow[] | null) => {
-    for (const row of rows ?? []) parcelById.set(row.id, row);
+    for (const row of rows ?? []) {
+      // Only checked cargo goes on the manifest. Accompanied cargo always
+      // rides with its sender, and a pre-073 schema has no loaded_at column.
+      if (
+        row.delivery_type !== 'accompanied'
+        && row.delivery_type != null
+        && row.loaded_at !== undefined
+        && row.loaded_at == null
+      ) continue;
+      parcelById.set(row.id, row);
+    }
   };
 
   if (bookingIds.length) {
@@ -314,7 +331,7 @@ export async function populateManifestDeparture(
 
     const { data, error } = await supabase
       .from('parcels')
-      .select('id, receiver_name, total_weight_kg')
+      .select('*')
       .in('booking_id', bookingIds)
       .or('delivery_type.eq.accompanied,delivery_type.is.null');
     if (__DEV__) {
@@ -327,7 +344,7 @@ export async function populateManifestDeparture(
     // no such column, so skip this leg instead of failing the departure.
     const { data: carried, error: carrierErr } = await supabase
       .from('parcels')
-      .select('id, receiver_name, total_weight_kg')
+      .select('*')
       .in('carrier_booking_id', bookingIds);
     if (__DEV__) {
       console.log('[manifest] parcels by carrier_booking_id:', carried?.length ?? 0, carrierErr?.message);
@@ -340,7 +357,7 @@ export async function populateManifestDeparture(
 
     const { data: piggy, error: piggyErr } = await supabase
       .from('parcels')
-      .select('id, receiver_name, total_weight_kg')
+      .select('*')
       .in('piggyback_booking_id', bookingIds);
     if (__DEV__) {
       console.log('[manifest] parcels by piggyback_booking_id:', piggy?.length ?? 0, piggyErr?.message);

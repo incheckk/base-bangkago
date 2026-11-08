@@ -67,14 +67,21 @@ export async function findEligiblePiggybackBooking(params: {
   };
 }
 
-export async function approvePiggyback(parcelId: string): Promise<void> {
-  // Piggyback approval is NOT batched mode — only the approval state flips.
-  const { error } = await supabase
-    .from('parcels')
-    .update({ approval_status: 'accepted' })
-    .eq('id', parcelId);
+/**
+ * Accept a pending piggyback request.
+ *
+ * One SECURITY DEFINER RPC (072) does the whole write atomically: approves
+ * the parcel, links it to the carrier ride, accepts the sender's cargo stub
+ * and merges that stub into the carrier trip's group_booking_id using the
+ * same group rule as 071. The stub is non-dispatchable, so accept_booking_hold
+ * would refuse it — this is the only correct accept path.
+ */
+export async function acceptPiggybackRequest(parcelId: string): Promise<void> {
+  const { error } = await supabase.rpc('accept_piggyback_request', {
+    p_parcel_id: parcelId,
+  });
 
-  if (error) throw new Error(`Failed to approve piggyback: ${error.message}`);
+  if (error) throw new Error(`Failed to accept piggyback: ${error.message}`);
 
   await notifySender(
     parcelId,
@@ -82,49 +89,11 @@ export async function approvePiggyback(parcelId: string): Promise<void> {
     (receiverName) =>
       `Your parcel for ${receiverName} will ride with a passenger trip.`
   );
+}
 
-  // Sync parent cargo booking's status to match the passenger ride, and
-  // (Option B / 045) link the parcel to its carrier booking. Best-effort.
-  try {
-    const { data: parcel } = await supabase
-      .from('parcels')
-      .select('booking_id, piggyback_booking_id')
-      .eq('id', parcelId)
-      .maybeSingle();
-
-    if (parcel?.booking_id && parcel?.piggyback_booking_id) {
-      // Requires migration 045 (carrier_booking_id). A missing column is
-      // skipped without blocking approval.
-      const { error: carrierErr } = await supabase
-        .from('parcels')
-        .update({ carrier_booking_id: parcel.piggyback_booking_id })
-        .eq('id', parcelId);
-      if (carrierErr && __DEV__) {
-        console.warn('[parcel] carrier_booking_id update skipped:', carrierErr.message);
-      }
-
-      const { data: ride } = await supabase
-        .from('bookings')
-        .select('operator_id')
-        .eq('id', parcel.piggyback_booking_id)
-        .maybeSingle();
-
-      if (ride?.operator_id) {
-        const { error: stubError } = await supabase
-          .from('bookings')
-          .update({
-            trip_stat: 'accepted',
-            operator_id: ride.operator_id,
-          })
-          .eq('id', parcel.booking_id);
-        if (stubError && __DEV__) {
-          console.warn('[parcel] Failed to link piggyback stub to operator:', stubError.message);
-        }
-      }
-    }
-  } catch {
-    /* best-effort sync; do not block approval */
-  }
+/** Back-compat alias for the retired cube-icon screen. */
+export async function approvePiggyback(parcelId: string): Promise<void> {
+  await acceptPiggybackRequest(parcelId);
 }
 
 export async function rejectPiggyback(parcelId: string): Promise<void> {

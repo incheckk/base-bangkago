@@ -18,7 +18,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
-import { usePiggybackRequests } from '@/hooks/usePiggybackRequests';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import {
@@ -35,6 +34,7 @@ import {
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
+import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggyback.service';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
@@ -107,7 +107,6 @@ export default function BangkeroHome() {
   const uid = user?.id ?? null;
 
   const notifications = useNotifications(uid);
-  const piggybackRequests = usePiggybackRequests(uid);
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
   /** Ping for a request that just arrived — the first load is the baseline. */
@@ -185,14 +184,29 @@ export default function BangkeroHome() {
     return map;
   }, [parcels.data]);
 
-  /** Passenger ride id → the piggyback parcels riding along. */
+  /** Passenger ride id → approved piggyback parcels riding along. */
   const piggybackByRideId = useMemo(() => {
     const map = new Map<string, ParcelDoc[]>();
     for (const p of parcels.data) {
-      if (p.piggybackBookingId) {
+      if (p.piggybackBookingId && p.approvalStatus === 'accepted') {
         const list = map.get(p.piggybackBookingId);
         if (list) list.push(p);
         else map.set(p.piggybackBookingId, [p]);
+      }
+    }
+    return map;
+  }, [parcels.data]);
+
+  /**
+   * Cargo stub booking id → its pending piggyback parcel. 044 RLS only
+   * returns parcels whose passenger ride this operator owns, so this map is
+   * also the visibility gate for piggyback cards in Incoming Requests.
+   */
+  const pendingPiggybackByBookingId = useMemo(() => {
+    const map = new Map<string, ParcelDoc>();
+    for (const p of parcels.data) {
+      if (p.deliveryType === 'piggyback' && p.approvalStatus === 'pending' && p.bookingId) {
+        map.set(p.bookingId, p);
       }
     }
     return map;
@@ -288,7 +302,12 @@ export default function BangkeroHome() {
       .catch(() => {})
       .finally(() => setBoatChecked(true));
   }, [uid]);
-  const acceptedLoad = activeTrips.reduce((sum, t) => sum + t.numOfPassenger, 0);
+  // Cargo stubs (piggyback/batched/solo before promotion) carry a synthetic
+  // 1 pax; only accompanied cargo actually boards a person.
+  const acceptedLoad = activeTrips.reduce(
+    (sum, t) => sum + (t.serviceType === 'cargo' && t.isDispatchable === false ? 0 : t.numOfPassenger),
+    0
+  );
   // Destinations of trips already accepted — the route lock (008).
   const activeDests = [...new Set(activeTrips.map((t) => endPortOf(t.routeId)))];
 
@@ -332,6 +351,37 @@ export default function BangkeroHome() {
       myFix && dep?.latitude != null && dep.longitude != null
         ? formatDistance(haversineM(myFix.latitude, myFix.longitude, dep.latitude, dep.longitude))
         : null;
+
+    // Piggyback add-on: the parcel rides on a passenger trip this operator
+    // already accepted (044 scopes the parcel to our own rides). It adds no
+    // passenger seat, so queue, route-lock, capacity and sailing checks do
+    // not apply — only the account gates. Accept groups it with that trip.
+    const piggyback = pendingPiggybackByBookingId.get(b.bookingId);
+    if (piggyback) {
+      const carrier = accepted.data.find(
+        (t) => t.bookingId === piggyback.piggybackBookingId
+      );
+      const ridesWith = carrier ? ` · rides with ${carrier.ref}` : '';
+      if (!available) {
+        return { text: 'Offline — turn on to accept', tone: 'block', canAccept: false, distance };
+      }
+      if (docsBlocked) {
+        return {
+          text: 'Documents not approved — finish verification to accept',
+          tone: 'block', canAccept: false, distance,
+        };
+      }
+      if (ratingBlocked) {
+        return {
+          text: 'Rating too low — must be above 1.0★',
+          tone: 'block', canAccept: false, distance,
+        };
+      }
+      return {
+        text: `Piggyback${ridesWith} — Accept to load`,
+        tone: 'live', canAccept: true, distance,
+      };
+    }
 
     // ponytail: advance trips are accepted free — no queue, dwell, route
     // lock or offer hold (accept_booking_hold skips them too via v_advance).
@@ -460,6 +510,20 @@ export default function BangkeroHome() {
     if (!uid || !bangkero.data) return;
     setPending(b.bookingId);
     setActionError(null);
+    // Piggyback rides on a passenger trip this boat already accepted.
+    // accept_booking_hold refuses non-dispatchable stubs, so the parcel is
+    // approved and the stub is merged into that trip's group instead.
+    const piggyback = pendingPiggybackByBookingId.get(b.bookingId);
+    if (piggyback) {
+      try {
+        await acceptPiggybackRequest(piggyback.parcelId);
+        markActed(b.bookingId);
+      } catch (e) {
+        setActionError(friendlyError(e));
+      }
+      setPending(null);
+      return;
+    }
     try {
       await acceptBooking(b.bookingId, {
         uid,
@@ -513,8 +577,15 @@ export default function BangkeroHome() {
     setPending(b.bookingId);
     setActionError(null);
     try {
-      // One RPC: append me + hand the offer to the next boat in line.
-      await rejectBooking(b.bookingId);
+      // A piggyback decline belongs to the parcel (the sender is told and
+      // the stub is not a dispatchable offer); everything else cascades
+      // the FCFS offer to the next boat in line.
+      const piggyback = pendingPiggybackByBookingId.get(b.bookingId);
+      if (piggyback) {
+        await rejectPiggyback(piggyback.parcelId);
+      } else {
+        await rejectBooking(b.bookingId);
+      }
       markActed(b.bookingId);
     } catch (e) {
       setActionError(friendlyError(e));
@@ -685,18 +756,17 @@ export default function BangkeroHome() {
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   // Two groups so an operator can tell tomorrow's commitments from
-  // people standing at the pier right now. Non-dispatchable parcel stubs
-  // are not independently acceptable: piggyback stubs are approved via
-  // the cube icon, and batched stubs are represented by their promoted
-  // master (071 demotes superseded members instead of cancelling them).
-  const visibleRequests = requests.data.filter(
-    (b) =>
-      !(
-        b.serviceType === 'cargo' &&
-        b.isDispatchable === false &&
-        (b.cargoMode === 'piggyback' || b.cargoMode === 'batched')
-      ),
-  );
+  // people standing at the pier right now. Batched stubs are represented
+  // by their promoted master (071 demotes superseded members instead of
+  // cancelling them). A piggyback stub shows only when this operator's
+  // pending piggyback parcel arrived (044 scopes that read to our rides),
+  // and it is accepted as an add-on to the carrier trip, never via FCFS.
+  const visibleRequests = requests.data.filter((b) => {
+    if (b.serviceType !== 'cargo' || b.isDispatchable !== false) return true;
+    if (b.cargoMode === 'batched') return false;
+    if (b.cargoMode === 'piggyback') return pendingPiggybackByBookingId.has(b.bookingId);
+    return true;
+  });
   const advanceReqs = visibleRequests.filter(isAdvance);
   const todayReqs = visibleRequests.filter((b) => !isAdvance(b));
 
@@ -774,25 +844,6 @@ export default function BangkeroHome() {
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>
                     {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => router.push('/(bangkero)/piggyback-requests')}
-              accessibilityRole="button"
-              accessibilityLabel={
-                piggybackRequests.data.length > 0
-                  ? `Piggyback requests, ${piggybackRequests.data.length} pending`
-                  : 'Piggyback requests'
-              }
-              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            >
-              <Icon name="parcel" size={20} color={colors.text} />
-              {piggybackRequests.data.length > 0 && (
-                <View style={styles.notifBadge}>
-                  <Text style={styles.notifBadgeText}>
-                    {piggybackRequests.data.length > 9 ? '9+' : piggybackRequests.data.length}
                   </Text>
                 </View>
               )}
@@ -1257,7 +1308,11 @@ function RequestBody({
         </View>
         <View style={styles.fareWrap}>
           <Text style={styles.fare}>₱{totalEarnings}</Text>
-          <Text style={styles.fareUnit}>{booking.numOfPassenger} pax</Text>
+          <Text style={styles.fareUnit}>
+            {booking.serviceType === 'cargo' && booking.cargoMode !== 'accompanied'
+              ? 'parcel'
+              : `${booking.numOfPassenger} pax`}
+          </Text>
           {showCargoBreakdown && (
             <Text style={styles.fareUnit} numberOfLines={1}>
               ₱{booking.totalPrice} fare + ₱{cargoTotal} cargo

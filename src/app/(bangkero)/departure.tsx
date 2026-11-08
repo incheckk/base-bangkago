@@ -182,13 +182,15 @@ export default function DepartureScreen() {
 
   const liveParcels = useMemo(() => {
     const sailingIds = new Set(acceptedTrips.map((t) => t.bookingId));
-    return allParcels.filter(
-      (p) =>
-        p.status !== 'returned' &&
-        ((p.deliveryType === 'accompanied' && sailingIds.has(p.bookingId)) ||
-          (p.carrierBookingId != null && sailingIds.has(p.carrierBookingId)) ||
-          (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId))),
-    );
+    return allParcels.filter((p) => {
+      const accompanied = p.deliveryType == null || p.deliveryType === 'accompanied';
+      return p.status !== 'returned'
+        && (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted')
+        && (accompanied || p.loadedAt != null)
+        && ((accompanied && sailingIds.has(p.bookingId))
+          || (p.carrierBookingId != null && sailingIds.has(p.carrierBookingId))
+          || (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId)));
+    });
   }, [acceptedTrips, allParcels]);
 
   const livePassengers = useMemo(() => {
@@ -199,6 +201,29 @@ export default function DepartureScreen() {
     );
     return passengers.filter((p) => passengerBookingIds.has(p.bookingId));
   }, [manifestTrips, passengers]);
+
+  // Cargo may only sail once every parcel is checked aboard or explicitly
+  // returned. Cargo-onboarded_at is an aggregate, so it cannot prove that
+  // individual parcels were handled; this reads the parcel rows directly.
+  const cargoNotReady = useMemo(
+    () =>
+      acceptedTrips.some((t) => {
+        if (t.serviceType !== 'cargo' || t.cargoMode === 'accompanied') return false;
+        const attached = allParcels.filter(
+          (p) =>
+            (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted')
+            && (p.bookingId === t.bookingId || p.carrierBookingId === t.bookingId),
+        );
+        return attached.length === 0
+          || attached.some(
+            (p) =>
+              p.deliveryType !== 'accompanied'
+              && p.status === 'pending'
+              && p.loadedAt == null,
+          );
+      }),
+    [acceptedTrips, allParcels],
+  );
 
   const manifestParcelIds = useMemo(
     () => new Set(parcels.map((p) => p.parcelId)),
@@ -283,7 +308,7 @@ export default function DepartureScreen() {
   }
 
   function confirmNoShow(t: BookingDoc) {
-    if (actedNoShow.has(t.bookingId)) return;
+    if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
     Alert.alert(
       'Passenger didn’t board',
       `The boat leaves with everyone who boarded on ${t.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
@@ -295,7 +320,7 @@ export default function DepartureScreen() {
   }
 
   async function doNoShow(t: BookingDoc) {
-    if (actedNoShow.has(t.bookingId)) return;
+    if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
     setNoShowId(t.bookingId);
     try {
       await resolveGroupNoShow(t);
@@ -386,6 +411,12 @@ export default function DepartureScreen() {
 
   async function handleDepart() {
     if (departInFlight.current || !manifest) return;
+    if (cargoNotReady) {
+      setGenError(
+        'Load every cargo parcel or mark it not at port on Booking Status before departing.'
+      );
+      return;
+    }
     departInFlight.current = true;
     setDeparting(true);
     setGenError(null);
@@ -526,10 +557,14 @@ export default function DepartureScreen() {
                             {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
                           </Text>
                           <Text style={styles.boardSub} numberOfLines={1}>
-                            {t.ref} · {resolved ? 'marked absent' : 'still on the pier'}
+                            {t.ref} · {resolved
+                              ? 'marked absent'
+                              : t.serviceType === 'cargo'
+                                ? 'cargo not loaded — manage on Booking Status'
+                                : 'still on the pier'}
                           </Text>
                         </View>
-                        {!resolved && (
+                        {!resolved && t.serviceType !== 'cargo' && (
                           <View style={styles.boardAction}>
                             <PrimaryButton
                               label="Didn't board"
@@ -752,7 +787,8 @@ export default function DepartureScreen() {
                 onPress={handleDepart}
                 loading={departing}
                 disabled={
-                  !manifestFinalized || !allChecked || departing || !allBoarded || !anyoneAboard
+                  !manifestFinalized || !allChecked || departing || !allBoarded
+                  || !anyoneAboard || cargoNotReady
                 }
               />
               {!anyoneAboard && allBoarded && (
@@ -764,6 +800,12 @@ export default function DepartureScreen() {
               {anyoneAboard && !allBoarded && (
                 <Text style={styles.readyHint}>
                   Confirm everyone aboard — or mark them as didn’t board — before departing.
+                </Text>
+              )}
+              {cargoNotReady && (
+                <Text style={styles.readyHint}>
+                  Load every cargo parcel or mark it not at port on Booking Status
+                  before departing.
                 </Text>
               )}
             </View>

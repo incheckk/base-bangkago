@@ -18,7 +18,9 @@ import {
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
-import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.service';
+import {
+  getParcelByBooking, mapRow as mapParcelRow, markParcelNoShow, setParcelLoaded,
+} from '@/services/parcel.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -140,6 +142,10 @@ export default function BookingStatus() {
   // column, so the combined query fails — fall back to the piggyback key.
   const [attachedParcelsByBookingId, setAttachedParcelsByBookingId] =
     useState<Record<string, ParcelDoc[]>>({});
+  const [attachedParcelsReadyKey, setAttachedParcelsReadyKey] =
+    useState<string | null>(null);
+  const attachedParcelsReady =
+    !!memberIdsKey && attachedParcelsReadyKey === memberIdsKey;
   useEffect(() => {
     const ids = memberIdsKey ? memberIdsKey.split(',') : [];
     if (ids.length === 0) return;
@@ -153,8 +159,10 @@ export default function BookingStatus() {
           `carrier_booking_id.eq.${id}`,
         ]).join(','));
       let rows: ParcelDoc[] = [];
+      let loaded = false;
       if (!combined.error) {
         rows = (combined.data ?? []).map(mapParcelRow);
+        loaded = true;
       } else {
         if (__DEV__) {
           console.warn('[parcel] attached-parcel carrier query skipped:', combined.error.message);
@@ -165,18 +173,26 @@ export default function BookingStatus() {
           .or(ids.map((id) => `piggyback_booking_id.eq.${id}`).join(','));
         if (!fallback.error) {
           rows = (fallback.data ?? []).map(mapParcelRow);
+          loaded = true;
         }
       }
       if (!alive) return;
+      if (!loaded) throw new Error('attached parcels unavailable');
       const byBooking: Record<string, ParcelDoc[]> = {};
       for (const id of ids) {
         byBooking[id] = rows.filter(
-          (p) => p.carrierBookingId === id || p.piggybackBookingId === id
+          (p) =>
+            (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted') &&
+            (p.carrierBookingId === id || p.piggybackBookingId === id)
         );
       }
       setAttachedParcelsByBookingId(byBooking);
+      setAttachedParcelsReadyKey(memberIdsKey);
     })().catch(() => {
-      if (alive) setAttachedParcelsByBookingId({});
+      if (alive) {
+        setAttachedParcelsByBookingId({});
+        setAttachedParcelsReadyKey(null);
+      }
     });
     return () => { alive = false; };
   }, [memberIdsKey]);
@@ -187,6 +203,13 @@ export default function BookingStatus() {
   const boardedFor = (m: BookingDoc) =>
     boardOverrides[m.bookingId] ?? !!m.onboardedAt;
   const [boardPending, setBoardPending] = useState(false);
+
+  // Per-parcel cargo checks + returned parcels. These bridge the gap until
+  // the parcel realtime subscription refreshes the attached rows.
+  const [loadedOverrides, setLoadedOverrides] = useState<Record<string, boolean>>({});
+  const [parcelStatusOverrides, setParcelStatusOverrides] =
+    useState<Record<string, ParcelDoc['status']>>({});
+  const [parcelBusy, setParcelBusy] = useState<string | null>(null);
 
   // Advance/slot bookings (020): the accepted row sits until its sailing
   // time — Prepare Departure and no-show both stay locked until the slot
@@ -221,24 +244,45 @@ export default function BookingStatus() {
   const attachedParcelsFor = (m: BookingDoc) =>
     attachedParcelsByBookingId[m.bookingId] ?? [];
   const parcelFor = (m: BookingDoc) => parcelByBookingId[m.bookingId] ?? null;
-  const parcelCountFor = (m: BookingDoc) => {
-    const attached = attachedParcelsFor(m);
-    const base = parcelFor(m);
-    return attached.length > 0 ? attached.length : base ? 1 : 0;
+  const carrierFor = (m: BookingDoc) => {
+    const p = parcelFor(m);
+    if (!p?.piggybackBookingId) return null;
+    return members.find((x) => x.bookingId === p.piggybackBookingId) ?? null;
   };
+  const parcelLoadedFor = (p: ParcelDoc) =>
+    loadedOverrides[p.parcelId] ?? !!p.loadedAt;
+  const parcelStatusFor = (p: ParcelDoc) =>
+    parcelStatusOverrides[p.parcelId] ?? p.status;
+  const cargoParcelsFor = (m: BookingDoc) => {
+    const byId = new Map<string, ParcelDoc>();
+    const base = parcelFor(m);
+    if (base) byId.set(base.parcelId, base);
+    for (const p of attachedParcelsFor(m)) byId.set(p.parcelId, p);
+    return [...byId.values()];
+  };
+  const parcelCountFor = (m: BookingDoc) => cargoParcelsFor(m).length;
 
   // Booker resolved = confirmed aboard, OR reported NOT aboard (022 dispute),
   // OR marked absent while companions sailed (022 partial no-show). Cargo is
-  // resolved only by its own Cargo Ready tick.
+  // resolved parcel by parcel: each one is either loaded or explicitly
+  // returned, so nothing silently sails or strands.
   const memberResolved = (m: BookingDoc) => {
-    if (m.serviceType === 'cargo') return boardedFor(m);
+    if (m.serviceType === 'cargo') {
+      const cargo = cargoParcelsFor(m);
+      return attachedParcelsReady
+        && cargo.length > 0
+        && cargo.every(
+          (p) => parcelStatusFor(p) === 'returned' || parcelLoadedFor(p)
+        );
+    }
     const companions = companionsFor(m);
     return !!companions
       && (boardedFor(m) || !!m.disputedAt || !!m.noShowAt)
       && companions.every((c) => c.boardedAt || c.noShowAt);
   };
   const canStart =
-    groupLoaded && members.length > 0 && members.every(memberResolved) && !advanceLocked;
+    groupLoaded && members.length > 0 && members.every(memberResolved)
+    && !advanceLocked && !parcelBusy;
   const contactPassenger =
     passengerMembers.find((m) => !memberResolved(m) && !!m.passengerPhone)
     ?? passengerMembers.find((m) => !!m.passengerPhone)
@@ -464,6 +508,69 @@ export default function BookingStatus() {
     setPending(false);
   }
 
+  async function toggleParcelLoaded(member: BookingDoc, parcel: ParcelDoc) {
+    if (parcelBusy || member.status !== 'accepted') return;
+    const wasLoaded = parcelLoadedFor(parcel);
+    const next = !wasLoaded;
+    setParcelBusy(parcel.parcelId);
+    setActionError(null);
+    setLoadedOverrides((prev) => ({ ...prev, [parcel.parcelId]: next }));
+    try {
+      await setParcelLoaded(parcel.parcelId, next);
+    } catch (e) {
+      setLoadedOverrides((prev) => ({ ...prev, [parcel.parcelId]: wasLoaded }));
+      setActionError(friendlyError(e));
+    }
+    setParcelBusy(null);
+  }
+
+  function confirmParcelNoShow(member: BookingDoc, parcel: ParcelDoc) {
+    if (parcelBusy || member.status !== 'accepted') return;
+    const isLast = cargoParcelsFor(member).every(
+      (p) => p.parcelId === parcel.parcelId
+        || parcelStatusFor(p) === 'returned'
+    );
+    Alert.alert(
+      'Cargo not at port?',
+      `${parcel.receiverName}'s parcel will be marked returned. This only changes the parcel - the passenger is not banned.${isLast ? ' This is the last live parcel, so the cargo trip will also be cancelled.' : ''}`,
+      [
+        { text: 'Go back', style: 'cancel' },
+        {
+          text: 'Mark returned',
+          style: 'destructive',
+          onPress: () => void doParcelNoShow(member, parcel),
+        },
+      ]
+    );
+  }
+
+  async function doParcelNoShow(member: BookingDoc, parcel: ParcelDoc) {
+    if (parcelBusy) return;
+    const previous = parcelStatusFor(parcel);
+    setParcelBusy(parcel.parcelId);
+    setActionError(null);
+    setParcelStatusOverrides((prev) => ({
+      ...prev,
+      [parcel.parcelId]: 'returned',
+    }));
+    try {
+      const cancelled = await markParcelNoShow(parcel.parcelId);
+      if (cancelled) {
+        Alert.alert(
+          'Cargo trip cancelled',
+          `Every parcel on ${member.ref} was marked not at port. The batch is closed and its route key is released.`
+        );
+      }
+    } catch (e) {
+      setParcelStatusOverrides((prev) => ({
+        ...prev,
+        [parcel.parcelId]: previous,
+      }));
+      setActionError(friendlyError(e));
+    }
+    setParcelBusy(null);
+  }
+
   async function toggleBoarded(member: BookingDoc, next: boolean) {
     setBoardPending(true);
     setActionError(null);
@@ -583,26 +690,76 @@ export default function BookingStatus() {
     );
   }
 
-  function renderAttachedParcels(member: BookingDoc, label: string) {
-    const attached = attachedParcelsFor(member);
-    if (attached.length === 0) return null;
-    return (
-      <View style={styles.memberSection}>
-        <Text style={styles.cardLabel}>{label}</Text>
-        {attached.map((p) => (
-          <View key={p.parcelId} style={styles.boardRow}>
-            <Icon name="parcel" size={16} color={colors.primary} />
+  function renderCargoReady(member: BookingDoc) {
+    const parcels = cargoParcelsFor(member);
+    if (parcels.length === 0) {
+      return <Text style={styles.cardSub}>Loading cargo…</Text>;
+    }
+    return parcels.map((p) => {
+      const status = parcelStatusFor(p);
+      const loaded = parcelLoadedFor(p);
+      const closed = status === 'returned' || status === 'delivered';
+      const canCheck = member.status === 'accepted'
+        && status === 'pending'
+        && !parcelBusy;
+      const statusLabel = status === 'returned'
+        ? 'Returned — not at port'
+        : status === 'delivered'
+          ? 'Delivered'
+          : loaded
+            ? 'Loaded'
+            : 'Not loaded yet';
+      return (
+        <View key={p.parcelId} style={styles.parcelRow}>
+          <Pressable
+            onPress={() => void toggleParcelLoaded(member, p)}
+            disabled={!canCheck}
+            style={({ pressed }) => [
+              styles.boardRow,
+              styles.parcelToggle,
+              pressed && canCheck && styles.boardRowPressed,
+            ]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: loaded && !closed, disabled: !canCheck }}
+            accessibilityLabel={`${p.receiverName} loaded`}
+          >
+            <View style={[
+              styles.checkbox,
+              loaded && !closed && styles.checkboxOn,
+              !canCheck && styles.checkboxDisabled,
+            ]}>
+              {loaded && !closed && (
+                <Icon name="check" size={14} color={colors.primaryText} />
+              )}
+            </View>
             <View style={styles.boardText}>
               <Text style={styles.boardName} numberOfLines={1}>{p.receiverName}</Text>
               <Text style={styles.boardSub} numberOfLines={1}>
                 {p.totalWeightKg != null ? `${p.totalWeightKg} kg · ` : ''}
-                {p.deliveryType ?? 'accompanied'}
+                {p.deliveryType ?? 'accompanied'} · {statusLabel}
               </Text>
             </View>
-          </View>
-        ))}
-      </View>
-    );
+          </Pressable>
+          {member.status === 'accepted'
+            && p.deliveryType !== 'accompanied'
+            && status === 'pending'
+            && !loaded && (
+              <Pressable
+                onPress={() => confirmParcelNoShow(member, p)}
+                disabled={!!parcelBusy}
+                style={({ pressed }) => [
+                  styles.parcelNoShowBtn,
+                  pressed && styles.boardRowPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Mark ${p.receiverName}'s parcel not at port`}
+              >
+                <Text style={styles.parcelNoShow}>Not at port</Text>
+              </Pressable>
+            )}
+        </View>
+      );
+    });
   }
 
   function renderPassengerCard(member: BookingDoc) {
@@ -622,8 +779,6 @@ export default function BookingStatus() {
         <Text style={styles.cardSub} numberOfLines={1}>
           {member.numOfPassenger} pax · ₱{member.totalPrice}
         </Text>
-
-        {renderAttachedParcels(member, 'RIDING ALONG PARCELS')}
 
         {member.status === 'accepted' && (
           <View style={styles.boardSection}>
@@ -715,7 +870,6 @@ export default function BookingStatus() {
   function renderCargoCard(member: BookingDoc) {
     const parcel = parcelFor(member);
     const parcelCount = parcelCountFor(member);
-    const boarded = boardedFor(member);
     return (
       <View key={member.bookingId} style={styles.card}>
         <Text style={styles.cardLabel}>RECEIVER / CARGO INFO · {member.ref}</Text>
@@ -729,31 +883,22 @@ export default function BookingStatus() {
           {parcelCount} parcel{parcelCount === 1 ? '' : 's'} · ₱{member.totalPrice}
         </Text>
 
-        {renderAttachedParcels(member, 'CARGO ON BOARD')}
+        {parcel?.deliveryType === 'piggyback' && (
+          <View style={styles.memberSection}>
+            <Text style={styles.cardLabel}>RIDING ALONG</Text>
+            <Text style={styles.cardSub} numberOfLines={1}>
+              Riding along with {carrierFor(member)?.passengerName ?? 'the passenger trip'}
+            </Text>
+          </View>
+        )}
 
         {member.status === 'accepted' && (
           <View style={styles.boardSection}>
-            <Text style={styles.cardLabel}>CARGO READY</Text>
-            <Pressable
-              onPress={() => void toggleBoarded(member, !boarded)}
-              disabled={boardPending}
-              style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: boarded }}
-              accessibilityLabel="Cargo loaded"
-            >
-              <View style={[styles.checkbox, boarded && styles.checkboxOn]}>
-                {boarded && <Icon name="check" size={14} color={colors.primaryText} />}
-              </View>
-              <View style={styles.boardText}>
-                <Text style={styles.boardName} numberOfLines={1}>
-                  Cargo
-                </Text>
-                <Text style={styles.boardSub}>
-                  Cargo trip · {boarded ? 'loaded' : 'not loaded yet'}
-                </Text>
-              </View>
-            </Pressable>
+            <Text style={styles.cardLabel}>CARGO READY · CHECK EACH PARCEL</Text>
+            {renderCargoReady(member)}
+            <Text style={styles.cardSub}>
+              Every parcel must be loaded or marked “Not at port” before Prepare Departure unlocks.
+            </Text>
           </View>
         )}
       </View>
@@ -896,7 +1041,7 @@ export default function BookingStatus() {
                       ? 'Could not load the rest of this group — Prepare Departure stays locked.'
                       : 'Loading the other bookings in this group…'
                     : cargoMembers.some((m) => !memberResolved(m))
-                      ? 'Tick Cargo Ready for every cargo booking to prepare departure.'
+                      ? 'Load every parcel or mark it not at port to prepare departure.'
                       : 'Tick every passenger who is aboard to prepare departure.'}
               </Text>
             )}
@@ -1048,9 +1193,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkboxDisabled: { opacity: 0.45 },
   boardText: { flex: 1, minWidth: 0 },
   boardName: { flexShrink: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
   boardSub: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  parcelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  parcelToggle: { flex: 1, minWidth: 0 },
+  parcelNoShowBtn: { paddingVertical: spacing.sm, paddingLeft: spacing.sm },
+  parcelNoShow: { color: colors.danger, fontSize: 12, fontWeight: '700' },
   scanBtn: { marginTop: spacing.md },
 
   // ---------- QR scanner ----------

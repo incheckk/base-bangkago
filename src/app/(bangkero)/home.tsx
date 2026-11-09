@@ -184,6 +184,17 @@ export default function BangkeroHome() {
     return map;
   }, [parcels.data]);
 
+  /** 077: every batched booking owns a synthetic 1-pax cargo stub. */
+  const batchedBookingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of parcels.data) {
+      if (p.deliveryType === 'batched' && p.carrierBookingId && p.bookingId) {
+        ids.add(p.bookingId);
+      }
+    }
+    return ids;
+  }, [parcels.data]);
+
   /** Passenger ride id → approved piggyback parcels riding along. */
   const piggybackByRideId = useMemo(() => {
     const map = new Map<string, ParcelDoc[]>();
@@ -303,9 +314,16 @@ export default function BangkeroHome() {
       .finally(() => setBoatChecked(true));
   }, [uid]);
   // Cargo stubs (piggyback/batched/solo before promotion) carry a synthetic
-  // 1 pax; only accompanied cargo actually boards a person.
+  // 1 pax; only accompanied cargo actually boards a person. 077 batch
+  // members are accepted with is_dispatchable = true, so exclude them by
+  // their batched parcel as well.
   const acceptedLoad = activeTrips.reduce(
-    (sum, t) => sum + (t.serviceType === 'cargo' && t.isDispatchable === false ? 0 : t.numOfPassenger),
+    (sum, t) =>
+      sum +
+      (t.serviceType === 'cargo' &&
+      (t.isDispatchable === false || batchedBookingIds.has(t.bookingId))
+        ? 0
+        : t.numOfPassenger),
     0
   );
   // Destinations of trips already accepted — the route lock (008).

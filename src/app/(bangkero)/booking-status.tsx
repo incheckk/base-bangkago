@@ -257,7 +257,20 @@ export default function BookingStatus() {
     const byId = new Map<string, ParcelDoc>();
     const base = parcelFor(m);
     if (base) byId.set(base.parcelId, base);
-    for (const p of attachedParcelsFor(m)) byId.set(p.parcelId, p);
+    for (const p of attachedParcelsFor(m)) {
+      // Batched parcels share carrier_booking_id with the whole batch's
+      // master, so the carrier link alone duplicates a member's parcel onto
+      // every master card. A batched parcel renders only under the member
+      // whose booking_id matches it directly; piggyback and accompanied
+      // links keep their old behavior, and a null booking_id (legacy row)
+      // still falls back to the carrier link.
+      if (
+        p.deliveryType === 'batched'
+        && p.bookingId != null
+        && p.bookingId !== m.bookingId
+      ) continue;
+      byId.set(p.parcelId, p);
+    }
     return [...byId.values()];
   };
   const parcelCountFor = (m: BookingDoc) => cargoParcelsFor(m).length;

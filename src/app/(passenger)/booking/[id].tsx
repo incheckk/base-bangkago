@@ -166,6 +166,20 @@ export default function BookingDetail() {
     };
   }, [id, booking?.serviceType]);
 
+  // Only a legacy demoted stub needs redirecting. 077 group members are
+  // accepted under the same operator and own their parcel directly.
+  useEffect(() => {
+    if (!id || !booking || !parcel) return;
+    if (booking.operatorId) return;
+    if (parcel.deliveryType !== 'batched') return;
+    const carrierId = parcel.carrierBookingId;
+    if (!carrierId || carrierId === id) return;
+    router.replace({
+      pathname: '/(passenger)/booking/[id]',
+      params: { id: carrierId },
+    });
+  }, [booking, id, parcel]);
+
   // A piggyback parcel rides with this passenger booking — surface its status.
   useEffect(() => {
     if (!id || booking?.serviceType === 'cargo') return;

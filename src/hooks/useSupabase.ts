@@ -143,6 +143,7 @@ export interface ActiveCargoBooking {
   ref: string;
   fromPortName: string;
   toPortName: string;
+  tripStat: string | null;
 }
 
 export interface ActiveCargoDelivery {
@@ -184,8 +185,9 @@ export function useActiveCargoDeliveries(
       p.deliveryType === 'piggyback' ? p.bookingId : (p.carrierBookingId ?? p.bookingId);
     const ids = Array.from(new Set(parcels.map(targetId)));
     const bookingMap = new Map<string, ActiveCargoBooking>();
-    // A cancelled stub must not leave its parcel pending: cancel_own_booking
-    // only flips the booking, so the target row is the cancellation signal.
+    // A cancelled target booking must not leave its parcel pending. The
+    // booking row is the cancellation signal; the 075 trigger returns linked
+    // unloaded parcels and both realtime subscriptions re-run this fetch.
     // Auto-soloed parcels are the exception — an abandoned batch cancels the
     // stub it was linked to while the solo delivery is still live.
     const cancelledTargets = new Set<string>();
@@ -208,6 +210,7 @@ export function useActiveCargoDeliveries(
             ref: row.ref ?? '',
             fromPortName: row.from_port_name ?? '',
             toPortName: row.to_port_name ?? '',
+            tripStat: row.trip_stat ?? null,
           });
         }
       }
@@ -227,7 +230,12 @@ export function useActiveCargoDeliveries(
   useEffect(() => { void load(); }, [load]);
   useRealtimeQuery(
     load,
-    passengerId ? [{ table: 'parcels', filter: `user_id=eq.${passengerId}` }] : [],
+    passengerId
+      ? [
+          { table: 'parcels', filter: `user_id=eq.${passengerId}` },
+          { table: 'bookings', filter: `user_id=eq.${passengerId}` },
+        ]
+      : [],
   );
 
   return { data, error };

@@ -76,6 +76,7 @@ export default function ArrivedScreen() {
             (p.piggybackBookingId != null && sailingIds.includes(p.piggybackBookingId))),
       )
     : allParcels;
+  const unloadParcels = parcels.filter((p) => p.status !== 'returned');
 
   const [completing, setCompleting] = useState(false);
   const [deliveringAll, setDeliveringAll] = useState(false);
@@ -267,8 +268,8 @@ export default function ArrivedScreen() {
               <View style={styles.cardRow}>
                 <Text style={styles.cardLabel}>Parcels</Text>
                 <Text style={styles.cardValue}>
-                  {parcels.length} {parcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
-                  {parcels.length} items to unload
+                  {unloadParcels.length} {unloadParcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
+                  {unloadParcels.length} items to unload
                 </Text>
               </View>
             </View>

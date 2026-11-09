@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -9,7 +9,7 @@ import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import {
   BATCH_THRESHOLD,
   bumpBatchCycle,
-  releaseAbandonedBatch,
+  upgradeToSolo,
 } from '@/services/parcel-batching.service';
 import { PARCEL_RATES } from '@/services/parcel-pricing.service';
 import { supabase } from '@/services/supabase';
@@ -22,6 +22,7 @@ export default function BatchedWaiting() {
   const [parcel, setParcel] = useState<any>(null);
   const [partners, setPartners] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [upgrading, setUpgrading] = useState(false);
   const [now, setNow] = useState(Date.now());
   // Guards the one-shot deadline resolve against re-entry from the poll,
   // the realtime subscription and the 1s tick firing load() together.
@@ -37,6 +38,25 @@ export default function BatchedWaiting() {
     if (!parcelId) return;
     const { data } = await supabase.from('parcels').select('*').eq('id', parcelId).maybeSingle();
     if (data) {
+      const soloBookingId = data.carrier_booking_id ?? data.booking_id;
+      if (data.batching_status === 'solo' && soloBookingId) {
+        router.replace(`/(passenger)/booking/${soloBookingId}`);
+        return;
+      }
+      if (data.carrier_booking_id) {
+        const { data: carrierBooking } = await supabase
+          .from('bookings')
+          .select('id, trip_stat')
+          .eq('id', data.carrier_booking_id)
+          .maybeSingle();
+        if (
+          carrierBooking?.trip_stat &&
+          ['accepted', 'in_transit', 'completed'].includes(carrierBooking.trip_stat)
+        ) {
+          router.replace(`/(passenger)/booking/${carrierBooking.id}`);
+          return;
+        }
+      }
       setParcel(data);
       if (data.batching_route_key) {
         const { data: partnerCount } = await supabase.rpc('get_batch_partner_count', {
@@ -156,33 +176,40 @@ export default function BatchedWaiting() {
             <Text style={styles.warning}>No other parcels joined</Text>
               <Pressable
                 style={styles.primaryBtn}
+                disabled={upgrading}
                 onPress={async () => {
-                  if (!parcelId) return;
-                  await bumpBatchCycle(parcelId);
-                  // Immediately sail: flip status to solo with surcharge.
-                  // Restore the self-stub carrier so a batch link from an
-                  // earlier resolve cannot keep this parcel attached.
-                  await supabase
-                    .from('parcels')
-                    .update({
-                      batching_status: 'solo',
-                      solo_surcharge: PARCEL_RATES.soloSurcharge,
-                      carrier_booking_id: parcel.booking_id ?? null,
-                    })
-                    .eq('id', parcelId);
-                  if (parcel.batching_route_key) {
-                    await releaseAbandonedBatch(parcel.batching_route_key);
+                  if (!parcelId || upgrading) return;
+                  setUpgrading(true);
+                  try {
+                    const bookingId = await upgradeToSolo(parcelId);
+                    router.replace(`/(passenger)/booking/${bookingId}`);
+                  } catch (error) {
+                    Alert.alert(
+                      'Upgrade failed',
+                      error instanceof Error ? error.message : 'Please try again.',
+                    );
+                    setUpgrading(false);
                   }
-                  void load();
                 }}
               >
-              <Text style={styles.primaryBtnText}>Pay ₱{PARCEL_RATES.soloSurcharge} and sail now (coming soon)</Text>
+              <Text style={styles.primaryBtnText}>
+                {upgrading
+                  ? 'Upgrading…'
+                  : `Pay ₱${parcel.solo_surcharge ?? PARCEL_RATES.soloSurcharge} and sail now`}
+              </Text>
             </Pressable>
               <Pressable
                 style={styles.secondaryBtn}
                 onPress={async () => {
                   if (!parcelId) return;
-                  await bumpBatchCycle(parcelId);
+                  const { autoSolo } = await bumpBatchCycle(parcelId);
+                  if (autoSolo) {
+                    const bookingId = parcel.carrier_booking_id ?? parcel.booking_id;
+                    if (bookingId) {
+                      router.replace(`/(passenger)/booking/${bookingId}`);
+                      return;
+                    }
+                  }
                   void load();
                 }}
               >

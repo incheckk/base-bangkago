@@ -248,6 +248,14 @@ export default function PassengerHome() {
   const openDelivery = () => {
     if (!activeDelivery) return;
     const parcel = activeDelivery.parcel;
+    const booking = activeDelivery.booking;
+    if (
+      booking?.tripStat &&
+      ['accepted', 'in_transit', 'completed'].includes(booking.tripStat)
+    ) {
+      router.push(`/(passenger)/booking/${booking.bookingId}`);
+      return;
+    }
     // Only a parcel still in the batching queue belongs on the waiting
     // screen; auto-soloed/in-transit former batches track via the booking.
     const waitingOnBatch =
@@ -259,7 +267,7 @@ export default function PassengerHome() {
         params: { parcelId: parcel.parcelId },
       });
     } else {
-      router.push(`/(passenger)/booking/${parcel.bookingId}`);
+      router.push(`/(passenger)/booking/${activeDelivery.booking?.bookingId ?? parcel.bookingId}`);
     }
   };
   const recentTrips = bookings.data

@@ -349,6 +349,20 @@ export async function cancelBooking(bookingId: string, reason?: string): Promise
     p_booking_id: bookingId,
     p_reason: reason ?? null,
   });
+  if (error) {
+    if (error.message.includes('already merged into a batch')) {
+      throw new Error(
+        'This parcel is already merged into a batch. You cannot cancel it directly.',
+      );
+    }
+    throw error;
+  }
+}
+
+export async function markBatchParcelPaid(parcelId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_batch_parcel_paid', {
+    p_parcel_id: parcelId,
+  });
   if (error) throw error;
 }
 

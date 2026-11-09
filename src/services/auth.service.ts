@@ -221,6 +221,9 @@ export function friendlyAuthError(e: unknown): string {
   if (message.includes('confirm passengers on board')) {
     return 'Confirm everyone is on board before completing this trip.';
   }
+  if (message.includes('already merged into a batch')) {
+    return 'This parcel is already merged into a batch. You cannot cancel it directly.';
+  }
   if (message.includes('already cancelled or has changed')) {
     return 'This booking was already cancelled or has changed.';
   }

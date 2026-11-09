@@ -176,6 +176,8 @@ export interface BookingDoc {
   cargoMode?: 'accompanied' | 'piggyback' | 'batched' | 'solo' | null;
   /** False = parcel-mode stub hidden from FCFS (050). Absent pre-migration. */
   isDispatchable?: boolean;
+  /** 071: shared by accepted bookings on one boat + route + sailing day/slot. */
+  groupBookingId?: string | null;
 }
 
 export interface PassengerDetailDoc {

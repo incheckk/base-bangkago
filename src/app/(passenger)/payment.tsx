@@ -152,6 +152,13 @@ export default function PaymentScreen() {
       setError('Missing trip details. Go back and pick your ports again.');
       return;
     }
+    // Accompanied Padala hides the receiver fields; the parcel still needs
+    // a receiver_name, so the sender is the receiver.
+    const resolvedReceiverName =
+      params.receiverName?.trim() ||
+      `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() ||
+      'Sender';
+    const resolvedReceiverContact = params.receiverContact || profile.phone || undefined;
     setBusy(true);
     setError(null);
     try {
@@ -173,7 +180,9 @@ export default function PaymentScreen() {
       // (or a paid-downpayment booking) behind.
       let cargoItems: { itemName: string; quantity: number; kilogram: number }[] = [];
       if (serviceType === 'cargo') {
-        if (!params.receiverName) throw new Error('Missing receiver details. Go back and try again.');
+        if (deliveryMode !== 'accompanied' && !params.receiverName) {
+          throw new Error('Missing receiver details. Go back and try again.');
+        }
         let parsed: { itemName?: string; quantity: string | number; kilogram: string | number }[];
         try {
           parsed = JSON.parse(params.itemsJson ?? '[]') as typeof parsed;
@@ -264,8 +273,8 @@ export default function PaymentScreen() {
       if (serviceType === 'cargo') {
         try {
           const parcel = await createParcel({
-            receiverName: params.receiverName ?? '',
-            receiverContact: params.receiverContact || undefined,
+            receiverName: resolvedReceiverName,
+            receiverContact: resolvedReceiverContact,
             totalPrice: actualFare,
             userId: profile.uid,
             bookingId,
@@ -350,6 +359,7 @@ export default function PaymentScreen() {
         pathname: '/(passenger)/booking-confirmed',
         params: {
           ...params,
+          receiverName: resolvedReceiverName,
           fare: String(actualFare),
           paymentMethod: isEscrow ? 'cash' : method,
           bookingId,

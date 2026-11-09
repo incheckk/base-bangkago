@@ -138,14 +138,18 @@ export default function BookDelivery() {
     (i) => !itemNameError(i) && !itemQuantityError(i) && !itemWeightError(i)
   );
 
+  // Accompanied cargo rides with the sender, so there is no separate
+  // receiver. The payment step fills receiver_name from the sender profile
+  // because the parcels table still requires a receiver.
+  const needsReceiver = deliveryMode !== 'accompanied';
+
   const ready =
     !!fromId &&
     !!toId &&
     fromId !== toId &&
     cargoFare !== null &&
     totalKg > 0 &&
-    !nameError(receiverName) &&
-    !!normalizePhone(receiverContact) &&
+    (!needsReceiver || (!nameError(receiverName) && !!normalizePhone(receiverContact))) &&
     itemsValid &&
     piggybackReady;
 
@@ -272,25 +276,29 @@ export default function BookDelivery() {
           </View>
         )}
 
-        <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
-        <TextField
-          label="Receiver Name"
-          value={receiverName}
-          onChangeText={setReceiverName}
-          placeholder="Juan Dela Cruz"
-          autoCapitalize="words"
-          error={receiverName ? nameError(receiverName) : null}
-        />
-        <View style={{ height: spacing.md }} />
-        <TextField
-          label="Contact Number"
-          value={receiverContact}
-          onChangeText={setReceiverContact}
-          placeholder="+639171234567"
-          keyboardType="phone-pad"
-          maxLength={20}
-          error={receiverContact && !normalizePhone(receiverContact) ? 'Enter a valid mobile number' : null}
-        />
+        {needsReceiver && (
+          <>
+            <Text style={[styles.sectionLabel, styles.mt]}>RECEIVER INFO</Text>
+            <TextField
+              label="Receiver Name"
+              value={receiverName}
+              onChangeText={setReceiverName}
+              placeholder="Juan Dela Cruz"
+              autoCapitalize="words"
+              error={receiverName ? nameError(receiverName) : null}
+            />
+            <View style={{ height: spacing.md }} />
+            <TextField
+              label="Contact Number"
+              value={receiverContact}
+              onChangeText={setReceiverContact}
+              placeholder="+639171234567"
+              keyboardType="phone-pad"
+              maxLength={20}
+              error={receiverContact && !normalizePhone(receiverContact) ? 'Enter a valid mobile number' : null}
+            />
+          </>
+        )}
 
         <Text style={[styles.sectionLabel, styles.mt]}>PARCEL ITEMS</Text>
         {items.map((item, idx) => (

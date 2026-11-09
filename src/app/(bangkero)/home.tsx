@@ -35,7 +35,6 @@ import {
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
-import { supabase } from '@/services/supabase';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
@@ -43,6 +42,7 @@ import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models'
 import { formatPhone } from '@/utils/phone';
 import { alertPing } from '@/utils/feedback';
 import { bookingTypeLabel } from '@/utils/booking-label';
+import { groupAcceptedBookings, type TripGroup } from '@/utils/trip-groups';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
 const clock = (ms: number) => {
@@ -199,33 +199,6 @@ export default function BangkeroHome() {
   }, [parcels.data]);
 
   /**
-   * Batched stubs (053): cargo_mode='batched' + is_dispatchable=false.
-   * Read straight off `bookings` — RLS hides a pending_batch parcel from
-   * the bangkero, so the parcel row can never be used for this decision.
-   */
-  const [batchedStubIds, setBatchedStubIds] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    const cargoIds = requests.data
-      .filter((b) => b.serviceType === 'cargo')
-      .map((b) => b.bookingId);
-    if (cargoIds.length === 0) return;
-    let alive = true;
-    supabase
-      .from('bookings')
-      .select('id, is_dispatchable, cargo_mode')
-      .in('id', cargoIds)
-      .eq('cargo_mode', 'batched')
-      .eq('is_dispatchable', false)
-      .then(({ data, error }) => {
-        if (!alive || error) return;
-        setBatchedStubIds(new Set((data ?? []).map((r) => r.id as string)));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [requests.data]);
-
-  /**
    * Active Trips: only an unassigned batched parcel still waiting for its
    * batching window is a stub. Accompanied / piggyback / solo cargo and
    * anything this bangkero already owns are real trips — never hide them.
@@ -258,6 +231,10 @@ export default function BangkeroHome() {
   const activeTrips = useMemo(
     () => accepted.data.filter((b) => !isCargoStub(b)),
     [accepted.data, isCargoStub],
+  );
+  const activeGroups = useMemo(
+    () => groupAcceptedBookings(activeTrips),
+    [activeTrips],
   );
   const hasActiveTrip = activeTrips.length > 0;
   /** The trip currently at sea — departed, not yet arrived. A completed
@@ -545,7 +522,7 @@ export default function BangkeroHome() {
     setPending(null);
   }
 
-  async function complete(b: BookingDoc) {
+  async function complete(b: BookingDoc): Promise<boolean> {
     setPending(b.bookingId);
     setActionError(null);
     try {
@@ -556,10 +533,22 @@ export default function BangkeroHome() {
         'Trip Completed',
         `Your trip ${b.ref} has been completed. Safe travels!`
       ).catch(() => {});
+      return true;
     } catch (e) {
       setActionError(friendlyError(e));
+      return false;
+    } finally {
+      setPending(null);
     }
-    setPending(null);
+  }
+
+  /** 071: a group card completes every member, stopping on the first error. */
+  async function completeGroup(g: TripGroup) {
+    for (const b of g.bookings) {
+      if (acted.has(b.bookingId)) continue;
+      const ok = await complete(b);
+      if (!ok) return;
+    }
   }
 
   /** Accepted trips plus the just-accepted row (realtime can lag a second). */
@@ -696,15 +685,16 @@ export default function BangkeroHome() {
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
   // Two groups so an operator can tell tomorrow's commitments from
-  // people standing at the pier right now. Batched stubs stay visible
-  // with a disabled Accept ("Waiting for batch"); piggyback stubs are
-  // approved via the cube icon, so keep them off this list.
+  // people standing at the pier right now. Non-dispatchable parcel stubs
+  // are not independently acceptable: piggyback stubs are approved via
+  // the cube icon, and batched stubs are represented by their promoted
+  // master (071 demotes superseded members instead of cancelling them).
   const visibleRequests = requests.data.filter(
     (b) =>
       !(
         b.serviceType === 'cargo' &&
-        b.cargoMode === 'piggyback' &&
-        b.isDispatchable === false
+        b.isDispatchable === false &&
+        (b.cargoMode === 'piggyback' || b.cargoMode === 'batched')
       ),
   );
   const advanceReqs = visibleRequests.filter(isAdvance);
@@ -713,9 +703,6 @@ export default function BangkeroHome() {
   const renderRequest = (b: BookingDoc) => {
     const chip = chipFor(b);
     const category = categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined);
-    // 053: batched stub still waiting on its batch window — visible, but
-    // not acceptable until the dispatcher marks it dispatchable.
-    const isPendingBatch = batchedStubIds.has(b.bookingId);
     return (
       <View key={b.bookingId} style={styles.request}>
         <RequestBody booking={b} category={category} />
@@ -753,10 +740,10 @@ export default function BangkeroHome() {
             style={styles.declineBtn}
           />
           <PrimaryButton
-            label={isPendingBatch ? 'Waiting for batch' : 'Accept'}
+            label="Accept"
             onPress={() => accept(b)}
             loading={pending === b.bookingId}
-            disabled={isPendingBatch || acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
+            disabled={acted.has(b.bookingId) || ratingBlocked || docsBlocked || !chip.canAccept}
             style={styles.acceptBtn}
           />
         </View>
@@ -1068,7 +1055,7 @@ export default function BangkeroHome() {
           </>
         )}
 
-        {activeTrips.length > 0 && (
+        {activeGroups.length > 0 && (
           <>
             <View style={styles.sectionHead}>
               <Text style={styles.sectionLabelInline}>ACTIVE TRIPS</Text>
@@ -1085,52 +1072,72 @@ export default function BangkeroHome() {
                   <Text style={styles.sectionAction}>Boat load ›</Text>
                 </Pressable>
                 <View style={styles.countPill}>
-                  <Text style={styles.countPillText}>{activeTrips.length}</Text>
+                  <Text style={styles.countPillText}>{activeGroups.length}</Text>
                 </View>
               </View>
             </View>
-            {activeTrips.map((b) => (
-              <Pressable
-                key={b.bookingId}
-                onPress={() => router.push({
-                  pathname: '/(bangkero)/booking-status',
-                  params: { bookingId: b.bookingId },
-                })}
-                style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
-              >
-                <RequestBody
-                  booking={b}
-                  category={categoryLabel(b, b.packageId ? pkgNames[b.packageId] : undefined)}
-                  ridingAlong={piggybackByRideId.get(b.bookingId) ?? []}
-                />
-                {/* Completing requires everyone aboard (complete_trip raises
-                    otherwise) — until then the button routes to the boarding
-                    card instead of pretending the trip can close. */}
-                <PrimaryButton
-                  label={
-                    acted.has(b.bookingId)
-                      ? 'Completed'
-                      : b.onboardedAt
-                        ? 'Mark completed'
-                        : 'Open trip to confirm boarding'
-                  }
-                  onPress={() => {
-                    if (acted.has(b.bookingId)) return;
-                    if (b.onboardedAt) {
-                      void complete(b);
-                    } else {
-                      router.push({
-                        pathname: '/(bangkero)/booking-status',
-                        params: { bookingId: b.bookingId },
-                      });
+            {activeGroups.map((g) => {
+              const lead = g.bookings[0];
+              if (!lead) return null;
+              const allBoarded = g.bookings.every((b) => !!b.onboardedAt);
+              const allActed = g.bookings.every((b) => acted.has(b.bookingId));
+              const groupLoading = g.bookings.some((b) => pending === b.bookingId);
+              return (
+                <Pressable
+                  key={g.key}
+                  onPress={() => router.push({
+                    pathname: '/(bangkero)/booking-status',
+                    params: { bookingId: lead.bookingId },
+                  })}
+                  style={({ pressed }) => [styles.request, styles.activeTrip, pressed && styles.requestPressed]}
+                >
+                  <RequestBody
+                    booking={lead}
+                    category={categoryLabel(lead, lead.packageId ? pkgNames[lead.packageId] : undefined)}
+                    ridingAlong={g.bookings.flatMap(
+                      (b) => piggybackByRideId.get(b.bookingId) ?? []
+                    )}
+                  />
+                  {g.bookings.length > 1 && (
+                    <View style={styles.groupSummary}>
+                      <Text style={styles.groupSummaryTitle}>
+                        GROUP BOOKING · {g.bookings.length} BOOKINGS
+                      </Text>
+                      <Text style={styles.groupSummaryText} numberOfLines={2}>
+                        {g.refs.join(' · ')} · {g.pax} pax
+                        {g.cargoCount > 0 ? ` · ${g.cargoCount} padala` : ''} · ₱{g.totalPrice}
+                      </Text>
+                    </View>
+                  )}
+                  {/* Completing requires everyone aboard (complete_trip raises
+                      otherwise) — until then the button routes to the boarding
+                      card instead of pretending the trip can close. */}
+                  <PrimaryButton
+                    label={
+                      allActed
+                        ? 'Completed'
+                        : allBoarded
+                          ? 'Mark completed'
+                          : 'Open trip to confirm boarding'
                     }
-                  }}
-                  loading={pending === b.bookingId}
-                  disabled={acted.has(b.bookingId)}
-                  style={{ marginTop: spacing.md }}
-                />
-              </Pressable>
-            ))}
+                    onPress={() => {
+                      if (allActed) return;
+                      if (allBoarded) {
+                        void completeGroup(g);
+                      } else {
+                        router.push({
+                          pathname: '/(bangkero)/booking-status',
+                          params: { bookingId: lead.bookingId },
+                        });
+                      }
+                    }}
+                    loading={groupLoading}
+                    disabled={allActed}
+                    style={{ marginTop: spacing.md }}
+                  />
+                </Pressable>
+              );
+            })}
           </>
         )}
 
@@ -1477,6 +1484,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   catChipText: { flexShrink: 1, ...typography.label, color: colors.primary, letterSpacing: 0.5 },
+  groupSummary: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.borderSubtle,
+    gap: spacing.xxs,
+  },
+  groupSummaryTitle: { ...typography.label, color: colors.primary },
+  groupSummaryText: { ...typography.caption, color: colors.textSecondary },
 
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rail: { alignItems: 'center' },

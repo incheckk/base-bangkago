@@ -41,6 +41,64 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-09 — Cargo boards parcel by parcel: per-parcel checks, parcel-only
+  no-show, ghost batch-key fix (migration 073 PENDING — USER MUST RUN, after
+  072; 072 is also still pending; gates: tsc clean, lint 0 errors / 132
+  warnings; expo-doctor 17/18 — 8 SDK-57 patch drifts, unchanged and not
+  bulk-upgraded).**
+  - 073 adds `parcels.loaded_at`, backfills already-boarded accepted cargo
+    from `bookings.onboarded_at`, and adds `set_parcel_loaded` /
+    `mark_parcel_no_show`.
+  - Booking Status Cargo Ready is now one checkbox per parcel (and one
+    "Not at port" action for pending non-accompanied cargo). Unchecking
+    removes the parcel from the manifest and clears the cargo booking's
+    `onboarded_at` when nothing is loaded.
+  - Parcel no-show NEVER writes `no_show_at` and never bans the sender.
+    Returning the last live parcel cancels the non-accompanied cargo
+    booking, writes `cancel_reason`, and explicitly sets
+    `batch_route_key = NULL`; accompanied cargo is refused.
+  - 073 also installs a BEFORE UPDATE trigger that clears every
+    `batch_route_key` when `trip_stat` becomes cancelled/completed, plus a
+    one-time ghost-key cleanup. This releases the 054 unique batch key so
+    later batches on the same route are accepted.
+  - Prepare Departure and the departure checklist's Ready to Depart both
+    stay locked until every attached cargo parcel is loaded or explicitly
+    returned. Complete Trip / departure sync only move or deliver loaded
+    cargo; manifest population filters unchecked cargo; Arrived has one
+    "Mark All Delivered" action scoped to loaded cargo. Pre-073 service
+    reads keep their legacy behavior.
+  - Known gap: marking a parcel returned does not re-price the booking or
+    issue a refund; that rule is still undecided.
+  - **Next:** run `migrations/072_piggyback_group_accept.sql` then
+    `migrations/073_per_parcel_cargo_boarding.sql`; smoke: load 2 of 3
+    parcels, return the third (trip stays accepted, manifest has 2), depart
+    and Mark All Delivered (returned parcel stays returned); return every
+    parcel on another batch (trip cancels, sender is not banned), then
+    accept a new batch on the same route (no duplicate batch-key error);
+    complete a loaded batch and accept another on that route.
+
+- **2026-11-08 — Piggyback joins the accept desk: one request card, one
+  grouped boat load (migration 072 PENDING — USER MUST RUN, after 071;
+  gates: tsc clean, lint 0 errors / 132 warnings).**
+  - The bangkero header cube icon and `piggyback-requests` screen/hook are
+    deleted. A pending piggyback parcel now appears in Incoming Requests as
+    the sender's cargo stub, and only while 044 RLS exposes that parcel to
+    this boat.
+  - Accept calls `accept_piggyback_request(parcel_id)` (072): approves the
+    parcel, accepts the stub, copies the carrier ride's date/slot, and
+    assigns `group_booking_id` with accept_booking_hold's group key +
+    advisory lock. Decline goes through `rejectPiggyback`. The stub is never
+    passed to accept_booking_hold (it is non-dispatchable).
+  - Group cards ignore the stub's synthetic 1 pax (`trip-groups.ts`); the
+    request card reads "parcel", not "1 pax".
+  - Arrived hides Mark Delivered for accompanied Padala (`complete_trip`
+    already auto-delivers it); other cargo keeps the manual step.
+  - **Next:** run `migrations/072_piggyback_group_accept.sql`, then smoke:
+    accept a passenger ride, send a piggyback parcel on it from the sender
+    phone, accept it from Incoming Requests, confirm one Active Trips card
+    with the boat load unchanged, Cargo Ready the parcel before Complete
+    Trip, and decline a second piggyback request.
+
 - **2026-10-29 — Mobile operations batch: trip history, plain weather,
   guide merge, gated quick login, map bounds, shared route card, two-step
   rentals, admin reports, coastguard console (migration 069 PENDING — USER

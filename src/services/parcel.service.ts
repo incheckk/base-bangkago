@@ -33,6 +33,7 @@ export function mapRow(row: any): ParcelDoc {
     scheduledDepartureAt: row.scheduled_departure_at ?? null,
     estimatedArrivalAt: row.estimated_arrival_at ?? null,
     actualArrivalAt: row.actual_arrival_at ?? null,
+    loadedAt: row.loaded_at ?? null,
   };
 }
 
@@ -148,6 +149,28 @@ export async function updateParcelStatus(
     .eq('id', parcelId);
 
   if (error) throw error;
+}
+
+export async function setParcelLoaded(
+  parcelId: string,
+  loaded: boolean
+): Promise<void> {
+  const { error } = await supabase.rpc('set_parcel_loaded', {
+    p_parcel_id: parcelId,
+    p_loaded: loaded,
+  });
+
+  if (error) throw error;
+}
+
+/** Returns true when this was the last parcel and the cargo trip cancelled. */
+export async function markParcelNoShow(parcelId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('mark_parcel_no_show', {
+    p_parcel_id: parcelId,
+  });
+
+  if (error) throw error;
+  return !!data;
 }
 
 export async function getParcelsByUser(userId: string): Promise<ParcelDoc[]> {

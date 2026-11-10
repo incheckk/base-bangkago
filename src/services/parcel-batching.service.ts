@@ -10,7 +10,6 @@
  */
 import { supabase } from './supabase';
 import { routeIdFor } from './booking.service';
-import { PARCEL_RATES } from './parcel-pricing.service';
 import type { ParcelDoc } from '../types/models';
 
 export const BATCH_WINDOW_MINUTES = 60;
@@ -205,37 +204,50 @@ export async function releaseAbandonedBatch(routeKey: string): Promise<void> {
   }
 }
 
+export async function upgradeToSolo(parcelId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('upgrade_batch_to_solo', {
+    p_parcel_id: parcelId,
+  });
+  if (error) throw error;
+  if (!data) throw new Error('Upgrade did not return a booking.');
+  return data as string;
+}
+
 export async function bumpBatchCycle(
   parcelId: string
 ): Promise<{ cycleCount: number; autoSolo: boolean }> {
   const { data: parcel } = await supabase
     .from('parcels')
-    .select('batching_cycle_count, batching_route_key, booking_id')
+    .select('batching_cycle_count')
     .eq('id', parcelId)
     .maybeSingle();
 
   const current = parcel?.batching_cycle_count ?? 0;
   const next = current + 1;
-  const autoSolo = next >= BATCH_MAX_CYCLES;
+  const shouldAutoUpgrade = next >= BATCH_MAX_CYCLES;
 
   const newDeadline = new Date(Date.now() + BATCH_WINDOW_MINUTES * 60_000);
-  const update: Record<string, unknown> = {
-    batching_cycle_count: next,
-    batching_deadline_at: newDeadline.toISOString(),
-  };
-  if (autoSolo) {
-    update.batching_status = 'solo';
-    update.solo_surcharge = PARCEL_RATES.soloSurcharge;
-    // Solo parcels stay reachable through their own stub (Option B);
-    // clear any batch carrier left over from an earlier resolve.
-    update.carrier_booking_id = parcel?.booking_id ?? null;
+  await supabase
+    .from('parcels')
+    .update({
+      batching_cycle_count: next,
+      batching_deadline_at: newDeadline.toISOString(),
+    })
+    .eq('id', parcelId);
+
+  if (shouldAutoUpgrade) {
+    try {
+      await upgradeToSolo(parcelId);
+      return { cycleCount: next, autoSolo: true };
+    } catch (error) {
+      if (__DEV__) {
+        console.warn(
+          '[parcel] auto solo skipped:',
+          error instanceof Error ? error.message : error,
+        );
+      }
+    }
   }
 
-  await supabase.from('parcels').update(update).eq('id', parcelId);
-
-  if (autoSolo && parcel?.batching_route_key) {
-    await releaseAbandonedBatch(parcel.batching_route_key);
-  }
-
-  return { cycleCount: next, autoSolo };
+  return { cycleCount: next, autoSolo: false };
 }

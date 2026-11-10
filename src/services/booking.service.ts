@@ -349,6 +349,20 @@ export async function cancelBooking(bookingId: string, reason?: string): Promise
     p_booking_id: bookingId,
     p_reason: reason ?? null,
   });
+  if (error) {
+    if (error.message.includes('already merged into a batch')) {
+      throw new Error(
+        'This parcel is already merged into a batch. You cannot cancel it directly.',
+      );
+    }
+    throw error;
+  }
+}
+
+export async function markBatchParcelPaid(parcelId: string): Promise<void> {
+  const { error } = await supabase.rpc('mark_batch_parcel_paid', {
+    p_parcel_id: parcelId,
+  });
   if (error) throw error;
 }
 
@@ -401,6 +415,62 @@ export async function rejectBooking(bookingId: string): Promise<void> {
   if (error) throw error;
 }
 
+type AttachedParcelRow = {
+  id: string;
+  delivery_type: string | null;
+  approval_status?: string | null;
+  status: string | null;
+  /** Missing on a pre-073 database; null means intentionally not loaded. */
+  loaded_at?: string | null;
+};
+
+/** Parcels on this booking via piggyback, carrier, or accompanied cargo. */
+async function getAttachedParcelRows(bookingId: string): Promise<AttachedParcelRow[]> {
+  const combined = await supabase
+    .from('parcels')
+    .select('*')
+    .or(
+      `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
+    );
+
+  if (!combined.error) {
+    return (combined.data ?? []) as AttachedParcelRow[];
+  }
+
+  if (__DEV__) {
+    console.warn('[booking] Attached parcel lookup retried:', combined.error.message);
+  }
+
+  // Pre-050 has no carrier_booking_id column — retry on the keys that
+  // always exist so accompanied and piggyback parcels still close out.
+  const fallback = await supabase
+    .from('parcels')
+    .select('*')
+    .or(
+      `piggyback_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
+    );
+
+  if (fallback.error) {
+    if (__DEV__) {
+      console.warn('[booking] Attached parcel lookup skipped:', fallback.error.message);
+    }
+    return [];
+  }
+
+  return (fallback.data ?? []) as AttachedParcelRow[];
+}
+
+/** Checked cargo sails; pre-073 or already-under-way rows keep old behavior. */
+function parcelSails(row: AttachedParcelRow): boolean {
+  if (row.delivery_type === 'piggyback' && row.approval_status !== 'accepted') {
+    return false;
+  }
+  return row.delivery_type === 'accompanied'
+    || row.loaded_at === undefined
+    || row.loaded_at !== null
+    || row.status === 'in_transit';
+}
+
 /**
  * Only the assigned bangkero can complete — and only once every
  * passenger is confirmed aboard. The complete_trip RPC enforces both
@@ -410,32 +480,28 @@ export async function completeBooking(bookingId: string): Promise<void> {
   const { error } = await supabase.rpc('complete_trip', { p_booking_id: bookingId });
   if (error) throw error;
 
-  // Best-effort: auto-deliver every parcel attached to this booking —
-  // piggyback riders, Option B carriers, and accompanied cargo.
+  // Best-effort: auto-deliver the cargo that actually sailed. Unchecked
+  // parcels stay behind; accompanied cargo always rides with its sender.
   // Never blocks completion — a parcel-sync failure is only logged.
   const deliveredAt = new Date().toISOString();
   try {
-    const { error: parcelError } = await supabase
-      .from('parcels')
-      .update({ status: 'delivered', actual_arrival_at: deliveredAt })
-      .or(
-        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
-      );
+    const rows = await getAttachedParcelRows(bookingId);
+    const deliverIds = rows
+      .filter(
+        (row) =>
+          parcelSails(row)
+          && (row.status === null || row.status === 'pending' || row.status === 'in_transit')
+      )
+      .map((row) => row.id);
 
-    if (parcelError) {
-      if (__DEV__) {
-        console.warn('[booking] Failed to auto-deliver attached parcels:', parcelError.message);
-      }
-      // Pre-050 has no carrier_booking_id column — retry on the keys that
-      // always exist so accompanied and piggyback parcels still close out.
-      const { error: fallbackError } = await supabase
+    if (deliverIds.length > 0) {
+      const { error: parcelError } = await supabase
         .from('parcels')
         .update({ status: 'delivered', actual_arrival_at: deliveredAt })
-        .or(
-          `piggyback_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
-        );
-      if (fallbackError && __DEV__) {
-        console.warn('[booking] Parcel delivery sync failed:', fallbackError.message);
+        .in('id', deliverIds);
+
+      if (parcelError && __DEV__) {
+        console.warn('[booking] Parcel delivery sync failed:', parcelError.message);
       }
     }
 
@@ -477,30 +543,23 @@ export async function stampBookingDepart(bookingId: string): Promise<void> {
   });
   if (error) throw error;
 
-  // Best-effort: attached parcels are now under way. A parcel-sync failure
-  // must never stop the boat from sailing — it is only logged.
+  // Best-effort: only the cargo checked aboard moves under way. Unchecked
+  // parcels stay at the pier. A parcel-sync failure must never stop the
+  // boat from sailing — it is only logged.
   try {
-    const { error: parcelError } = await supabase
-      .from('parcels')
-      .update({ status: 'in_transit' })
-      .or(
-        `piggyback_booking_id.eq.${bookingId},carrier_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
-      );
+    const rows = await getAttachedParcelRows(bookingId);
+    const moveIds = rows
+      .filter((row) => parcelSails(row) && row.status === 'pending')
+      .map((row) => row.id);
 
-    if (parcelError) {
-      if (__DEV__) {
-        console.warn('[booking] Failed to mark attached parcels in_transit:', parcelError.message);
-      }
-      // Pre-050 has no carrier_booking_id column — retry without it so
-      // accompanied and piggyback parcels still move to in_transit.
-      const { error: fallbackError } = await supabase
+    if (moveIds.length > 0) {
+      const { error: parcelError } = await supabase
         .from('parcels')
         .update({ status: 'in_transit' })
-        .or(
-          `piggyback_booking_id.eq.${bookingId},and(booking_id.eq.${bookingId},delivery_type.eq.accompanied)`
-        );
-      if (fallbackError && __DEV__) {
-        console.warn('[booking] Parcel in_transit sync failed:', fallbackError.message);
+        .in('id', moveIds);
+
+      if (parcelError && __DEV__) {
+        console.warn('[booking] Parcel in_transit sync failed:', parcelError.message);
       }
     }
   } catch (e) {

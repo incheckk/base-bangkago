@@ -16,7 +16,13 @@ import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRefetchOnFocus, useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
-import { friendlyError, rejectBooking, resolveGroupNoShow, stampBookingDepart } from '@/services/booking.service';
+import {
+  friendlyError,
+  markBatchParcelPaid,
+  rejectBooking,
+  resolveGroupNoShow,
+  stampBookingDepart,
+} from '@/services/booking.service';
 import {
   cancelActiveManifests, createManifest, populateManifestDeparture, stampManifestDeparture,
 } from '@/services/manifest.service';
@@ -28,7 +34,7 @@ import { supabase } from '@/services/supabase';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { BookingDoc, PaymentDoc, PaymentMethod } from '@/types/models';
+import type { BookingDoc, ParcelDoc, PaymentDoc, PaymentMethod } from '@/types/models';
 
 const CHECKLIST_ITEMS = [
   { key: 'lifeJackets', label: 'Life jackets accounted for', icon: '🦺' },
@@ -85,8 +91,22 @@ export default function DepartureScreen() {
     () => accepted.data.filter((t) => !t.scheduledDate || t.scheduledDate <= todayIso),
     [accepted.data, todayIso],
   );
-  const boardedTrips = acceptedTrips.filter((t) => t.onboardedAt);
-  const waitingTrips = acceptedTrips.filter((t) => !t.onboardedAt);
+  // Client-side per-parcel loaded read (073): a cargo booking whose parcel
+  // has loaded_at set counts as boarded even before its booking row's
+  // onboarded_at catches up (pre-078 DBs never stamped batch members).
+  const loadedParcelBookingIds = useMemo(
+    () =>
+      new Set(
+        allParcels
+          .filter((p) => p.loadedAt != null && p.status !== 'returned')
+          .map((p) => p.bookingId),
+      ),
+    [allParcels],
+  );
+  const tripAboard = (t: BookingDoc) =>
+    !!t.onboardedAt || loadedParcelBookingIds.has(t.bookingId);
+  const boardedTrips = acceptedTrips.filter((t) => tripAboard(t));
+  const waitingTrips = acceptedTrips.filter((t) => !tripAboard(t));
   // Cargo bookings have no passenger QR — the bangkero ticks "Cargo Ready"
   // on the status screen. Their parcels still belong on the manifest, so
   // every accepted cargo trip is recorded regardless of onboarded_at.
@@ -123,12 +143,20 @@ export default function DepartureScreen() {
   // "Mark as paid" per trip once everyone is aboard.
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [payingParcelId, setPayingParcelId] = useState<string | null>(null);
   // Reference drafts keyed by booking — one shared input mixed refs
   // across rows when several trips were unpaid at once.
   const [payReferences, setPayReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
   const loadPayments = useCallback(async () => {
-    const ids = accepted.data.map((t) => t.bookingId);
+    const ids = Array.from(
+      new Set([
+        ...accepted.data.map((t) => t.bookingId),
+        ...allParcels
+          .filter((p) => p.deliveryType === 'batched' && !!p.carrierBookingId)
+          .map((p) => p.bookingId),
+      ]),
+    );
     if (ids.length === 0) {
       setPayments({});
       return;
@@ -139,7 +167,7 @@ export default function DepartureScreen() {
     } catch {
       // status chips stay as they were; focus/realtime will retry
     }
-  }, [accepted.data]);
+  }, [accepted.data, allParcels]);
   useEffect(() => { void loadPayments(); }, [loadPayments]);
   useRealtimeQuery(loadPayments, [{ table: 'payments' }]);
 
@@ -153,6 +181,18 @@ export default function DepartureScreen() {
       setPayError(friendlyError(e));
     }
     setPayingId(null);
+  }
+
+  async function markBatchPaid(parcelId: string) {
+    setPayingParcelId(parcelId);
+    setPayError(null);
+    try {
+      await markBatchParcelPaid(parcelId);
+      await loadPayments();
+    } catch (e) {
+      setPayError(friendlyError(e));
+    }
+    setPayingParcelId(null);
   }
 
   const paxLabel = (t: BookingDoc) =>
@@ -182,14 +222,93 @@ export default function DepartureScreen() {
 
   const liveParcels = useMemo(() => {
     const sailingIds = new Set(acceptedTrips.map((t) => t.bookingId));
-    return allParcels.filter(
-      (p) =>
-        p.status !== 'returned' &&
-        ((p.deliveryType === 'accompanied' && sailingIds.has(p.bookingId)) ||
-          (p.carrierBookingId != null && sailingIds.has(p.carrierBookingId)) ||
-          (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId))),
-    );
+    return allParcels.filter((p) => {
+      const accompanied = p.deliveryType == null || p.deliveryType === 'accompanied';
+      return p.status !== 'returned'
+        && (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted')
+        && (accompanied || p.loadedAt != null)
+        && ((accompanied && sailingIds.has(p.bookingId))
+          || (p.carrierBookingId != null && sailingIds.has(p.carrierBookingId))
+          || (p.piggybackBookingId != null && sailingIds.has(p.piggybackBookingId)));
+    });
   }, [acceptedTrips, allParcels]);
+
+  const batchParcelsByMaster = useMemo(() => {
+    const acceptedIds = new Set(acceptedTrips.map((t) => t.bookingId));
+    const map = new Map<string, ParcelDoc[]>();
+    for (const p of allParcels) {
+      if (!p.carrierBookingId || !acceptedIds.has(p.carrierBookingId)) continue;
+      if (p.deliveryType !== 'batched' || p.batchingStatus === 'solo') continue;
+      const list = map.get(p.carrierBookingId);
+      if (list) list.push(p);
+      else map.set(p.carrierBookingId, [p]);
+    }
+    return map;
+  }, [acceptedTrips, allParcels]);
+  // 077: every batch member is accepted, but its payment is still shown
+  // once under the carrier's parcel list. Keep member rows out of the
+  // regular per-booking payment list.
+  const batchMemberBookingIds = useMemo(
+    () =>
+      new Set(
+        allParcels
+          .filter(
+            (p) =>
+              p.deliveryType === 'batched' &&
+              !!p.carrierBookingId &&
+              p.bookingId !== p.carrierBookingId,
+          )
+          .map((p) => p.bookingId),
+      ),
+    [allParcels],
+  );
+  const paymentTrips = useMemo(
+    () => acceptedTrips.filter((t) => !batchMemberBookingIds.has(t.bookingId)),
+    [acceptedTrips, batchMemberBookingIds],
+  );
+  const [parcelSenderBookings, setParcelSenderBookings] = useState<
+    Record<string, { ref: string; passengerName: string | null }>
+  >({});
+  const parcelSenderBookingIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          Array.from(batchParcelsByMaster.values())
+            .flat()
+            .map((p) => p.bookingId),
+        ),
+      ),
+    [batchParcelsByMaster],
+  );
+  useEffect(() => {
+    if (parcelSenderBookingIds.length === 0) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('bookings')
+          .select('id, ref, passenger_name')
+          .in('id', parcelSenderBookingIds);
+        if (!alive) return;
+        setParcelSenderBookings(
+          Object.fromEntries(
+            (data ?? []).map((row) => [
+              row.id as string,
+              {
+                ref: (row.ref as string) ?? '',
+                passengerName: (row.passenger_name as string | null) ?? null,
+              },
+            ]),
+          ),
+        );
+      } catch {
+        return;
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [parcelSenderBookingIds]);
 
   const livePassengers = useMemo(() => {
     const passengerBookingIds = new Set(
@@ -199,6 +318,29 @@ export default function DepartureScreen() {
     );
     return passengers.filter((p) => passengerBookingIds.has(p.bookingId));
   }, [manifestTrips, passengers]);
+
+  // Cargo may only sail once every parcel is checked aboard or explicitly
+  // returned. Cargo-onboarded_at is an aggregate, so it cannot prove that
+  // individual parcels were handled; this reads the parcel rows directly.
+  const cargoNotReady = useMemo(
+    () =>
+      acceptedTrips.some((t) => {
+        if (t.serviceType !== 'cargo' || t.cargoMode === 'accompanied') return false;
+        const attached = allParcels.filter(
+          (p) =>
+            (p.deliveryType !== 'piggyback' || p.approvalStatus === 'accepted')
+            && (p.bookingId === t.bookingId || p.carrierBookingId === t.bookingId),
+        );
+        return attached.length === 0
+          || attached.some(
+            (p) =>
+              p.deliveryType !== 'accompanied'
+              && p.status === 'pending'
+              && p.loadedAt == null,
+          );
+      }),
+    [acceptedTrips, allParcels],
+  );
 
   const manifestParcelIds = useMemo(
     () => new Set(parcels.map((p) => p.parcelId)),
@@ -283,7 +425,7 @@ export default function DepartureScreen() {
   }
 
   function confirmNoShow(t: BookingDoc) {
-    if (actedNoShow.has(t.bookingId)) return;
+    if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
     Alert.alert(
       'Passenger didn’t board',
       `The boat leaves with everyone who boarded on ${t.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
@@ -295,7 +437,7 @@ export default function DepartureScreen() {
   }
 
   async function doNoShow(t: BookingDoc) {
-    if (actedNoShow.has(t.bookingId)) return;
+    if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
     setNoShowId(t.bookingId);
     try {
       await resolveGroupNoShow(t);
@@ -386,6 +528,12 @@ export default function DepartureScreen() {
 
   async function handleDepart() {
     if (departInFlight.current || !manifest) return;
+    if (cargoNotReady) {
+      setGenError(
+        'Load every cargo parcel or mark it not at port on Booking Status before departing.'
+      );
+      return;
+    }
     departInFlight.current = true;
     setDeparting(true);
     setGenError(null);
@@ -526,10 +674,14 @@ export default function DepartureScreen() {
                             {t.passengerName ?? 'Passengers'} · {paxLabel(t)}
                           </Text>
                           <Text style={styles.boardSub} numberOfLines={1}>
-                            {t.ref} · {resolved ? 'marked absent' : 'still on the pier'}
+                            {t.ref} · {resolved
+                              ? 'marked absent'
+                              : t.serviceType === 'cargo'
+                                ? 'cargo not loaded — manage on Booking Status'
+                                : 'still on the pier'}
                           </Text>
                         </View>
-                        {!resolved && (
+                        {!resolved && t.serviceType !== 'cargo' && (
                           <View style={styles.boardAction}>
                             <PrimaryButton
                               label="Didn't board"
@@ -677,13 +829,55 @@ export default function DepartureScreen() {
             </View>
 
             {/* ---------- payment (pay-on-board, 012) ---------- */}
-            {acceptedTrips.length > 0 && (
+            {paymentTrips.length > 0 && (
               <>
                 <Text style={styles.sectionLabel}>
                   {allBoarded && anyoneAboard ? 'MARK AS PAID' : 'PAYMENT'}
                 </Text>
                 <View style={styles.payCard}>
-                  {acceptedTrips.map((t) => {
+                  {paymentTrips.map((t) => {
+                    const batchParcels = batchParcelsByMaster.get(t.bookingId);
+                    if (batchParcels && batchParcels.length > 0) {
+                      return batchParcels.map((parcel) => {
+                        const sender = parcelSenderBookings[parcel.bookingId];
+                        const isMasterParcel = parcel.bookingId === t.bookingId;
+                        const parcelPayment = payments[parcel.bookingId];
+                        const paid = parcelPayment?.paymentStatus === 'completed';
+                        return (
+                          <View key={parcel.parcelId} style={styles.payItem}>
+                            <View style={styles.payRow}>
+                              <View style={styles.payBody}>
+                                <Text style={styles.payName} numberOfLines={1}>
+                                  {sender?.ref || (isMasterParcel ? t.ref : '—')} ·{' '}
+                                  {sender?.passengerName
+                                    ?? (isMasterParcel ? t.passengerName : null)
+                                    ?? 'Sender'}
+                                </Text>
+                                <Text style={styles.payMeta} numberOfLines={1}>
+                                  ₱{parcel.totalPrice}
+                                  {parcelPayment
+                                    ? ` · ${METHOD_LABELS[parcelPayment.paymentMethod] ?? parcelPayment.paymentMethod}`
+                                    : ''}
+                                </Text>
+                              </View>
+                              <Text style={paid ? styles.payStatusDone : styles.payStatusPending}>
+                                {paid ? '✓ Paid' : 'Pending'}
+                              </Text>
+                            </View>
+                            {allBoarded && anyoneAboard && !paid && (
+                              <PrimaryButton
+                                label="Mark as paid"
+                                onPress={() => void markBatchPaid(parcel.parcelId)}
+                                loading={payingParcelId === parcel.parcelId}
+                                disabled={payingParcelId !== null || payingId !== null}
+                                style={styles.payBtn}
+                              />
+                            )}
+                          </View>
+                        );
+                      });
+                    }
+
                     const p = payments[t.bookingId];
                     const paid = p?.paymentStatus === 'completed';
                     const canMark = allBoarded && anyoneAboard && !paid;
@@ -752,7 +946,8 @@ export default function DepartureScreen() {
                 onPress={handleDepart}
                 loading={departing}
                 disabled={
-                  !manifestFinalized || !allChecked || departing || !allBoarded || !anyoneAboard
+                  !manifestFinalized || !allChecked || departing || !allBoarded
+                  || !anyoneAboard || cargoNotReady
                 }
               />
               {!anyoneAboard && allBoarded && (
@@ -764,6 +959,12 @@ export default function DepartureScreen() {
               {anyoneAboard && !allBoarded && (
                 <Text style={styles.readyHint}>
                   Confirm everyone aboard — or mark them as didn’t board — before departing.
+                </Text>
+              )}
+              {cargoNotReady && (
+                <Text style={styles.readyHint}>
+                  Load every cargo parcel or mark it not at port on Booking Status
+                  before departing.
                 </Text>
               )}
             </View>

@@ -9,6 +9,7 @@ island-hop companions, trip close-out, live en-route tracking).
 Section [E] carries the P2 security debt moved out of that pass.
 Updated 2026-10-21 (demo-readiness batch: bookings rules v3, accept desk,
 Open-Meteo weather, validation, map legibility).
+Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -103,6 +104,14 @@ Open-Meteo weather, validation, map legibility).
     notifications remain a no-op on Android in Expo Go — so a phone in
     a pocket stays silent. Same root cause as B1/B2; fixed by a dev
     build with push + background tasks.
+
+11. RETURNED CARGO PARCEL HAS NO FARE ADJUSTMENT (2026-11-09)
+    Migration 073 lets the bangkero mark individual parcels "not at
+    port" from Booking Status. The parcel becomes returned, and the
+    last live parcel cancels the non-accompanied cargo booking, but
+    bookings.total_price is NOT re-priced and no refund is issued.
+    Decide the money rule before launch: per-parcel refund, re-price
+    the booking before departure, or keep the no-show fare.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------

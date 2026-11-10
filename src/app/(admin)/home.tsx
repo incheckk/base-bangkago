@@ -5,6 +5,7 @@ import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { Icon, type IconName } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
+import { SailingAdvisoryCard } from '@/components/SailingAdvisoryCard';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useAuth } from '@/hooks/useAuth';
@@ -154,6 +155,10 @@ export default function AdminHome() {
               <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} place="Mactan–Olango" />
             </View>
 
+            <View style={styles.advisoryWrap}>
+              <SailingAdvisoryCard role="admin" />
+            </View>
+
             <View style={styles.section}>
               {MANAGE.map((item, i) => {
                 const first = i === 0;
@@ -208,6 +213,7 @@ const styles = StyleSheet.create({
 
   section: { paddingHorizontal: spacing.xl, marginBottom: spacing.xl },
   weatherWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
+  advisoryWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
 
   // ---------- summary card ----------
   summary: {

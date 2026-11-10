@@ -96,6 +96,7 @@ export default function CoastguardHome() {
     <ScreenContainer padded={false}>
       {/* Outside the ScrollView: SideDrawer's overlay is absolute. */}
       <AdminScreenHeader
+        role="coastguard"
         eyebrow="COASTGUARD / LGU"
         title={`${greeting}, ${profile?.firstName ?? 'Officer'}`}
         showBack={false}

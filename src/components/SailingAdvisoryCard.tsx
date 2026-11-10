@@ -12,19 +12,22 @@ import { colors, radii, spacing } from '../theme/tokens';
 const SOURCE_LABEL: Record<string, string> = {
   coastguard: 'Coastguard advisory',
   weather: 'Weather advisory',
-  admin_override: 'Lifted by admin',
+  admin_override: 'Admin advisory',
 };
 
 const HOURS = 6;
 
 /**
- * The coastguard's switch for the whole strait. Suspending cancels today's
- * un-sailed trips and notifies everyone; resuming opens the gates again.
+ * The strait's switch, shown to the coastguard and the admin. Suspending
+ * cancels today's un-sailed trips and notifies everyone; resuming opens the
+ * gates again.
  *
  * A weather-sourced suspension clears itself the moment the live strait
- * reading is back to 'good' — a manual coastguard suspension never does.
+ * reading is back to 'good' — a manual suspension never does.
  */
-export function SailingAdvisoryCard() {
+export function SailingAdvisoryCard({ role = 'coastguard' }: {
+  role?: 'coastguard' | 'admin';
+}) {
   const { advisory, active, refresh } = useSailingAdvisory();
   const weather = useLiveWeather(STRAIT_POINT.lat, STRAIT_POINT.lon);
 
@@ -34,6 +37,12 @@ export function SailingAdvisoryCard() {
   const [error, setError] = useState<string | null>(null);
 
   const verdict = weather.data ? sailVerdict(weather.data) : null;
+  // A stale (offline) reading must never turn into a cancel-all prompt.
+  const rough = verdict === 'rough' && !!weather.data && !weather.data.stale;
+  const roughReason = weather.data
+    ? `Rough sea: ${weather.data.windKmh} km/h wind${weather.data.waveM != null
+      ? `, ${weather.data.waveM} m waves` : ''}`
+    : '';
 
   useEffect(() => {
     if (!advisory?.active || advisory.source !== 'weather' || verdict !== 'good') return;
@@ -51,7 +60,7 @@ export function SailingAdvisoryCard() {
       await setSailingAdvisory({
         suspended: next,
         reason: next ? reason.trim() : undefined,
-        source: 'coastguard',
+        source: role === 'admin' ? 'admin_override' : 'coastguard',
         hours: HOURS,
       });
       await refresh();
@@ -61,6 +70,11 @@ export function SailingAdvisoryCard() {
       setError(friendlyError(e));
     }
     setBusy(false);
+  }
+
+  function openSuspend() {
+    if (rough && !reason.trim()) setReason(roughReason);
+    setOpen(true);
   }
 
   // No row = migration 069 has not run yet. Hide the control instead of
@@ -100,11 +114,16 @@ export function SailingAdvisoryCard() {
       <Text style={styles.hint}>
         Suspend when the sea is unsafe: today&apos;s trips that have not left the port are
         cancelled, bangkeros are told to stay in, and nobody can accept or sail.
-        {verdict === 'rough' ? ' The weather reading is already marked rough.' : ''}
       </Text>
+      {rough && (
+        <Text style={styles.rough}>
+          {roughReason}. Suspend before anyone sails.
+        </Text>
+      )}
       <PrimaryButton
         label="Suspend sailing"
-        onPress={() => setOpen(true)}
+        variant="danger"
+        onPress={openSuspend}
         style={styles.action}
       />
 
@@ -134,6 +153,7 @@ export function SailingAdvisoryCard() {
               />
               <PrimaryButton
                 label="Suspend"
+                variant="danger"
                 onPress={() => void submit(true)}
                 loading={busy}
                 style={styles.sheetBtn}
@@ -162,6 +182,7 @@ const styles = StyleSheet.create({
   reason: { fontSize: 15, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   meta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   hint: { fontSize: 13, color: colors.textSecondary, lineHeight: 19, marginTop: spacing.xs },
+  rough: { fontSize: 13, fontWeight: '600', color: colors.danger, lineHeight: 19, marginTop: spacing.sm },
   error: { fontSize: 12, color: colors.danger, marginTop: spacing.sm },
 
   action: { marginTop: spacing.md },

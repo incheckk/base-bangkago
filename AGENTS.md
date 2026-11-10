@@ -41,6 +41,28 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-11 — Coastguard menu fix, admin suspend sailing, rough-sea
+  prompt (no migration; gates: tsc clean, lint 0 errors / 134 warnings,
+  expo-doctor 20/21 — the 8 known SDK-57 patch drifts, not bulk-upgraded).**
+  - `(coastguard)/home.tsx` rendered `AdminScreenHeader` without
+    `role="coastguard"`, so the burger on the coastguard landing page opened
+    the 17-row admin drawer. Every other coastguard screen (and the profile
+    page) already passed the role; the header now defaults correctly there.
+  - `SailingAdvisoryCard` takes `role="admin"` and is rendered on
+    `(admin)/home.tsx` under the weather card, so both roles can suspend and
+    resume the strait. Admin suspensions write `source = 'admin_override'`
+    and the active card labels that "Admin advisory". No migration: 069's
+    `set_sailing_advisory` already allows admins.
+  - "Suspend sailing" and the sheet's "Suspend" are now danger-red. When the
+    live strait reading is `rough` (storm, wind >= 40 km/h or waves >= 1.5 m)
+    and not stale, the card shows the numbers in red and prefills the reason
+    with them. It still never suspends on its own — a stale/flickering
+    Open-Meteo reading must not cancel today's trips; only a manual tap does.
+  - **Next:** smoke the coastguard burger on home and profile (six rows, no
+    admin rows); admin home card suspend/resume; coastguard suspend with a
+    rough reading prefilled; confirm a weather-sourced suspension still
+    auto-clears when the sea reads good.
+
 - **2026-11-09 — Cargo boards parcel by parcel: per-parcel checks, parcel-only
   no-show, ghost batch-key fix (migration 073 PENDING — USER MUST RUN, after
   072; 072 is also still pending; gates: tsc clean, lint 0 errors / 132

@@ -15,6 +15,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { WeatherCard } from '@/components/WeatherCard';
 import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
+import { useGroupReadiness } from '@/hooks/useGroupReadiness';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
@@ -261,6 +262,13 @@ export default function BangkeroHome() {
     () => groupAcceptedBookings(activeTrips),
     [activeTrips],
   );
+  // Hook rules: the gate runs once for every member of every group — a map
+  // callback cannot call hooks. Each card resolves its own members below.
+  const groupMembers = useMemo(
+    () => activeGroups.flatMap((g) => g.bookings),
+    [activeGroups],
+  );
+  const { resolvedByBookingId } = useGroupReadiness(groupMembers);
   const hasActiveTrip = activeTrips.length > 0;
   /** The trip currently at sea — departed, not yet arrived. A completed
    *  trip keeps its depart stamp forever, so arrival must be checked too or
@@ -1148,9 +1156,16 @@ export default function BangkeroHome() {
             {activeGroups.map((g) => {
               const lead = g.bookings[0];
               if (!lead) return null;
-              const allBoarded = g.bookings.every((b) => !!b.onboardedAt);
+              const allResolved = g.bookings.every((b) => resolvedByBookingId[b.bookingId]);
               const allActed = g.bookings.every((b) => acted.has(b.bookingId));
               const groupLoading = g.bookings.some((b) => pending === b.bookingId);
+              const ridingAlong = g.bookings.flatMap(
+                (b) => piggybackByRideId.get(b.bookingId) ?? []
+              );
+              // The piggyback stub is a member of g.bookings, so its fare is
+              // already inside g.totalPrice — adding the stub parcels' fares
+              // here double-counts it.
+              const groupTotal = g.totalPrice;
               return (
                 <Pressable
                   key={g.key}
@@ -1163,9 +1178,8 @@ export default function BangkeroHome() {
                   <RequestBody
                     booking={lead}
                     category={categoryLabel(lead, lead.packageId ? pkgNames[lead.packageId] : undefined)}
-                    ridingAlong={g.bookings.flatMap(
-                      (b) => piggybackByRideId.get(b.bookingId) ?? []
-                    )}
+                    ridingAlong={ridingAlong}
+                    totalOverride={g.bookings.length > 1 ? groupTotal : undefined}
                   />
                   {g.bookings.length > 1 && (
                     <View style={styles.groupSummary}>
@@ -1174,30 +1188,29 @@ export default function BangkeroHome() {
                       </Text>
                       <Text style={styles.groupSummaryText} numberOfLines={2}>
                         {g.refs.join(' · ')} · {g.pax} pax
-                        {g.cargoCount > 0 ? ` · ${g.cargoCount} padala` : ''} · ₱{g.totalPrice}
+                        {g.cargoCount > 0 ? ` · ${g.cargoCount} padala` : ''} · ₱{groupTotal}
                       </Text>
                     </View>
                   )}
-                  {/* Completing requires everyone aboard (complete_trip raises
-                      otherwise) — until then the button routes to the boarding
-                      card instead of pretending the trip can close. */}
+                  {/* Resolved = every companion ticked or no-showed and every
+                      cargo parcel loaded or returned — the same gate
+                      booking-status enforces (complete_trip raises
+                      otherwise) — until then the card only offers the
+                      boarding scan. */}
                   <PrimaryButton
                     label={
                       allActed
                         ? 'Completed'
-                        : allBoarded
+                        : allResolved
                           ? 'Mark completed'
-                          : 'Open trip to confirm boarding'
+                          : 'Scan Boarding QR'
                     }
                     onPress={() => {
                       if (allActed) return;
-                      if (allBoarded) {
+                      if (allResolved) {
                         void completeGroup(g);
                       } else {
-                        router.push({
-                          pathname: '/(bangkero)/booking-status',
-                          params: { bookingId: lead.bookingId },
-                        });
+                        openScan(lead);
                       }
                     }}
                     loading={groupLoading}
@@ -1285,15 +1298,18 @@ function RequestBody({
   booking,
   category,
   ridingAlong = [],
+  totalOverride,
 }: {
   booking: BookingDoc;
   category?: string | null;
   ridingAlong?: ParcelDoc[];
+  /** Group cards show the whole group's total; absent → the booking's own. */
+  totalOverride?: number;
 }) {
   // Passenger fare plus the cargo fares riding along on this trip. A cargo
   // booking never carries piggyback parcels, so this is a no-op for them.
   const cargoTotal = ridingAlong.reduce((sum, p) => sum + (p.totalPrice || 0), 0);
-  const totalEarnings = booking.totalPrice + cargoTotal;
+  const totalEarnings = totalOverride ?? booking.totalPrice + cargoTotal;
   const showCargoBreakdown = booking.serviceType !== 'cargo' && cargoTotal > 0;
   return (
     <>

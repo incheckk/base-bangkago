@@ -34,8 +34,12 @@ export function groupAcceptedBookings(trips: BookingDoc[]): TripGroup[] {
       map.set(key, g);
     }
     g.bookings.push(b);
-    // Cargo stubs carry a synthetic 1 pax; only people count as seats.
-    g.pax += b.serviceType === 'cargo' ? 0 : b.numOfPassenger;
+    // Cargo stubs (piggyback/batched/solo) have nobody aboard, but an
+    // accompanied sender rides with their parcel — force the seat open even
+    // when the row carries num_of_passenger = 0.
+    g.pax += b.serviceType === 'cargo'
+      ? (b.cargoMode === 'accompanied' ? Math.max(b.numOfPassenger, 1) : 0)
+      : b.numOfPassenger;
     if (b.serviceType === 'cargo') g.cargoCount += 1;
     g.totalPrice += b.totalPrice;
     g.refs.push(b.ref);

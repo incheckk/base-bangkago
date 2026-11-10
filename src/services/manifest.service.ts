@@ -270,7 +270,12 @@ export async function populateManifestDeparture(
     // sender rides with the parcel, so it counts as one passenger.
     if (b.serviceType === 'cargo' && b.cargoMode !== 'accompanied') continue;
     const alreadySeated = seatedByBooking.get(b.bookingId) ?? 0;
-    const missing = b.numOfPassenger - alreadySeated;
+    // The accompanied sender's row can carry num_of_passenger = 0 — they
+    // still physically ride, so force the seat open.
+    const seats = b.serviceType === 'cargo'
+      ? Math.max(b.numOfPassenger, 1)
+      : b.numOfPassenger;
+    const missing = seats - alreadySeated;
     if (missing <= 0) continue;
 
     const alreadyNamed = namedByBooking.get(b.bookingId) ?? new Set<string>();
@@ -296,6 +301,25 @@ export async function populateManifestDeparture(
       });
     }
   }
+
+  // Passenger rows land FIRST, before anything below can abort: a failed
+  // parcel read used to throw past this insert and leave the manifest's
+  // passenger list empty while the boat sailed. The totals patch is split
+  // the same way so each count only writes what actually landed.
+  if (paxRows.length) {
+    const { error } = await supabase.from('manifest_passengers').insert(paxRows);
+    if (error) throw error;
+  }
+
+  const paxPatch: Record<string, unknown> = {
+    total_passengers_on_board: existingPax.length + paxRows.length,
+  };
+  const { error: paxPatchErr } = await supabase
+    .from('trip_manifest')
+    .update(paxPatch)
+    .eq('id', manifest.manifestId)
+    .eq('bangkero_id', manifest.bangkeroId);
+  if (paxPatchErr) throw paxPatchErr;
 
   const loadedParcelIds = new Set(existingParcels.map((p) => p.parcelId));
   const bookingIds = uniqueBoarding.map((b) => b.bookingId);
@@ -326,47 +350,54 @@ export async function populateManifestDeparture(
     }
   };
 
-  if (bookingIds.length) {
-    if (__DEV__) console.log('[manifest] parcel lookup bookingIds:', bookingIds);
+  // The parcel read is best-effort: a schema/RLS refusal (carrier_booking_id
+  // on a pre-050 database, a publication reset, anything) must not abort
+  // departure after the passenger rows have already landed.
+  try {
+    if (bookingIds.length) {
+      if (__DEV__) console.log('[manifest] parcel lookup bookingIds:', bookingIds);
 
-    const { data, error } = await supabase
-      .from('parcels')
-      .select('*')
-      .in('booking_id', bookingIds)
-      .or('delivery_type.eq.accompanied,delivery_type.is.null');
-    if (__DEV__) {
-      console.log('[manifest] parcels by booking_id:', data?.length ?? 0, error?.message);
-    }
-    if (error) throw error;
-    addParcelRows(data);
+      const { data, error } = await supabase
+        .from('parcels')
+        .select('*')
+        .in('booking_id', bookingIds)
+        .or('delivery_type.eq.accompanied,delivery_type.is.null');
+      if (__DEV__) {
+        console.log('[manifest] parcels by booking_id:', data?.length ?? 0, error?.message);
+      }
+      if (error) throw error;
+      addParcelRows(data);
 
-    // carrier_booking_id arrives with migration 050 — a pre-050 schema has
-    // no such column, so skip this leg instead of failing the departure.
-    const { data: carried, error: carrierErr } = await supabase
-      .from('parcels')
-      .select('*')
-      .in('carrier_booking_id', bookingIds);
-    if (__DEV__) {
-      console.log('[manifest] parcels by carrier_booking_id:', carried?.length ?? 0, carrierErr?.message);
-    }
-    if (carrierErr) {
-      if (__DEV__) console.warn('[manifest] carrier parcel query skipped:', carrierErr.message);
-    } else {
-      addParcelRows(carried);
-    }
+      // carrier_booking_id arrives with migration 050 — a pre-050 schema has
+      // no such column, so skip this leg instead of failing the departure.
+      const { data: carried, error: carrierErr } = await supabase
+        .from('parcels')
+        .select('*')
+        .in('carrier_booking_id', bookingIds);
+      if (__DEV__) {
+        console.log('[manifest] parcels by carrier_booking_id:', carried?.length ?? 0, carrierErr?.message);
+      }
+      if (carrierErr) {
+        if (__DEV__) console.warn('[manifest] carrier parcel query skipped:', carrierErr.message);
+      } else {
+        addParcelRows(carried);
+      }
 
-    const { data: piggy, error: piggyErr } = await supabase
-      .from('parcels')
-      .select('*')
-      .in('piggyback_booking_id', bookingIds);
-    if (__DEV__) {
-      console.log('[manifest] parcels by piggyback_booking_id:', piggy?.length ?? 0, piggyErr?.message);
+      const { data: piggy, error: piggyErr } = await supabase
+        .from('parcels')
+        .select('*')
+        .in('piggyback_booking_id', bookingIds);
+      if (__DEV__) {
+        console.log('[manifest] parcels by piggyback_booking_id:', piggy?.length ?? 0, piggyErr?.message);
+      }
+      if (piggyErr) {
+        if (__DEV__) console.warn('[manifest] piggyback parcel query skipped:', piggyErr.message);
+      } else {
+        addParcelRows(piggy);
+      }
     }
-    if (piggyErr) {
-      if (__DEV__) console.warn('[manifest] piggyback parcel query skipped:', piggyErr.message);
-    } else {
-      addParcelRows(piggy);
-    }
+  } catch (err) {
+    if (__DEV__) console.warn('[manifest] parcel lookup skipped:', err instanceof Error ? err.message : err);
   }
 
   const parcelInserts = [...parcelById.values()]
@@ -379,10 +410,6 @@ export async function populateManifestDeparture(
       loaded_at: now,
     }));
 
-  if (paxRows.length) {
-    const { error } = await supabase.from('manifest_passengers').insert(paxRows);
-    if (error) throw error;
-  }
   if (parcelInserts.length) {
     // 060 adds UNIQUE(manifest_id, parcel_id): a double-tap or two
     // overlapping populates can no longer record the same parcel twice.
@@ -400,9 +427,9 @@ export async function populateManifestDeparture(
   }
 
   const patch: Record<string, unknown> = {
-    total_passengers_on_board: existingPax.length + paxRows.length,
     // Distinct parcel ids only — duplicate manifest_parcels rows (pre-060
-    // or a stale row) must never inflate the "items" count again.
+    // or a stale row) must never inflate the "items" count again. The
+    // passenger total was patched alongside the pax insert above.
     total_parcels_on_board: loadedParcelIds.size + parcelInserts.length,
   };
   if (opts.stampDeparture !== false && !manifest.actualDepartureTime) {

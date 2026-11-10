@@ -77,6 +77,12 @@ export default function ArrivedScreen() {
       )
     : allParcels;
   const unloadParcels = parcels.filter((p) => p.status !== 'returned');
+  // Accompanied cargo auto-delivers with the trip (complete_trip), and a
+  // returned parcel is done — only freight still on the boat needs the
+  // PARCEL DELIVERY section and the Parcels row.
+  const carryingCargo = parcels.some(
+    (p) => p.deliveryType !== 'accompanied' || p.status === 'returned',
+  );
 
   const [completing, setCompleting] = useState(false);
   const [deliveringAll, setDeliveringAll] = useState(false);
@@ -264,17 +270,21 @@ export default function ArrivedScreen() {
                 <Text style={styles.cardLabel}>Status</Text>
                 <Text style={[styles.cardValue, styles.statusPending]}>Pending</Text>
               </View>
-              <View style={styles.divider} />
-              <View style={styles.cardRow}>
-                <Text style={styles.cardLabel}>Parcels</Text>
-                <Text style={styles.cardValue}>
-                  {unloadParcels.length} {unloadParcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
-                  {unloadParcels.length} items to unload
-                </Text>
-              </View>
+              {carryingCargo && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.cardRow}>
+                    <Text style={styles.cardLabel}>Parcels</Text>
+                    <Text style={styles.cardValue}>
+                      {unloadParcels.length} {unloadParcels.length === 1 ? 'parcel' : 'parcels'} ·{' '}
+                      {unloadParcels.length} items to unload
+                    </Text>
+                  </View>
+                </>
+              )}
             </View>
 
-            {parcels.length > 0 && (
+            {carryingCargo && (
               <>
                 <Text style={styles.sectionLabel}>PARCEL DELIVERY</Text>
                 {parcelError && (

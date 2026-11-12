@@ -85,14 +85,21 @@ export default function BatchedWaiting() {
           !resolveTriggeredRef.current
         ) {
           resolveTriggeredRef.current = true;
-          const { error: resolveError } = await supabase.rpc('resolve_batch_rpc', {
-            p_route_key: data.batching_route_key,
-            p_min_count: BATCH_THRESHOLD,
-          });
+          const { data: resolvedBookingId, error: resolveError } = await supabase.rpc(
+            'resolve_batch_rpc',
+            {
+              p_route_key: data.batching_route_key,
+              p_min_count: BATCH_THRESHOLD,
+            },
+          );
           if (resolveError) {
             if (__DEV__) console.warn('[parcel] resolve_batch_rpc:', resolveError.message);
             // Allow a retry on the next load.
             resolveTriggeredRef.current = false;
+          } else if (resolvedBookingId == null) {
+            // No merge happened (single parcel): keep the deadline branch
+            // visible so Wait / Upgrade render, but don't re-call the RPC.
+            resolveTriggeredRef.current = true;
           } else {
             setParcel((prev: any) =>
               prev
@@ -203,6 +210,8 @@ export default function BatchedWaiting() {
                 onPress={async () => {
                   if (!parcelId) return;
                   const { autoSolo } = await bumpBatchCycle(parcelId);
+                  // The deadline moved: allow the next expiry to resolve again.
+                  resolveTriggeredRef.current = false;
                   if (autoSolo) {
                     const bookingId = parcel.carrier_booking_id ?? parcel.booking_id;
                     if (bookingId) {

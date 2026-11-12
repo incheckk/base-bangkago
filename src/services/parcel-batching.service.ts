@@ -227,13 +227,16 @@ export async function bumpBatchCycle(
   const shouldAutoUpgrade = next >= BATCH_MAX_CYCLES;
 
   const newDeadline = new Date(Date.now() + BATCH_WINDOW_MINUTES * 60_000);
-  await supabase
+  const { error: bumpError } = await supabase
     .from('parcels')
     .update({
       batching_cycle_count: next,
       batching_deadline_at: newDeadline.toISOString(),
     })
     .eq('id', parcelId);
+  if (bumpError && __DEV__) {
+    console.warn('[parcel] bumpBatchCycle:', bumpError.message);
+  }
 
   if (shouldAutoUpgrade) {
     try {

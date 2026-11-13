@@ -41,7 +41,7 @@
   async function getRouteDemandSummary() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     // Get predictions grouped by route for summary stats
-    var r = await c.from('demand_predictions').select('route_id, predicted_passengers, confidence_score, prediction_date');
+    var r = await c.from('demand_predictions').select('route_id, predicted_passengers, prediction_date');
     if (r.error) throw r.error;
     var data = r.data || [];
 
@@ -70,11 +70,9 @@
     data.forEach(function(d) {
       var key = d.route_id || 'unknown';
       if (!byRoute[key]) {
-        byRoute[key] = { routeId: key, routeName: routeNames[key] || key, totalPredicted: 0, count: 0, avgConfidence: 0, dates: new Set() };
+        byRoute[key] = { routeId: key, routeName: routeNames[key] || key, totalPredicted: 0, dates: new Set() };
       }
       byRoute[key].totalPredicted += d.predicted_passengers || 0;
-      byRoute[key].count += 1;
-      byRoute[key].avgConfidence += d.confidence_score || 0;
       if (d.prediction_date) byRoute[key].dates.add(d.prediction_date);
     });
 
@@ -82,12 +80,22 @@
       return {
         routeId: r.routeId,
         routeName: r.routeName,
-        avgDailyPredicted: r.count > 0 ? Math.round(r.totalPredicted / r.dates.size) : 0,
+        avgDailyPredicted: r.dates.size > 0 ? Math.round(r.totalPredicted / r.dates.size) : 0,
         totalPredicted: r.totalPredicted,
-        avgConfidence: r.count > 0 ? (r.avgConfidence / r.count) : 0,
         daysWithData: r.dates.size
       };
     }).sort(function(a, b) { return b.totalPredicted - a.totalPredicted; });
+  }
+
+  async function getPredictionDateCount() {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.from('demand_predictions').select('prediction_date');
+    if (r.error) throw r.error;
+    var dates = new Set();
+    (r.data || []).forEach(function(d) {
+      if (d.prediction_date) dates.add(d.prediction_date);
+    });
+    return dates.size;
   }
 
   async function getPeakHours(routeId) {
@@ -109,5 +117,5 @@
     }).sort(function(a, b) { return b.avgPredicted - a.avgPredicted; });
   }
 
-  window.bangkagoDemand = { getPredictions, getRouteDemandSummary, getPeakHours };
+  window.bangkagoDemand = { getPredictions, getRouteDemandSummary, getPredictionDateCount, getPeakHours };
 })();

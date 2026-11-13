@@ -126,7 +126,8 @@ export default function ArrivedScreen() {
             await createNotification(
               parcel.userId,
               'Parcel delivered',
-              `Parcel for ${parcel.receiverName} has been delivered.`
+              `Parcel for ${parcel.receiverName} has been delivered.`,
+              'cargo'
             );
           } catch {
             /* swallow — notification is best-effort */
@@ -200,7 +201,8 @@ export default function ArrivedScreen() {
               createNotification(
                 b.user_id,
                 'Arrived at Destination',
-                `Boat for trip ${b.ref} has arrived. Please disembark.`
+                `Boat for trip ${b.ref} has arrived. Please disembark.`,
+                'booking'
               ).catch(() => {});
             }
           }),

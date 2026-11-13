@@ -43,6 +43,15 @@ export type ParcelStatus = 'pending' | 'in_transit' | 'delivered' | 'returned';
 
 export type ManifestStatus = 'draft' | 'finalized' | 'completed' | 'cancelled';
 
+/** Inbox accent. Old rows (pre-079) read 'system'. */
+export type NotificationCategory =
+  | 'booking'
+  | 'payment'
+  | 'cargo'
+  | 'safety'
+  | 'account'
+  | 'system';
+
 // =============================================================
 // Core Doc types (used by hooks and services)
 // =============================================================
@@ -58,6 +67,9 @@ export interface UserDoc {
   profilePhoto: string | null;
   isVerified: boolean;
   createdAt: string; // ISO 8601
+  /** Manifest details for the booker (079). Null until the user fills them. */
+  age: number | null;
+  address: string | null;
 }
 
 export interface BangkeroDoc {
@@ -235,6 +247,10 @@ export interface DownpaymentDoc {
   boatRentalId: string | null;
   createdAt: string;
   reviewedAt: string | null;
+  /** 079: the held amount left the admin and reached the operator. */
+  releasedAt: string | null;
+  payoutMethod: 'gcash' | 'cash' | null;
+  payoutRef: string | null;
 }
 
 export interface ParcelDoc {
@@ -300,6 +316,7 @@ export interface NotificationDoc {
   isRead: boolean;
   createdAt: string;
   userId: string;
+  category: NotificationCategory;
 }
 
 export interface RatingDoc {
@@ -356,6 +373,9 @@ export interface BoatRentalDoc {
   userId: string;
   bangkaId: string;
   paymentId: string | null;
+  /** 079: the charter's sailing record. */
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface RouteStopDoc {

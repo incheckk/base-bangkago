@@ -146,7 +146,8 @@ async function notifySender(
       await createNotification(
         parcel.user_id,
         title,
-        messageFor(parcel.receiver_name ?? 'your parcel')
+        messageFor(parcel.receiver_name ?? 'your parcel'),
+        'cargo'
       );
     }
   } catch {

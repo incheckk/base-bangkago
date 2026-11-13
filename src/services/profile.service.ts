@@ -1,9 +1,51 @@
 import { friendlyAuthError } from './auth.service';
+import { addressError } from '../utils/validation';
 import { supabase } from './supabase';
 
 export const friendlyError = friendlyAuthError;
 
 export const MAX_CAPACITY = 50;
+
+interface PersonalDetailsArgs {
+  uid: string;
+  age: number;
+  address: string;
+}
+
+/**
+ * The main booker's manifest details (079). Companions have carried both
+ * since 028; without these the bangkero sees a name and a phone only.
+ * users_update_own (002) allows the write; 065 only guards is_suspended.
+ */
+export async function updatePersonalDetails({ uid, age, address }: PersonalDetailsArgs): Promise<void> {
+  if (!Number.isInteger(age) || age < 1 || age > 120) {
+    throw new Error('Enter an age between 1 and 120.');
+  }
+  const addrErr = addressError(address);
+  if (addrErr) throw new Error(addrErr);
+
+  const { error } = await supabase
+    .from('users')
+    .update({ age, address: address.trim() })
+    .eq('id', uid);
+  if (error) throw error;
+}
+
+/**
+ * Gate before any new booking/charter: the operator's manifest needs the
+ * booker's age and address, so a row still missing them cannot book.
+ */
+export async function requirePersonalDetails(uid: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('age, address')
+    .eq('id', uid)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || data.age == null || !String(data.address ?? '').trim()) {
+    throw new Error('Add your age and home address in Profile before booking.');
+  }
+}
 
 interface NameArgs {
   uid: string;

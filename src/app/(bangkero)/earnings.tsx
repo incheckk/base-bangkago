@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -6,7 +6,9 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useWallet } from '@/hooks/useWallet';
+import { type PayoutRow, getReleasedPayouts } from '@/services/downpayment.service';
 import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -22,6 +24,20 @@ export default function BangkeroEarnings() {
   const { wallet, transactions, loading, error, topUp } = useWallet(user?.id ?? null);
   const [toppingUp, setToppingUp] = useState(false);
   const [topUpError, setTopUpError] = useState<string | null>(null);
+
+  // 079: the held 50% the admin released to this boat's GCash/cash.
+  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+  const uid = user?.id ?? null;
+  const loadPayouts = useCallback(async () => {
+    if (!uid) return;
+    try {
+      setPayouts(await getReleasedPayouts(uid));
+    } catch {
+      // the release shows up on the next realtime tick
+    }
+  }, [uid]);
+  useEffect(() => { void loadPayouts(); }, [loadPayouts]);
+  useRealtimeQuery(loadPayouts, [{ table: 'downpayments' }]);
 
   const todayIso = manilaTodayIso();
   const weekAgoIso = toManilaIso(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)) ?? todayIso;
@@ -104,11 +120,41 @@ export default function BangkeroEarnings() {
           </View>
         )}
 
+        {payouts.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>RELEASED TO YOU</Text>
+            <Text style={styles.payoutHint}>
+              The 50% escrow the admin paid out after each completed trip.
+            </Text>
+            {payouts.map((p) => (
+              <View key={p.downpaymentId} style={styles.txRow}>
+                <View style={styles.txLeft}>
+                  <View style={[styles.txDot, { backgroundColor: colors.primary }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.txLabel} numberOfLines={1}>{p.label}</Text>
+                    <Text style={styles.txRef} numberOfLines={1}>
+                      {new Date(p.releasedAt).toLocaleDateString('en-PH', {
+                        month: 'short', day: 'numeric',
+                      })}
+                      {' · '}
+                      {p.payoutMethod === 'cash' ? 'Cash' : 'GCash'}
+                      {p.payoutRef ? ` · ${p.payoutRef}` : ''}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.txAmount, { color: colors.primary }]} numberOfLines={1}>
+                  +₱{p.amount.toFixed(2)}
+                </Text>
+              </View>
+            ))}
+          </>
+        )}
+
         <Text style={styles.sectionLabel}>TRANSACTION HISTORY</Text>
 
         {transactions.length === 0 ? (
           <EmptyState
-            icon="💰"
+            icon="cash"
             title="No transactions yet"
             message="Your earnings will appear here."
           />
@@ -179,6 +225,7 @@ const styles = StyleSheet.create({
   summaryValue: { flexShrink: 1, color: colors.text, fontSize: 18, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
+  payoutHint: { ...typography.caption, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md },
 
   banner: {
     backgroundColor: colors.dangerTint,

@@ -111,6 +111,7 @@
     'audit-log': { title: 'Audit Log', subtitle: 'Every admin change, who made it, and what it was before' },
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
+    'export-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view the passenger list, and export' },
     'view-weather': { title: 'View Weather', subtitle: 'Weather data and route safety status' },
     'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents with evidence' },
     'suspend-user': { title: 'Suspend User', subtitle: 'Confirm user suspension' },

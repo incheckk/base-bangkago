@@ -19,7 +19,7 @@ import { useGroupReadiness } from '@/hooks/useGroupReadiness';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
-import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
+import { useRealtimeQuery, useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import {
   useAcceptedBookings, useBangkero, useDevFlags, useMyPortQueue, useMyTrips, useOpenRequests, usePorts,
@@ -36,6 +36,7 @@ import {
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
 import { getPaymentsForBookings } from '@/services/payment.service';
 import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggyback.service';
+import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
@@ -147,6 +148,23 @@ export default function BangkeroHome() {
   // Option B (045): the parcel rows tell us which cargo bookings are
   // non-accompanied stubs — the pre-045 fallback for the filter below.
   const parcels = useBangkeroParcels(uid);
+
+  // Today's charter (079): a confirmed rental keeps the whole day, so the
+  // home screen has to be the way back into it.
+  const [todayCharter, setTodayCharter] = useState<BangkeroRentalRow | null>(null);
+  const loadCharter = useCallback(async () => {
+    if (!uid) return;
+    try {
+      const rows = await getRentalsForBangkero(uid);
+      setTodayCharter(
+        rows.find((r) => r.status === 'confirmed' && r.rentalDate === manilaTodayIso()) ?? null
+      );
+    } catch {
+      // no banner rather than a wrong one
+    }
+  }, [uid]);
+  useEffect(() => { void loadCharter(); }, [loadCharter]);
+  useRealtimeQuery(loadCharter, [{ table: 'boat_rentals' }]);
 
   const [pending, setPending] = useState<string | null>(null);
   /**
@@ -583,7 +601,8 @@ export default function BangkeroHome() {
       createNotification(
         b.userId,
         'Booking Accepted',
-        `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.${sails ? ` Sails ${sails}.` : ''}`
+        `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.${sails ? ` Sails ${sails}.` : ''}`,
+        'booking'
       ).catch(() => {});
       // Stay on the list: the sheet shows this booking while the bangkero
       // keeps accepting more same-route bookings until the boat is full.
@@ -628,7 +647,8 @@ export default function BangkeroHome() {
       createNotification(
         b.userId,
         'Trip Completed',
-        `Your trip ${b.ref} has been completed. Safe travels!`
+        `Your trip ${b.ref} has been completed. Safe travels!`,
+        'booking'
       ).catch(() => {});
       return true;
     } catch (e) {
@@ -668,7 +688,8 @@ export default function BangkeroHome() {
             createNotification(
               t.userId,
               'Boat is ready',
-              `Your bangkero is at ${t.fromPortName} and ready to board trip ${t.ref}. Head to the pier now.`
+              `Your bangkero is at ${t.fromPortName} and ready to board trip ${t.ref}. Head to the pier now.`,
+              'booking'
             )
           )
       );
@@ -1000,6 +1021,33 @@ export default function BangkeroHome() {
               <Text style={styles.tripBannerTitle}>ON TRIP · SAILING NOW</Text>
               <Text style={styles.tripBannerRoute} numberOfLines={1}>
                 {sailingTrip.fromPortName} → {sailingTrip.toPortName}
+              </Text>
+            </View>
+            <Text style={styles.tripBannerAction}>Open ›</Text>
+          </Pressable>
+        )}
+
+        {/* A confirmed charter owns the whole day (027/079) — it belongs on
+            the home screen, not only inside the rentals list. */}
+        {todayCharter && (
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: '/(bangkero)/charter/[id]',
+                params: { id: todayCharter.rentalId },
+              })
+            }
+            accessibilityRole="button"
+            accessibilityLabel="Open today's charter"
+            style={({ pressed }) => [styles.tripBanner, styles.charterBanner, pressed && styles.requestPressed]}
+          >
+            <View style={[styles.tripBannerDot, styles.charterBannerDot]} />
+            <View style={styles.tripBannerText}>
+              <Text style={[styles.tripBannerTitle, styles.charterBannerTitle]}>
+                {todayCharter.startedAt ? 'CHARTER · UNDER WAY' : 'CHARTER TODAY'}
+              </Text>
+              <Text style={styles.tripBannerRoute} numberOfLines={1}>
+                {todayCharter.eventName || 'Boat charter'} · {todayCharter.boatName ?? 'your boat'}
               </Text>
             </View>
             <Text style={styles.tripBannerAction}>Open ›</Text>
@@ -1412,6 +1460,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   tripBannerDot: { width: 10, height: 10, borderRadius: radii.pill, backgroundColor: colors.warning },
+  charterBanner: { borderColor: colors.primaryBorder, backgroundColor: colors.primaryTint },
+  charterBannerDot: { backgroundColor: colors.primary },
+  charterBannerTitle: { color: colors.primary },
   tripBannerText: { flex: 1, minWidth: 0 },
   tripBannerTitle: { ...typography.label, color: colors.warning, fontSize: 11 },
   tripBannerRoute: { ...typography.bodyStrong, marginTop: 2 },

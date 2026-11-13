@@ -14,6 +14,8 @@ function mapUserRow(row: any): UserDoc {
     profilePhoto: row.profile_photo,
     isVerified: row.is_verified,
     createdAt: row.created_at,
+    age: row.age ?? null,
+    address: row.address ?? null,
   };
 }
 

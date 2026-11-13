@@ -506,7 +506,8 @@ export default function BookingStatus() {
         createNotification(
           booking.userId,
           'Booking Accepted',
-          `Your trip ${booking.ref} was accepted.${sails ? ` Sails ${sails}.` : ''}`
+          `Your trip ${booking.ref} was accepted.${sails ? ` Sails ${sails}.` : ''}`,
+          'booking'
         ).catch(() => {});
       }
       scheduleLocalNotification(
@@ -599,7 +600,8 @@ export default function BookingStatus() {
           cargo ? 'Cargo confirmed loaded' : 'You are confirmed on board',
           cargo
             ? `The crew confirmed the cargo on ${member.ref} is loaded.`
-            : `The crew confirmed everyone on ${member.ref} is aboard. If you are NOT on board, open this booking and tap "I'm NOT on board" right away.`
+            : `The crew confirmed everyone on ${member.ref} is aboard. If you are NOT on board, open this booking and tap "I'm NOT on board" right away.`,
+          cargo ? 'cargo' : 'booking'
         ).catch(() => {});
         scheduleLocalNotification(
           cargo ? 'Cargo confirmed loaded' : 'Passengers confirmed aboard',
@@ -665,7 +667,8 @@ export default function BookingStatus() {
             createNotification(
               disputedMember.userId,
               'Bangkero counters your report',
-              `The captain disputes your not-aboard report on ${disputedMember.ref}: the boat waited at ${disputedMember.fromPortName} and your party was called to board. Coastguard will review both statements.`
+              `The captain disputes your not-aboard report on ${disputedMember.ref}: the boat waited at ${disputedMember.fromPortName} and your party was called to board. Coastguard will review both statements.`,
+              'safety'
             )
               .then(() => setCounterSent(true))
               .catch(() => setActionError('Could not send the counter-report — try again.'));

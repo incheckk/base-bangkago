@@ -25,6 +25,9 @@ function mapRow(row: any): DownpaymentDoc {
     boatRentalId: row.boat_rental_id,
     createdAt: row.created_at,
     reviewedAt: row.reviewed_at,
+    releasedAt: row.released_at ?? null,
+    payoutMethod: row.payout_method ?? null,
+    payoutRef: row.payout_ref ?? null,
   };
 }
 
@@ -130,6 +133,42 @@ export async function getDownpaymentsForBookings(
   return (data ?? []).map(mapRow);
 }
 
+/** A released escrow row, as the bangkero's earnings screen shows it. */
+export interface PayoutRow {
+  downpaymentId: string;
+  amount: number;
+  releasedAt: string;
+  payoutMethod: 'gcash' | 'cash';
+  payoutRef: string | null;
+  label: string;
+}
+
+/**
+ * What the admin already paid out to this bangkero (079). RLS: the
+ * booking-operator / rental-bangkero select policies (015) expose only
+ * rows this boat earned.
+ */
+export async function getReleasedPayouts(bangkeroUid: string): Promise<PayoutRow[]> {
+  const { data, error } = await supabase
+    .from('downpayments')
+    .select('*, booking:bookings(ref, from_port_name, to_port_name), rental:boat_rentals(event_name)')
+    .eq('released_to', bangkeroUid)
+    .not('released_at', 'is', null)
+    .order('released_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    downpaymentId: row.id,
+    amount: Number(row.amount),
+    releasedAt: row.released_at,
+    payoutMethod: row.payout_method === 'cash' ? 'cash' : 'gcash',
+    payoutRef: row.payout_ref ?? null,
+    label: row.booking
+      ? `${row.booking.ref ?? 'Trip'} · ${row.booking.from_port_name ?? ''} → ${row.booking.to_port_name ?? ''}`.trim()
+      : row.rental?.event_name ?? 'Boat rental',
+  }));
+}
+
 /** What the admin's review screen needs to render one escrow row. */
 export interface AdminDownpaymentRow extends DownpaymentDoc {
   /** Booking ref, or the rental's event name. */
@@ -143,6 +182,13 @@ export interface AdminDownpaymentRow extends DownpaymentDoc {
   /** Owner of the chartered boat — notified when a rental escrow clears. */
   rentalBangkeroId: string | null;
   rentalBoatName: string | null;
+  /** 079: who receives the held half once the trip is completed. */
+  operatorId: string | null;
+  operatorName: string | null;
+  /** Object path of the operator's GCash QR (bangkeros.gcash_qr_url). */
+  operatorQrUrl: string | null;
+  /** True when the booking/rental already reached 'completed'. */
+  targetCompleted: boolean;
 }
 
 function humanDate(iso: string): string {
@@ -162,7 +208,7 @@ export async function listDownpayments(
     .from('downpayments')
     .select(`
       *,
-      booking:bookings(id, ref, passenger_name, user_id, from_port_name, to_port_name, service_type, num_of_passenger),
+      booking:bookings(id, ref, passenger_name, user_id, from_port_name, to_port_name, service_type, num_of_passenger, operator_id, trip_stat),
       rental:boat_rentals(id, event_name, rental_date, hours, total_price, user_id, status, bangka_id,
         bangkas(bangka_name, bangkero_id))
     `)
@@ -190,6 +236,23 @@ export async function listDownpayments(
     }
   }
 
+  // The release step pays the operator, so carry their name + GCash QR.
+  const operatorIds = [...new Set(
+    rows.map((r) => r.booking?.operator_id ?? r.rental?.bangkas?.bangkero_id)
+      .filter((id): id is string => !!id)
+  )];
+  const operatorById = new Map<string, { name: string; qr: string | null }>();
+  if (operatorIds.length) {
+    const { data: operators, error: opError } = await supabase
+      .from('bangkeros')
+      .select('id, display_name, gcash_qr_url')
+      .in('id', operatorIds);
+    if (opError) throw opError;
+    for (const o of operators ?? []) {
+      operatorById.set(o.id, { name: o.display_name, qr: o.gcash_qr_url ?? null });
+    }
+  }
+
   return rows.map((row) => {
     const base = mapRow(row);
     const booking = row.booking ?? null;
@@ -201,6 +264,8 @@ export async function listDownpayments(
       : rental
         ? `${humanDate(rental.rental_date)} · ${rental.hours}h`
         : '—';
+    const operatorId = booking?.operator_id ?? rental?.bangkas?.bangkero_id ?? null;
+    const operator = operatorId ? operatorById.get(operatorId) : undefined;
 
     return {
       ...base,
@@ -211,6 +276,14 @@ export async function listDownpayments(
         ?? (rental?.user_id ? nameById.get(rental.user_id) ?? null : null),
       rentalBangkeroId: rental?.bangkas?.bangkero_id ?? null,
       rentalBoatName: rental?.bangkas?.bangka_name ?? null,
+      operatorId,
+      operatorName: operator?.name ?? null,
+      operatorQrUrl: operator?.qr ?? null,
+      targetCompleted: booking
+        ? booking.trip_stat === 'completed'
+        : rental
+          ? rental.status === 'completed'
+          : false,
     };
   });
 }
@@ -259,7 +332,8 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
     await createNotification(
       row.notifyUserId,
       'Downpayment confirmed',
-      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been confirmed. It is now visible to bangkeros.`
+      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been confirmed. It is now visible to bangkeros.`,
+      'payment'
     ).catch(() => {});
   }
 
@@ -269,9 +343,29 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
     await createNotification(
       row.rentalBangkeroId,
       'New boat rental request',
-      `${row.payerName ?? 'A passenger'} wants to rent ${row.rentalBoatName ?? 'your boat'} (${row.serviceLabel}). The downpayment is approved — confirm or decline.`
+      `${row.payerName ?? 'A passenger'} wants to rent ${row.rentalBoatName ?? 'your boat'} (${row.serviceLabel}). The downpayment is approved — confirm or decline.`,
+      'booking'
     ).catch(() => {});
   }
+}
+
+/**
+ * The admin pays the held 50% to the operator once the trip/rental is
+ * completed. GCash uses the operator's own QR (079 RPC verifies it is on
+ * file); cash is handed over at the port. The RPC stamps the ledger and
+ * notifies the operator — the client never chooses who gets paid.
+ */
+export async function releaseDownpayment(
+  row: AdminDownpaymentRow,
+  method: 'gcash' | 'cash',
+  payoutRef?: string
+): Promise<void> {
+  const { error } = await supabase.rpc('release_downpayment', {
+    p_downpayment_id: row.downpaymentId,
+    p_method: method,
+    p_ref: payoutRef?.trim() || null,
+  });
+  if (error) throw error;
 }
 
 /**
@@ -280,6 +374,9 @@ export async function approveDownpayment(row: AdminDownpaymentRow): Promise<void
  * out). A row that never passed review cancels with it.
  */
 export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void> {
+  if (row.releasedAt) {
+    throw new Error('This downpayment was already released to the bangkero — it cannot be refunded.');
+  }
   const previousStatus = row.status;
   const previousReviewedAt = row.reviewedAt ?? null;
 
@@ -316,7 +413,8 @@ export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void>
     await createNotification(
       row.notifyUserId,
       'Downpayment refunded',
-      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been refunded.`
+      `Your GCash downpayment of ₱${row.amount} for ${row.label} has been refunded.`,
+      'payment'
     ).catch(() => {});
   }
 }

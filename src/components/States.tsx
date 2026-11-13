@@ -1,8 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { ICONS, Icon, type IconName } from './Icon';
 import { PrimaryButton } from './PrimaryButton';
-import { colors, spacing, typography } from '../theme/tokens';
+import { colors, radii, spacing, typography } from '../theme/tokens';
 
 const isIconName = (s: string): s is IconName => s in ICONS;
 
@@ -20,9 +20,43 @@ function StateGlyph({ icon, tint }: { icon: string; tint: string }) {
 }
 
 export function LoadingState({ label = 'Loading…' }: { label?: string }) {
+  // Same idea as the web loader: the brand boat riding a slow swell. Every
+  // screen runs its page loads through here, so one component covers all
+  // roles; native driver keeps it off the JS thread during the fetch.
+  const [bob] = React.useState(() => new Animated.Value(0));
+  React.useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, {
+          toValue: 1, duration: 850, easing: Easing.inOut(Easing.quad), useNativeDriver: true,
+        }),
+        Animated.timing(bob, {
+          toValue: 0, duration: 850, easing: Easing.inOut(Easing.quad), useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [bob]);
+
   return (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.primary} size="large" />
+    <View
+      style={styles.center}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+    >
+      <View style={styles.loaderRing}>
+        <Animated.View
+          style={{
+            transform: [
+              { translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [3, -3] }) },
+              { rotate: bob.interpolate({ inputRange: [0, 1], outputRange: ['-4deg', '4deg'] }) },
+            ],
+          }}
+        >
+          <Icon name="boat" size={28} color={colors.primary} />
+        </Animated.View>
+      </View>
       <Text style={styles.caption}>{label}</Text>
     </View>
   );
@@ -64,6 +98,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl, paddingVertical: spacing.xxl,
   },
   icon: { fontSize: 40, marginBottom: spacing.md },
+  loaderRing: {
+    width: 64, height: 64, borderRadius: radii.pill,
+    backgroundColor: colors.primaryTint,
+    borderWidth: 1, borderColor: colors.primaryBorder,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
   glyphRing: {
     width: 56, height: 56, borderRadius: 999,
     borderWidth: 1, alignItems: 'center', justifyContent: 'center',

@@ -69,39 +69,6 @@
                 <span class="route-pill">Loading vessels...</span>
               </div>
             </div>
-
-            <!-- Replay Vessel History -->
-            <div class="cg-card">
-              <div class="panel-head">
-                <h6 class="mb-0">Replay Vessel History</h6>
-                <span class="muted-note">Position timeline (read-only)</span>
-              </div>
-
-              <div class="row g-2 mb-3 align-items-end filter-row">
-                <div class="col-12 col-sm-6 col-md-4">
-                  <label class="form-label visually-hidden" for="historyVessel">Vessel</label>
-                  <select id="historyVessel" class="form-select w-100">
-                    <option value="">Select vessel</option>
-                  </select>
-                </div>
-                <div class="col-12 col-sm-6 col-md-3">
-                  <label class="form-label visually-hidden" for="historyDate">Date</label>
-                  <input id="historyDate" type="date" class="form-control w-100">
-                </div>
-                <div class="col-12 col-md-5 d-flex gap-2">
-                  <button id="replayBtn" class="btn btn-primary flex-fill" type="button">
-                    <i class="bi bi-play-fill"></i> Replay
-                  </button>
-                  <button id="pauseBtn" class="btn btn-outline-secondary flex-fill" type="button">
-                    <i class="bi bi-pause-fill"></i> Pause
-                  </button>
-                </div>
-              </div>
-
-              <ul class="activity-list" id="replayList">
-                <li class="text-muted"><small>Select a vessel and date to replay history</small></li>
-              </ul>
-            </div>
           </div>
 
           <!-- RIGHT: Vessel Location + ETA -->
@@ -164,12 +131,8 @@
     let allBangkas = [];
     let allPositions = [];
     let fleetMap = null;
-    let replayTimer = null;
-    let replayIndex = 0;
 
     const locationVessel = document.getElementById("locationVessel");
-    const historyVessel = document.getElementById("historyVessel");
-    const historyDate = document.getElementById("historyDate");
     const locZone = document.getElementById("locZone");
     const locCoords = document.getElementById("locCoords");
     const locSpeed = document.getElementById("locSpeed");
@@ -181,12 +144,6 @@
     const etaDelay = document.getElementById("etaDelay");
     const etaConf = document.getElementById("etaConf");
     const routePills = document.getElementById("routePills");
-    const replayList = document.getElementById("replayList");
-    const replayBtn = document.getElementById("replayBtn");
-    const pauseBtn = document.getElementById("pauseBtn");
-
-    // Set default date to today
-    historyDate.valueAsDate = new Date();
 
     function setDelayBadge(value){
       etaDelay.className = value === "On Time" ? "badge text-bg-success" : "badge text-bg-warning";
@@ -256,17 +213,15 @@
 
     function populateVesselSelects() {
       const vesselNames = Object.keys(vesselData).sort();
-      [locationVessel, historyVessel].forEach(select => {
-        const currentValue = select.value;
-        select.innerHTML = '<option value="">Select vessel</option>';
-        vesselNames.forEach(name => {
-          const opt = document.createElement('option');
-          opt.value = name;
-          opt.textContent = name;
-          select.appendChild(opt);
-        });
-        if (vesselNames.includes(currentValue)) select.value = currentValue;
+      const currentValue = locationVessel.value;
+      locationVessel.innerHTML = '<option value="">Select vessel</option>';
+      vesselNames.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        locationVessel.appendChild(opt);
       });
+      if (vesselNames.includes(currentValue)) locationVessel.value = currentValue;
     }
 
     function updateRoutePills() {
@@ -348,7 +303,6 @@
         pushMapMarkers();
 
         if (locationVessel.value) updateVesselPanel(locationVessel.value);
-        if (historyVessel.value) loadReplayData(historyVessel.value);
         
       } catch(e) {
         console.error('Error loading vessel data:', e);
@@ -376,59 +330,12 @@
       }).filter(Boolean));
     }
 
-    function loadReplayData(vesselName) {
-      const v = vesselData[vesselName];
-      if (!v) {
-        replayList.innerHTML = '<li class="text-muted"><small>No data for this vessel</small></li>';
-        return;
-      }
-      
-      replayList.innerHTML = `
-        <li><span>${new Date().toLocaleTimeString()} • ${vesselName} at ${v.zone}</span><small>Current</small></li>
-        <li><span>${new Date(Date.now() - 300000).toLocaleTimeString()} • Position update received</span><small>5 min ago</small></li>
-        <li><span>${new Date(Date.now() - 600000).toLocaleTimeString()} • ${v.dest === 'En route' ? 'Departed port' : 'At dock'}</span><small>10 min ago</small></li>
-      `;
-    }
-
     // Event listeners
     locationVessel.addEventListener("change", (e) => {
       updateVesselPanel(e.target.value);
       const v = vesselData[e.target.value];
       if (fleetMap && v && v.bangkaId) fleetMap.panTo(v.bangkaId);
     });
-
-    historyVessel.addEventListener("change", (e) => {
-      loadReplayData(e.target.value);
-    });
-
-    historyDate.addEventListener("change", () => {
-      if (historyVessel.value) loadReplayData(historyVessel.value);
-    });
-
-    replayBtn.addEventListener("click", () => {
-      const vessel = historyVessel.value;
-      if (!vessel) { alert('Select a vessel first'); return; }
-      
-      clearInterval(replayTimer);
-      replayIndex = 0;
-      const frames = [
-        `Departed port heading to ${vesselData[vessel]?.dest || 'destination'}`,
-        `Passed waypoint 1`,
-        `Mid-route stable speed`,
-        `Approaching destination`
-      ];
-      
-      replayTimer = setInterval(() => {
-        const li = document.createElement("li");
-        li.innerHTML = `<span>${new Date().toLocaleTimeString()} • ${vessel} ${frames[replayIndex]}</span><small>Replay</small>`;
-        replayList.prepend(li);
-        replayIndex = (replayIndex + 1) % frames.length;
-        const items = replayList.querySelectorAll("li");
-        if (items.length > 10) items[items.length - 1].remove();
-      }, 2000);
-    });
-
-    pauseBtn.addEventListener("click", () => clearInterval(replayTimer));
 
     // Real-time updates
     window.bangkagoRealtime.subscribe('vessel_tracking', null, function() {

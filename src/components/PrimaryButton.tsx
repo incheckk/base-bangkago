@@ -15,11 +15,20 @@ export function PrimaryButton({
   label, onPress, loading = false, disabled = false, variant = 'primary', style,
 }: Props) {
   const isOff = disabled || loading;
+  // A 400 ms latch stops the double tap that fires an action twice before
+  // the screen's own `loading` state has had a chance to flip.
+  const latch = React.useRef(0);
+  const press = () => {
+    const now = Date.now();
+    if (now - latch.current < 400) return;
+    latch.current = now;
+    onPress();
+  };
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isOff, busy: loading }}
-      onPress={onPress}
+      onPress={press}
       disabled={isOff}
       style={({ pressed }) => [
         styles.base,

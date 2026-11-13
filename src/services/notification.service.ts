@@ -1,7 +1,7 @@
 import { isRunningInExpoGo } from 'expo';
 
 import { supabase } from './supabase';
-import type { NotificationDoc } from '../types/models';
+import type { NotificationCategory, NotificationDoc } from '../types/models';
 
 function mapNotificationRow(row: any): NotificationDoc {
   return {
@@ -11,6 +11,8 @@ function mapNotificationRow(row: any): NotificationDoc {
     isRead: row.is_read,
     createdAt: row.created_at,
     userId: row.user_id,
+    // ?? 'system' keeps pre-079 databases readable.
+    category: (row.category ?? 'system') as NotificationCategory,
   };
 }
 
@@ -61,13 +63,20 @@ export async function clearOldNotifications(userId: string): Promise<void> {
 export async function createNotification(
   userId: string,
   title: string,
-  message: string
+  message: string,
+  category: NotificationCategory = 'system'
 ): Promise<void> {
   const { error } = await supabase
     .from('notifications')
-    .insert({ user_id: userId, title, message });
+    .insert({ user_id: userId, title, message, category });
 
-  if (error) throw error;
+  if (error) {
+    // 079 not applied yet: keep notifications working without the column
+    // instead of silently dropping every row until the migration runs.
+    if (!/category/i.test(error.message)) throw error;
+    const retry = await supabase.from('notifications').insert({ user_id: userId, title, message });
+    if (retry.error) throw retry.error;
+  }
 }
 
 /**

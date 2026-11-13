@@ -6,6 +6,7 @@ import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { StatusPill } from '@/components/StatusPill';
 import { useAllTrips } from '@/hooks/useAllTrips';
+import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
 import { getParcelByBooking } from '@/services/parcel.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { supabase } from '@/services/supabase';
@@ -25,6 +26,23 @@ export default function AdminBookingDetail() {
   const [items, setItems] = useState<ParcelItemDoc[]>([]);
   const [manifestLoading, setManifestLoading] = useState(true);
   const [manifestError, setManifestError] = useState<string | null>(null);
+  // 079 booker details — admins already read every users row.
+  const [booker, setBooker] = useState<BookerDetails | null>(null);
+
+  useEffect(() => {
+    if (!booking?.userId) return;
+    let alive = true;
+    getBookersForBookings([booking.userId])
+      .then((map) => {
+        if (alive) setBooker(map[booking.userId] ?? null);
+      })
+      .catch(() => {
+        // names still render; the rows simply stay hidden
+      });
+    return () => {
+      alive = false;
+    };
+  }, [booking?.userId]);
 
   useEffect(() => {
     if (!id) return;
@@ -162,6 +180,18 @@ export default function AdminBookingDetail() {
                   <Text style={styles.value} numberOfLines={1}>
                     {formatPhone(booking.passengerPhone)}
                   </Text>
+                </View>
+              )}
+              {booker?.age != null && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Age</Text>
+                  <Text style={styles.value}>{booker.age}</Text>
+                </View>
+              )}
+              {!!booker?.address && (
+                <View style={styles.row}>
+                  <Text style={styles.label}>Address</Text>
+                  <Text style={styles.value} numberOfLines={2}>{booker.address}</Text>
                 </View>
               )}
               {companions.map((c) => (

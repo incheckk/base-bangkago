@@ -69,19 +69,18 @@ export default function BookingDetail() {
     }
   }, [liveBooking, cacheKey]);
   useEffect(() => {
-    if (!liveError) return;
     let alive = true;
     AsyncStorage.getItem(cacheKey)
       .then((raw) => {
         if (alive && raw) setCached(JSON.parse(raw) as BookingDoc);
       })
       .catch(() => {
-        // no snapshot — the error state below covers it
+        // no snapshot — the live fetch covers it
       });
     return () => {
       alive = false;
     };
-  }, [liveError, cacheKey]);
+  }, [cacheKey]);
 
   // While the request is open, how many boats are already queued at the
   // departure port — reassurance that the wait has a real queue behind it.

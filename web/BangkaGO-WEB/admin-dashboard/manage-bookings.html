@@ -182,6 +182,12 @@
       return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
     }
 
+    // "regular" -> "Regular", "in_transit" -> "In transit".
+    function label(s){
+      s = String(s || '');
+      return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ');
+    }
+
     const STATUS = {
       pending:   { label: 'Pending',   hint: 'Awaiting downpayment review', badge: 'text-bg-info' },
       open:      { label: 'Open',      hint: 'Waiting for a bangkero',      badge: 'text-bg-warning' },
@@ -373,7 +379,7 @@
         <div class="info-box mb-2"><strong>Passengers:</strong> ${b.passengerCount}</div>
         <div class="info-box mb-2"><strong>Total Cost:</strong> ${peso(b.totalPrice)}</div>
         <div class="info-box mb-2"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div>
-        <div class="info-box mb-2"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'N/A')}</div>
+        <div class="info-box mb-2"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'Unassigned')}</div>
         ${downpayment}
         <div class="info-box mb-2"><strong>Created:</strong> ${esc(formatDateTime(b.createdAt))}</div>
         ${b.acceptedAt ? `<div class="info-box mb-2"><strong>Accepted:</strong> ${esc(formatDateTime(b.acceptedAt))}</div>` : ''}
@@ -448,9 +454,9 @@
            <td>1</td>
            <td>${esc(b.customerName || b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
            <td>${esc(b.customerPhone || b.passengerPhone || '—')}</td>
-           <td>—</td>
-           <td>—</td>
-           <td>—</td>
+           <td>Not on file</td>
+           <td>Booker</td>
+           <td>Not on file</td>
            <td>${b.onboardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
          </tr>`,
         ...companions.map((p, i) => `
@@ -458,9 +464,9 @@
            <td>${i + 2}</td>
            <td>${esc((p.first_name || '') + ' ' + (p.last_name || ''))}</td>
            <td>${esc(p.contact_number || '—')}</td>
-           <td>${p.age ?? '—'}</td>
-           <td>${esc(p.passenger_type || 'regular')}</td>
-           <td>${esc(p.address || '—')}</td>
+           <td>${p.age ?? 'Not on file'}</td>
+           <td>${esc(label(p.passenger_type || 'regular'))}</td>
+           <td>${esc(p.address || 'Not on file')}</td>
            <td>${p.boarded_at ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
          </tr>`)
       ].join('');
@@ -473,6 +479,7 @@
            <td>${i + 1}</td>
            <td>${esc(p.receiver_name || '—')}</td>
            <td>${esc(p.receiver_contact || '—')}</td>
+           <td>${esc(label(p.delivery_type || 'accompanied'))}</td>
            <td>${esc(desc)}</td>
            <td>${kg ? kg.toFixed(1) : '—'}</td>
            <td>${esc(p.status || 'pending')}</td>
@@ -489,7 +496,7 @@
           <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${esc(tripDateText(b))}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Passengers:</strong> ${b.passengerCount} booked, ${companions.length} companion${companions.length === 1 ? '' : 's'} listed</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'N/A')}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'Unassigned')}</div></div>
         </div>
 
         <h6 class="mb-2">Passenger List (${companions.length + 1})</h6>
@@ -518,13 +525,14 @@
                 <th>#</th>
                 <th>Receiver</th>
                 <th>Contact</th>
+                <th>Mode</th>
                 <th>Items</th>
                 <th>Weight (kg)</th>
                 <th>Status</th>
                 <th>Price</th>
               </tr>
             </thead>
-            <tbody>${parcelRows || '<tr><td colspan="7" class="text-center text-muted">No parcels</td></tr>'}</tbody>
+            <tbody>${parcelRows || '<tr><td colspan="8" class="text-center text-muted">No parcels</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -617,7 +625,7 @@
           ['Booking Ref', b.ref, 'Trip Date', tripDateText(b)],
           ['Route', (b.fromPortName || '') + ' -> ' + (b.toPortName || ''), 'Status', mapStatusToDisplay(b.status)],
           ['Booker', (b.customerName || b.passengerName || 'Unknown') + ' (' + (b.customerPhone || b.passengerPhone || 'no number') + ')', 'Passengers', String(b.passengerCount)],
-          ['Operator', b.operatorName || 'Unassigned', 'Boat', b.operatorBoatName || 'N/A']
+          ['Operator', b.operatorName || 'Unassigned', 'Boat', b.operatorBoatName || 'Unassigned']
         ];
         doc.setFontSize(9);
         let y = 30;
@@ -631,15 +639,15 @@
 
         // Passengers table
         const paxBody = [
-          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', '—', 'Booker', '—', b.onboardedAt ? 'Yes' : 'No']
+          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', 'Not on file', 'Booker', 'Not on file', b.onboardedAt ? 'Yes' : 'No']
         ].concat(data.companions.map(function(p, i) {
           return [
             i + 2,
             ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
             p.contact_number || '—',
-            p.age != null ? String(p.age) : '—',
-            p.passenger_type || 'regular',
-            p.address || '—',
+            p.age != null ? String(p.age) : 'Not on file',
+            label(p.passenger_type || 'regular'),
+            p.address || 'Not on file',
             p.boarded_at ? 'Yes' : 'No'
           ];
         }));
@@ -661,11 +669,11 @@
             const list = itemsByParcel[p.id] || [];
             const desc = list.map(function(it) { return it.item_name + (it.quantity > 1 ? ' x' + it.quantity : ''); }).join(', ') || '—';
             const kg = list.reduce(function(s, it) { return s + Number(it.kilogram || 0); }, 0);
-            return [i + 1, p.receiver_name || '—', p.receiver_contact || '—', desc, kg ? kg.toFixed(1) : '—', p.status || 'pending', 'PHP ' + Number(p.total_price || 0).toFixed(2)];
+            return [i + 1, p.receiver_name || '—', p.receiver_contact || '—', label(p.delivery_type || 'accompanied'), desc, kg ? kg.toFixed(1) : '—', p.status || 'pending', 'PHP ' + Number(p.total_price || 0).toFixed(2)];
           });
           doc.autoTable({
             startY: doc.lastAutoTable.finalY + 8,
-            head: [['#', 'Receiver', 'Contact', 'Items', 'Weight (kg)', 'Status', 'Price']],
+            head: [['#', 'Receiver', 'Contact', 'Mode', 'Items', 'Weight (kg)', 'Status', 'Price']],
             body: parcelBody,
             styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
             headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },

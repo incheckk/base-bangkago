@@ -10,6 +10,9 @@ Section [E] carries the P2 security debt moved out of that pass.
 Updated 2026-10-21 (demo-readiness batch: bookings rules v3, accept desk,
 Open-Meteo weather, validation, map legibility).
 Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
+Updated 2026-11-13 (migration 079: escrow release to operators, charter
+sailing day, notification kinds, route/module lock split, booker details,
+passenger SOS).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -113,6 +116,26 @@ Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
     Decide the money rule before launch: per-parcel refund, re-price
     the booking before departure, or keep the no-show fare.
 
+12. ONE SERVICE MODULE PER BOAT PER SAILING DAY (2026-11-13)
+    Migration 079 adds module_lock_ok + trg_bookings_module_lock: once a
+    boat accepts a ride it cannot take an island hop that day (or the
+    reverse), and a live charter holds the whole day. Same module +
+    same route keeps accepting until capacity is full (that is the
+    point). The lock is ALWAYS on - no developer switch - while the
+    route lock has its own switch (dev_flags.route_lock_bypass) and is
+    no longer lifted by the FCFS bypass. Confirm with operators that a
+    boat really should never mix a ride and an island hop in one day;
+    real operations may want a per-slot version (morning ride,
+    afternoon hop) instead of the whole day.
+
+13. ESCROW PAYOUT IS A MANUAL ADMIN LEDGER ENTRY (2026-11-13)
+    migration 079 adds released_at / released_to / payout_method /
+    payout_ref to downpayments and release_downpayment, which pays the
+    whole held 50% to the operator's own GCash QR (or records cash).
+    Nothing moves money: the admin sends GCash by hand and types the
+    reference, and there is no commission model. A released row cannot
+    be refunded. Real payout rails + commission belong with B9.
+
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
 B1. BACKGROUND GPS TRACKING
@@ -177,6 +200,14 @@ B9. REAL GCASH PAYMENT INTEGRATION
     PERSON when the charter completes; package remainders are a
     'cash' payment row collected onboard. No real gateway in any of
     these paths yet.
+    2026-11-13 (079): the ADMIN now also releases the held 50% to the
+    OPERATOR once the trip/rental is completed — via the operator's own
+    GCash QR (bangkeros.gcash_qr_url, previewed in Admin →
+    Downpayments) or as recorded cash. The transfer is still done by
+    hand outside the app; release_downpayment only stamps the ledger
+    and notifies the operator. No commission is withheld, and a
+    released row cannot be refunded. This closes the "escrow money has
+    no way back to the boat" gap, not the gateway gap above.
     B9a. RECEIPT OCR — deferred by decision (2026-10), researched:
          auto-reading the Ref No. off the uploaded receipt instead of
          the admin doing it by eye. Chosen candidate when revived:
@@ -218,6 +249,14 @@ B13. OFFLINE QUEUEING FOR SAFETY ALERTS
      would reuse the outbox pattern. Demo mode (arrival_bypass)
      suppresses the escalation on purpose so rehearsals don't fill the
      admin's alerts page.
+B14. PASSENGER ISSUE / COMPLAINT REPORTING — removed 2026-11-13.
+     (passenger)/report-issue.tsx was a four-type form that only showed
+     a "submitted" alert and never wrote a row, so every report was
+     lost. It was deleted rather than half-built. The passenger SOS on
+     trip-en-route now writes a REAL critical safety_alerts row
+     (booking ref + ports, no bangka_id). A general complaint/ticket
+     flow (trip, payment, other) is still not built; decide whether it
+     reads into safety_alerts or needs its own table at launch.
 
 [C] CODE TODOs LEFT IN THE APP
 --------------------------------------------------------------------------------
@@ -245,18 +284,23 @@ C7. ADMIN DEV OPTIONS (new) — src/app/(admin)/developer-options.tsx,
     migrations/009_dev_dispatch_bypass.sql + 010_bangkero_gates.sql +
     026_rental_companions_arrival_bypass.sql exist ONLY for the
     classroom demo. Switch 1 (dispatch_bypass) lifts FCFS
-    queue/dwell/GPS/route/capacity rules; switch 2 (gates_bypass)
+    queue/dwell/GPS/capacity rules; the ROUTE lock left it in 079 and
+    now has its own switch 4 (route_lock_bypass — route_ok reads only
+    that); switch 2 (gates_bypass)
     lifts the bangkero gates — document verification + registered boat
     to go online, and documents + rating floor to receive/accept
     offers (bangkero_online_gate trigger, gates_ok(),
     accept_booking_hold / assign_next_hold checks in 010); switch 3
     (arrival_bypass, 026) lets force_complete_trip close out trips
-    whose passengers were never marked onboarded.
+    whose passengers were never marked onboarded. The module lock
+    (079: one ride / island hop / rental per boat per sailing day)
+    is ALWAYS on and has no switch by decision.
     Before public launch: remove the screen + nav entries, drop the
     dev_flags table and all set_*_bypass / force_complete_trip RPCs,
     drop the trg_bangkero_online_gate trigger, and revert the
     dev_dispatch_bypass()/dev_gates_bypass()/dev_arrival_bypass()/
-    gates_ok() checks in the 009/010/026-patched functions.
+    dev_route_lock_bypass()/gates_ok() checks in the 009/010/026/079-
+    patched functions.
 C8. (shipped in 023 — stamp_booking_depart stamps depart_time and
     complete_trip stamps arrival_time as SECURITY DEFINER RPCs,
     bypassing the 004 column restriction. Kept for context: sailing

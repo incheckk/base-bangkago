@@ -9,14 +9,13 @@ import { useDevFlags } from '@/hooks/useSupabase';
 import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import { setSailingAdvisory } from '@/services/advisory.service';
 import { friendlyError } from '@/services/booking.service';
-import { setArrivalBypass, setDispatchBypass, setGatesBypass, setShowQuickLogin } from '@/services/dev.service';
+import { setArrivalBypass, setDispatchBypass, setGatesBypass, setRouteLockBypass, setShowQuickLogin } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const LIFTED = [
   'Port queue membership (any perimeter)',
   '5-minute queue dwell',
   '3-minute GPS freshness',
-  'Route lock (trips to other destinations)',
   'Capacity fit-check',
 ];
 
@@ -26,6 +25,8 @@ const KEPT = [
   'Booking must still be open',
   '3-minute offer hold (one boat at a time)',
   '"Already passed on this request"',
+  'One module per sailing day (ride vs island hop vs rental)',
+  'Route lock — unless its own switch below is ON',
 ];
 
 /**
@@ -42,16 +43,21 @@ export default function DeveloperOptions() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const dispatchOn = flags.data.dispatchBypass;
+  const routeLockOn = flags.data.routeLockBypass;
   const gatesOn = flags.data.gatesBypass;
   const arrivalOn = flags.data.arrivalBypass;
   const quickLoginOn = flags.data.showQuickLogin;
-  const on = dispatchOn || gatesOn || arrivalOn;
+  const on = dispatchOn || routeLockOn || gatesOn || arrivalOn;
 
-  async function toggle(which: 'dispatch' | 'gates' | 'arrival' | 'quicklogin', next: boolean) {
+  async function toggle(
+    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin',
+    next: boolean
+  ) {
     setBusy(which);
     setActionError(null);
     try {
       if (which === 'dispatch') await setDispatchBypass(next);
+      else if (which === 'routelock') await setRouteLockBypass(next);
       else if (which === 'gates') await setGatesBypass(next);
       else if (which === 'quicklogin') await setShowQuickLogin(next);
       else await setArrivalBypass(next);
@@ -102,8 +108,9 @@ export default function DeveloperOptions() {
               <View style={styles.rowText}>
                 <Text style={styles.rowLabel}>Bypass FCFS dispatch rules</Text>
                 <Text style={styles.rowHint}>
-                  Lets any available bangkero accept an open request — no queue, dwell, GPS,
-                  route lock or capacity checks.
+                  Lets any available bangkero accept an open request — no queue, dwell, GPS
+                  or capacity checks. Same-route accepting is always open; the route lock has
+                  its own switch below.
                 </Text>
               </View>
               <Switch
@@ -120,6 +127,32 @@ export default function DeveloperOptions() {
                 : dispatchOn
                   ? 'ON — rules are lifted'
                   : 'OFF — normal FCFS dispatch'}
+            </Text>
+
+            <View style={styles.divider} />
+
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Bypass route lock</Text>
+                <Text style={styles.rowHint}>
+                  After the first accept, a boat only takes trips on the same route. Turn this on
+                  to let it accept a different destination too — same route is always allowed.
+                </Text>
+              </View>
+              <Switch
+                value={routeLockOn}
+                onValueChange={(next) => void toggle('routelock', next)}
+                disabled={busy !== null}
+                trackColor={{ false: colors.border, true: colors.warningTint }}
+                thumbColor={routeLockOn ? colors.warning : colors.surface}
+              />
+            </View>
+            <Text style={[styles.rowStatus, { color: routeLockOn ? colors.danger : colors.textMuted }]}>
+              {busy === 'routelock'
+                ? 'Saving…'
+                : routeLockOn
+                  ? 'ON — any destination is accepted'
+                  : 'OFF — same route only after the first accept'}
             </Text>
 
             <View style={styles.divider} />

@@ -12,6 +12,7 @@ import { useRecentBookings } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc } from '@/types/models';
 import { bookingTypeLabel } from '@/utils/booking-label';
+import { goOnce } from '@/utils/navigation';
 
 /**
  * One screen for live bookings AND trip history (was two screens).
@@ -96,11 +97,11 @@ export default function BookingsScreen() {
                 key={b.bookingId}
                 // Booking Details owns the Cancel button; Trip Details doesn't.
                 onPress={() =>
-                  router.push(
+                  goOnce(() => router.push(
                     isActive(b)
                       ? `/(passenger)/booking/${b.bookingId}`
                       : `/(passenger)/trip/${b.bookingId}`
-                  )
+                  ))
                 }
                 style={styles.card}
               >

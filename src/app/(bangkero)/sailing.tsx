@@ -13,6 +13,7 @@ import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRealtimeQuery, useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useMyTrips } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
+import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
 import { getDownpaymentsForBookings } from '@/services/downpayment.service';
 import {
   getPassengerDetailsByBooking,
@@ -57,6 +58,8 @@ export default function SailingScreen() {
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
   const [details, setDetails] = useState<Record<string, PassengerDetailDoc[]>>({});
+  // 079: the booker's age/address on the manifest, mirroring companions.
+  const [bookers, setBookers] = useState<Record<string, BookerDetails>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
   // Reference drafts keyed by booking — one shared input mixed refs
   // across rows when several bookings were unpaid at once.
@@ -71,6 +74,10 @@ export default function SailingScreen() {
 
   const bookingIds = useMemo(
     () => (sailing ? sailing.bookings.map((b) => b.bookingId) : []),
+    [sailing]
+  );
+  const bookerIds = useMemo(
+    () => (sailing ? sailing.bookings.map((b) => b.userId) : []),
     [sailing]
   );
 
@@ -105,6 +112,20 @@ export default function SailingScreen() {
   }, [bookingIds]);
   useEffect(() => { void loadDetails(); }, [loadDetails]);
   useRefetchOnFocus(loadDetails);
+
+  const loadBookers = useCallback(async () => {
+    if (bookerIds.length === 0) {
+      setBookers({});
+      return;
+    }
+    try {
+      setBookers(await getBookersForBookings(bookerIds));
+    } catch {
+      // manifest keeps names; focus retries
+    }
+  }, [bookerIds]);
+  useEffect(() => { void loadBookers(); }, [loadBookers]);
+  useRealtimeQuery(loadBookers, [{ table: 'users' }]);
 
   const loadDowns = useCallback(async () => {
     if (bookingIds.length === 0) {
@@ -211,8 +232,14 @@ export default function SailingScreen() {
 
               <Text style={styles.passengerName} numberOfLines={1}>
                 {b.passengerName ?? 'Unknown passenger'}
+                {bookers[b.userId]?.age != null ? ` · ${bookers[b.userId]!.age} yrs` : ''}
                 {b.passengerPhone ? ` · ${formatPhone(b.passengerPhone)}` : ''}
               </Text>
+              {!!bookers[b.userId]?.address && (
+                <Text style={styles.bookingMeta} numberOfLines={2}>
+                  📍 {bookers[b.userId]!.address}
+                </Text>
+              )}
               <Text style={styles.bookingMeta} numberOfLines={1}>
                 {isCargo
                   ? parcelForBooking

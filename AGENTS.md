@@ -41,6 +41,70 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-13 — Operator escrow payout, charter sailing day, notification
+  kinds, route/module lock split, passenger details + SOS fixes, shared
+  loading animation (migration 079 PENDING — USER MUST RUN, after 078;
+  gates: tsc clean, lint 0 errors / 136 warnings, expo-doctor 20/21 — the
+  9 known SDK-57 patch drifts; do NOT bulk-upgrade).**
+  - **079** adds `notifications.category` (+ CHECK and a title backfill),
+    `users.age`/`users.address` (+ CHECK, `is_booking_operator` and the
+    `users_select_booking_operator` policy so a bangkero can read the
+    booker's row), the downpayment release ledger (`released_at`,
+    `released_to`, `payout_method`, `payout_ref`) with admin-only
+    `release_downpayment`, `boat_rentals.started_at`/`completed_at`,
+    `dev_flags.route_lock_bypass`, and `module_lock_ok` +
+    `trg_bookings_module_lock`.
+  - **Escrow payout:** Admin → Downpayments has a "To release" filter. Once
+    the trip/rental is completed the admin releases the held 50% to the
+    operator's own `bangkeros.gcash_qr_url` (the QR is previewed in the
+    sheet) or as cash, with an optional reference. The RPC refuses a second
+    release, refuses before completion, stamps the operator server-side,
+    and refuses GCash when that bangkero has no QR. It notifies the
+    operator (`payment`) and the row appears on bangkero Earnings under
+    "RELEASED TO YOU". No commission is modeled; the transfer itself stays
+    outside the app. A released row can no longer be refunded.
+  - **Charter day:** `(bangkero)/charter/[id]` is the sailing-day screen for
+    a confirmed rental — renter age/address, the party list as the
+    manifest, a start gate (charter date), Finish (writes `completed_at`)
+    and SOS. Confirmed charters also list in `(bangkero)/trips.tsx` and
+    raise a home banner on the day; the advance-rental notification fires
+    when the admin approves its escrow. No `trip_manifest` row is created.
+  - **Notification kinds:** one shared `NotificationInbox` backs both
+    inboxes; rows carry a kind colour + icon + label (booking / payment /
+    cargo / safety / account / system), so a safety alert never looks like
+    a receipt. Booking, departure, piggyback, rental and downpayment
+    notifications all pass their category.
+  - **Lock split:** `dev_dispatch_bypass()` still lifts queue/dwell/GPS/
+    capacity, but `route_ok` now reads only `dev_route_lock_bypass()` — its
+    own Developer Options switch. The module lock is always on with no
+    switch: one boat runs one service type per sailing day (ride / island
+    hop / rental) while extra same-route accepts keep filling it. Piggyback
+    group members are exempt (they are the same trip).
+  - **Passenger fixes:** `goOnce()` plus a 400 ms `PrimaryButton` latch stop
+    double-tap screen stacking (accepted-trip View, home banners, booking
+    cards); `booking/[id]` replays its cache on mount instead of only after
+    a failed fetch. Tutorial completion asks for age + home address once,
+    Edit Profile edits both, and `createBooking`/`createRental` refuse
+    without them. The booker's age/address show on the bangkero sailing
+    manifest and admin booking detail. The fake report-issue form is gone;
+    trip-en-route SOS now inserts a real critical `safety_alerts` row with
+    booking ref + ports behind a confirm dialog, with sending/sent/error
+    states.
+  - **Loading:** `LoadingState` (used by every screen and role) is the brand
+    boat riding a slow swell instead of a spinner — native driver, stops on
+    unmount. Expo Go caches visuals: `npx expo start -c` before judging it.
+  - **Next:** run `migrations/079_release_charter_profiles_categories_locks.sql`
+    after 078, then smoke: complete a trip, release its downpayment via the
+    GCash QR (and as cash for a bangkero with no QR), confirm the Earnings
+    entry + operator notification, try releasing twice and before
+    completion (both must refuse); start/finish a charter on its date and
+    check the trips card + home banner; accept a ride then try an island hop
+    on the same day (must refuse) while a second same-route ride still
+    accepts, and flip the route-lock switch alone to confirm FCFS no longer
+    lifts the route lock; finish the tutorial and check the age/address
+    prompt, the manifest rows, double-tap View, and SOS on the passenger
+    en-route screen.
+
 - **2026-11-11 — Coastguard menu fix, admin suspend sailing, rough-sea
   prompt (no migration; gates: tsc clean, lint 0 errors / 134 warnings,
   expo-doctor 20/21 — the 8 known SDK-57 patch drifts, not bulk-upgraded).**

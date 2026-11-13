@@ -12,11 +12,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRefetchOnFocus } from '@/hooks/useRealtimeQuery';
 import { useVesselTracking } from '@/hooks/useVesselTracking';
 import { usePorts, useBooking } from '@/hooks/useSupabase';
-import { getActiveBooking } from '@/services/booking.service';
+import { getActiveBooking, friendlyError } from '@/services/booking.service';
 import { fetchUserDoc } from '@/services/auth.service';
 import { getAverageRating } from '@/services/rating.service';
 import { endPortOf, startPortOf } from '@/services/queue.service';
 import { getAllRoutes } from '@/services/route.service';
+import { sendPassengerSos } from '@/services/safety-alert.service';
 import { getBangkaIdForBangkero } from '@/services/tracking.service';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
@@ -43,7 +44,7 @@ const TRACK_INSET = `${100 / (STEPS.length * 2)}%` as const;
  * bangkero, rating and route all come from the real active booking.
  */
 export default function TripEnRoute() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const ports = usePorts();
 
   // Resolve the one open/accepted booking first, then load it fully.
@@ -89,6 +90,11 @@ export default function TripEnRoute() {
   // Latest fix first (getTrackingByBangka orders desc), refreshed live.
   const { data: positions } = useVesselTracking(bangkaId);
   const vessel = positions[0] ?? null;
+
+  // Real SOS (079): this button used to open a mock form that showed a
+  // "submitted" alert and never wrote a row, so nobody ever saw the alert.
+  const [sosState, setSosState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [sosError, setSosError] = useState<string | null>(null);
 
   // Route estimate for the "On the way" ETA line — one fetch per route.
   const [routeMins, setRouteMins] = useState<number | null>(null);
@@ -196,6 +202,41 @@ export default function TripEnRoute() {
   // before the sails are up.
   const currentStep = booking.completedAt ? 2 : booking.departTime ? 1 : 0;
   const initials = initialsOf(booking.operatorName ?? '');
+
+  function confirmSos() {
+    if (!booking || sosState === 'sending' || sosState === 'sent') return;
+    Alert.alert(
+      'Emergency SOS',
+      'This sends an emergency alert to the coast guard and nearby vessels. Use it only for a real emergency.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send SOS',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setSosState('sending');
+              setSosError(null);
+              try {
+                await sendPassengerSos({
+                  passengerName: profile
+                    ? `${profile.firstName} ${profile.lastName}`.trim()
+                    : 'a passenger',
+                  bookingRef: booking.ref,
+                  fromPort: booking.fromPortName,
+                  toPort: booking.toPortName,
+                });
+                setSosState('sent');
+              } catch (e) {
+                setSosState('error');
+                setSosError(friendlyError(e));
+              }
+            })();
+          },
+        },
+      ]
+    );
+  }
 
   // Underway facts: ETA from the departure stamp + route estimate, and how
   // stale the boat's GPS is — quiet while the fix is fresh, a warning when
@@ -359,11 +400,31 @@ export default function TripEnRoute() {
               style={({ pressed }) => [styles.sosBtn, pressed && styles.sosBtnPressed]}
               accessibilityRole="button"
               accessibilityLabel="Report an emergency"
-              onPress={() => router.push('/(passenger)/report-issue')}
+              accessibilityState={{ busy: sosState === 'sending', disabled: sosState === 'sending' || sosState === 'sent' }}
+              onPress={confirmSos}
+              disabled={sosState === 'sending' || sosState === 'sent'}
             >
               <Icon name="sos" size={18} color={colors.danger} />
-              <Text style={styles.sosText}>SOS — Emergency</Text>
+              <Text style={styles.sosText}>
+                {sosState === 'sending'
+                  ? 'Sending SOS…'
+                  : sosState === 'sent'
+                    ? 'SOS sent — stay in place'
+                    : 'SOS — Emergency'}
+              </Text>
             </Pressable>
+
+            {sosState === 'sent' && (
+              <Text style={styles.sosSent}>
+                The coast guard has your trip and ports. Stay in position and keep this
+                screen open.
+              </Text>
+            )}
+            {sosState === 'error' && (
+              <Text style={styles.sosError}>
+                {sosError ?? 'Could not send the alert. Try again.'}
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -512,6 +573,8 @@ const styles = StyleSheet.create({
   },
   sosBtnPressed: { backgroundColor: colors.dangerTint, borderColor: colors.danger },
   sosText: { ...typography.bodyStrong, color: colors.danger, fontWeight: '700' },
+  sosSent: { ...typography.caption, color: colors.success, textAlign: 'center', lineHeight: 18 },
+  sosError: { ...typography.caption, color: colors.danger, textAlign: 'center', lineHeight: 18 },
 
   // ---------- empty state ----------
   emptyAction: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },

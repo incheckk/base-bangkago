@@ -7,6 +7,7 @@ import { createNotification } from './notification.service';
 import { calculateParcelFare, type DeliveryType } from './parcel-pricing.service';
 import { validateParcelItems } from './parcel.service';
 import { getPassengerDetailsByBooking } from './passenger-detail.service';
+import { requirePersonalDetails } from './profile.service';
 import { supabase } from './supabase';
 
 /** Supabase speaks in error objects; screens need sentences. */
@@ -241,6 +242,7 @@ export async function createBooking({
   passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', items, deliveryType,
   packageId, scheduledDate, scheduledTime, isDispatchable,
 }: CreateArgs): Promise<CreateBookingResult> {
+  await requirePersonalDetails(passenger.uid);
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
   }
@@ -336,6 +338,35 @@ export async function createBooking({
   }
 
   return { bookingId: data.id, ref: data.ref, totalPrice };
+}
+
+/** Booker age/address for a manifest (079). */
+export interface BookerDetails {
+  age: number | null;
+  address: string | null;
+}
+
+/**
+ * Companions carry their own details (passenger_details); the booker's age
+ * and address live on the users row. The operator can read it through
+ * users_select_booking_operator (079); an admin reads every row already.
+ */
+export async function getBookersForBookings(
+  userIds: string[]
+): Promise<Record<string, BookerDetails>> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) return {};
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, age, address')
+    .in('id', ids);
+  if (error) throw error;
+  return Object.fromEntries(
+    (data ?? []).map((row: any) => [
+      row.id as string,
+      { age: row.age ?? null, address: row.address ?? null },
+    ])
+  );
 }
 
 /**
@@ -627,8 +658,9 @@ export async function noShowPassenger(booking: {
   createNotification(
     booking.userId,
     'You were marked as a no-show',
-    `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} after you were told to board.` +
-      (mins ? ` You can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : '')
+        `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} after you were told to board.` +
+      (mins ? ` You can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : ''),
+    'booking'
   ).catch(() => {});
 }
 
@@ -693,8 +725,9 @@ export async function resolveGroupNoShow(booking: {
   createNotification(
     booking.userId,
     'Some passengers did not board',
-    `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} without the passengers who missed boarding — the rest of the booking continues.` +
-      (mins ? ` The booker can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : '')
+    `The boat for ${booking.ref} left ${booking.fromPortName ?? 'the port'} without the passengers who missed boarding - the rest of the booking continues.` +
+      (mins ? ` The booker can't book again for ${mins} minute${mins === 1 ? '' : 's'}.` : ''),
+    'booking'
   ).catch(() => {});
   return 'partial';
 }

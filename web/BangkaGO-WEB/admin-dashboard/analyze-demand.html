@@ -73,7 +73,6 @@
                       <th>Route</th>
                       <th>Avg Daily Predicted</th>
                       <th>Total Predicted</th>
-                      <th>Avg Confidence</th>
                       <th>Days with Data</th>
                     </tr>
                   </thead>
@@ -103,27 +102,16 @@
 
   <!-- View Predictions Modal -->
   <div class="modal fade" id="predictionsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">View Predictions</h5>
           <button class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="table-responsive">
-            <table class="table table-theme align-middle mb-0">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Hour</th>
-                  <th>Route</th>
-                  <th>Predicted Passengers</th>
-                  <th>Confidence</th>
-                </tr>
-              </thead>
-              <tbody id="predictionsBody"></tbody>
-            </table>
-          </div>
+          <label class="form-label fw-semibold" for="predictionDateSelect">Prediction Date</label>
+          <select id="predictionDateSelect" class="form-select mb-3"></select>
+          <div id="predictionsBody"></div>
         </div>
       </div>
     </div>
@@ -199,10 +187,6 @@
       return Number(n).toLocaleString('en-PH');
     }
 
-    function formatPercent(n) {
-      return (n * 100).toFixed(1) + '%';
-    }
-
     function showLoading(show) {
       loadingState.classList.toggle('d-none', !show);
       errorState.classList.add('d-none');
@@ -217,15 +201,15 @@
     async function loadDemandData() {
       showLoading(true);
       try {
-        const [summary, peakHours, stats] = await Promise.all([
+        const [summary, dateCount, stats] = await Promise.all([
           window.bangkagoDemand.getRouteDemandSummary(),
-          window.bangkagoDemand.getPeakHours(),
+          window.bangkagoDemand.getPredictionDateCount(),
           window.bangkagoStats.getAdminStats()
         ]);
 
-        renderKPIs(summary, peakHours, stats);
+        renderKPIs(summary, dateCount, stats);
         renderRouteTable(summary);
-        renderRecommendations(summary, peakHours);
+        renderRecommendations(summary);
         showLoading(false);
       } catch (e) {
         console.error(e);
@@ -233,42 +217,45 @@
       }
     }
 
-    function renderKPIs(summary, peakHours, stats) {
+    function renderKPIs(summary, dateCount, stats) {
       const totalPredicted = summary.reduce((sum, r) => sum + r.totalPredicted, 0);
       const topRoute = summary[0] || { routeName: '—', totalPredicted: 0 };
-      const peakHour = peakHours[0] || { hour: 16, avgPredicted: 0 };
+      const dailyAverage = dateCount > 0 ? Math.round(totalPredicted / dateCount) : 0;
+      const hasData = summary.length > 0;
+      const tripsToday = stats.tripsToday || 0;
+      const completedToday = stats.completedTripsToday || 0;
+      const activeToday = stats.activeTripsToday || 0;
 
       kpiCards.innerHTML = `
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
-            <div class="text-muted">Total Predicted Demand</div>
+            <div class="text-muted">7-Day Total Predicted</div>
             <div class="kpi-value">${formatNumber(totalPredicted)}</div>
-            <div class="kpi-sub text-success">Across ${summary.length} routes</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `Across ${summary.length} routes` : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
-            <div class="text-muted">Peak Hour</div>
-            <div class="kpi-value">${peakHour.hour}:00</div>
-            <div class="kpi-sub text-warning">${formatNumber(peakHour.avgPredicted)} avg predicted</div>
-            <div class="soft-bar warn mt-3"></div>
+            <div class="text-muted">Daily Average</div>
+            <div class="kpi-value">${hasData ? '~' + formatNumber(dailyAverage) : '0'}</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? 'per day' : 'No predictions yet'}</div>
+            <div class="soft-bar mt-3"></div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
             <div class="text-muted">Top Route</div>
             <div class="kpi-value">${topRoute.routeName}</div>
-            <div class="kpi-sub text-success">${formatNumber(topRoute.totalPredicted)} predicted</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? formatNumber(topRoute.totalPredicted) + ' predicted' : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
             <div class="text-muted">Trips Today</div>
-            <div class="kpi-value">${formatNumber(stats.tripsToday)}</div>
-            <div class="kpi-sub text-success">${formatNumber(stats.completedTripsToday)} completed</div>
-            <div class="soft-bar mt-3"></div>
+            <div class="kpi-value">${formatNumber(tripsToday)} Trips</div>
+            <div class="kpi-sub ${tripsToday ? 'text-success' : 'text-muted'}">${formatNumber(completedToday)} completed / ${formatNumber(activeToday)} active</div>
           </div>
         </div>
       `;
@@ -276,27 +263,20 @@
 
     function renderRouteTable(summary) {
       routeDemandBody.innerHTML = summary.map(function(r) {
-        var trendBadge = 'text-bg-secondary';
-        var trendText = 'No data';
-        if (r.totalPredicted > 0) {
-          trendBadge = 'text-bg-success';
-          trendText = 'Active';
-        }
         return `
           <tr>
             <td>${r.routeName}</td>
             <td>${formatNumber(r.avgDailyPredicted)}</td>
             <td>${formatNumber(r.totalPredicted)}</td>
-            <td>${r.avgConfidence ? formatPercent(r.avgConfidence) : '—'}</td>
-            <td><span class="badge ${trendBadge}">${trendText}</span></td>
+            <td>${formatNumber(r.daysWithData)}</td>
           </tr>
         `;
-      }).join('') || '<tr><td colspan="5" class="text-center text-muted">No demand predictions available</td></tr>';
+      }).join('') || '<tr><td colspan="4" class="text-center text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</td></tr>';
     }
 
-    function renderRecommendations(summary, peakHours) {
+    function renderRecommendations(summary) {
       if (summary.length === 0) {
-        recommendationsList.innerHTML = '<p class="text-muted">No demand data available for recommendations.</p>';
+        recommendationsList.innerHTML = '<p class="text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
         return;
       }
 
@@ -307,7 +287,7 @@
       if (topRoute) {
         html += `
           <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Add capacity on <strong>${topRoute.routeName}</strong> during peak hours (${peakHours[0]?.hour || 16}:00–${(peakHours[0]?.hour || 16)+2}:00)</span>
+            <span>Add capacity on <strong>${topRoute.routeName}</strong> (highest total predicted demand)</span>
             <span class="text-muted">priority high</span>
           </div>
         `;
@@ -331,54 +311,108 @@
       recommendationsList.innerHTML = html;
     }
 
+    let predictionRows = [];
+
+    function formatPredictionDate(dateStr) {
+      if (!dateStr) return 'Unknown date';
+      var d = new Date(dateStr + 'T00:00:00');
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    }
+
+    function renderPredictionRows(date) {
+      const predictionsBody = document.getElementById('predictionsBody');
+      const rows = predictionRows.filter(function(p) {
+        return (p.predictionDate || '') === date;
+      });
+
+      if (rows.length === 0) {
+        predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
+        return;
+      }
+
+      predictionsBody.innerHTML = `
+        <div class="table-responsive">
+          <table class="table table-theme align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Route</th>
+                <th>Predicted Passengers</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(function(p) {
+                return `
+                  <tr>
+                    <td>${p.routeId}</td>
+                    <td>${formatNumber(p.predictedPassengers)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
     // Predictions Modal
     async function loadPredictions() {
+      const select = document.getElementById('predictionDateSelect');
+      const predictionsBody = document.getElementById('predictionsBody');
       try {
-        const preds = await window.bangkagoDemand.getPredictions({ limit: 100 });
-        const predictionsBody = document.getElementById('predictionsBody');
-        if (preds.length === 0) {
-          predictionsBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No predictions available</td></tr>';
+        predictionRows = await window.bangkagoDemand.getPredictions();
+        const dates = [...new Set(predictionRows.map(function(p) {
+          return p.predictionDate;
+        }).filter(Boolean))].sort();
+
+        if (dates.length === 0) {
+          select.innerHTML = '';
+          select.disabled = true;
+          predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
           return;
         }
-        predictionsBody.innerHTML = preds.map(function(p) {
-          return `
-            <tr>
-              <td>${p.predictionDate}</td>
-              <td>${p.hourOfDay}:00</td>
-              <td>${p.routeId}</td>
-              <td>${formatNumber(p.predictedPassengers)}</td>
-              <td>${p.confidenceScore ? formatPercent(p.confidenceScore) : '—'}</td>
-            </tr>
-          `;
+
+        select.disabled = false;
+        select.innerHTML = dates.map(function(date) {
+          return '<option value="' + date + '">' + formatPredictionDate(date) + '</option>';
         }).join('');
+        select.value = dates[0];
+        renderPredictionRows(select.value);
       } catch (e) {
+        select.disabled = true;
+        select.innerHTML = '';
+        predictionsBody.innerHTML = '<p class="text-center text-danger mb-0">Failed to load predictions.</p>';
         console.error(e);
       }
     }
 
+    document.getElementById('predictionDateSelect').addEventListener('change', function() {
+      renderPredictionRows(this.value);
+    });
+
     // Trends Modal
     async function loadTrends() {
       try {
-        const [summary, peakHours] = await Promise.all([
-          window.bangkagoDemand.getRouteDemandSummary(),
-          window.bangkagoDemand.getPeakHours()
-        ]);
+        const summary = await window.bangkagoDemand.getRouteDemandSummary();
         const trendsContent = document.getElementById('trendsContent');
         var html = '';
         summary.forEach(function(r) {
-          const routePeaks = peakHours.filter(p => true); // all routes share peak hours in current impl
           html += `
             <div class="col-md-6">
               <div class="panel-card p-3">
                 <h6 class="mb-2">${r.routeName}</h6>
                 <p class="mb-1"><strong>Avg Daily:</strong> ${formatNumber(r.avgDailyPredicted)} passengers</p>
-                <p class="mb-1"><strong>Confidence:</strong> ${r.avgConfidence ? formatPercent(r.avgConfidence) : 'N/A'}</p>
-                <p class="mb-0"><strong>Peak:</strong> ${peakHours[0]?.hour || 16}:00 (${formatNumber(peakHours[0]?.avgPredicted || 0)} avg)</p>
+                <p class="mb-1"><strong>Total:</strong> ${formatNumber(r.totalPredicted)} passengers</p>
+                <p class="mb-0"><strong>Days with Data:</strong> ${formatNumber(r.daysWithData)}</p>
               </div>
             </div>
           `;
         });
-        trendsContent.innerHTML = html || '<p class="text-muted">No trend data available</p>';
+        trendsContent.innerHTML = html || '<p class="text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
       } catch (e) {
         console.error(e);
       }
@@ -389,10 +423,18 @@
       try {
         const summary = await window.bangkagoDemand.getRouteDemandSummary();
         const select = document.getElementById('insightRoute');
+        const output = document.getElementById('insightOutput');
         select.innerHTML = '<option value="">Select a route...</option>' +
           summary.map(function(r) {
             return '<option value="' + r.routeId + '">' + r.routeName + '</option>';
           }).join('');
+        if (summary.length === 0) {
+          output.className = 'alert alert-info mb-0';
+          output.textContent = 'No predictions yet. Data will appear after the ML model publishes predictions.';
+        } else {
+          output.className = 'alert alert-info mb-0';
+          output.textContent = 'Select a route and click Generate to produce recommendation.';
+        }
       } catch (e) {
         console.error(e);
       }
@@ -410,27 +452,23 @@
       }
 
       try {
-        const [summary, peakHours] = await Promise.all([
-          window.bangkagoDemand.getRouteDemandSummary(),
-          window.bangkagoDemand.getPeakHours()
-        ]);
+        const summary = await window.bangkagoDemand.getRouteDemandSummary();
         const route = summary.find(r => r.routeId === routeId);
-        const peak = peakHours[0];
 
         let message = '';
         if (route) {
           if (route.totalPredicted > 100) {
             message = `High demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
-              `Add extra trips at ${peak?.hour || 16}:00–${(peak?.hour || 16)+2}:00 and prioritize larger vessels.`;
+              `Add extra trips and prioritize larger vessels.`;
           } else if (route.totalPredicted > 50) {
             message = `Moderate demand on ${route.routeName}. Maintain current schedule; ` +
-              `consider standby vessel at ${peak?.hour || 16}:00 peak.`;
+              `consider a standby vessel during high-demand days.`;
           } else {
             message = `Low demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
               `Monitor weather and consider reducing frequency to optimize costs.`;
           }
         } else {
-          message = 'Insufficient data for this route.';
+          message = 'No predictions yet. Data will appear after the ML model publishes predictions.';
         }
 
         output.className = 'alert alert-success mb-0';
@@ -451,6 +489,7 @@
         loadDemandData();
       });
       loadDemandData();
+      loadPredictions();
     }).catch(function(e) {
       console.error('Failed to initialize demand page:', e);
       showError('Failed to initialize demand data: ' + e.message);

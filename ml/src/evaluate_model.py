@@ -112,6 +112,13 @@ def main() -> None:
         print("No test rows — nothing to evaluate")
         return
 
+    # Align X_test to the saved model's training schema: reindex adds any
+    # missing feature columns as 0 and drops columns the model never saw
+    # (the 0.51 model was trained on the old 48-route, 67-feature set).
+    expected_features = meta.get("feature_columns")
+    if expected_features:
+        X_test = X_test.reindex(columns=expected_features, fill_value=0)
+
     y_pred = model.predict(X_test)
     m = metrics_block(y_test, y_pred)
 
@@ -133,7 +140,7 @@ def main() -> None:
     ensure_dir(out_dir)
     (out_dir / "metrics_report.txt").write_text(report + "\n", encoding="utf-8")
     save_plots(y_test, y_pred, test_df.loc[y_test.index, "date"], out_dir)
-    plot_importance(model, feature_columns, model_name=meta.get("model_type", "model"))
+    plot_importance(model, list(X_test.columns), model_name=meta.get("model_type", "model"))
 
 
 if __name__ == "__main__":

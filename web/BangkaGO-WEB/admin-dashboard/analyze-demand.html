@@ -217,13 +217,14 @@
     async function loadDemandData() {
       showLoading(true);
       try {
-        const [summary, peakHours, stats] = await Promise.all([
+        const [summary, peakHours, stats, preds] = await Promise.all([
           window.bangkagoDemand.getRouteDemandSummary(),
           window.bangkagoDemand.getPeakHours(),
-          window.bangkagoStats.getAdminStats()
+          window.bangkagoStats.getAdminStats(),
+          window.bangkagoDemand.getPredictions()
         ]);
 
-        renderKPIs(summary, peakHours, stats);
+        renderKPIs(summary, stats, preds);
         renderRouteTable(summary);
         renderRecommendations(summary, peakHours);
         showLoading(false);
@@ -233,10 +234,16 @@
       }
     }
 
-    function renderKPIs(summary, peakHours, stats) {
+    function renderKPIs(summary, stats, preds) {
       const totalPredicted = summary.reduce((sum, r) => sum + r.totalPredicted, 0);
       const topRoute = summary[0] || { routeName: '—', totalPredicted: 0 };
-      const peakHour = peakHours[0] || { hour: 16, avgPredicted: 0 };
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+      // today's forecast, or the newest day the export covers when today has no rows
+      const dates = preds.map(p => p.predictionDate).filter(Boolean).sort();
+      const demandDate = dates.indexOf(today) >= 0 ? today : (dates[dates.length - 1] || null);
+      const dailyDemand = preds
+        .filter(p => p.predictionDate === demandDate)
+        .reduce((sum, p) => sum + (p.predictedPassengers || 0), 0);
 
       kpiCards.innerHTML = `
         <div class="col-lg-3 col-md-6">
@@ -249,9 +256,9 @@
         </div>
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
-            <div class="text-muted">Peak Hour</div>
-            <div class="kpi-value">${peakHour.hour}:00</div>
-            <div class="kpi-sub text-warning">${formatNumber(peakHour.avgPredicted)} avg predicted</div>
+            <div class="text-muted">Daily Demand</div>
+            <div class="kpi-value">${formatNumber(dailyDemand)}</div>
+            <div class="kpi-sub text-warning">predicted passengers ${demandDate === today ? 'today' : 'on ' + (demandDate || '—')}</div>
             <div class="soft-bar warn mt-3"></div>
           </div>
         </div>

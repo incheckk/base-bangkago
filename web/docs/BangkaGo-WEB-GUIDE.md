@@ -60,16 +60,14 @@ BangkaGo/
 │   └── coastguard-dashboard/
 │       ├── index.html               # CG overview (weather, alerts, fleet, boats at sea)
 │       ├── monitor-fleet.html       # live map + vessel location + ETA (read-only)
-│       ├── view-manifests.html      # search manifest + passenger list + export
 │       ├── view-weather.html        # marine weather view
 │       ├── view-bangkeros.html      # bangkero list (read-only)
 │       ├── alerts.html              # active alerts view
-│       ├── reports.html             # operator records
 │       ├── report-compliance.html   # submit compliance issue
 │       ├── verify-departure.html    # check departure readiness
 │       ├── search-vessel.html       # vessel lookup
 │       ├── port-history.html        # port movements
-│       ├── export-manifest.html     # export helper
+│       ├── export-manifest.html     # view manifest + passenger list + PDF export
 │       ├── partials/sidebar.html    # CG nav (Core Monitoring/Compliance/Workflow)
 │       ├── partials/topbar.html     # CG topbar (toggles + readonly pill)
 │       ├── assets/css/coastguard-theme.css
@@ -98,7 +96,7 @@ Demo credentials (in `bangkaGo-access.html:114`): `admin/admin123` → `admin-da
 | `*/assets/js/*-theme.js` | Sidebar `collapsed`/`show` + `localStorage bangkago_*_sidebar_collapsed` + resize handler | Query `adminSidebar` only (must handle both `cgSidebar`/`adminSidebar` + `cgMain`/`adminMain`) |
 | `*/assets/css/*-theme.css` | Tokens, `.btn` pill, `.cg-card`/`.kpi-card` `will-change/contain`, `.live-map-img aspect-ratio:16/9`, `.table-responsive thin scrollbar` | Reintroduce `height:320px` fixed map, `border-radius:6px` buttons, `width:380px` cols |
 
-If a name is unclear: open it. Example — `manage-bangkeros.html` contains `bangkeros[]` + `#reviewDocsModal` + `#decisionModal`; `view-manifests.html` contains `manifests[]` + `passengerMap` + `exportMsg`.
+If a name is unclear: open it. Example — `manage-bangkeros.html` contains `bangkeros[]` + `#reviewDocsModal` + `#decisionModal`; `export-manifest.html` contains `manifests[]` + `#manifestViewModal` + `downloadPDF()`.
 
 ---
 

@@ -92,11 +92,10 @@
     'view-bangkeros': { title: 'View Bangkeros', subtitle: 'Read-only list of registered bangkero records' },
     'report-compliance': { title: 'Report Compliance Issue', subtitle: 'Submit compliance concerns for admin review' },
     'alerts': { title: 'View Active Alerts', subtitle: 'Alert feed with vessel, severity, and response status' },
-    'reports': { title: 'View Operator Records', subtitle: 'Operator activity logs and compliance-related records' },
     'verify-departure': { title: 'Verify Departure', subtitle: 'Confirm vessel departure readiness' },
     'search-vessel': { title: 'Search Vessel', subtitle: 'Lookup vessel records and compliance' },
     'port-history': { title: 'Port History', subtitle: 'Historical port activity and movements' },
-    'export-manifest': { title: 'Export Manifest', subtitle: 'Generate manifest exports for records' }
+    'export-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view the passenger list, and export' }
   };
 
   const currentFile = location.pathname.split('/').pop() || 'index.html';

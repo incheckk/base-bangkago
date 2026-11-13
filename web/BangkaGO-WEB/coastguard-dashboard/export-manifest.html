@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BangkaGo Coast Guard — Export Manifest</title>
+  <title>BangkaGo Coast Guard — View Manifest</title>
   <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
@@ -22,7 +22,7 @@
           <div class="col-12">
             <div class="cg-card">
               <div class="panel-head">
-                <h6 class="mb-0">Export Manifest Snapshots</h6>
+                <h6 class="mb-0">View Manifest</h6>
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
@@ -64,6 +64,7 @@
                       <th>Passengers</th>
                       <th>Parcels</th>
                       <th>Status</th>
+                      <th>View</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -72,13 +73,58 @@
               </div>
 
               <p id="expEmptyState" class="cg-empty d-none">
-                No manifests found for export.
+                No manifests found.
               </p>
             </div>
           </div>
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- VIEW MANIFEST MODAL -->
+  <div class="modal fade" id="manifestViewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Manifest <span id="viewManifestId" class="font-monospace">-</span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <dl class="row small mb-3">
+            <dt class="col-sm-3 text-muted">Vessel</dt><dd class="col-sm-9" id="vsVessel">-</dd>
+            <dt class="col-sm-3 text-muted">Bangkero</dt><dd class="col-sm-9" id="vsBangkero">-</dd>
+            <dt class="col-sm-3 text-muted">Route</dt><dd class="col-sm-9" id="vsRoute">-</dd>
+            <dt class="col-sm-3 text-muted">Departure</dt><dd class="col-sm-9" id="vsDeparture">-</dd>
+            <dt class="col-sm-3 text-muted">Arrival</dt><dd class="col-sm-9" id="vsArrival">-</dd>
+            <dt class="col-sm-3 text-muted">Status</dt><dd class="col-sm-9" id="vsStatus">-</dd>
+            <dt class="col-sm-3 text-muted">Passengers</dt><dd class="col-sm-9" id="vsPassengers">-</dd>
+            <dt class="col-sm-3 text-muted">Parcels</dt><dd class="col-sm-9" id="vsParcels">-</dd>
+            <dt class="col-sm-3 text-muted">Snapshot created</dt><dd class="col-sm-9" id="vsSnapshot">-</dd>
+          </dl>
+
+          <h6 class="mb-2">Passenger List</h6>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Weight (kg)</th>
+                  <th>Boarded</th>
+                  <th>Booking ID</th>
+                </tr>
+              </thead>
+              <tbody id="viewPassengerBody">
+                <tr><td colspan="4" class="text-center text-muted">No manifest selected.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -99,6 +145,17 @@
     const resetBtn = document.getElementById("expResetBtn");
     const resultCount = document.getElementById("expResultCount");
     const emptyState = document.getElementById("expEmptyState");
+
+    const viewModal = new bootstrap.Modal(document.getElementById("manifestViewModal"));
+    const viewManifestId = document.getElementById("viewManifestId");
+    const viewPassengerBody = document.getElementById("viewPassengerBody");
+    let viewingManifestId = null;
+
+    function esc(value) {
+      return String(value === null || value === undefined ? '' : value).replace(/[&<>"']/g, function(ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+      });
+    }
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
@@ -296,6 +353,11 @@
           <td>${m.totalParcelsOnBoard}</td>
           <td><span class="badge ${statusBadge(m.status)}">${statusText(m.status)}</span></td>
           <td>
+            <button class="btn btn-sm btn-outline-primary action-btn" onclick="viewManifest('${m.manifestId}')" title="View passenger list">
+              <i class="bi bi-eye"></i> View
+            </button>
+          </td>
+          <td>
             <div class="d-flex gap-1">
               <button class="btn btn-sm btn-outline-danger action-btn" onclick="downloadPDF('${m.manifestId}', this)" title="Export PDF">
                 <i class="bi bi-file-earmark-pdf"></i> PDF
@@ -307,6 +369,51 @@
       });
 
       resultCount.textContent = `Showing ${data.length} manifest record(s)`;
+    }
+
+    async function viewManifest(manifestId) {
+      const manifest = manifests.find(m => m.manifestId === manifestId);
+      if (!manifest) {
+        alert('Manifest not found. Refresh the page and try again.');
+        return;
+      }
+
+      viewingManifestId = manifestId;
+      viewManifestId.textContent = manifest.manifestId;
+      document.getElementById("vsVessel").textContent = manifest.bangkaName || 'Unassigned';
+      document.getElementById("vsBangkero").textContent = manifest.bangkeroName || 'Unknown';
+      document.getElementById("vsRoute").textContent =
+        (manifest.departurePortName || 'Unknown') + ' to ' + (manifest.arrivalPortName || 'Unknown');
+      document.getElementById("vsDeparture").textContent = formatDate(manifest.actualDepartureTime);
+      document.getElementById("vsArrival").textContent = formatDate(manifest.actualArrivalTime);
+      document.getElementById("vsStatus").textContent = statusText(manifest.status);
+      document.getElementById("vsPassengers").textContent = String(manifest.totalPassengersOnBoard ?? 0);
+      document.getElementById("vsParcels").textContent = String(manifest.totalParcelsOnBoard ?? 0);
+      document.getElementById("vsSnapshot").textContent = formatDate(manifest.generatedAt);
+
+      viewPassengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Loading passengers...</td></tr>';
+      viewModal.show();
+
+      try {
+        const passengers = await window.bangkagoManifests.getPassengers(manifestId);
+        if (viewingManifestId !== manifestId) return;
+        if (!passengers.length) {
+          viewPassengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No passengers recorded.</td></tr>';
+          return;
+        }
+        viewPassengerBody.innerHTML = passengers.map(p => `
+          <tr>
+            <td>${esc(p.passengerName || 'Unknown')}</td>
+            <td>${p.actualWeightKg == null ? '—' : esc(p.actualWeightKg)}</td>
+            <td>${p.boardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
+            <td>${esc(p.bookingId || '—')}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.error(e);
+        if (viewingManifestId !== manifestId) return;
+        viewPassengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Could not load passengers.</td></tr>';
+      }
     }
 
     function runFilters() {
@@ -355,6 +462,7 @@
 
     // Make functions global for onclick
     window.downloadPDF = downloadPDF;
+    window.viewManifest = viewManifest;
 
     window.bangkagoAuthReady.then(function(role) {
       if (role !== 'coastguard') return;

@@ -7,9 +7,11 @@
   var svc = window.bangkagoServices;
 
   // Joined context the admin console needs: the account name/phone for
-  // bookings whose denormalized passenger fields are empty, and any GCash
-  // downpayment that must be refunded before the trip can be cancelled.
-  var SELECT = '*, passenger:users!bookings_user_id_fkey(first_name,last_name,phone_number), downpayments(id,status,amount,created_at)';
+  // bookings whose denormalized passenger fields are empty, any GCash
+  // downpayment that must be refunded before the trip can be cancelled,
+  // and the operator's boat (operator_boat_name is never written by the
+  // accept RPCs, so the boat is read from bangkas via the operator).
+  var SELECT = '*, passenger:users!bookings_user_id_fkey(first_name,last_name,phone_number), operator:bangkeros!bookings_operator_id_fkey(display_name, bangkas(bangka_name)), downpayments(id,status,amount,created_at)';
 
   function fullName(user) {
     return user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : '';
@@ -17,6 +19,8 @@
 
   function mapRow(row) {
     var passenger = row.passenger ?? null;
+    var operator = row.operator ?? null;
+    var boat = Array.isArray(operator?.bangkas) ? operator.bangkas[0] : null;
     var downs = Array.isArray(row.downpayments) ? row.downpayments : [];
     var latestDown = downs.slice().sort(function(a, b) {
       return new Date(b.created_at || 0) - new Date(a.created_at || 0);
@@ -44,8 +48,8 @@
       fromPortName: row.from_port_name,
       toPortName: row.to_port_name,
       operatorId: row.operator_id,
-      operatorName: row.operator_name,
-      operatorBoatName: row.operator_boat_name,
+      operatorName: row.operator_name || operator?.display_name || null,
+      operatorBoatName: row.operator_boat_name || boat?.bangka_name || null,
       rejectedBy: row.rejected_by || [],
       heldBy: row.held_by,
       holdExpiresAt: row.hold_expires_at,

@@ -78,6 +78,11 @@
             </div>
 
             <!-- Suspend Button -->
+            <div class="mb-3" id="suspendReasonWrap">
+              <label class="form-label" for="suspendReason">Reason</label>
+              <textarea class="form-control" id="suspendReason" rows="3" placeholder="Why is this account being suspended?"></textarea>
+              <div class="form-text">Required when suspending.</div>
+            </div>
             <div class="d-grid">
               <button class="btn btn-danger btn-lg" id="suspendBtn">
                 <i class="bi bi-person-x me-2"></i> Suspend User
@@ -159,6 +164,8 @@
 
         // Deleted bangkeros are restored from Manage Bangkeros; suspension
         // cannot change their access.
+        const cannotSuspend = user.bangkeroDeleted || user.isSuspended;
+        document.getElementById('suspendReasonWrap').classList.toggle('d-none', cannotSuspend);
         if (user.bangkeroDeleted) {
           suspendBtn.disabled = true;
           suspendBtn.innerHTML = '<i class="bi bi-person-x me-2"></i> Deleted Account';
@@ -181,7 +188,12 @@
 
     suspendBtn.addEventListener('click', async function() {
       if (!userId) return;
-      if (!confirm('Are you sure you want to suspend this user? They will be unable to log in.')) return;
+      const reason = document.getElementById('suspendReason').value.trim();
+      if (!reason) {
+        alert('Enter a reason for suspending this account.');
+        return;
+      }
+      if (!confirm(`Are you sure you want to suspend this user?\n\nReason: ${reason}\n\nThey will be unable to log in.`)) return;
 
       const originalText = suspendBtn.innerHTML;
       suspendBtn.disabled = true;

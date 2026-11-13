@@ -14,6 +14,7 @@ import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/c
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
+import { TextField } from '@/components/TextField';
 import { WeatherCard } from '@/components/WeatherCard';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,11 +24,14 @@ import {
   useActiveCargoDeliveries, useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings,
 } from '@/hooks/useSupabase';
 import { scheduleLocalNotification } from '@/services/notification.service';
+import { updatePersonalDetails } from '@/services/profile.service';
 import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
 import { supabase } from '@/services/supabase';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, ParcelDoc, PortDoc } from '@/types/models';
+import { goOnce } from '@/utils/navigation';
+import { addressError } from '@/utils/validation';
 
 const SCREEN_H = Dimensions.get('window').height;
 
@@ -128,7 +132,7 @@ const PASSENGER_COACH: CoachStep[] = [
 
 export default function PassengerHome() {
   const insets = useSafeAreaInsets();
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const tour = useOnboarding(user?.id ?? null);
   const coachRects = useCoachRects();
   // Each of these marks one real control on this screen, measured where it
@@ -307,6 +311,46 @@ export default function PassengerHome() {
     ).catch(() => {});
   }, [bookings.loading, bookings.data]);
 
+  // Tutorial exit gate (079): age + address are required before the first
+  // booking and asked once, here, where onboarding is already happening.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [ageInput, setAgeInput] = useState('');
+  const [addressInput, setAddressInput] = useState('');
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const missingDetails = !!profile && (profile.age == null || !profile.address);
+
+  function finishTour() {
+    tour.dismiss();
+    if (!missingDetails) return;
+    setAgeInput('');
+    setAddressInput('');
+    setDetailsError(null);
+    setDetailsOpen(true);
+  }
+
+  async function saveDetails() {
+    if (!profile || savingDetails) return;
+    const parsedAge = Number(ageInput.trim());
+    const invalid = Number.isInteger(parsedAge) && parsedAge >= 1 && parsedAge <= 120
+      ? addressError(addressInput)
+      : 'Enter an age between 1 and 120.';
+    if (invalid) {
+      setDetailsError(invalid);
+      return;
+    }
+    setSavingDetails(true);
+    setDetailsError(null);
+    try {
+      await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address: addressInput });
+      await refreshProfile();
+      setDetailsOpen(false);
+    } catch (e) {
+      setDetailsError(e instanceof Error ? e.message : 'Could not save. Try again.');
+    }
+    setSavingDetails(false);
+  }
+
   // Starts collapsed so the map reads as the main surface on first open.
   const translateY = useSharedValue(DRAG_RANGE);
   const dragStart = useSharedValue(DRAG_RANGE);
@@ -481,7 +525,7 @@ export default function PassengerHome() {
         <Animated.View style={[styles.bannerWrap, { height: bannerHeight }, calloutStyle]}>
           {activeDelivery ? (
             <Pressable
-              onPress={openDelivery}
+              onPress={() => goOnce(openDelivery)}
               accessibilityRole="button"
               accessibilityLabel={`Open Padala for ${activeDelivery.parcel.receiverName}`}
               style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
@@ -510,7 +554,7 @@ export default function PassengerHome() {
             </Pressable>
           ) : bannerBooking ? (
             <Pressable
-              onPress={() => router.push(`/(passenger)/booking/${bannerBooking.bookingId}`)}
+              onPress={() => goOnce(() => router.push(`/(passenger)/booking/${bannerBooking.bookingId}`))}
               accessibilityRole="button"
               accessibilityLabel={`Open booking for ${bannerBooking.fromPortName} to ${bannerBooking.toPortName}`}
               style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
@@ -663,7 +707,7 @@ export default function PassengerHome() {
               {recentTrips.map((b) => (
                 <Pressable
                   key={b.bookingId}
-                  onPress={() => router.push(`/(passenger)/booking/${b.bookingId}`)}
+                  onPress={() => goOnce(() => router.push(`/(passenger)/booking/${b.bookingId}`))}
                   style={({ pressed }) => [styles.trip, pressed && styles.tripPressed]}
                 >
                   <View style={styles.tripTop}>
@@ -721,11 +765,53 @@ export default function PassengerHome() {
                   onPress={() => {
                     const target = acceptedNotice;
                     setAcceptedNotice(null);
-                    if (target) router.push(`/(passenger)/booking/${target.bookingId}`);
+                    if (target) {
+                      goOnce(() => router.push(`/(passenger)/booking/${target.bookingId}`));
+                    }
                   }}
                 />
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Tutorial exit: collect the two manifest fields before the first
+          booking can fail on them. */}
+      <Modal
+        visible={detailsOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDetailsOpen(false)}
+      >
+        <View style={styles.noticeBackdrop}>
+          <View style={[styles.noticeCard, styles.detailsCard]}>
+            <Text style={styles.noticeTitle}>One last thing</Text>
+            <Text style={styles.detailsBody}>
+              Your bangkero&apos;s manifest needs your age and home address. You only
+              enter these once.
+            </Text>
+            <TextField
+              label="Age"
+              value={ageInput}
+              onChangeText={setAgeInput}
+              keyboardType="number-pad"
+              maxLength={3}
+              placeholder="e.g. 24"
+            />
+            <TextField
+              label="Home Address"
+              value={addressInput}
+              onChangeText={setAddressInput}
+              placeholder="House, street, barangay, city"
+            />
+            {!!detailsError && <Text style={styles.detailsError}>{detailsError}</Text>}
+            <PrimaryButton
+              label="Save and start booking"
+              onPress={() => void saveDetails()}
+              loading={savingDetails}
+              disabled={savingDetails || !ageInput.trim() || !addressInput.trim()}
+            />
           </View>
         </View>
       </Modal>
@@ -737,7 +823,7 @@ export default function PassengerHome() {
         visible={tour.show}
         steps={PASSENGER_COACH}
         rects={coachRects}
-        onDone={tour.dismiss}
+        onDone={finishTour}
       />
     </View>
   );
@@ -1006,4 +1092,12 @@ const styles = StyleSheet.create({
   noticeActions: { flexDirection: 'row', gap: spacing.md, alignSelf: 'stretch' },
 
   noticeActionBtn: { flex: 1 },
+  detailsCard: { alignItems: 'stretch', gap: spacing.sm },
+  detailsBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  detailsError: { ...typography.caption, color: colors.danger, textAlign: 'center' },
 });

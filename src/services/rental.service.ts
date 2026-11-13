@@ -1,5 +1,6 @@
 import type { BoatRentalDoc } from '../types/models';
 import { createNotification } from './notification.service';
+import { requirePersonalDetails } from './profile.service';
 import { supabase } from './supabase';
 
 // =============================================================
@@ -38,6 +39,8 @@ function mapRentalRow(row: any): BoatRentalDoc {
     userId: row.user_id,
     bangkaId: row.bangka_id,
     paymentId: row.payment_id ?? null,
+    startedAt: row.started_at ?? null,
+    completedAt: row.completed_at ?? null,
   };
 }
 
@@ -98,6 +101,7 @@ export interface CreateRentalArgs {
 
 export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDoc> {
   if (!args.rentalDate) throw new Error('Pick a rental date.');
+  await requirePersonalDetails(args.userId);
 
   // Same boat, same day, still live. The passenger only sees their own
   // rows (RLS), so this catches double-submits early; the partial UNIQUE
@@ -181,6 +185,10 @@ export async function getMyRentals(userId: string): Promise<PassengerRentalRow[]
 export interface BangkeroRentalRow extends BoatRentalDoc {
   boatName: string | null;
   renterName: string | null;
+  renterPhone: string | null;
+  /** 079 main-booker manifest details. */
+  renterAge: number | null;
+  renterAddress: string | null;
 }
 
 /**
@@ -192,7 +200,7 @@ export interface BangkeroRentalRow extends BoatRentalDoc {
 export async function getRentalsForBangkero(bangkeroUid: string): Promise<BangkeroRentalRow[]> {
   const { data, error } = await supabase
     .from('boat_rentals')
-    .select('*, bangkas!inner(bangka_name, bangkero_id), users(id, first_name, last_name)')
+    .select('*, bangkas!inner(bangka_name, bangkero_id), users(*)')
     .eq('bangkas.bangkero_id', bangkeroUid)
     .order('created_at', { ascending: false });
 
@@ -203,7 +211,37 @@ export async function getRentalsForBangkero(bangkeroUid: string): Promise<Bangke
     renterName: row.users
       ? `${row.users.first_name ?? ''} ${row.users.last_name ?? ''}`.trim() || null
       : null,
+    renterPhone: row.users?.phone_number ?? null,
+    renterAge: row.users?.age ?? null,
+    renterAddress: row.users?.address ?? null,
   }));
+}
+
+/** One charter, for its sailing screen. RLS scopes to the owner's boats. */
+export async function getBangkeroRental(
+  bangkeroUid: string,
+  rentalId: string
+): Promise<BangkeroRentalRow | null> {
+  const { data, error } = await supabase
+    .from('boat_rentals')
+    .select('*, bangkas!inner(bangka_name, bangkero_id), users(*)')
+    .eq('id', rentalId)
+    .eq('bangkas.bangkero_id', bangkeroUid)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+  const row: any = data;
+  return {
+    ...mapRentalRow(row),
+    boatName: row.bangkas?.bangka_name ?? null,
+    renterName: row.users
+      ? `${row.users.first_name ?? ''} ${row.users.last_name ?? ''}`.trim() || null
+      : null,
+    renterPhone: row.users?.phone_number ?? null,
+    renterAge: row.users?.age ?? null,
+    renterAddress: row.users?.address ?? null,
+  };
 }
 
 // -------------------------------------------------------------
@@ -256,11 +294,12 @@ const rentalWhat = (ctx: RentalNotifyContext) =>
 async function transitionRental(
   rentalId: string,
   expectedFrom: string[],
-  to: string
+  to: string,
+  extra?: Record<string, unknown>
 ): Promise<void> {
   const { data, error } = await supabase
     .from('boat_rentals')
-    .update({ status: to })
+    .update({ status: to, ...(extra ?? {}) })
     .eq('id', rentalId)
     .in('status', expectedFrom)
     .select('id');
@@ -286,9 +325,32 @@ export async function confirmRental(ctx: RentalNotifyContext): Promise<void> {
     await createNotification(
       ctx.notifyUserId,
       'Boat rental confirmed',
-      `Your rental of ${rentalWhat(ctx)} is confirmed. Pay the 50% downpayment if you have not yet — the rest is collected in person.`
+      `Your rental of ${rentalWhat(ctx)} is confirmed. Pay the 50% downpayment if you have not yet — the rest is collected in person.`,
+      'booking'
     ).catch(() => {});
   }
+}
+
+/** Starts the charter's sailing record (079). Date gate is in the UI. */
+export async function startRental(rentalId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('boat_rentals')
+    .update({ started_at: new Date().toISOString() })
+    .eq('id', rentalId)
+    .eq('status', 'confirmed')
+    .is('started_at', null)
+    .select('id');
+  if (error) throw error;
+  if ((data ?? []).length > 0) return;
+
+  const { data: row } = await supabase
+    .from('boat_rentals')
+    .select('status, started_at')
+    .eq('id', rentalId)
+    .maybeSingle();
+  if (!row) throw new Error('That charter is no longer available.');
+  if (row.started_at) throw new Error('This charter already started.');
+  throw new Error(`That charter is ${row.status} — refresh the list.`);
 }
 
 /** Bangkero turns the request down (before or after escrow approval). */
@@ -299,20 +361,24 @@ export async function declineRental(ctx: RentalNotifyContext): Promise<void> {
     await createNotification(
       ctx.notifyUserId,
       'Boat rental declined',
-      `The bangkero declined your rental of ${rentalWhat(ctx)}. If you already filed a downpayment, ask the admin for a refund.`
+      `The bangkero declined your rental of ${rentalWhat(ctx)}. If you already filed a downpayment, ask the admin for a refund.`,
+      'booking'
     ).catch(() => {});
   }
 }
 
 /** Bangkero marks the charter finished — remainder collected in person. */
 export async function completeRental(ctx: RentalNotifyContext): Promise<void> {
-  await transitionRental(ctx.rentalId, ['confirmed'], 'completed');
+  await transitionRental(ctx.rentalId, ['confirmed'], 'completed', {
+    completed_at: new Date().toISOString(),
+  });
 
   if (ctx.notifyUserId) {
     await createNotification(
       ctx.notifyUserId,
       'Boat rental completed',
-      `Your rental of ${rentalWhat(ctx)} is done. Thanks for riding with us!`
+      `Your rental of ${rentalWhat(ctx)} is done. Thanks for riding with us!`,
+      'booking'
     ).catch(() => {});
   }
 }
@@ -329,7 +395,8 @@ export async function cancelRental(ctx: RentalNotifyContext): Promise<void> {
     await createNotification(
       ctx.notifyUserId,
       'Boat rental cancelled',
-      `The passenger cancelled the rental of ${rentalWhat(ctx)}.`
+      `The passenger cancelled the rental of ${rentalWhat(ctx)}.`,
+      'booking'
     ).catch(() => {});
   }
 }

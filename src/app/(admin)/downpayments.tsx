@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+} from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
@@ -14,21 +16,17 @@ import {
   approveDownpayment,
   listDownpayments,
   refundDownpayment,
+  releaseDownpayment,
 } from '@/services/downpayment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const FILTERS = [
   { key: 'pending', label: 'Pending' },
+  { key: 'release', label: 'To release' },
   { key: 'approved', label: 'Approved' },
   { key: 'refunded', label: 'Refunded' },
   { key: 'all', label: 'All' },
 ];
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Awaiting review',
-  approved: 'Approved',
-  refunded: 'Refunded',
-};
 
 function createdLabel(iso: string): string {
   const d = new Date(iso);
@@ -40,6 +38,22 @@ function createdLabel(iso: string): string {
     minute: '2-digit',
   });
 }
+
+/** The row's real state: 'approved' is the escrow state, release is its own. */
+function rowState(row: AdminDownpaymentRow): 'pending' | 'due' | 'waiting' | 'released' | 'refunded' {
+  if (row.releasedAt) return 'released';
+  if (row.status === 'refunded') return 'refunded';
+  if (row.status !== 'approved') return 'pending';
+  return row.targetCompleted ? 'due' : 'waiting';
+}
+
+const STATE_LABEL: Record<ReturnType<typeof rowState>, string> = {
+  pending: 'Awaiting review',
+  waiting: 'Approved · waiting for trip',
+  due: 'To release',
+  released: 'Released',
+  refunded: 'Refunded',
+};
 
 /**
  * Escrow review (migration 015/020): passengers file a GCash RECEIPT
@@ -65,6 +79,8 @@ export default function AdminDownpaymentsScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminDownpaymentRow | null>(null);
+  const [payoutMethod, setPayoutMethod] = useState<'gcash' | 'cash'>('gcash');
+  const [payoutRef, setPayoutRef] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -85,8 +101,13 @@ export default function AdminDownpaymentsScreen() {
   // into the realtime publication) — no pull-to-refresh needed.
   useRealtimeQuery(load, [{ table: 'downpayments' }]);
 
-  const visible = rows.filter((r) => filter === 'all' || r.status === filter);
+  const visible = rows.filter((r) => {
+    if (filter === 'all') return true;
+    if (filter === 'release') return rowState(r) === 'due';
+    return r.status === filter;
+  });
   const pendingCount = rows.filter((r) => r.status === 'pending').length;
+  const dueCount = rows.filter((r) => rowState(r) === 'due').length;
 
   async function doApprove(row: AdminDownpaymentRow) {
     if (busyId) return;
@@ -116,11 +137,49 @@ export default function AdminDownpaymentsScreen() {
     setBusyId(null);
   }
 
+  function doRelease(row: AdminDownpaymentRow) {
+    if (busyId) return;
+    const via = payoutMethod === 'gcash'
+      ? `GCash${payoutRef.trim() ? ` (ref ${payoutRef.trim()})` : ''}`
+      : 'cash at the port';
+    Alert.alert(
+      'Release this downpayment?',
+      `₱${row.amount} goes to ${row.operatorName ?? 'the bangkero'} via ${via}. This cannot be undone — only confirm after the money has actually been sent.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Release',
+          onPress: () => {
+            void (async () => {
+              setBusyId(row.downpaymentId);
+              setActionError(null);
+              try {
+                await releaseDownpayment(row, payoutMethod, payoutRef);
+                setDetail(null);
+                await load();
+              } catch (e) {
+                setActionError(friendlyError(e));
+              }
+              setBusyId(null);
+            })();
+          },
+        },
+      ]
+    );
+  }
+
   const proofUrl = detail ? docPublicUrl(detail.proofUrl) : null;
+  const operatorQrUrl = detail ? docPublicUrl(detail.operatorQrUrl) : null;
   // A dead storage path renders a blank white box without this — swap to
   // the dashed "unavailable" state instead of a silent failure.
   const [proofFailed, setProofFailed] = useState(false);
-  useEffect(() => { setProofFailed(false); }, [detail?.downpaymentId]);
+  const [qrFailed, setQrFailed] = useState(false);
+  useEffect(() => {
+    setProofFailed(false);
+    setQrFailed(false);
+    setPayoutRef('');
+    setPayoutMethod(detail?.operatorQrUrl ? 'gcash' : 'cash');
+  }, [detail?.downpaymentId, detail?.operatorQrUrl]);
 
   return (
     <ScreenContainer padded={false}>
@@ -130,7 +189,9 @@ export default function AdminDownpaymentsScreen() {
         subtitle={
           pendingCount > 0
             ? `${pendingCount} awaiting review`
-            : `${rows.length} total`
+            : dueCount > 0
+              ? `${dueCount} to release`
+              : `${rows.length} total`
         }
       />
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
@@ -159,12 +220,14 @@ export default function AdminDownpaymentsScreen() {
           <ErrorState message={error} onRetry={() => { setLoading(true); void load(); }} />
         ) : visible.length === 0 ? (
           <EmptyState
-            icon="🧾"
-            title="No rentals found"
+            icon="receipt"
+            title="No downpayments found"
             message={
               filter === 'pending'
                 ? 'No downpayments are waiting for review.'
-                : `No ${filter} downpayments yet.`
+                : filter === 'release'
+                  ? 'Nothing is due — released rows show under Approved.'
+                  : `No ${filter} downpayments yet.`
             }
           />
         ) : (
@@ -192,18 +255,24 @@ export default function AdminDownpaymentsScreen() {
                 <View
                   style={[
                     styles.statusChip,
-                    row.status === 'approved' && styles.statusApproved,
-                    row.status === 'refunded' && styles.statusRefunded,
+                    rowState(row) === 'pending' && styles.statusPending,
+                    rowState(row) === 'due' && styles.statusDue,
+                    rowState(row) === 'waiting' && styles.statusApproved,
+                    rowState(row) === 'released' && styles.statusApproved,
+                    rowState(row) === 'refunded' && styles.statusRefunded,
                   ]}
                 >
                   <Text
                     style={[
                       styles.statusText,
-                      row.status === 'approved' && styles.statusTextApproved,
-                      row.status === 'refunded' && styles.statusTextRefunded,
+                      rowState(row) === 'pending' && styles.statusTextPending,
+                      rowState(row) === 'due' && styles.statusTextDue,
+                      rowState(row) === 'waiting' && styles.statusTextApproved,
+                      rowState(row) === 'released' && styles.statusTextApproved,
+                      rowState(row) === 'refunded' && styles.statusTextRefunded,
                     ]}
                   >
-                    {STATUS_LABELS[row.status] ?? row.status}
+                    {STATE_LABEL[rowState(row)]}
                   </Text>
                 </View>
               </View>
@@ -230,7 +299,7 @@ export default function AdminDownpaymentsScreen() {
 
           <ScrollView contentContainerStyle={styles.modalBody}>
             <Text style={styles.modalTitle}>
-              ₱{detail?.amount} · {STATUS_LABELS[detail?.status ?? ''] ?? detail?.status}
+              ₱{detail?.amount} · {detail ? STATE_LABEL[rowState(detail)] : ''}
             </Text>
             <Text style={styles.modalSub}>
               {detail?.payerName ?? 'Passenger'} · {detail?.label}
@@ -254,7 +323,7 @@ export default function AdminDownpaymentsScreen() {
               </View>
             )}
 
-            {detail?.status === 'pending' ? (
+            {detail && rowState(detail) === 'pending' ? (
               <>
                 <Text style={styles.modalSteps}>
                   Check the Ref No. on this receipt in your GCash → Transaction History
@@ -277,6 +346,93 @@ export default function AdminDownpaymentsScreen() {
                   style={styles.modalBtn}
                 />
               </>
+            ) : detail && rowState(detail) === 'due' ? (
+              <View style={styles.releaseBox}>
+                <Text style={styles.releaseTitle}>RELEASE THE HELD 50%</Text>
+                <Text style={styles.releaseWho}>
+                  {detail.operatorName ?? 'The bangkero'} completed this trip. Pay ₱{detail.amount},
+                  then record it here — the app does not move money.
+                </Text>
+
+                <View style={styles.methodRow}>
+                  <Pressable
+                    onPress={() => setPayoutMethod('gcash')}
+                    disabled={!detail.operatorQrUrl}
+                    style={[
+                      styles.methodChip,
+                      payoutMethod === 'gcash' && styles.methodChipOn,
+                      !detail.operatorQrUrl && styles.methodChipOff,
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: payoutMethod === 'gcash', disabled: !detail.operatorQrUrl }}
+                  >
+                    <Text style={[styles.methodText, payoutMethod === 'gcash' && styles.methodTextOn]}>
+                      GCash
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setPayoutMethod('cash')}
+                    style={[styles.methodChip, payoutMethod === 'cash' && styles.methodChipOn]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: payoutMethod === 'cash' }}
+                  >
+                    <Text style={[styles.methodText, payoutMethod === 'cash' && styles.methodTextOn]}>
+                      Cash
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {payoutMethod === 'gcash' ? (
+                  operatorQrUrl && !qrFailed ? (
+                    <View style={styles.qrWrap}>
+                      <Image
+                        source={{ uri: operatorQrUrl }}
+                        style={styles.qrImg}
+                        resizeMode="contain"
+                        onError={() => setQrFailed(true)}
+                      />
+                      <Text style={styles.qrHint}>Scan this in GCash and send ₱{detail.amount}.</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.releaseWarn}>
+                      This bangkero has no GCash QR on file. Switch to cash, or ask them to
+                      upload one in Profile → GCash QR.
+                    </Text>
+                  )
+                ) : (
+                  <Text style={styles.qrHint}>
+                    Hand ₱{detail.amount} to {detail.operatorName ?? 'the bangkero'} at the port.
+                  </Text>
+                )}
+
+                <TextInput
+                  value={payoutRef}
+                  onChangeText={setPayoutRef}
+                  placeholder="GCash ref no. (optional)"
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="characters"
+                  style={styles.refInput}
+                  accessibilityLabel="Payout reference number"
+                />
+                <PrimaryButton
+                  label="Record release"
+                  onPress={() => doRelease(detail)}
+                  loading={busyId === detail.downpaymentId}
+                  disabled={busyId !== null || (payoutMethod === 'gcash' && !detail.operatorQrUrl)}
+                  style={styles.modalBtn}
+                />
+              </View>
+            ) : detail && rowState(detail) === 'waiting' ? (
+              <Text style={styles.modalDone}>
+                Approved — the held ₱{detail.amount} is released to the bangkero once the trip
+                is completed. Nothing to do yet.
+              </Text>
+            ) : detail && rowState(detail) === 'released' ? (
+              <Text style={styles.modalDone}>
+                ₱{detail.amount} released {detail.releasedAt ? createdLabel(detail.releasedAt) : ''}{' '}
+                via {detail.payoutMethod === 'cash' ? 'cash' : 'GCash'}
+                {detail.payoutRef ? ` · ref ${detail.payoutRef}` : ''}. The bangkero was notified.
+              </Text>
             ) : (
               <Text style={styles.modalDone}>
                 Reviewed {detail?.reviewedAt ? createdLabel(detail.reviewedAt) : ''} — the
@@ -347,11 +503,69 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radii.pill,
   },
+  statusPending: { backgroundColor: colors.warningTint },
+  statusDue: { backgroundColor: colors.accentTintSoft },
   statusApproved: { backgroundColor: colors.primaryTint },
   statusRefunded: { backgroundColor: colors.neutralTint },
   statusText: { fontSize: 10, fontWeight: '700', color: colors.warning, textTransform: 'uppercase' },
+  statusTextPending: { color: colors.warning },
+  statusTextDue: { color: colors.accent },
   statusTextApproved: { color: colors.primary },
   statusTextRefunded: { color: colors.textSecondary },
+
+  releaseBox: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  releaseTitle: { ...typography.label, color: colors.primary, marginBottom: spacing.sm },
+  releaseWho: { color: '#fff', fontSize: 14, lineHeight: 20 },
+  methodRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  methodChip: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  methodChipOn: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  methodChipOff: { opacity: 0.4 },
+  methodText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  methodTextOn: { color: colors.primary },
+  qrWrap: { alignItems: 'center', marginTop: spacing.md },
+  qrImg: {
+    width: 200,
+    height: 200,
+    borderRadius: radii.md,
+    backgroundColor: '#fff',
+  },
+  qrHint: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  releaseWarn: {
+    color: colors.warning,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.md,
+  },
+  refInput: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: '#fff',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 14,
+  },
 
   modalBg: {
     flex: 1,

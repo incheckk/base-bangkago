@@ -75,3 +75,27 @@ export async function resolveAlert(alertId: string): Promise<void> {
 
   if (error) throw error;
 }
+
+/**
+ * Passenger SOS (007 grants `safety_alerts_insert_passenger`). The row lands
+ * in the same feed the coastguard and admin resolve; the passenger's boat is
+ * the operator's boat, so the message carries the trip and ports instead of a
+ * bangka_id the passenger is not allowed to look up.
+ */
+export async function sendPassengerSos(args: {
+  passengerName: string;
+  bookingRef?: string | null;
+  fromPort?: string | null;
+  toPort?: string | null;
+}): Promise<SafetyAlertDoc> {
+  const trip = args.bookingRef ? ` (booking ${args.bookingRef})` : '';
+  const where = args.fromPort
+    ? ` At ${args.fromPort}${args.toPort ? ` → ${args.toPort}` : ''}.`
+    : '';
+  return createAlert({
+    message:
+      `Emergency SOS from passenger ${args.passengerName}${trip}.${where} ` +
+      'Immediate assistance needed.',
+    severity: 'critical',
+  });
+}

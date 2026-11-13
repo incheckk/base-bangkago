@@ -42,6 +42,8 @@ export async function signUp({
     profilePhoto: null,
     isVerified: false,
     createdAt: new Date().toISOString(),
+    age: null,
+    address: null,
   };
 
   const { error: profileError } = await supabase.from('users').insert({
@@ -160,6 +162,8 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
     profilePhoto: data.profile_photo,
     isVerified: data.is_verified,
     createdAt: data.created_at,
+    age: data.age ?? null,
+    address: data.address ?? null,
   };
 }
 
@@ -289,6 +293,9 @@ export function friendlyAuthError(e: unknown): string {
     return 'That date is already booked for this boat — pick another day.';
   }
   if (message.includes('created as a passenger')) {
+    return message;
+  }
+  if (message.includes('age and home address')) {
     return message;
   }
   if (message) return `Something went wrong (${message}).`;

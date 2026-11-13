@@ -584,7 +584,8 @@ export default function DepartureScreen() {
                   await createNotification(
                     b.user_id,
                     'Trip Departed',
-                    `Boat for trip ${b.ref} has departed.`
+                    `Boat for trip ${b.ref} has departed.`,
+                    'booking'
                   );
                 } catch {
                   // ignore — departure still proceeds

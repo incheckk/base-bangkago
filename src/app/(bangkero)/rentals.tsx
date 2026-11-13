@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
@@ -8,13 +9,11 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
-import { getDownpaymentByRental } from '@/services/downpayment.service';
 import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import {
   type BangkeroRentalRow,
   type OwnBangka,
   confirmRental,
-  completeRental,
   declineRental,
   getOwnBangkas,
   getRentalsForBangkero,
@@ -125,30 +124,8 @@ export default function BangkeroRentalsScreen() {
     );
   }
 
-  function askComplete(row: BangkeroRentalRow) {
-    void (async () => {
-      // Remainder = total minus what escrow actually holds. The approved
-      // downpayment is authoritative; the half-split is a fallback that
-      // rounds once (down = round, remainder = total − down) so the two
-      // halves always sum back to the total.
-      let remainder = row.totalPrice - Math.round(row.totalPrice * 0.5);
-      try {
-        const escrow = await getDownpaymentByRental(row.rentalId);
-        if (escrow && escrow.status === 'approved') {
-          remainder = row.totalPrice - escrow.amount;
-        }
-      } catch {
-        // escrow unreadable (RLS/offline) — fall back to the split
-      }
-      Alert.alert(
-        'Mark rental complete?',
-        `Confirm the charter is finished and you collected ₱${remainder} in person.`,
-        [
-          { text: 'Go back', style: 'cancel' },
-          { text: 'Complete', onPress: () => void act(row, completeRental) },
-        ]
-      );
-    })();
+  function openCharter(row: BangkeroRentalRow) {
+    router.push({ pathname: '/(bangkero)/charter/[id]', params: { id: row.rentalId } });
   }
 
   async function savePrice(boat: OwnBangka) {
@@ -342,15 +319,7 @@ export default function BangkeroRentalsScreen() {
               row={row}
               riders={riders[row.rentalId] ?? []}
               busy={busyId === row.rentalId}
-              actions={
-                <PrimaryButton
-                  label="Mark complete"
-                  onPress={() => askComplete(row)}
-                  loading={busyId === row.rentalId}
-                  disabled={busyId !== null}
-                  style={styles.actionBtnFull}
-                />
-              }
+              onOpen={() => openCharter(row)}
             />
           ))
         )}
@@ -373,11 +342,14 @@ function RentalCard({
   riders,
   busy,
   actions,
+  onOpen,
 }: {
   row: BangkeroRentalRow;
   riders: PassengerDetailDoc[];
   busy: boolean;
   actions?: React.ReactNode;
+  /** Confirmed charters open their sailing-day screen. */
+  onOpen?: () => void;
 }) {
   const status = STATUS_STYLES[row.status] ?? STATUS_STYLES.pending;
   return (
@@ -394,12 +366,30 @@ function RentalCard({
       <Text style={styles.cardMeta} numberOfLines={1}>
         {row.boatName ?? 'Boat'} · {formatDate(row.rentalDate)} · {rentalDurationLabel(row.hours)} · ₱{row.totalPrice}
       </Text>
+      {row.startedAt && (
+        <Text style={styles.cardMeta} numberOfLines={1}>
+          Started {new Date(row.startedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
+          {row.completedAt
+            ? ` · finished ${new Date(row.completedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
+            : ''}
+        </Text>
+      )}
       {riders.length > 0 && (
         <Text style={styles.cardMeta} numberOfLines={2}>
           Riders: {riders.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
         </Text>
       )}
       {!!actions && <View style={styles.actions}>{actions}</View>}
+      {onOpen && (
+        <View style={styles.actions}>
+          <PrimaryButton
+            label={row.startedAt ? 'Resume charter' : 'Open charter'}
+            onPress={onOpen}
+            disabled={busy}
+            style={styles.actionBtnFull}
+          />
+        </View>
+      )}
     </View>
   );
 }

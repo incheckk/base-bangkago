@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  getArrivalBypass, getDispatchBypass, getGatesBypass, getShowQuickLogin,
+  getArrivalBypass, getDispatchBypass, getGatesBypass, getRouteLockBypass, getShowQuickLogin,
 } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { mapRow as mapParcelRow } from '../services/parcel.service';
@@ -544,6 +544,8 @@ export function useMyPortQueue(bangkeroUid: string | null): Result<MyQueueState>
 export interface DevFlags {
   /** Admin demo switch: true lifts the FCFS dispatch rules (009). */
   dispatchBypass: boolean;
+  /** Admin demo switch: true lifts the route lock only (079). */
+  routeLockBypass: boolean;
   /** Admin demo switch: true lifts the verification + rating gates (010). */
   gatesBypass: boolean;
   /** Admin demo switch: true lets the arrived screen close out unboarded trips (026). */
@@ -559,7 +561,7 @@ export interface DevFlags {
  * screen re-reads immediately instead of waiting for the realtime echo.
  */
 export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
-  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, gatesBypass: false, arrivalBypass: false, showQuickLogin: true });
+  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, routeLockBypass: false, gatesBypass: false, arrivalBypass: false, showQuickLogin: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
@@ -569,8 +571,9 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
     // Each flag tolerates its own migration being unrun: pre-009 reads
     // OFF, and a 009-only database still shows the dispatch switch for
     // real while gates/arrival read OFF.
-    const [dispatch, gates, arrival, quickLogin] = await Promise.all([
+    const [dispatch, routeLock, gates, arrival, quickLogin] = await Promise.all([
       getDispatchBypass().catch(() => false),
+      getRouteLockBypass().catch(() => false),
       getGatesBypass().catch(() => false),
       getArrivalBypass().catch(() => false),
       getShowQuickLogin().catch(() => true),
@@ -578,6 +581,7 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
     if (id !== seq.current) return;
     setData({
       dispatchBypass: dispatch,
+      routeLockBypass: routeLock,
       gatesBypass: gates,
       arrivalBypass: arrival,
       showQuickLogin: quickLogin,

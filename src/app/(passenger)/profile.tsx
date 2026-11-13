@@ -9,10 +9,12 @@ import { TextField } from '@/components/TextField';
 import { useAuth } from '@/hooks/useAuth';
 import { requestReplay } from '@/hooks/useOnboarding';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
-import { friendlyError as profileFriendlyError, updateName } from '@/services/profile.service';
+import {
+  friendlyError as profileFriendlyError, updateName, updatePersonalDetails,
+} from '@/services/profile.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
-import { nameError } from '@/utils/validation';
+import { addressError, nameError } from '@/utils/validation';
 import { useState } from 'react';
 
 export default function PassengerProfile() {
@@ -23,12 +25,16 @@ export default function PassengerProfile() {
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [age, setAge] = useState('');
+  const [address, setAddress] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savedName, setSavedName] = useState<{ first: string; last: string } | null>(null);
 
   function startEdit() {
     setFirstName(profile?.firstName ?? '');
     setLastName(profile?.lastName ?? '');
+    setAge(profile?.age != null ? String(profile.age) : '');
+    setAddress(profile?.address ?? '');
     setError(null);
     setEditing(true);
   }
@@ -37,7 +43,16 @@ export default function PassengerProfile() {
     if (!profile) return;
     const firstErr = nameError(firstName);
     const lastErr = nameError(lastName);
-    const invalid = firstErr ? `First name: ${firstErr}` : lastErr ? `Last name: ${lastErr}` : null;
+    const parsedAge = Number(age.trim());
+    const ageErr = Number.isInteger(parsedAge) && parsedAge >= 1 && parsedAge <= 120
+      ? null
+      : 'Enter an age between 1 and 120.';
+    const addrErr = addressError(address);
+    const invalid = firstErr
+      ? `First name: ${firstErr}`
+      : lastErr
+        ? `Last name: ${lastErr}`
+        : ageErr ?? addrErr;
     if (invalid) {
       setError(invalid);
       return;
@@ -51,6 +66,7 @@ export default function PassengerProfile() {
         lastName,
         isBangkero: false,
       });
+      await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address });
       setSavedName({ first: firstName.trim(), last: lastName.trim() });
       setEditing(false);
     } catch (e) {
@@ -98,6 +114,11 @@ export default function PassengerProfile() {
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{displayFirst} {displayLast}</Text>
           <Text style={styles.phone}>{formatPhone(profile.phone)}</Text>
+          {profile.age != null && (
+            <Text style={styles.phone}>
+              {profile.age} years old{profile.address ? ` · ${profile.address}` : ''}
+            </Text>
+          )}
         </View>
 
         {/* Edit form / button */}
@@ -115,6 +136,24 @@ export default function PassengerProfile() {
               onChangeText={setLastName}
               autoCapitalize="words"
             />
+            <TextField
+              label="Age"
+              value={age}
+              onChangeText={setAge}
+              keyboardType="number-pad"
+              maxLength={3}
+              placeholder="e.g. 24"
+            />
+            <TextField
+              label="Home Address"
+              value={address}
+              onChangeText={setAddress}
+              placeholder="House, street, barangay, city"
+            />
+            <Text style={styles.editHint}>
+              Age and address appear on the bangkero&apos;s manifest and are required
+              before booking.
+            </Text>
             <View style={styles.editActions}>
               <PrimaryButton
                 label="Cancel"
@@ -222,6 +261,7 @@ const styles = StyleSheet.create({
   },
   editActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
   editActionBtn: { flex: 1 },
+  editHint: { ...typography.caption, color: colors.textMuted, lineHeight: 17 },
 
   menu: {
     backgroundColor: colors.surface,

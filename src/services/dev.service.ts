@@ -44,6 +44,27 @@ export async function setGatesBypass(on: boolean): Promise<void> {
 }
 
 /**
+ * The route lock's own switch (migration 079). The FCFS switch no longer
+ * lifts it: a boat with an accepted trip to one destination still refuses
+ * another destination unless THIS flag is on.
+ */
+export async function getRouteLockBypass(): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('dev_flags')
+    .select('route_lock_bypass')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.route_lock_bypass ?? false;
+}
+
+/** Admin-only — enforced inside the RPC (users.user_role = 'admin'). */
+export async function setRouteLockBypass(on: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_route_lock_bypass', { p_on: on });
+  if (error) throw error;
+}
+
+/**
  * The arrival close-out switch (migration 026). While ON, the arrived
  * screen can complete trips whose passengers were never marked onboarded
  * (force_complete_trip). Independent of the other two flags.

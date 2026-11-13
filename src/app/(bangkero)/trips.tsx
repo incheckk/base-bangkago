@@ -14,6 +14,7 @@ import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useMyTrips } from '@/hooks/useSupabase';
 import { getPaymentsForBookings } from '@/services/payment.service';
+import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc, PaymentDoc } from '@/types/models';
 import { bookingTypeLabel } from '@/utils/booking-label';
@@ -42,8 +43,21 @@ export default function TripsScreen() {
   const trips = useMyTrips(uid);
   const parcels = useBangkeroParcels(uid);
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
+  const [rentals, setRentals] = useState<BangkeroRentalRow[]>([]);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+
+  // 079: a charter is a sailing too — same list, same day, own card.
+  const loadRentals = useCallback(async () => {
+    if (!uid) return;
+    try {
+      setRentals(await getRentalsForBangkero(uid));
+    } catch {
+      // keep the last list; realtime retries
+    }
+  }, [uid]);
+  useEffect(() => { void loadRentals(); }, [loadRentals]);
+  useRealtimeQuery(loadRentals, [{ table: 'boat_rentals' }]);
 
   const tripIds = useMemo(() => trips.data.map((t) => t.bookingId), [trips.data]);
   const loadPayments = useCallback(async () => {
@@ -84,13 +98,22 @@ export default function TripsScreen() {
   const cancelled = matchingTrips.filter((t) => t.status === 'cancelled')
     .sort((a, b) => (b.cancelledAt ?? b.createdAt).localeCompare(a.cancelledAt ?? a.createdAt));
 
+  const matchingRentals = q
+    ? rentals.filter((r) =>
+      `${r.eventName ?? ''} ${r.renterName ?? ''} ${r.boatName ?? ''}`.toLowerCase().includes(q)
+    )
+    : rentals;
+  const activeCharters = matchingRentals.filter((r) => r.status === 'confirmed');
+  const completedCharters = matchingRentals.filter((r) => r.status === 'completed');
+  const cancelledCharters = matchingRentals.filter((r) => r.status === 'cancelled');
+
   const showActive = filter === 'all' || filter === 'active';
   const showCompleted = filter === 'all' || filter === 'completed';
   const showCancelled = filter === 'all' || filter === 'cancelled';
 
-  const total = (showActive ? active.length : 0)
-    + (showCompleted ? completed.length : 0)
-    + (showCancelled ? cancelled.length : 0);
+  const total = (showActive ? active.length + activeCharters.length : 0)
+    + (showCompleted ? completed.length + completedCharters.length : 0)
+    + (showCancelled ? cancelled.length + cancelledCharters.length : 0);
 
   if (trips.loading) {
     return (
@@ -145,20 +168,23 @@ export default function TripsScreen() {
           </View>
         ) : (
           <>
-            {showActive && active.length > 0 && (
+            {showActive && (active.length > 0 || activeCharters.length > 0) && (
               <Section title="ACTIVE">
+                {activeCharters.map((r) => <CharterCard key={r.rentalId} row={r} />)}
                 {active.map((s) => (
                   <SailingCard key={s.key} sailing={s} soon={s.day > todayKey()} />
                 ))}
               </Section>
             )}
-            {showCompleted && completed.length > 0 && (
+            {showCompleted && (completed.length > 0 || completedCharters.length > 0) && (
               <Section title="COMPLETED">
+                {completedCharters.map((r) => <CharterCard key={r.rentalId} row={r} />)}
                 {completed.map((s) => <SailingCard key={s.key} sailing={s} />)}
               </Section>
             )}
-            {showCancelled && cancelled.length > 0 && (
+            {showCancelled && (cancelled.length > 0 || cancelledCharters.length > 0) && (
               <Section title="CANCELLED REQUESTS">
+                {cancelledCharters.map((r) => <CharterCard key={r.rentalId} row={r} />)}
                 {cancelled.map((t) => <CancelledCard key={t.bookingId} trip={t} />)}
               </Section>
             )}
@@ -225,6 +251,60 @@ function SailingCard({ sailing, soon }: { sailing: Sailing; soon?: boolean }) {
       <Text style={styles.openHint}>Tap for manifest, passengers &amp; parcels</Text>
     </Pressable>
   );
+}
+
+function CharterCard({ row }: { row: BangkeroRentalRow }) {
+  const done = row.status === 'completed' || !!row.completedAt;
+  const cancelled = row.status === 'cancelled';
+  const live = !done && !cancelled && !!row.startedAt;
+  const soon = !done && !cancelled && !live && row.rentalDate > todayKey();
+  return (
+    <Pressable
+      onPress={() =>
+        router.push({ pathname: '/(bangkero)/charter/[id]', params: { id: row.rentalId } })
+      }
+      accessibilityRole="button"
+      accessibilityLabel={`Charter ${row.eventName ?? ''}, ${row.rentalDate}`}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+    >
+      <View style={styles.cardTop}>
+        <Text style={styles.route} numberOfLines={1}>
+          {row.eventName || 'Boat charter'}
+        </Text>
+        <View style={[
+          styles.chip,
+          cancelled ? styles.chipCancelled : done ? styles.chipDone : soon ? styles.chipSoon : styles.chipLive,
+        ]}>
+          <Text style={[styles.chipText, cancelled ? styles.chipTextCancelled : done ? styles.chipTextDone : soon ? styles.chipTextSoon : styles.chipTextLive]}>
+            {cancelled ? 'Cancelled' : done ? 'Completed' : live ? 'Under way' : soon ? 'Upcoming' : 'Ready'}
+          </Text>
+        </View>
+      </View>
+
+      <Text style={styles.typeLine} numberOfLines={1}>BOAT RENTAL · whole day</Text>
+      <Text style={styles.day}>
+        {formatCharterDay(row.rentalDate)} · {row.boatName ?? 'Boat'}
+        {row.renterName ? ` · ${row.renterName}` : ''}
+      </Text>
+
+      <View style={styles.metaRow}>
+        <Text style={styles.meta}>₱{row.totalPrice}</Text>
+        {row.startedAt && (
+          <Text style={styles.meta}>
+            · started {new Date(row.startedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        )}
+      </View>
+
+      <Text style={styles.openHint}>Tap for the party list &amp; sailing times</Text>
+    </Pressable>
+  );
+}
+
+function formatCharterDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function CancelledCard({ trip }: { trip: BookingDoc }) {

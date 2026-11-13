@@ -88,11 +88,22 @@
             <div><strong>Bangka Name:</strong> <span id="docAssignedBangka">-</span></div>
           </div>
 
+          <div class="border rounded bg-light p-2 mb-3 d-none" id="docPreviewPanel">
+            <div class="d-flex justify-content-between align-items-center mb-2 gap-2">
+              <strong class="text-truncate" id="docPreviewLabel"></strong>
+              <button type="button" class="btn-close" id="docPreviewClose" aria-label="Close preview"></button>
+            </div>
+            <div class="text-center">
+              <img id="docPreviewImg" class="img-fluid rounded" style="max-height: 60vh; object-fit: contain;" alt="" />
+              <div class="small text-muted mt-2 d-none" id="docPreviewMsg"></div>
+            </div>
+          </div>
+
           <div class="list-group" id="docList"></div>
 
           <div class="alert alert-info mt-3 mb-0">
             <i class="bi bi-info-circle me-1"></i>
-            Click a document row to preview it full-screen; the arrow button opens it in a new tab.
+            Click a document row or its View button to preview it here; the arrow opens it in a new tab.
           </div>
         </div>
       </div>
@@ -132,6 +143,32 @@
     </div>
   </div>
 
+  <!-- DELETE BANGKERO MODAL -->
+  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form class="modal-content" id="deleteForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Bangkero</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-2"><strong>Bangkero:</strong> <span id="deleteName">-</span></div>
+          <div class="mb-3">
+            <label class="form-label" for="deleteReason">Reason</label>
+            <textarea id="deleteReason" class="form-control" rows="3" placeholder="Why is this bangkero being deleted?"></textarea>
+          </div>
+          <div class="muted-note">
+            Their account and trip history are retained and can be restored from the Deleted Bangkeros table.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Delete Bangkero</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
@@ -152,17 +189,28 @@
 
     const reviewDocsModal = new bootstrap.Modal(document.getElementById("reviewDocsModal"));
     const decisionModal = new bootstrap.Modal(document.getElementById("decisionModal"));
+    const deleteModal = new bootstrap.Modal(document.getElementById("deleteModal"));
 
     const docApplicantName = document.getElementById("docApplicantName");
     const docApplicantId = document.getElementById("docApplicantId");
     const docAssignedBangka = document.getElementById("docAssignedBangka");
     const docList = document.getElementById("docList");
+    const docPreviewPanel = document.getElementById("docPreviewPanel");
+    const docPreviewLabel = document.getElementById("docPreviewLabel");
+    const docPreviewImg = document.getElementById("docPreviewImg");
+    const docPreviewMsg = document.getElementById("docPreviewMsg");
+    const docPreviewClose = document.getElementById("docPreviewClose");
 
     const decisionName = document.getElementById("decisionName");
     const decisionId = document.getElementById("decisionId");
     const decisionSelect = document.getElementById("decisionSelect");
     const decisionRemarks = document.getElementById("decisionRemarks");
     const decisionForm = document.getElementById("decisionForm");
+
+    let deleteIndex = null;
+    const deleteName = document.getElementById("deleteName");
+    const deleteReason = document.getElementById("deleteReason");
+    const deleteForm = document.getElementById("deleteForm");
 
     function appBadge(status){
       if(status === "Approved" || status === "verified") return "text-bg-success";
@@ -195,7 +243,7 @@
                 <button class="btn btn-sm btn-bangkago" onclick="openDecisionModal(${i})">
                   <i class="bi bi-check2-square"></i> Update Application
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteBangkero(${i})">
+                <button class="btn btn-sm btn-outline-danger" onclick="openDeleteModal(${i})">
                   <i class="bi bi-person-x"></i> Delete
                 </button>
               </div>
@@ -255,16 +303,32 @@
       }
     }
 
-    window.deleteBangkero = async function(index){
+    window.openDeleteModal = function(index){
       const b = bangkeros[index];
-      if (!b || !confirm(`Move ${b.displayName} to Deleted Bangkeros? Their account and trip history will be retained.`)) return;
+      if (!b) return;
+      deleteIndex = index;
+      deleteName.textContent = b.displayName;
+      deleteReason.value = "";
+      deleteModal.show();
+    };
+
+    deleteForm.addEventListener("submit", async function(e){
+      e.preventDefault();
+      const b = bangkeros[deleteIndex];
+      if (!b) return;
+      const reason = deleteReason.value.trim();
+      if (!reason) {
+        alert('Enter a reason for deleting this bangkero.');
+        return;
+      }
       try {
         await window.bangkagoBangkeros.softDelete(b.uid);
+        deleteModal.hide();
         await loadBangkeros();
       } catch(e) {
         alert('Unable to delete bangkero: ' + e.message);
       }
-    };
+    });
 
     window.restoreBangkero = async function(index){
       const b = deletedBangkeros[index];
@@ -288,11 +352,39 @@
       return client.storage.from('docs').getPublicUrl(path).data?.publicUrl || null;
     }
 
+    // Inline preview inside the review modal — a second stacked modal hid
+    // the documents behind the review backdrop, so one image panel is used.
+    function hideDocPreview(){
+      docPreviewPanel.classList.add('d-none');
+      docPreviewImg.removeAttribute('src');
+      docPreviewMsg.classList.add('d-none');
+    }
+
+    function showDocPreview(url, label){
+      if (!url) return;
+      docPreviewLabel.textContent = label;
+      docPreviewMsg.textContent = '';
+      docPreviewMsg.classList.add('d-none');
+      docPreviewImg.classList.remove('d-none');
+      docPreviewImg.alt = label;
+      docPreviewImg.onerror = function(){
+        docPreviewImg.classList.add('d-none');
+        docPreviewMsg.textContent = 'This file is missing or empty in storage — ask the bangkero to re-upload it.';
+        docPreviewMsg.classList.remove('d-none');
+      };
+      docPreviewImg.src = url;
+      docPreviewPanel.classList.remove('d-none');
+      docPreviewPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    docPreviewClose.addEventListener('click', hideDocPreview);
+
     window.openReviewDocs = async function(index){
       const b = bangkeros[index];
       docApplicantName.textContent = b.displayName;
       docApplicantId.textContent = b.uid;
       docAssignedBangka.textContent = b.boatName || 'Unassigned';
+      hideDocPreview();
 
       // Show loading state
       docList.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Loading documents...</p></div>';
@@ -354,7 +446,10 @@
               </div>
               <div class="d-flex align-items-center gap-2">
                 <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Uploaded</span>
-                <a href="${publicUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary" data-document-link title="Open document in a new tab" aria-label="Open document in a new tab">
+                <button type="button" class="btn btn-sm btn-outline-primary" data-doc-view title="Preview this document">
+                  <i class="bi bi-eye me-1"></i>View
+                </button>
+                <a href="${publicUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" data-document-link title="Open document in a new tab" aria-label="Open document in a new tab">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </a>
               </div>
@@ -367,69 +462,17 @@
           row.addEventListener('click', () => {
             const doc = docs[Number(row.dataset.docIndex)];
             const url = documentUrls[Number(row.dataset.docIndex)];
-            if (url) window.previewDocument(url, doc.label);
+            if (url) showDocPreview(url, doc.label);
           });
           row.querySelector('[data-document-link]')?.addEventListener('click', event => {
             event.stopPropagation();
           });
         });
-
-        // Update info alert
-        const alertEl = docList.nextElementSibling;
-        if (alertEl && alertEl.classList.contains('alert-info')) {
-          alertEl.innerHTML = '<i class="bi bi-info-circle me-1"></i>Click a document row to preview full-screen. Use the external link button to open in new tab.';
-        }
       } catch (e) {
         console.error(e);
         docList.innerHTML = '<div class="alert alert-danger">Error loading documents: ' + e.message + '</div>';
       }
     }
-
-    // Full-screen document preview
-    window.previewDocument = function(url, label) {
-      const modalHtml = `
-        <div class="modal fade" id="docPreviewModal" tabindex="-1" aria-hidden="true">
-          <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content bg-dark border-0">
-              <div class="modal-header border-0">
-                <h5 class="modal-title text-white"></h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-              </div>
-              <div class="modal-body p-0 text-center">
-                <img class="document-preview-image img-fluid" style="max-height: 80vh; object-fit: contain;">
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      // Remove any existing preview modal
-      const existing = document.getElementById('docPreviewModal');
-      if (existing) existing.remove();
-      
-      // Add to body and show
-      document.body.insertAdjacentHTML('beforeend', modalHtml);
-      const modalElement = document.getElementById('docPreviewModal');
-      modalElement.querySelector('.modal-title').textContent = label;
-      const previewImage = modalElement.querySelector('.document-preview-image');
-      previewImage.alt = label;
-      previewImage.src = url;
-      previewImage.addEventListener('error', () => {
-        previewImage.remove();
-        const message = document.createElement('div');
-        message.className = 'alert alert-warning m-3';
-        message.textContent = 'This document could not be loaded. The storage file may be missing or unavailable.';
-        modalElement.querySelector('.modal-body').appendChild(message);
-      }, { once: true });
-
-      const previewModal = new bootstrap.Modal(modalElement);
-      previewModal.show();
-      
-      // Clean up on hide
-      modalElement.addEventListener('hidden.bs.modal', function() {
-        this.remove();
-      });
-    };
 
     window.openDecisionModal = function(index){
       selectedIndex = index;
@@ -464,12 +507,16 @@
       }
     });
 
-    // Real-time updates
-    window.bangkagoRealtime.subscribe('bangkeros', null, function() {
-      loadBangkeros();
-    });
-    window.bangkagoRealtime.subscribe('bangkas', null, function() {
-      loadBangkeros();
+    // Real-time updates — an application spans four tables: the bangkero
+    // row (status + doc paths), the boat, each review round and the name/
+    // phone on the account. One debounced reload for all of them.
+    let reloadTimer = null;
+    function reloadSoon() {
+      clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(loadBangkeros, 400);
+    }
+    ['bangkeros', 'bangkas', 'bangkero_verification', 'users'].forEach(function(table) {
+      window.bangkagoRealtime.subscribe(table, null, reloadSoon);
     });
 
     // Initial load — wait for auth guard to complete and session to restore

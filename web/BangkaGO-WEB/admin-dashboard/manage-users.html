@@ -96,6 +96,11 @@
               <option value="suspended">Suspended</option>
             </select>
           </div>
+          <div class="mb-3 d-none" id="statusReasonWrap">
+            <label class="form-label" for="statusReason">Reason</label>
+            <textarea id="statusReason" class="form-control" rows="3" placeholder="Why is this account being suspended?"></textarea>
+            <div class="form-text">Required when suspending.</div>
+          </div>
           <div class="muted-note">
             A suspended account cannot sign in to the mobile app or this portal. Reactivate it here to restore access.
           </div>
@@ -167,6 +172,18 @@
     const newStatus = document.getElementById("newStatus");
     const newRole = document.getElementById("newRole");
     const roleNotes = document.getElementById("roleNotes");
+    const statusReasonWrap = document.getElementById("statusReasonWrap");
+    const statusReason = document.getElementById("statusReason");
+
+    // The reason box only exists for a suspension; reactivating asks nothing.
+    function syncStatusReason() {
+      const suspending = newStatus.value === "suspended";
+      statusReasonWrap.classList.toggle("d-none", !suspending);
+      statusReason.required = suspending;
+      if (!suspending) statusReason.value = "";
+    }
+
+    newStatus.addEventListener("change", syncStatusReason);
 
     function roleBadge(role) {
       const badges = {
@@ -291,6 +308,7 @@
       selectedUid = uid;
       statusUserLabel.textContent = `${u.name} (${u.phone})`;
       newStatus.value = u.isSuspended ? 'suspended' : 'active';
+      syncStatusReason();
       statusModal.show();
     }
 
@@ -310,6 +328,15 @@
       if (!u) return;
 
       const newStatusVal = newStatus.value;
+      const reason = statusReason.value.trim();
+
+      if (newStatusVal === 'suspended') {
+        if (!reason) {
+          alert('Enter a reason for suspending this account.');
+          return;
+        }
+        if (!confirm(`Suspend ${u.name}?\n\nReason: ${reason}\n\nThey will be unable to sign in.`)) return;
+      }
 
       try {
         await window.bangkagoUsers.setSuspended(u.uid, newStatusVal === 'suspended');

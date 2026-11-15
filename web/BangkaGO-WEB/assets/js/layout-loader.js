@@ -108,7 +108,7 @@
     'view-reports': { title: 'View Reports', subtitle: 'Operations, compliance, and system reports' },
     'analyze-demand': { title: 'Analyze Demand', subtitle: 'Demand trends, peak windows, and forecast insights' },
     'ratings': { title: 'Bangkero Ratings', subtitle: 'Effective ratings, penalties, and accept-gate locks' },
-    'audit-log': { title: 'Audit Log', subtitle: 'Every admin change, who made it, and what it was before' },
+    'audit-log': { title: 'Audit Log', subtitle: 'User activities with actor, record, time and before → after values' },
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
     'export-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view the passenger list, and export' },

@@ -83,10 +83,18 @@ export type PickSource = 'camera' | 'gallery';
  * null when the user backs out. Throws on a denied permission so the
  * screen can say why nothing happened.
  */
-export async function pickImage(source: PickSource): Promise<string | null> {
+async function launchPicker(
+  source: PickSource,
+  wantBase64: boolean
+): Promise<ImagePicker.ImagePickerAsset | null> {
   const options: ImagePicker.ImagePickerOptions = {
     mediaTypes: ['images'],
     quality: 0.7,
+    base64: wantBase64,
+    // iOS hands HEIC back inside the file by default; the admin dashboard
+    // can only render JPEG/PNG.
+    preferredAssetRepresentationMode:
+      ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
   };
 
   let result: ImagePicker.ImagePickerResult;
@@ -105,20 +113,62 @@ export async function pickImage(source: PickSource): Promise<string | null> {
   }
 
   if (result.canceled) return null;
-  return result.assets?.[0]?.uri ?? null;
+  return result.assets?.[0] ?? null;
 }
 
-const extFor = (localUri: string) => (/\.png(\?|$)/i.test(localUri) ? 'png' : 'jpg');
-const mimeFor = (ext: string) => (ext === 'png' ? 'image/png' : 'image/jpeg');
+/** Local uri — for screens that show the picked photo before uploading it. */
+export async function pickImage(source: PickSource): Promise<string | null> {
+  return (await launchPicker(source, false))?.uri ?? null;
+}
 
-async function putImage(uid: string, name: string, localUri: string): Promise<string> {
-  const ext = extFor(localUri);
+/**
+ * JPEG bytes straight from the picker, for uploads. Never re-read the
+ * picked file: that read comes back as the 14-byte text "File not found"
+ * on some photos, and iOS files are HEIC while the picker's base64 export
+ * is always JPEG.
+ */
+export async function pickImageBase64(source: PickSource): Promise<string | null> {
+  const base64 = (await launchPicker(source, true))?.base64;
+  if (!base64) {
+    throw new Error('That photo could not be read from this phone. Take a new photo.');
+  }
+  return base64;
+}
+
+const B64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** base64 → bytes (Hermes has no atob). */
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, '');
+  const out = new Uint8Array((clean.length * 3) >> 2);
+  let buffer = 0;
+  let bits = 0;
+  let o = 0;
+  for (let i = 0; i < clean.length; i += 1) {
+    buffer = (buffer << 6) | B64_ALPHABET.indexOf(clean[i]);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out[o] = (buffer >> bits) & 0xff;
+      o += 1;
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  return out.slice(0, o);
+}
+
+async function putImage(uid: string, name: string, base64: string): Promise<string> {
+  const bytes = base64ToBytes(base64);
+  const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  if (!jpeg && !png) {
+    throw new Error('That photo could not be read from this phone. Take a new photo.');
+  }
+  const ext = png ? 'png' : 'jpg';
   const path = `${uid}/${name}.${ext}`;
-  const resp = await fetch(localUri);
-  const buf = await resp.arrayBuffer();
   const { error } = await supabase.storage
     .from('docs')
-    .upload(path, buf, { contentType: mimeFor(ext), upsert: true });
+    .upload(path, bytes, { contentType: png ? 'image/png' : 'image/jpeg', upsert: true });
   if (error) throw error;
   return path;
 }
@@ -127,11 +177,11 @@ async function putImage(uid: string, name: string, localUri: string): Promise<st
 export async function uploadDocImage(
   uid: string,
   key: DocKey,
-  localUri: string
+  base64: string
 ): Promise<void> {
   const field = DOCUMENT_FIELDS.find((d) => d.key === key);
   if (!field) throw new Error('unknown document');
-  const path = await putImage(uid, key, localUri);
+  const path = await putImage(uid, key, base64);
   const { error } = await supabase
     .from('bangkeros')
     .update({ [field.column]: path, updated_at: new Date().toISOString() })
@@ -184,8 +234,8 @@ export function docPublicUrl(path: string | null | undefined): string | null {
 
 const QR_NAME = 'gcash-qr';
 
-export async function saveGcashQr(uid: string, localUri: string): Promise<string> {
-  const path = await putImage(uid, QR_NAME, localUri);
+export async function saveGcashQr(uid: string, base64: string): Promise<string> {
+  const path = await putImage(uid, QR_NAME, base64);
   const { error } = await supabase
     .from('bangkeros')
     .update({ gcash_qr_url: path, updated_at: new Date().toISOString() })

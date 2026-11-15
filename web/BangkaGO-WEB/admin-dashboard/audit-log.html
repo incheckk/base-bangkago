@@ -10,6 +10,90 @@
   <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+
+  <style>
+    /* ---- Audit Log page ---- */
+    .al-toolbar{
+      background:var(--gray-50);border:1px solid var(--gray-200);border-radius:12px;
+      padding:.85rem .9rem;margin-bottom:.85rem;
+    }
+    .al-search-wrap{position:relative}
+    .al-search-wrap>i{
+      position:absolute;left:.7rem;top:50%;transform:translateY(-50%);
+      color:var(--gray-500);font-size:.85rem;pointer-events:none;
+    }
+    .al-search-wrap .form-control{padding-left:2rem}
+
+    .al-scroll{max-height:62vh;overflow:auto;border:1px solid var(--gray-200);border-radius:12px}
+    .al-table{min-width:940px;margin:0}
+    .table.al-table thead th{
+      position:sticky;top:0;z-index:2;background:#fff;
+      box-shadow:inset 0 -1px 0 var(--gray-200);
+      padding-top:.7rem;padding-bottom:.7rem;
+    }
+    .al-table tbody td{padding-top:.7rem;padding-bottom:.7rem}
+    .al-table tbody tr{cursor:pointer;transition:background var(--ease-fast)}
+    .al-table tbody tr:hover{background:#f8fbff}
+    .al-sort{
+      background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--gray-500);
+      display:inline-flex;align-items:center;gap:.32rem;letter-spacing:.02em;cursor:pointer;
+    }
+    .al-sort:hover{color:var(--blue-700)}
+    .al-sort.is-active{color:var(--blue-900)}
+    .al-sort i{font-size:.68rem;opacity:.5}
+    .al-sort.is-active i{opacity:1}
+
+    .al-av{
+      width:30px;height:30px;border-radius:50%;flex-shrink:0;
+      display:inline-flex;align-items:center;justify-content:center;
+      font-family:var(--font-display);font-size:.72rem;font-weight:700;letter-spacing:.02em;
+      background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200);
+    }
+    .al-av.al-av-lg{width:40px;height:40px;font-size:.85rem}
+    .al-av.al-role-admin{background:#e0f2fe;color:#0e4d92;border-color:#bae6fd}
+    .al-av.al-role-coastguard{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+    .al-av.al-role-bangkero{background:#fef3c7;color:#92400e;border-color:#fde68a}
+    .al-av.al-role-passenger{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+
+    .al-strong{font-weight:600;color:var(--blue-900);line-height:1.2}
+    .al-mono{
+      font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+      font-size:.76rem;color:var(--gray-500);
+    }
+    .al-chip{
+      background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200);
+      font-weight:600;font-size:.68rem;letter-spacing:.02em;border-radius:999px;
+    }
+    .al-badge{
+      display:inline-flex;align-items:center;gap:.32rem;
+      padding:.32rem .6rem;border-radius:999px;
+      font-size:.72rem;font-weight:600;letter-spacing:.02em;line-height:1;
+    }
+    .al-badge i{font-size:.72rem}
+    .al-badge-created{background:#ecfdf5;color:#166534;border:1px solid #bbf7d0}
+    .al-badge-updated{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+    .al-badge-deleted{background:#fef2f2;color:#b42318;border:1px solid #fecaca}
+    .al-badge-other{background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200)}
+
+    .al-foot{
+      display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;
+      padding-top:.75rem;
+    }
+    .al-pager{display:inline-flex;align-items:center;gap:.4rem}
+    .al-empty{color:var(--gray-500)}
+    .al-empty>i{font-size:1.6rem;color:var(--gray-200);display:block;margin-bottom:.4rem}
+
+    .al-detail-head{
+      display:flex;align-items:center;gap:.75rem;
+      padding-bottom:.85rem;margin-bottom:.85rem;border-bottom:1px solid var(--gray-200);
+    }
+    .al-detail-title{font-family:var(--font-display);font-weight:600;color:var(--blue-900);font-size:1rem}
+    .al-k{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-500);margin-bottom:.15rem}
+    .al-diff .al-before{color:#b42318;background:#fef2f2}
+    .al-diff .al-after{color:#166534;background:#f0fdf4;font-weight:600}
+    .al-diff .al-same{background:#fff}
+    .al-diff code{white-space:pre-wrap;word-break:break-word;font-size:.8rem}
+  </style>
 </head>
 <body data-page="audit-log">
   <div class="cg-shell">
@@ -19,62 +103,145 @@
       <div id="topbarMount"></div>
 
       <section class="cg-content container-fluid">
-        <div class="cg-card p-3">
+
+        <div class="cg-card">
           <div class="panel-head">
-            <h6 class="mb-0">Audit Log</h6>
-            <span class="muted-note">Every admin change with actor, timestamp and before → after values (admin view only)</span>
-          </div>
-
-          <div class="row g-2 mb-3 align-items-end">
-            <div class="col-md-3">
-              <input id="alSearch" class="form-control" placeholder="Search actor, table, or record ID">
+            <div>
+              <h6 class="mb-1">Activity</h6>
+              <span class="muted-note">
+                Successful changes made by signed-in users in the app or web console. Each entry includes
+                who acted, what they changed, and the previous and new values. Background telemetry and
+                direct SQL-editor changes are not user-attributed activities.
+              </span>
             </div>
-            <div class="col-md-2">
-              <label class="form-label small mb-1" for="alRole">Actor role</label>
-              <select id="alRole" class="form-select">
-                <option value="">All roles</option>
-                <option value="admin">Admin</option>
-                <option value="coastguard">Coast Guard</option>
-                <option value="bangkero">Bangkero</option>
-                <option value="passenger">Passenger</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label small mb-1" for="alTable">Table</label>
-              <select id="alTable" class="form-select">
-                <option value="">All tables</option>
-                <option value="users">users</option>
-                <option value="bangkeros">bangkeros</option>
-                <option value="bangkero_verification">bangkero_verification</option>
-                <option value="dev_flags">dev_flags</option>
-                <option value="downpayments">downpayments</option>
-                <option value="bookings">bookings</option>
-                <option value="boat_rentals">boat_rentals</option>
-                <option value="ports">ports</option>
-                <option value="routes">routes</option>
-                <option value="safety_alerts">safety_alerts</option>
-                <option value="bangkas">bangkas</option>
-              </select>
-            </div>
-            <div class="col-md-2 d-grid">
-              <button id="alReset" class="btn btn-outline-secondary">Reset</button>
+            <div class="d-flex gap-2">
+              <button id="alExport" class="btn btn-sm btn-primary" title="Download the filtered activities as a PDF">
+                <i class="bi bi-file-earmark-pdf"></i> Export PDF
+              </button>
+              <button id="alRefresh" class="btn btn-sm btn-outline-secondary" title="Reload the newest entries">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+              </button>
             </div>
           </div>
 
-          <div class="table-responsive">
-            <table class="table table-theme align-middle mb-0">
+          <!-- FILTERS -->
+          <div class="al-toolbar">
+            <div class="row g-2 align-items-end">
+              <div class="col-12 col-lg-4">
+                <label class="form-label small mb-1" for="alSearch">Search</label>
+                <div class="al-search-wrap">
+                  <i class="bi bi-search"></i>
+                  <input id="alSearch" class="form-control" placeholder="Activity, person, record, field or value">
+                </div>
+              </div>
+              <div class="col-6 col-md-3 col-lg-2">
+                <label class="form-label small mb-1" for="alRole">Role</label>
+                <select id="alRole" class="form-select">
+                  <option value="">All roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="coastguard">Coast Guard</option>
+                  <option value="bangkero">Bangkero</option>
+                  <option value="passenger">Passenger</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3 col-lg-2">
+                <label class="form-label small mb-1" for="alTable">Record type</label>
+                <select id="alTable" class="form-select">
+                  <option value="">All tables</option>
+                  <option value="users">User accounts</option>
+                  <option value="bangkeros">Bangkero profiles</option>
+                  <option value="bangkero_verification">Bangkero verification</option>
+                  <option value="dev_flags">Developer settings</option>
+                  <option value="downpayments">Downpayments</option>
+                  <option value="bookings">Bookings and trips</option>
+                  <option value="boat_rentals">Boat charters</option>
+                  <option value="ports">Ports</option>
+                  <option value="routes">Routes and fares</option>
+                  <option value="safety_alerts">Safety alerts</option>
+                  <option value="bangkas">Boats</option>
+                  <option value="island_packages">Island-hop packages</option>
+                  <option value="passenger_details">Passenger details</option>
+                  <option value="payments">Payments</option>
+                  <option value="ratings">Trip ratings</option>
+                  <option value="parcels">Parcel deliveries</option>
+                  <option value="parcel_items">Parcel items</option>
+                  <option value="route_stops">Route stops</option>
+                  <option value="trip_manifest">Sailing manifests</option>
+                  <option value="manifest_passengers">Manifest passengers</option>
+                  <option value="manifest_parcels">Manifest parcels</option>
+                  <option value="wallet_transactions">Wallet transactions</option>
+                  <option value="wallets">Wallets</option>
+                  <option value="notifications">Notification read state</option>
+                  <option value="sailing_advisory">Sailing advisory</option>
+                  <option value="parcel_rates">Parcel delivery rates</option>
+                  <option value="app_settings">App settings</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3 col-lg-2">
+                <label class="form-label small mb-1" for="alAction">Action</label>
+                <select id="alAction" class="form-select">
+                  <option value="">All actions</option>
+                  <option value="INSERT">Created</option>
+                  <option value="UPDATE">Updated</option>
+                  <option value="DELETE">Deleted</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-3 col-lg-2">
+                <label class="form-label small mb-1" for="alRange">Period</label>
+                <select id="alRange" class="form-select">
+                  <option value="">All time</option>
+                  <option value="today">Today (PHT)</option>
+                  <option value="7">Last 7 days</option>
+                  <option value="30">Last 30 days</option>
+                </select>
+              </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center gap-2 mt-2 flex-wrap">
+              <span id="alFilterNote" class="muted-note"></span>
+              <button id="alReset" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-x-circle"></i> Reset filters
+              </button>
+            </div>
+          </div>
+
+          <div class="table-responsive al-scroll">
+            <table class="table table-theme align-middle al-table">
               <thead>
                 <tr>
-                  <th style="min-width:150px;">When</th>
-                  <th>Who</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>Changes</th>
-                  <th style="width:70px;"></th>
+                  <th style="min-width:168px;">
+                    <button class="al-sort" data-sort="createdAt">When (PHT) <i class="bi bi-arrow-down-up"></i></button>
+                  </th>
+                  <th style="min-width:190px;">
+                    <button class="al-sort" data-sort="actorName">Actor <i class="bi bi-arrow-down-up"></i></button>
+                  </th>
+                  <th style="min-width:118px;">
+                    <button class="al-sort" data-sort="action">Action <i class="bi bi-arrow-down-up"></i></button>
+                  </th>
+                  <th style="min-width:170px;">
+                    <button class="al-sort" data-sort="targetLabel">Record <i class="bi bi-arrow-down-up"></i></button>
+                  </th>
+                  <th style="min-width:300px;">Changes</th>
+                  <th style="width:52px;"></th>
                 </tr>
               </thead>
               <tbody id="alBody"></tbody>
             </table>
+          </div>
+
+          <div class="al-foot">
+            <span id="alCount" class="muted-note"></span>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button id="alMore" class="btn btn-sm btn-outline-secondary d-none">Load older entries</button>
+              <div class="al-pager">
+                <button id="alPrev" class="btn btn-sm btn-outline-secondary" aria-label="Previous page">
+                  <i class="bi bi-chevron-left"></i>
+                </button>
+                <span id="alPage" class="muted-note">Page 1 / 1</span>
+                <button id="alNext" class="btn btn-sm btn-outline-secondary" aria-label="Next page">
+                  <i class="bi bi-chevron-right"></i>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div id="loadingState" class="text-center py-4 d-none">
@@ -82,21 +249,24 @@
             <p class="mt-2 text-muted">Loading audit log...</p>
           </div>
 
-          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+          <div id="errorState" class="alert alert-danger d-none mb-0 mt-3" role="alert"></div>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- AUDIT DETAIL MODAL -->
+  <!-- ACTIVITY DETAIL MODAL -->
   <div class="modal fade" id="alModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Audit Entry</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <h5 class="modal-title">Activity detail</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" id="alDetail"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -109,18 +279,28 @@
   <script src="../../assets/js/services/audit.js"></script>
   <script src="../../assets/js/services/realtime.js"></script>
 
-  <style>
-    .al-json{font-size:.78rem;white-space:pre-wrap;word-break:break-word;background:var(--gray-50);
-      border:1px solid var(--gray-200);border-radius:8px;padding:.6rem .7rem;max-height:260px;overflow:auto;}
-  </style>
-
   <script>
-    let entries = [];
+    let entries = [];        // everything loaded from Supabase
+    let filtered = [];       // after search + filters + sort
+    let limit = window.bangkagoAudit.PAGE;
+    let hasMore = false;
+    let sortKey = 'createdAt';
+    let sortDir = 'desc';
+    let page = 1;
+    const PAGE_ROWS = 50;
 
     const alBody = document.getElementById('alBody');
     const alSearch = document.getElementById('alSearch');
     const alRole = document.getElementById('alRole');
     const alTable = document.getElementById('alTable');
+    const alAction = document.getElementById('alAction');
+    const alRange = document.getElementById('alRange');
+    const alFilterNote = document.getElementById('alFilterNote');
+    const alCount = document.getElementById('alCount');
+    const alPage = document.getElementById('alPage');
+    const alPrev = document.getElementById('alPrev');
+    const alNext = document.getElementById('alNext');
+    const alMore = document.getElementById('alMore');
     const loadingState = document.getElementById('loadingState');
     const errorState = document.getElementById('errorState');
 
@@ -132,27 +312,45 @@
       ));
     }
 
+    // The DB stores UTC; every admin screen shows Philippine time.
     function when(iso){
       const d = new Date(iso);
-      return isNaN(d) ? iso : d.toLocaleString('en-PH', {
+      return isNaN(d) ? String(iso ?? '—') : d.toLocaleString('en-PH', {
+        timeZone:'Asia/Manila',
         month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'
       });
     }
 
-    function actionBadge(action){
-      if (action === 'INSERT') return 'text-bg-success';
-      if (action === 'UPDATE') return 'text-bg-warning';
-      if (action === 'DELETE') return 'text-bg-danger';
-      return 'text-bg-secondary';
+    function manilaDay(iso){
+      const d = new Date(iso);
+      return isNaN(d) ? '' : d.toLocaleDateString('en-CA', { timeZone:'Asia/Manila' });
     }
 
-    function roleBadge(role){
-      return {
-        'admin': 'text-bg-dark',
-        'coastguard': 'text-bg-primary',
-        'bangkero': 'text-bg-warning',
-        'passenger': 'text-bg-success'
-      }[role] || 'text-bg-secondary';
+    function roleLabel(role){
+      return { admin:'Admin', coastguard:'Coast Guard', bangkero:'Bangkero', passenger:'Passenger' }[role] || 'Unknown';
+    }
+
+    function actionLabel(action){
+      return action === 'INSERT' ? 'Created' : action === 'UPDATE' ? 'Updated'
+        : action === 'DELETE' ? 'Deleted' : String(action || 'Unknown');
+    }
+
+    function activityLabel(e){
+      return e.eventName || actionLabel(e.action);
+    }
+
+    function actionBadge(e){
+      const kind = actionLabel(e.action).toLowerCase();
+      const cls = ['created','updated','deleted'].includes(kind) ? kind : 'other';
+      const icon = e.action === 'INSERT' ? 'bi-plus-lg' : e.action === 'UPDATE' ? 'bi-pencil-fill'
+        : e.action === 'DELETE' ? 'bi-trash3' : 'bi-dot';
+      return `<span class="al-badge al-badge-${cls}"><i class="bi ${icon}"></i> ${esc(activityLabel(e))}</span>`;
+    }
+
+    function initials(name){
+      const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return '?';
+      return (parts[0][0] + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
     }
 
     function shortId(id){
@@ -161,27 +359,77 @@
       return s.length > 12 ? s.slice(0, 8) + '…' : s;
     }
 
-    // UPDATE rows carry only the changed columns (old/new pairs).
+    function fmtVal(v){
+      if (v === null || v === undefined) return '—';
+      if (typeof v === 'object') return JSON.stringify(v);
+      return String(v);
+    }
+
+    function fieldLabel(key){
+      const labels = {
+        trip_stat:'Trip status', status:'Status', total_price:'Total price', base_fare:'Base fare',
+        is_available:'Availability', is_suspended:'Account access', verification_stat:'Verification status',
+        is_resolved:'Alert status', loaded_at:'Loaded at', released_at:'Released at',
+        rating_penalty:'Rating penalty', rating_recovery_stars:'Rating recovery stars',
+        standard_price:'Charter price', rental_listed:'Charter listing', num_of_passenger:'Passengers',
+        scheduled_date:'Sailing date', scheduled_time:'Sailing time', bangka_name:'Boat name',
+        port_name:'Port name', event_name:'Event name', first_name:'First name', last_name:'Last name',
+        phone_number:'Phone number', address:'Address', age:'Age', payment_status:'Payment status',
+        user_role:'User role', is_active:'Active', rejected_by:'Declined by', depart_time:'Departure time',
+        arrival_time:'Arrival time', completed_at:'Completed at', cancelled_at:'Cancelled at',
+        payout_method:'Payout method', payout_ref:'Payout reference', released_to:'Paid to',
+        is_read:'Read', value:'Setting value', reason:'Reason', source:'Source',
+        base_fee_accompanied:'Accompanied base fee', base_fee_piggyback:'Piggyback base fee',
+        base_fee_batched:'Batched base fee', solo_surcharge:'Solo surcharge',
+        included_kg:'Included weight', excess_rate_per_kg:'Excess rate per kg',
+        min_kg:'Minimum weight', max_kg:'Maximum weight'
+      };
+      return labels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function clip(s, n){
+      s = String(s);
+      return s.length > n ? s.slice(0, n) + '…' : s;
+    }
+
+    // The audit trigger omits generated fields and redacts sensitive values.
+    function changedKeys(e){
+      const o = e.oldData || {};
+      const n = e.newData || {};
+      return [...new Set(Object.keys(n).concat(Object.keys(o)))].sort();
+    }
+
     function changeSummary(e){
-      if (e.action === 'INSERT') return '<span class="text-muted">created</span>';
-      if (e.action === 'DELETE') return '<span class="text-muted">row deleted</span>';
       const oldV = e.oldData || {}, newV = e.newData || {};
-      const keys = Object.keys(newV);
+      const keys = changedKeys(e);
       if (!keys.length) return '<span class="text-muted">no field change</span>';
-      const shown = keys.slice(0, 3).map(k => {
-        const a = oldV[k], b = newV[k];
-        const fmt = v => v === null || v === undefined ? 'null'
-          : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-        const short = s => s.length > 24 ? s.slice(0, 24) + '…' : s;
-        return `<div><code>${esc(k)}</code>: <span class="text-decoration-line-through text-muted">${esc(short(fmt(a)))}</span> → <strong>${esc(short(fmt(b)))}</strong></div>`;
-      }).join('');
+      const shown = keys.slice(0, 3).map(k =>
+        `<div><code>${esc(fieldLabel(k))}</code>: <span class="al-before">${esc(clip(e.action === 'INSERT' ? '—' : fmtVal(oldV[k]), 22))}</span> → <strong class="al-after">${esc(clip(e.action === 'DELETE' ? '—' : fmtVal(newV[k]), 22))}</strong></div>`
+      ).join('');
       const more = keys.length > 3 ? `<div class="text-muted small">+${keys.length - 3} more…</div>` : '';
       return shown + more;
     }
 
+    function changeList(e){
+      const o = e.oldData || {};
+      const n = e.newData || {};
+      const keys = changedKeys(e);
+      if (!keys.length) return '';
+      return keys.map(k => `${fieldLabel(k)}: ${e.action === 'INSERT' ? '—' : fmtVal(o[k])} → ${e.action === 'DELETE' ? '—' : fmtVal(n[k])}`).join(' | ');
+    }
+
+    function haystack(e){
+      const parts = [e.actorName, e.actorRole, e.eventName, e.targetLabel, e.action, e.targetTable, e.targetId];
+      [e.oldData, e.newData].forEach(v => {
+        if (!v || typeof v !== 'object') return;
+        Object.keys(v).forEach(k => { parts.push(k, fmtVal(v[k])); });
+      });
+      return parts.join(' ').toLowerCase();
+    }
+
     function showLoading(show) {
       loadingState.classList.toggle('d-none', !show);
-      errorState.classList.add('d-none');
+      if (show) errorState.classList.add('d-none');
     }
 
     function showError(msg) {
@@ -190,100 +438,361 @@
       errorState.classList.remove('d-none');
     }
 
-    function runFilter(){
+    function sortRows(rows){
+      const dir = sortDir === 'asc' ? 1 : -1;
+      return rows.slice().sort((a, b) => {
+        let x = a[sortKey], y = b[sortKey];
+        if (sortKey === 'createdAt') {
+          x = new Date(x).getTime() || 0;
+          y = new Date(y).getTime() || 0;
+        } else {
+          x = String(x ?? '').toLowerCase();
+          y = String(y ?? '').toLowerCase();
+        }
+        if (x < y) return -dir;
+        if (x > y) return dir;
+        return String(b.id).localeCompare(String(a.id));
+      });
+    }
+
+    function updateSortIcons(){
+      document.querySelectorAll('.al-sort').forEach(btn => {
+        const active = btn.dataset.sort === sortKey;
+        btn.classList.toggle('is-active', active);
+        const icon = btn.querySelector('i');
+        if (icon) {
+          icon.className = 'bi ' + (active
+            ? (sortDir === 'asc' ? 'bi-arrow-up' : 'bi-arrow-down')
+            : 'bi-arrow-down-up');
+        }
+      });
+    }
+
+    function applyFilters(){
       const q = alSearch.value.toLowerCase().trim();
       const role = alRole.value;
       const table = alTable.value;
+      const action = alAction.value;
+      const range = alRange.value;
+      const today = manilaDay(new Date().toISOString());
+      const cutoff = range && range !== 'today' ? Date.now() - Number(range) * 86400000 : null;
 
-      const rows = entries.filter(e => {
+      filtered = sortRows(entries.filter(e => {
         if (role && e.actorRole !== role) return false;
         if (table && e.targetTable !== table) return false;
-        if (q) {
-          const hay = ((e.actorName || '') + ' ' + e.targetTable + ' ' + (e.targetId || '')).toLowerCase();
-          if (!hay.includes(q)) return false;
-        }
+        if (action && e.action !== action) return false;
+        if (range === 'today' && e.day !== today) return false;
+        if (cutoff !== null && (new Date(e.createdAt).getTime() || 0) < cutoff) return false;
+        if (q && !haystack(e).includes(q)) return false;
         return true;
-      });
+      }));
+
+      const active = [q, role, table, action, range].filter(Boolean).length;
+      alFilterNote.textContent = active
+        ? `${active} filter${active === 1 ? '' : 's'} active`
+        : 'Showing all loaded activities';
+
+      renderPage();
+    }
+
+    function renderPage(){
+      const total = filtered.length;
+      const pageCount = Math.max(1, Math.ceil(total / PAGE_ROWS));
+      page = Math.min(Math.max(1, page), pageCount);
+      const start = (page - 1) * PAGE_ROWS;
+      const rows = filtered.slice(start, start + PAGE_ROWS);
+
       render(rows);
+
+      alCount.textContent = total === 0
+        ? 'No matching entries'
+        : `Showing ${start + 1}–${start + rows.length} of ${total} matching ${total === 1 ? 'entry' : 'entries'}`
+          + (hasMore ? ' · older entries not loaded' : '');
+      alPage.textContent = `Page ${page} / ${pageCount}`;
+      alPrev.disabled = page <= 1;
+      alNext.disabled = page >= pageCount;
+      alMore.classList.toggle('d-none', !(hasMore && page >= pageCount));
+      updateSortIcons();
     }
 
     function render(rows){
       if (!rows.length) {
-        alBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No audit entries match.</td></tr>';
+        alBody.innerHTML = `<tr><td colspan="6" class="py-5 text-center">
+          <div class="al-empty">
+            <i class="bi bi-shield-exclamation"></i>
+            <div class="fw-semibold text-dark mb-1" style="font-size:.9rem;">
+              ${entries.length ? 'No entries match these filters' : 'No audit entries yet'}
+            </div>
+            <div class="muted-note">
+              ${entries.length
+                ? 'Try clearing the search or widening the period.'
+                : 'Signed-in user changes appear here as they happen.'}
+            </div>
+          </div>
+        </td></tr>`;
         return;
       }
-      alBody.innerHTML = rows.map(e => {
-        const i = entries.indexOf(e);
-        return `
-          <tr>
-            <td>${when(e.createdAt)}</td>
-            <td>${esc(e.actorName)}<br><span class="badge ${roleBadge(e.actorRole)}">${esc(e.actorRole)}</span></td>
-            <td><span class="badge ${actionBadge(e.action)}">${e.action}</span></td>
-            <td><code>${esc(e.targetTable)}</code><br><small class="text-muted" title="${esc(e.targetId || '')}">${esc(shortId(e.targetId))}</small></td>
-            <td class="small">${changeSummary(e)}</td>
-            <td>
-              <button class="btn btn-sm btn-outline-primary" onclick="openEntry(${i})">
-                <i class="bi bi-zoom-in"></i>
-              </button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      alBody.innerHTML = rows.map(e => `
+        <tr data-entry="${esc(e.id)}">
+          <td class="text-nowrap">${when(e.createdAt)}</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="al-av al-role-${esc(e.actorRole)}">${esc(initials(e.actorName))}</span>
+              <div class="min-w-0">
+                <div class="al-strong">${esc(e.actorName)}</div>
+                <span class="badge al-chip mt-1">${esc(roleLabel(e.actorRole))}</span>
+              </div>
+            </div>
+          </td>
+          <td>${actionBadge(e)}</td>
+          <td>
+            <div class="al-strong">${esc(e.targetLabel)}</div>
+            <code class="al-mono" title="${esc(e.targetId || '')}">${esc(shortId(e.targetId))}</code>
+          </td>
+          <td class="small">${changeSummary(e)}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-link p-0 al-open" data-entry="${esc(e.id)}"
+                    title="View activity" aria-label="View activity">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
     }
 
-    window.openEntry = function(index){
-      const e = entries[index];
+    function diffTable(e){
+      const o = e.oldData || {};
+      const n = e.newData || {};
+      const keys = changedKeys(e);
+      if (!keys.length) return '<p class="text-muted mb-0">No field values were recorded for this entry.</p>';
+
+      const cell = (v, cls) => {
+        const s = fmtVal(v);
+        return `<td class="${cls}"><code title="${esc(s)}">${esc(clip(s, 160))}</code></td>`;
+      };
+      const head = '<tr><th style="width:26%;">Changed field</th><th>Previous value</th><th>New value</th></tr>';
+      const body = keys.map(k => {
+        const before = e.action === 'INSERT' ? '—' : fmtVal(o[k]);
+        const after = e.action === 'DELETE' ? '—' : fmtVal(n[k]);
+        return `<tr><td><code>${esc(fieldLabel(k))}</code></td>${cell(before, 'al-before')}${cell(after, 'al-after')}</tr>`;
+      }).join('');
+
+      return `<div class="table-responsive al-diff">
+        <table class="table table-sm table-theme align-middle mb-0">
+          <thead>${head}</thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+    }
+
+    function openEntry(id){
+      const e = entries.find(x => x.id === id);
       if (!e) return;
-      const json = v => v ? esc(JSON.stringify(v, null, 2)) : '<span class="text-muted">—</span>';
       document.getElementById('alDetail').innerHTML = `
+        <div class="al-detail-head">
+          <span class="al-av al-av-lg al-role-${esc(e.actorRole)}">${esc(initials(e.actorName))}</span>
+          <div class="min-w-0">
+            <div class="al-detail-title">${esc(e.actorName)}</div>
+            <div class="muted-note">
+              <span class="badge al-chip">${esc(roleLabel(e.actorRole))}</span>
+              ${esc(activityLabel(e))} · ${when(e.createdAt)} PHT
+            </div>
+          </div>
+          <div class="ms-auto">${actionBadge(e)}</div>
+        </div>
+
         <div class="row g-2 mb-3">
-          <div class="col-md-6"><div class="info-box"><strong>When:</strong> ${when(e.createdAt)}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Action:</strong> <span class="badge ${actionBadge(e.action)}">${e.action}</span></div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Actor:</strong> ${esc(e.actorName)} (${esc(e.actorRole)})</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Target:</strong> <code>${esc(e.targetTable)}</code> · ${esc(e.targetId || '—')}</div></div>
+          <div class="col-12 col-md-6"><div class="info-box">
+            <div class="al-k">Record</div><strong>${esc(e.targetLabel)}</strong>
+          </div></div>
+          <div class="col-12 col-md-6"><div class="info-box">
+            <div class="al-k">When (Philippine time)</div>${when(e.createdAt)}
+          </div></div>
         </div>
-        <div class="row g-2">
-          <div class="col-md-6">
-            <h6>Before</h6>
-            <div class="al-json">${json(e.oldData)}</div>
-          </div>
-          <div class="col-md-6">
-            <h6>After</h6>
-            <div class="al-json">${json(e.newData)}</div>
-          </div>
-        </div>
+
+        <h6 class="mb-2">What changed</h6>
+        ${diffTable(e)}
       `;
       alModal.show();
-    };
+    }
 
-    alSearch.addEventListener('input', runFilter);
-    alRole.addEventListener('change', runFilter);
-    alTable.addEventListener('change', runFilter);
+    function loadPdfScript(src){
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load the PDF library.'));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensurePdfLibrary(){
+      if (!window.jspdf?.jsPDF) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        throw new Error('PDF library did not initialize.');
+      }
+    }
+
+    async function exportPdf(button){
+      if (!filtered.length) {
+        alert('There are no activities to export for the current filters.');
+        return;
+      }
+      const originalLabel = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating PDF...';
+      try {
+        await ensurePdfLibrary();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const margin = 12;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const generatedAt = when(new Date().toISOString());
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(23, 42, 66);
+        doc.text('BangkaGo User Activity Log', margin, 15);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(90, 100, 110);
+        doc.text('Generated ' + generatedAt + ' (PHT)', margin, 21);
+        doc.text(
+          filtered.length + ' matching activities' + (hasMore ? ' · load older entries for complete history' : ''),
+          pageWidth - margin,
+          21,
+          { align: 'right' }
+        );
+
+        const body = filtered.map(e => [
+          when(e.createdAt),
+          e.actorName,
+          roleLabel(e.actorRole),
+          activityLabel(e),
+          e.targetLabel,
+          changeList(e).replace(/→/g, '->').replace(/—/g, '-')
+        ]);
+        doc.autoTable({
+          startY: 27,
+          head: [['When (PHT)', 'User', 'Role', 'Activity', 'Record', 'Previous -> new values']],
+          body,
+          styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin, bottom: 13 },
+          columnStyles: {
+            0: { cellWidth: 34 },
+            1: { cellWidth: 32 },
+            2: { cellWidth: 22 },
+            3: { cellWidth: 42 },
+            4: { cellWidth: 38 }
+          }
+        });
+
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+          doc.setPage(pageNumber);
+          doc.setFontSize(8);
+          doc.setTextColor(120, 120, 120);
+          doc.text(
+            'BangkaGo activity log | Page ' + pageNumber + ' of ' + pageCount,
+            margin,
+            doc.internal.pageSize.getHeight() - 6
+          );
+        }
+
+        const stamp = new Date().toLocaleString('en-CA', { timeZone: 'Asia/Manila', hour12: false })
+          .replace(/[^\d]/g, '').slice(0, 12);
+        doc.save('BangkaGo-activity-log-' + stamp + '.pdf');
+      } catch (error) {
+        console.error(error);
+        alert('Could not generate the activity PDF: ' + error.message);
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalLabel;
+      }
+    }
+
+    // ---- events
+    alBody.addEventListener('click', ev => {
+      const hit = ev.target.closest('[data-entry]');
+      if (hit) openEntry(hit.dataset.entry);
+    });
+
+    document.querySelectorAll('.al-sort').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.sort;
+        if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+        else { sortKey = key; sortDir = key === 'createdAt' ? 'desc' : 'asc'; }
+        page = 1;
+        applyFilters();
+      });
+    });
+
+    [alRole, alTable, alAction, alRange].forEach(sel => {
+      sel.addEventListener('change', () => { page = 1; applyFilters(); });
+    });
+    alSearch.addEventListener('input', () => { page = 1; applyFilters(); });
+
     document.getElementById('alReset').addEventListener('click', () => {
       alSearch.value = '';
       alRole.value = '';
       alTable.value = '';
-      runFilter();
+      alAction.value = '';
+      alRange.value = '';
+      sortKey = 'createdAt';
+      sortDir = 'desc';
+      page = 1;
+      applyFilters();
     });
 
-    async function loadAudit() {
-      showLoading(true);
+    document.getElementById('alRefresh').addEventListener('click', () => loadAudit());
+    document.getElementById('alExport').addEventListener('click', function() {
+      void exportPdf(this);
+    });
+
+    alPrev.addEventListener('click', () => { page -= 1; renderPage(); });
+    alNext.addEventListener('click', () => { page += 1; renderPage(); });
+
+    alMore.addEventListener('click', async () => {
+      const nextPage = Math.ceil(filtered.length / PAGE_ROWS) + 1;
+      limit += window.bangkagoAudit.PAGE;
+      await loadAudit();
+      page = nextPage;
+      renderPage();
+    });
+
+    // A full page back means there may be older entries beyond the window.
+    async function loadAudit(opts) {
+      const silent = !!(opts && opts.silent);
+      if (!silent) showLoading(true);
       try {
-        entries = await window.bangkagoAudit.listAudit({ limit: 300 });
+        const rows = await window.bangkagoAudit.listAudit(limit);
+        entries = rows.map(e => Object.assign(e, { day: manilaDay(e.createdAt) }));
+        hasMore = rows.length === limit;
         showLoading(false);
-        runFilter();
+        applyFilters();
       } catch(e) {
         console.error(e);
-        const msg = /audit_log/i.test(e.message || '') && /does not exist|schema cache/i.test(e.message || '')
-          ? 'Audit table not found — run migrations/038_admin_audit_and_rating_adjust.sql in the SQL editor.'
-          : 'Failed to load audit log: ' + e.message;
+        const detail = e && e.message ? e.message : String(e);
+        const msg = /actor_name|event_name|target_label/i.test(detail)
+          ? 'Semantic activity tracking is not installed — run migrations/080_semantic_user_activity_audit.sql after 079 in the SQL editor.'
+          : /audit_log/i.test(detail) && /does not exist|schema cache/i.test(detail)
+            ? 'Audit table not found — run migrations/038_admin_audit_and_rating_adjust.sql first, then migration 080.'
+            : 'Failed to load audit log: ' + detail;
         showError(msg);
       }
     }
 
-    // Live updates — new admin actions appear without a refresh.
+    // Live updates — new user activities appear without a refresh, and the
+    // spinner stays out of the way when the refresh came from realtime.
     window.bangkagoRealtime.subscribe('audit_log', null, function() {
-      loadAudit();
+      loadAudit({ silent: true });
     });
 
     // Initial load — wait for auth guard to complete and session to restore

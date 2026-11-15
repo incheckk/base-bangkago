@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAllVesselTracking } from '@/hooks/useVesselTracking';
 import { usePorts } from '@/hooks/useSupabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -31,15 +32,15 @@ export default function FleetOverviewScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>ACTIVE VESSELS</Text>
           {tracking.loading ? (
-            <View style={styles.stateBox}>
-              <Text style={styles.loadingText}>Loading vessels…</Text>
-            </View>
+            <LoadingState label="Loading vessels…" />
+          ) : tracking.error ? (
+            <ErrorState message={tracking.error} />
           ) : tracking.data.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyIcon}>🚤</Text>
-              <Text style={styles.emptyTitle}>No vessels tracked</Text>
-              <Text style={styles.emptyText}>No active vessel data available.</Text>
-            </View>
+            <EmptyState
+              icon="boat"
+              title="No vessels tracked"
+              message="No boat is reporting its position right now."
+            />
           ) : (
             <View style={styles.list}>
               {tracking.data.map((v) => (

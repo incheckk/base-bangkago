@@ -27,7 +27,7 @@ import { colors, elevation, numeric, radii, spacing, touchTarget, typography } f
 const MANAGE: { key: string; icon: IconName; label: string; route: string; group?: string }[] = [
   { key: 'operators', icon: 'people', label: 'Operators', route: '/(admin)/operators', group: 'OPERATIONS' },
   { key: 'users', icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-  { key: 'trips', icon: 'bookings', label: 'Trips', route: '/(admin)/active-trips' },
+  { key: 'trips', icon: 'bookings', label: 'Trips', route: '/(admin)/bookings' },
 
   // The drawer uses `anchor` for this same destination; one place, one glyph.
   { key: 'fleet', icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', group: 'FLEET' },
@@ -39,7 +39,6 @@ const MANAGE: { key: string; icon: IconName; label: string; route: string; group
   { key: 'parcel-rates', icon: 'parcel', label: 'Parcel Rates', route: '/(admin)/manage-parcel-rates' },
 
   { key: 'safety', icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', group: 'SYSTEM' },
-  { key: 'alerts', icon: 'alert', label: 'System Alerts', route: '/(admin)/alerts' },
   { key: 'dev', icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options' },
 ];
 
@@ -72,7 +71,7 @@ export default function AdminHome() {
   const STATS: { label: string; value: number; route: string; flag?: string }[] = s
     ? [
         { label: 'Bangkeros', value: s.activeBangkeros, route: '/(admin)/operators' },
-        { label: 'Trips today', value: s.tripsToday, route: '/(admin)/active-trips' },
+        { label: 'Trips today', value: s.tripsToday, route: '/(admin)/bookings' },
         {
           label: 'Pending', value: s.pendingApprovals, route: '/(admin)/operators',
           flag: s.pendingApprovals > 0 ? colors.warning : undefined,

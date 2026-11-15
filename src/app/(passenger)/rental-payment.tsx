@@ -65,6 +65,9 @@ export default function RentalPaymentScreen() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set once createRental succeeds. A retry must reuse it, never post a
+  // second charter request.
+  const [rentalId, setRentalId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -114,42 +117,53 @@ export default function RentalPaymentScreen() {
       // that documents its downpayment (same order as the package flow).
       const proofPath = await uploadDownpaymentProof(proofUri);
 
-      const rental = await createRental({
-        userId: profile.uid,
-        bangkaId: params.bangkaId,
-        eventName: params.eventName || undefined,
-        rentalDate: date,
-      });
+      // On a retry the rental already exists — never create a second one.
+      let id = rentalId;
+      if (!id) {
+        const rental = await createRental({
+          userId: profile.uid,
+          bangkaId: params.bangkaId,
+          eventName: params.eventName || undefined,
+          rentalDate: date,
+        });
+        const newId = rental.rentalId;
+        id = newId;
+        setRentalId(newId);
 
-      // Companions ride under this charter (026 boat_rental_id). A failed
-      // insert must never block the request — the rental already exists.
-      await Promise.all(
-        companions.map((c) =>
-          createPassengerDetail({
-            firstName: c.firstName,
-            lastName: c.lastName,
-            age: c.age,
-            sex: c.sex,
-            contactNumber: c.contact,
-            address: c.address,
-            passengerType: 'regular',
-            boatRentalId: rental.rentalId,
-          }).catch(() => null),
-        ),
-      );
+        // Companions ride under this charter (026 boat_rental_id). A failed
+        // insert must never block the request — the rental already exists.
+        await Promise.all(
+          companions.map((c) =>
+            createPassengerDetail({
+              firstName: c.firstName,
+              lastName: c.lastName,
+              age: c.age,
+              sex: c.sex,
+              contactNumber: c.contact,
+              address: c.address,
+              passengerType: 'regular',
+              boatRentalId: newId,
+            }).catch(() => null),
+          ),
+        );
+      }
 
-      // Escrow row — booking already exists, so a failed insert only
-      // flags the confirmation instead of blocking it.
-      let downWarning = false;
+      // The escrow row is NOT best-effort: a rental with none never reaches
+      // the admin's Downpayments screen and the operator is never notified,
+      // so it sits in awaiting_payment forever. Stay on this screen and let
+      // the passenger retry against the same rental.
       try {
         await createDownpayment({
           amount: down,
           referenceNum: '',
           proofUrl: proofPath,
-          boatRentalId: rental.rentalId,
+          boatRentalId: id,
         });
-      } catch {
-        downWarning = true;
+      } catch (e) {
+        throw new Error(
+          `Your rental is saved, but the downpayment did not record: ${friendlyError(e)} ` +
+          'Tap "Retry downpayment" — your request is safe.'
+        );
       }
 
       // No notification here on purpose: the request sits in
@@ -157,10 +171,7 @@ export default function RentalPaymentScreen() {
       // notified the moment the admin approves the escrow (020/027).
       router.replace({
         pathname: '/(passenger)/my-rentals',
-        params: {
-          rentalId: rental.rentalId,
-          ...(downWarning ? { downWarning: '1' } : {}),
-        },
+        params: { rentalId: id },
       });
     } catch (e) {
       setError(friendlyError(e));
@@ -208,7 +219,7 @@ export default function RentalPaymentScreen() {
           <View style={styles.sumRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.sumLabelStrong}>GCash downpayment (50%)</Text>
-              <Text style={styles.sumHint}>Held in escrow until the admin verifies it</Text>
+              <Text style={styles.sumHint}>Held in escrow until we verify it</Text>
             </View>
             <Text style={styles.sumDown}>₱{down}</Text>
           </View>
@@ -225,7 +236,7 @@ export default function RentalPaymentScreen() {
           <View style={styles.qrPlaceholder}>
             <Text style={styles.qrPlaceholderText}>
               {qrLoaded
-                ? 'The admin has not uploaded their GCash QR yet. Ask them to set it up in Admin → GCash QR.'
+                ? 'BangkaGo has not set up its GCash QR yet. Try again later, or contact us in the app.'
                 : 'Loading QR…'}
             </Text>
           </View>
@@ -233,7 +244,7 @@ export default function RentalPaymentScreen() {
 
         <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
         <Text style={styles.proofHint}>
-          Attach the digital receipt of your Express Send — the admin reads the
+          Attach the digital receipt of your Express Send — our team reads the
           Ref No. straight from this image.
         </Text>
         <View style={styles.proofRow}>
@@ -255,7 +266,7 @@ export default function RentalPaymentScreen() {
         {proofUri && <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />}
 
         <Text style={styles.escrowHint}>
-          The bangkero is notified once the admin approves your downpayment, then confirms or
+          The bangkero is notified once we confirm your downpayment, then confirms or
           declines. Nothing is charged in the app — the remainder is paid in person.
         </Text>
 
@@ -267,7 +278,7 @@ export default function RentalPaymentScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={`Pay ₱${down} & request rental`}
+            label={rentalId ? 'Retry downpayment' : `Pay ₱${down} & request rental`}
             onPress={submit}
             loading={busy}
             disabled={busy || !profile || !proofUri}

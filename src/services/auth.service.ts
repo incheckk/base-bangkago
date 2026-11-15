@@ -1,4 +1,5 @@
 import type { AuthError } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { BangkeroDoc, UserDoc, UserRole } from '../types/models';
 import { normalizePhone, phoneToAuthEmail } from '../utils/phone';
@@ -121,6 +122,17 @@ export async function signIn(phone: string, password: string): Promise<void> {
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+
+  // Booking snapshots are per-device PII and outlive the session: the next
+  // person to sign in on this phone must not inherit the last one's cache.
+  // The GPS outbox is keyed by bangka id, not user — it is deliberately kept.
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const cached = keys.filter((k) => k.startsWith('booking_cache:'));
+    if (cached.length > 0) await AsyncStorage.multiRemove(cached);
+  } catch {
+    // Never block a sign-out on cache cleanup.
+  }
 }
 
 export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {

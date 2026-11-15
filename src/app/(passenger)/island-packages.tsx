@@ -67,14 +67,14 @@ export default function IslandPackages() {
                   })
                 }
                 accessibilityRole="button"
-                accessibilityLabel={`${pkg.packageName}, ${pkg.price} pesos for the whole boat`}
+                accessibilityLabel={`${pkg.packageName}, ${pkg.price} pesos per person`}
                 style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.cardName} numberOfLines={2}>{pkg.packageName}</Text>
                   <View style={styles.priceWrap}>
                     <Text style={styles.price}>₱{pkg.price}</Text>
-                    <Text style={styles.priceUnit}>per boat</Text>
+                    <Text style={styles.priceUnit}>per person</Text>
                   </View>
                 </View>
 

@@ -116,7 +116,7 @@ export default function BangkeroRentalsScreen() {
   function askDecline(row: BangkeroRentalRow) {
     Alert.alert(
       'Decline this rental?',
-      `${row.renterName ?? 'The passenger'} will be told right away. Their escrow downpayment is refunded by the admin.`,
+      `${row.renterName ?? 'The passenger'} will be told right away. BangkaGo refunds their escrow downpayment.`,
       [
         { text: 'Go back', style: 'cancel' },
         { text: 'Decline', style: 'destructive', onPress: () => void act(row, declineRental) },
@@ -205,7 +205,7 @@ export default function BangkeroRentalsScreen() {
           <Text style={styles.howTitle}>LIST YOUR BOAT</Text>
           <Text style={styles.howBody}>
             Flip the switch to make your boat show up in the passenger Boat Rental catalog.
-            Passengers pick a date and pay the 50% GCash escrow; once the admin approves it,
+            Passengers pick a date and pay the 50% GCash escrow; once BangkaGo approves it,
             the request lands here — Confirm or Decline. A confirmed charter locks that whole
             day: you cannot take rides, island hops, or other charters on the same date.
           </Text>
@@ -264,7 +264,7 @@ export default function BangkeroRentalsScreen() {
           <>
             <Text style={styles.escrowHint}>
               These passengers still owe the 50% GCash escrow — Confirm unlocks
-              once the admin approves it in Downpayments.
+              once BangkaGo approves it.
             </Text>
             {awaiting.map((row) => (
               <RentalCard

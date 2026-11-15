@@ -82,11 +82,6 @@ export default function BoatUnderReview() {
           })}
         </View>
 
-        <Text style={styles.support}>
-          Need help?{' '}
-          <Text style={styles.supportLink}>Contact Support</Text>
-        </Text>
-
         <PrimaryButton
           label="Back to Home"
           onPress={() => router.push('/(bangkero)/home')}
@@ -143,11 +138,4 @@ const styles = StyleSheet.create({
   docThumbIcon: { fontSize: 16 },
   docLabel: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
   docLocked: { ...typography.caption, color: colors.textMuted },
-
-  support: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-  },
-  supportLink: { color: colors.primary, fontWeight: '600' },
 });

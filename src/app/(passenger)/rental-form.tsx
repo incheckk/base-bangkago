@@ -187,7 +187,7 @@ export default function RentalFormScreen() {
           <View style={styles.sumRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.sumLabelStrong}>GCash downpayment (50%)</Text>
-              <Text style={styles.sumHint}>Paid next step to the admin&apos;s QR · held in escrow</Text>
+              <Text style={styles.sumHint}>Paid next step to BangkaGo&apos;s QR · held in escrow</Text>
             </View>
             <Text style={styles.sumDown}>₱{down}</Text>
           </View>
@@ -198,7 +198,7 @@ export default function RentalFormScreen() {
         </View>
 
         <Text style={styles.escrowHint}>
-          The bangkero is notified once the admin approves your downpayment, then confirms or
+          The bangkero is notified once we confirm your downpayment, then confirms or
           declines. Nothing is charged in the app — the remainder is paid in person.
         </Text>
 

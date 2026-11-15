@@ -419,6 +419,8 @@ export async function getOwnBangkas(bangkeroUid: string): Promise<OwnBangka[]> {
     // `*` keeps this working before 068 (standard_price reads absent).
     .select('*')
     .eq('bangkero_id', bangkeroUid)
+    // Retired duplicates (081) must never reappear as a second boat.
+    .is('deleted_at', null)
     .order('bangka_name');
 
   if (error) throw error;

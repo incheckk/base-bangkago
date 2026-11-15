@@ -1,9 +1,10 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { supabase } from '@/services/supabase';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -32,6 +33,7 @@ export default function TrackDelivery() {
     approvalStatus?: string | null;
     approvalDeadlineAt?: string | null;
   } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const parcelId = params.parcelId ?? null;
   const seq = useRef(0);
 
@@ -49,16 +51,20 @@ export default function TrackDelivery() {
         .eq('id', parcelId)
         .maybeSingle();
       if (id !== seq.current) return;
-      if (!error && data?.status) setLiveStatus(data.status);
-      if (!error && data) {
+      if (error) throw error;
+      setLoadError(null);
+      if (data?.status) setLiveStatus(data.status);
+      if (data) {
         setLiveExtra({
           deliveryType: data.delivery_type ?? null,
           approvalStatus: data.approval_status ?? null,
           approvalDeadlineAt: data.approval_deadline_at ?? null,
         });
       }
-    } catch {
-      // keep the last known status when the refresh fails
+    } catch (e: any) {
+      // Keep the last known status — the card is still useful — but say that
+      // it is stale instead of pretending the refresh worked.
+      if (id === seq.current) setLoadError(e?.message ?? 'Could not refresh this delivery.');
     }
   }, [parcelId]);
 
@@ -74,6 +80,12 @@ export default function TrackDelivery() {
     <ScreenContainer padded={false}>
       <View style={styles.container}>
         <PassengerScreenHeader title="Track Delivery" />
+
+        {!!loadError && (
+          <View style={styles.staleBanner}>
+            <Text style={styles.staleText}>Showing the last known status.</Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <View style={styles.row}>
@@ -144,20 +156,32 @@ export default function TrackDelivery() {
                       : 'No response in time'}
                   </Text>
                 </View>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Next step</Text>
-                  <Text style={styles.value}>Batched delivery (coming soon)</Text>
-                </View>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Next step</Text>
-                  <Text style={styles.value}>Solo delivery (coming soon)</Text>
-                </View>
-                <View style={styles.row}>
-                  <Text style={styles.label}>Next step</Text>
-                  <Text style={styles.value}>Or contact support to cancel</Text>
-                </View>
+                <Text style={styles.tryAgain}>
+                  This parcel is not riding with that trip. Book it again and it will be
+                  offered to another boat.
+                </Text>
+                <PrimaryButton
+                  label="Book this padala again"
+                  onPress={() => router.replace('/(passenger)/book-delivery')}
+                  style={styles.retryBtn}
+                />
               </>
             )}
+          </View>
+        )}
+
+        {status === 'returned' && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Parcel returned</Text>
+            <Text style={styles.tryAgain}>
+              Nobody collected this parcel at the destination port, so it is heading back to
+              you. If you already paid a delivery fee, BangkaGo will refund it.
+            </Text>
+            <PrimaryButton
+              label="Book another padala"
+              onPress={() => router.replace('/(passenger)/book-delivery')}
+              style={styles.retryBtn}
+            />
           </View>
         )}
       </View>
@@ -207,6 +231,18 @@ const styles = StyleSheet.create({
   lineActive: { backgroundColor: colors.primary },
   stepLabel: { flexShrink: 1, color: colors.textMuted, fontSize: 13 },
   stepLabelActive: { color: colors.text, fontWeight: '600' },
+
+  staleBanner: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  staleText: { ...typography.caption, color: colors.textSecondary },
+  tryAgain: { ...typography.caption, color: colors.textSecondary, marginTop: spacing.sm },
+  retryBtn: { marginTop: spacing.md },
 
   eta: { flexShrink: 1, color: colors.primary, fontSize: 18, fontWeight: '700' },
 });

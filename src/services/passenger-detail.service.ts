@@ -90,3 +90,20 @@ export async function deletePassengerDetail(id: string): Promise<void> {
 
   if (error) throw error;
 }
+
+/**
+ * Charter boarding tick (081). passenger_details has no UPDATE policy, so
+ * this goes through the owner-checked RPC.
+ */
+export async function setRentalRiderBoarded(
+  rentalId: string,
+  passengerId: string,
+  boarded: boolean
+): Promise<void> {
+  const { error } = await supabase.rpc('set_rental_rider_boarded', {
+    p_rental_id: rentalId,
+    p_passenger_id: passengerId,
+    p_boarded: boarded,
+  });
+  if (error) throw error;
+}

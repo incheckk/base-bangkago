@@ -5,15 +5,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { Icon, type IconName } from '@/components/Icon';
 import { useAuth } from '@/hooks/useAuth';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 const MENU_ITEMS = [
-  { key: 'operators', label: 'Manage Operators', icon: '🚤', route: '/(admin)/all-users' },
-  { key: 'users', label: 'All Users', icon: '👥', route: '/(admin)/all-users' },
-  { key: 'trips', label: 'Trips', icon: '📋', route: '/(admin)/active-trips' },
-  { key: 'alerts', label: 'System Alerts', icon: '🚨', route: '/(admin)/alerts' },
-] as const;
+  { key: 'users', label: 'All Users', icon: 'people', route: '/(admin)/all-users' },
+  { key: 'trips', label: 'Trips', icon: 'bookings', route: '/(admin)/bookings' },
+] as const satisfies readonly { key: string; label: string; icon: IconName; route: string }[];
 
 export default function AdminProfileScreen() {
   const { profile } = useAuth();
@@ -64,7 +63,9 @@ export default function AdminProfileScreen() {
                 pressed && styles.menuPressed,
               ]}
             >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
+              <View style={styles.menuIcon}>
+                <Icon name={item.icon} size={20} color={colors.textSecondary} />
+              </View>
               <Text style={styles.menuLabel}>{item.label}</Text>
               <Text style={styles.menuArrow}>›</Text>
             </Pressable>
@@ -133,7 +134,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.borderSubtle,
   },
   menuPressed: { backgroundColor: colors.bgElevated },
-  menuIcon: { flexShrink: 1, fontSize: 18, marginRight: spacing.md },
+  menuIcon: { marginRight: spacing.md },
   menuLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
   menuArrow: { color: colors.textMuted, fontSize: 20 },
 

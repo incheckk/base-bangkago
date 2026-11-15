@@ -13,6 +13,8 @@ Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
 Updated 2026-11-13 (migration 079: escrow release to operators, charter
 sailing day, notification kinds, route/module lock split, booker details,
 passenger SOS).
+Updated 2026-11-16 (migration 081: one live boat per bangkero, date-scoped
+capacity, island hop priced per person, charter boarding ticks).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -135,6 +137,23 @@ passenger SOS).
     Nothing moves money: the admin sends GCash by hand and types the
     reference, and there is no commission model. A released row cannot
     be refunded. Real payout rails + commission belong with B9.
+
+14. ISLAND-HOP PRICE IS PER PERSON AGAIN (2026-11-16)
+    Migration 068 had re-read island_packages.price as a WHOLE-BOAT
+    price; the defense build reverses that (the panel asked for per
+    passenger): book-package charges price x pax and every label reads
+    "per person". No rows were reseeded - the numbers already in the
+    table now mean per person. Web admin edits still write the same
+    column, so keep the Manage Bangka / island-package labels in sync.
+    Decide the final commercial rule (seat price vs charter price)
+    before publishing fares.
+
+15. ONE BOAT PER BANGKERO IS NOW ENFORCED (2026-11-16)
+    Migration 081 retires every extra boat (049 soft delete, keeping the
+    one with the most history) and adds a partial UNIQUE index per
+    bangkero. A real operator may own a fleet; lifting that needs the
+    app's single-boat reads (profile, departure, getMyBangkaCapacity) to
+    become a boat picker first, and the index to be dropped.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
@@ -499,6 +518,30 @@ reports are wired into the admin menu (manage-routes port pickers use
 the inline PortSelect dropdown); pending-operators, (passenger) booked,
 find-bangkero and parcel-details were DELETED. The trip-en-route entry
 moved onto the accepted-booking card. Nothing left unwired.
+
+[H] KNOWN COSMETIC / POLISH DEBT (2026-11-16 finalization pass)
+--------------------------------------------------------------------------------
+H1. KEYBOARD AVOIDANCE IS PARTIAL — only the auth screens wrap in
+    KeyboardAvoidingView. (passenger)/rate-trip, (passenger)/rental-form
+    and (bangkero)/departure have mid-screen TextInputs that an iOS
+    keyboard can cover. Android adjustResize handles the demo phone.
+    Add the wrapper per screen when iOS parity matters.
+H2. PARCEL PRICING IS STILL CLIENT-SIDE — parcel-pricing.service.ts keeps
+    PARCEL_RATES hardcoded (already marked TODO Phase 1). Editing a rate in
+    Admin -> Parcel Rates does not move the passenger quote. Wiring it needs
+    the estimator to become async; deferred until after the defense.
+H3. NOTIFICATION LIST USES ScrollView — fine at demo volume, degrades past
+    ~100 rows. Move NotificationInbox to FlatList with the existing 1-day
+    clear-old action before any real launch.
+H4. A BANGKERO WITH LOCATION OFF IS NOT WARNED — useLocationTracking
+    reports nothing, so dispatch can still offer them a trip. Needs a
+    permission state on (bangkero)/home before public launch (relates to B1).
+H5. CHARTER BOARDING IS A TICK LIST, NOT A QR SCAN (2026-11-16) —
+    (bangkero)/charter/[id] marks each rider aboard through
+    081's set_rental_rider_boarded, but there is no per-rider QR: rental
+    companions never get a scannable token the way ride companions do
+    (020). A scanner needs a rental-scoped payload + verify branch before
+    the tick can be retired.
 
 ================================================================================
 END — keep this file updated whenever a feature is consciously deferred.

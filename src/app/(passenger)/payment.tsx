@@ -221,14 +221,17 @@ export default function PaymentScreen() {
       const actualRemainder = totalPrice - actualDownAmount;
 
       // Companions ride under this booking. A failed insert must never block
-      // the confirmation screen — the booking itself already exists.
+      // the confirmation screen — the booking itself already exists — but it
+      // MUST be reported: the fare is per passenger, so silently losing a
+      // companion means paying for someone who has no boarding pass.
+      let companionWarning = false;
       if (serviceType === 'passenger' && params.companionsJson) {
         try {
           const companions = JSON.parse(params.companionsJson) as {
             firstName: string; lastName: string; age?: number; sex?: string; contact?: string;
             address?: string;
           }[];
-          await Promise.all(
+          const saved = await Promise.all(
             companions.map((c) =>
               createPassengerDetail({
                 firstName: c.firstName,
@@ -239,10 +242,12 @@ export default function PaymentScreen() {
                 address: c.address,
                 passengerType: 'regular',
                 bookingId,
-              }).catch(() => null),
+              }).then(() => true).catch(() => false),
             ),
           );
+          companionWarning = saved.some((ok) => !ok);
         } catch {
+          companionWarning = true;
           if (__DEV__) console.warn('[payment] companions json malformed');
         }
       }
@@ -367,6 +372,7 @@ export default function PaymentScreen() {
           ...(parcelId ? { parcelId } : {}),
           ...(payWarning ? { payWarning: '1' } : {}),
           ...(parcelWarning ? { parcelWarning: '1' } : {}),
+          ...(companionWarning ? { companionWarning: '1' } : {}),
           ...(isEscrow
             ? {
                 downStatus: 'pending',
@@ -442,7 +448,7 @@ export default function PaymentScreen() {
               <Text style={[styles.sectionLabel, styles.mtLg]}>GCASH DOWNPAYMENT (50%)</Text>
               <View style={styles.escrowCard}>
                 <View style={styles.escrowAmountRow}>
-                  <Text style={styles.escrowLabel}>Pay now to the admin&apos;s GCash</Text>
+                  <Text style={styles.escrowLabel}>Pay now to BangkaGo&apos;s GCash</Text>
                   <Text style={styles.escrowAmount}>₱{downAmount}</Text>
                 </View>
                 <View style={styles.summaryDivider} />
@@ -459,7 +465,7 @@ export default function PaymentScreen() {
                 <View style={styles.qrPlaceholder}>
                   <Text style={styles.qrPlaceholderText}>
                     {qrLoaded
-                      ? 'The admin has not uploaded their GCash QR yet. Ask them to set it up in Admin → GCash QR.'
+                      ? 'BangkaGo has not set up its GCash QR yet. Try again later, or book today and pay on board.'
                       : 'Loading QR…'}
                   </Text>
                 </View>
@@ -467,7 +473,7 @@ export default function PaymentScreen() {
 
               <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
               <Text style={styles.proofHint}>
-                Attach the digital receipt of your Express Send — the admin reads the
+                Attach the digital receipt of your Express Send — our team reads the
                 Ref No. straight from this image.
               </Text>
               <View style={styles.proofRow}>
@@ -492,8 +498,8 @@ export default function PaymentScreen() {
 
               <Text style={styles.escrowHint}>
                 {isAdvance
-                  ? 'The admin reviews your payment first — your sailing is confirmed and offered to bangkeros only after that. This downpayment is held in escrow until your trip.'
-                  : 'The admin confirms your payment from their side. Booking goes ahead either way — this downpayment is held in escrow until your trip.'}
+                  ? 'We review your payment first — your sailing is confirmed and offered to bangkeros only after that. This downpayment is held in escrow until your trip.'
+                  : 'We confirm your payment on our side. Booking goes ahead either way — this downpayment is held in escrow until your trip.'}
               </Text>
             </View>
           ) : (

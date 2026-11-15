@@ -34,7 +34,6 @@ import {
   DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
-import { getPaymentsForBookings } from '@/services/payment.service';
 import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggyback.service';
 import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { STRAIT_POINT } from '@/services/weather.service';
@@ -136,11 +135,19 @@ export default function BangkeroHome() {
       .catch(() => {});
     return () => { alive = false; };
   }, []);
-  const topDemand = todayDemand
-    .filter((r): r is DemandPredictionDoc & { routeId: string; predictedPassengers: number } =>
-      r.routeId != null && r.predictedPassengers != null)
-    .sort((a, b) => b.predictedPassengers - a.predictedPassengers)
-    .slice(0, 3);
+  // The model stores one row per route PER HOUR. Summing the route's day
+  // before ranking is what makes "top demand" mean a route, not an hour.
+  const topDemand = useMemo(() => {
+    const byRoute = new Map<string, number>();
+    for (const r of todayDemand) {
+      if (r.routeId == null || r.predictedPassengers == null) continue;
+      byRoute.set(r.routeId, (byRoute.get(r.routeId) ?? 0) + r.predictedPassengers);
+    }
+    return [...byRoute.entries()]
+      .map(([routeId, predictedPassengers]) => ({ routeId, predictedPassengers }))
+      .sort((a, b) => b.predictedPassengers - a.predictedPassengers)
+      .slice(0, 3);
+  }, [todayDemand]);
   const trips = useMyTrips(uid);
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
@@ -149,15 +156,19 @@ export default function BangkeroHome() {
   // non-accompanied stubs — the pre-045 fallback for the filter below.
   const parcels = useBangkeroParcels(uid);
 
-  // Today's charter (079): a confirmed rental keeps the whole day, so the
-  // home screen has to be the way back into it.
+  // Upcoming charter (079): a confirmed rental keeps the whole day, so the
+  // home screen has to be the way back into it — and the bangkero must see
+  // it BEFORE the day starts, not only once they open Boat Rentals.
   const [todayCharter, setTodayCharter] = useState<BangkeroRentalRow | null>(null);
   const loadCharter = useCallback(async () => {
     if (!uid) return;
+    const today = manilaTodayIso();
     try {
       const rows = await getRentalsForBangkero(uid);
       setTodayCharter(
-        rows.find((r) => r.status === 'confirmed' && r.rentalDate === manilaTodayIso()) ?? null
+        rows
+          .filter((r) => r.status === 'confirmed' && r.rentalDate >= today)
+          .sort((a, b) => a.rentalDate.localeCompare(b.rentalDate))[0] ?? null
       );
     } catch {
       // no banner rather than a wrong one
@@ -343,7 +354,10 @@ export default function BangkeroHome() {
   // 1 pax; only accompanied cargo actually boards a person. 077 batch
   // members are accepted with is_dispatchable = true, so exclude them by
   // their batched parcel as well.
-  const acceptedLoad = activeTrips.reduce(
+  // Today's load only: an advance trip for next week must never make the
+  // boat look full today (server-side fits_booking is date-scoped in 081).
+  const todayTrips = activeTrips.filter((t) => !isAdvance(t));
+  const acceptedLoad = todayTrips.reduce(
     (sum, t) =>
       sum +
       (t.serviceType === 'cargo' &&
@@ -352,8 +366,9 @@ export default function BangkeroHome() {
         : t.numOfPassenger),
     0
   );
-  // Destinations of trips already accepted — the route lock (008).
-  const activeDests = [...new Set(activeTrips.map((t) => endPortOf(t.routeId)))];
+  // Destinations of trips already accepted — the route lock (008). Only
+  // today's sailings lock the route; an advance trip does not.
+  const activeDests = [...new Set(todayTrips.map((t) => endPortOf(t.routeId)))];
 
   // Effective rating = smoothed passenger average − penalties + recovery
   // stars (rule v2, 036); the accept gate enforces the same floor
@@ -482,8 +497,11 @@ export default function BangkeroHome() {
         tone: 'block', canAccept: false, distance,
       };
     }
+    // Advance trips are checked per-date by fits_booking (081) — comparing
+    // them against today's load wrongly refused an otherwise fine advance.
     if (
       !bypass &&
+      !advance &&
       b.serviceType !== 'rental' &&
       myCapacity !== null &&
       b.numOfPassenger + acceptedLoad > myCapacity
@@ -604,6 +622,18 @@ export default function BangkeroHome() {
         `Your trip ${b.ref} (${b.fromPortName} → ${b.toPortName}) was accepted by ${bangkero.data.displayName}.${sails ? ` Sails ${sails}.` : ''}`,
         'booking'
       ).catch(() => {});
+      // Keep it in MY inbox too — the local ping is transient, and an
+      // advance trip sails days later when nobody remembers accepting it.
+      if (uid) {
+        createNotification(
+          uid,
+          isAdvance(b) && sails ? 'Advance trip confirmed' : 'Trip accepted',
+          isAdvance(b) && sails
+            ? `${b.ref} · ${b.fromPortName} → ${b.toPortName} sails ${sails}.`
+            : `${b.ref} · ${b.fromPortName} → ${b.toPortName}.`,
+          'booking'
+        ).catch(() => {});
+      }
       // Stay on the list: the sheet shows this booking while the bangkero
       // keeps accepting more same-route bookings until the boat is full.
       setSheetBooking(b);
@@ -751,54 +781,22 @@ export default function BangkeroHome() {
     router.push('/(bangkero)/departure');
   }
 
-  // Earnings count only trips that actually completed AND got paid,
-  // bucketed by Manila day of completion — TODAY and THIS WEEK are real
-  // windows, not a guess. (Device-local midnights skewed both on foreign
-  // phones; completed-but-unpaid trips used to inflate both cards.)
-  // Unknown payment state (offline/RLS failure) falls back to unfiltered
-  // rather than zeroing the cards.
+  // Earnings count completed trips, bucketed by Manila day of completion.
+  // The fare is collected on board (cash), so completion is the earn event —
+  // waiting for a `payments` row marked completed read ₱0 forever whenever
+  // the bangkero never tapped "mark as paid" (the old behaviour).
   const completedTrips = useMemo(
     () => trips.data.filter((t) => t.status === 'completed' && t.completedAt),
     [trips.data]
   );
-  const completedIds = useMemo(
-    () => completedTrips.map((t) => t.bookingId),
-    [completedTrips]
-  );
-  const [paidIds, setPaidIds] = useState<Set<string> | null>(null);
-  useEffect(() => {
-    if (completedIds.length === 0) {
-      setPaidIds(new Set());
-      return;
-    }
-    let alive = true;
-    getPaymentsForBookings(completedIds)
-      .then((rows) => {
-        if (!alive) return;
-        setPaidIds(
-          new Set(
-            rows.filter((r) => r.paymentStatus === 'completed').map((r) => r.bookingId)
-          )
-        );
-      })
-      .catch(() => {
-        if (alive) setPaidIds(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [completedIds]);
-  const paidTrips = paidIds
-    ? completedTrips.filter((t) => paidIds.has(t.bookingId))
-    : completedTrips;
   const homeTodayIso = manilaTodayIso();
   const homeTodayStartMs = manilaDayStartMs(homeTodayIso);
   const homeWeekStartMs = homeTodayStartMs - 6 * 86400000;
   const completedMs = (t: BookingDoc) => new Date(t.completedAt as string).getTime();
-  const todayEarnings = paidTrips
+  const todayEarnings = completedTrips
     .filter((t) => completedMs(t) >= homeTodayStartMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
-  const weekEarnings = paidTrips
+  const weekEarnings = completedTrips
     .filter((t) => completedMs(t) >= homeWeekStartMs)
     .reduce((sum, t) => sum + t.totalPrice, 0);
 
@@ -940,7 +938,7 @@ export default function BangkeroHome() {
             {hasActiveTrip
               ? 'You have an active trip — stay online until it is completed.'
               : docsBlocked
-                ? 'Your documents must be verified by the admin before you can go online.'
+                ? 'Your documents must be verified by BangkaGo before you can go online.'
                 : boatBlocked
                   ? 'Register your boat (Profile → Edit Profile) before going online.'
                   : available
@@ -1028,7 +1026,8 @@ export default function BangkeroHome() {
         )}
 
         {/* A confirmed charter owns the whole day (027/079) — it belongs on
-            the home screen, not only inside the rentals list. */}
+            the home screen, not only inside the rentals list, and it shows
+            up as soon as it is confirmed so the day is never a surprise. */}
         {todayCharter && (
           <Pressable
             onPress={() =>
@@ -1038,13 +1037,17 @@ export default function BangkeroHome() {
               })
             }
             accessibilityRole="button"
-            accessibilityLabel="Open today's charter"
+            accessibilityLabel="Open the confirmed charter"
             style={({ pressed }) => [styles.tripBanner, styles.charterBanner, pressed && styles.requestPressed]}
           >
             <View style={[styles.tripBannerDot, styles.charterBannerDot]} />
             <View style={styles.tripBannerText}>
               <Text style={[styles.tripBannerTitle, styles.charterBannerTitle]}>
-                {todayCharter.startedAt ? 'CHARTER · UNDER WAY' : 'CHARTER TODAY'}
+                {todayCharter.startedAt
+                  ? 'CHARTER · UNDER WAY'
+                  : todayCharter.rentalDate === manilaTodayIso()
+                    ? 'CHARTER TODAY'
+                    : `CHARTER · ${new Date(`${todayCharter.rentalDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }).toUpperCase()}`}
               </Text>
               <Text style={styles.tripBannerRoute} numberOfLines={1}>
                 {todayCharter.eventName || 'Boat charter'} · {todayCharter.boatName ?? 'your boat'}
@@ -1088,8 +1091,8 @@ export default function BangkeroHome() {
         {!gatesBypass && bangkero.data?.verificationStat === 'incomplete' && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
-              Upload your four documents to start sailing — you stay offline until the
-              admin approves them.
+              Upload your four documents to start sailing — you stay offline until
+              BangkaGo approves them.
             </Text>
             <PrimaryButton
               label="Upload documents"
@@ -1102,14 +1105,14 @@ export default function BangkeroHome() {
         {!gatesBypass && bangkero.data?.verificationStat === 'pending' && (
           <View style={styles.bannerInfo}>
             <Text style={styles.bannerInfoText}>
-              Your documents are under review. You can go online once the admin approves them.
+              Your documents are under review. You can go online once BangkaGo approves them.
             </Text>
           </View>
         )}
         {!gatesBypass && bangkero.data?.verificationStat === 'rejected' && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
-              The admin rejected your documents — upload them again to continue.
+              BangkaGo rejected your documents — upload them again to continue.
             </Text>
             <PrimaryButton
               label="Re-upload documents"
@@ -1207,6 +1210,12 @@ export default function BangkeroHome() {
               const allResolved = g.bookings.every((b) => resolvedByBookingId[b.bookingId]);
               const allActed = g.bookings.every((b) => acted.has(b.bookingId));
               const groupLoading = g.bookings.some((b) => pending === b.bookingId);
+              // A trip can only be completed once the boat has actually
+              // sailed (`depart_time` is stamped on departure). Before that
+              // the card offers the boarding scan / the checklist, never
+              // "Mark completed" — that used to complete unsailed trips.
+              const advance = isAdvance(lead);
+              const departed = !!lead.departTime;
               const ridingAlong = g.bookings.flatMap(
                 (b) => piggybackByRideId.get(b.bookingId) ?? []
               );
@@ -1240,21 +1249,37 @@ export default function BangkeroHome() {
                       </Text>
                     </View>
                   )}
-                  {/* Resolved = every companion ticked or no-showed and every
-                      cargo parcel loaded or returned — the same gate
-                      booking-status enforces (complete_trip raises
-                      otherwise) — until then the card only offers the
-                      boarding scan. */}
+                  {/* Advance trips sail another day: no boarding scan and
+                      no completion now, just the booking. While moored the
+                      card drives the scan / checklist; "Mark completed"
+                      only appears once the boat has departed. */}
                   <PrimaryButton
                     label={
-                      allActed
-                        ? 'Completed'
-                        : allResolved
-                          ? 'Mark completed'
-                          : 'Scan Boarding QR'
+                      advance
+                        ? 'View booking'
+                        : allActed
+                          ? 'Completed'
+                          : !departed
+                            ? allResolved
+                              ? 'Ready to depart'
+                              : 'Scan Boarding QR'
+                            : allResolved
+                              ? 'Mark completed'
+                              : 'Scan Boarding QR'
                     }
                     onPress={() => {
                       if (allActed) return;
+                      if (advance) {
+                        router.push({
+                          pathname: '/(bangkero)/booking-status',
+                          params: { bookingId: lead.bookingId },
+                        });
+                        return;
+                      }
+                      if (allResolved && !departed) {
+                        openDepartureChecklist();
+                        return;
+                      }
                       if (allResolved) {
                         void completeGroup(g);
                       } else {

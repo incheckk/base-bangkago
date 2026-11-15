@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAllTrips } from '@/hooks/useAllTrips';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -34,7 +35,10 @@ export default function AdminBookings() {
 
   return (
     <ScreenContainer padded={false}>
-      <AdminScreenHeader title="All Bookings" />
+      <AdminScreenHeader
+        title="Trips"
+        subtitle={`${filtered.length} booking${filtered.length === 1 ? '' : 's'}`}
+      />
 
       <View style={styles.searchWrap}>
         <TextInput
@@ -49,17 +53,16 @@ export default function AdminBookings() {
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-        <Text style={styles.count} numberOfLines={1}>{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</Text>
-
         {loading ? (
-          <View style={styles.stateBox}><Text style={styles.loadingText}>Loading…</Text></View>
+          <LoadingState label="Loading trips…" />
         ) : error ? (
-          <View style={styles.stateBox}><Text style={styles.errorText}>{error}</Text></View>
+          <ErrorState message={error} />
         ) : filtered.length === 0 ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>No bookings found</Text>
-          </View>
+          <EmptyState
+            icon="bookings"
+            title="No bookings found"
+            message={search ? 'Nothing matches that search.' : 'No bookings in this filter yet.'}
+          />
         ) : (
           filtered.map((b) => (
             <Pressable

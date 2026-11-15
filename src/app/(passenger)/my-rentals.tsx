@@ -24,8 +24,8 @@ const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: strin
 };
 
 const DOWN_TEXT: Record<string, string> = {
-  pending: 'awaiting admin confirmation',
-  approved: 'confirmed by admin',
+  pending: 'awaiting BangkaGo confirmation',
+  approved: 'confirmed by BangkaGo',
   refunded: 'refunded',
 };
 
@@ -86,7 +86,7 @@ export default function MyRentalsScreen() {
   function askCancel(row: PassengerRentalRow) {
     Alert.alert(
       'Cancel this rental?',
-      `${row.boatName ?? 'The boat'} on ${row.rentalDate} (${rentalDurationLabel(row.hours)}) will be released. If you filed a downpayment, ask the admin for a refund.`,
+      `${row.boatName ?? 'The boat'} on ${row.rentalDate} (${rentalDurationLabel(row.hours)}) will be released. If you filed a downpayment, BangkaGo will refund it.`,
       [
         { text: 'Keep it', style: 'cancel' },
         { text: 'Cancel rental', style: 'destructive', onPress: () => void doCancel(row) },
@@ -197,7 +197,14 @@ export default function MyRentalsScreen() {
                   </View>
                 )}
 
-                {row.status === 'pending' && (
+                {row.status === 'awaiting_payment' && !down && (
+                  <Text style={styles.missingEscrow}>
+                    This downpayment never reached us, so the operator cannot see this
+                    request. Cancel it and book again, or contact BangkaGo to check.
+                  </Text>
+                )}
+
+                {(row.status === 'pending' || row.status === 'awaiting_payment') && (
                   <PrimaryButton
                     label="Cancel rental"
                     variant="secondary"
@@ -281,6 +288,11 @@ const styles = StyleSheet.create({
   },
   moneyLabel: { flexShrink: 1, ...typography.caption },
   moneyValue: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '600', textAlign: 'right' },
+  missingEscrow: {
+    ...typography.caption,
+    color: colors.warning,
+    marginTop: spacing.sm,
+  },
 
   cancelBtn: { marginTop: spacing.md },
   backBtn: { marginTop: spacing.md },

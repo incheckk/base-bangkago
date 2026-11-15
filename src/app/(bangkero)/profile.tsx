@@ -66,6 +66,7 @@ export default function BangkeroProfileScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [boatName, setBoatName] = useState('');
+  const [bangkaName, setBangkaName] = useState('');
   const [capacity, setCapacity] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [saved, setSaved] = useState<{ first: string; last: string; boat: string } | null>(null);
@@ -99,12 +100,20 @@ export default function BangkeroProfileScreen() {
   const loadBangka = useCallback(async () => {
     if (!uid) return;
     try {
+      // `.limit(1)`: Pedro-style duplicate rows made maybeSingle() error and
+      // the screen fell back to the operator's display name.
       const { data } = await supabase
         .from('bangkas')
-        .select('capacity')
+        .select('bangka_name, capacity')
         .eq('bangkero_id', uid)
+        .is('deleted_at', null)
+        .order('id')
+        .limit(1)
         .maybeSingle();
-      if (data) setBangkaCapacity(String(data.capacity ?? ''));
+      if (data) {
+        setBangkaCapacity(String(data.capacity ?? ''));
+        setBangkaName((data.bangka_name as string) ?? '');
+      }
     } catch {
       // keep the last known capacity
     }
@@ -121,7 +130,7 @@ export default function BangkeroProfileScreen() {
     if (!profile) return;
     setFirstName(profile.firstName);
     setLastName(profile.lastName);
-    setBoatName(saved?.boat ?? op?.displayName ?? '');
+    setBoatName(bangkaName || op?.displayName || '');
     setCapacity(bangkaCapacity ?? '');
     setError(null);
     setEditing(true);
@@ -152,11 +161,12 @@ export default function BangkeroProfileScreen() {
       nameSaved = true;
       await updateBoat({
         uid,
-        boatName,
+        // The boat name is read-only; send it back unchanged so the
+        // service's "dirty field" logic only ever writes capacity.
+        boatName: '',
         capacity,
       });
-      const newBoat = boatName.trim() || (saved?.boat ?? op?.displayName ?? '');
-      setSaved({ first: firstName.trim(), last: lastName.trim(), boat: newBoat });
+      setSaved({ first: firstName.trim(), last: lastName.trim(), boat: boatName });
       if (capacity.trim()) setBangkaCapacity(capacity.trim());
       setEditing(false);
     } catch (e) {
@@ -182,7 +192,7 @@ export default function BangkeroProfileScreen() {
 
   const displayFirst = saved?.first ?? profile?.firstName ?? '';
   const displayLast = saved?.last ?? profile?.lastName ?? '';
-  const displayBoat = saved?.boat ?? op?.displayName ?? '';
+  const displayBoat = saved?.boat || bangkaName;
 
   return (
     <ScreenContainer padded={false}>
@@ -255,8 +265,8 @@ export default function BangkeroProfileScreen() {
               label="Boat Name"
               value={boatName}
               onChangeText={setBoatName}
-              autoCapitalize="words"
-              placeholder="e.g. Maria Bangka"
+              editable={false}
+              placeholder="Set by BangkaGo"
             />
             <TextField
               label="Capacity (passengers)"

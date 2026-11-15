@@ -24,6 +24,7 @@ import {
   useActiveCargoDeliveries, useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings,
 } from '@/hooks/useSupabase';
 import { scheduleLocalNotification } from '@/services/notification.service';
+import { slotLabel } from '@/components/SchedulePicker';
 import { updatePersonalDetails } from '@/services/profile.service';
 import { formatDistance, getNearestQueuedBoatDistance, haversineM } from '@/services/queue.service';
 import { supabase } from '@/services/supabase';
@@ -307,7 +308,9 @@ export default function PassengerHome() {
     setAcceptedNotice(fresh);
     scheduleLocalNotification(
       'Your trip was accepted',
-      `${fresh.operatorName ?? 'A bangkero'} accepted ${fresh.ref}. Head to ${fresh.fromPortName}.`
+      fresh.scheduledDate
+        ? `${fresh.operatorName ?? 'A bangkero'} accepted ${fresh.ref}. Sails ${new Date(`${fresh.scheduledDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}${fresh.scheduledTime ? ` · ${slotLabel(fresh.scheduledTime)}` : ''}.`
+        : `${fresh.operatorName ?? 'A bangkero'} accepted ${fresh.ref}. Head to ${fresh.fromPortName}.`
     ).catch(() => {});
   }, [bookings.loading, bookings.data]);
 
@@ -571,6 +574,9 @@ export default function PassengerHome() {
                       ? 'Waiting for a bangkero'
                       : 'Accepted'}
                   {' · '}{bannerBooking.numOfPassenger} pax · ₱{bannerBooking.totalPrice}
+                  {bannerBooking.scheduledDate
+                    ? ` · ${new Date(`${bannerBooking.scheduledDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}${bannerBooking.scheduledTime ? ` ${slotLabel(bannerBooking.scheduledTime)}` : ''}`
+                    : ''}
                   {activeBookings.length > 1 ? ` · +${activeBookings.length - 1} more` : ''}
                 </Text>
               </View>

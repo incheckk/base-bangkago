@@ -74,7 +74,6 @@ export default function ManagePorts() {
     try {
       const parsedRadius = parseInt(radius, 10);
       const portData = {
-        portId: editId ?? '',
         portName: portName.trim(),
         location: location.trim(),
         latitude: latitude ? parseFloat(latitude) : 0,

@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 
@@ -9,6 +9,7 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { LoadingState } from '@/components/States';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAllPorts } from '@/hooks/useAllPorts';
 import { useAuth } from '@/hooks/useAuth';
@@ -54,7 +55,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
 export default function DepartureScreen() {
   const { user } = useAuth();
   const bangkeroId = user?.id ?? null;
-  const { manifest, passengers, parcels, loading, error: manifestError, finalizeManifest } = useTripManifest(bangkeroId);
+  const { manifest, passengers, parcels, loading, error: manifestError, reload, finalizeManifest } = useTripManifest(bangkeroId);
   // Sea weather runs on the live Open-Meteo reading for the route (below),
   // not the never-populated weather_data table.
   const { data: ports } = useAllPorts();
@@ -394,7 +395,7 @@ export default function DepartureScreen() {
     if (!bangkeroId) return;
     try {
       const [bangkaRes, bookingRes] = await Promise.all([
-        supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).maybeSingle(),
+        supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).is('deleted_at', null).order('id').limit(1).maybeSingle(),
         supabase
           .from('bookings')
           .select('route_id')
@@ -457,8 +458,13 @@ export default function DepartureScreen() {
         .from('bangkas')
         .select('id')
         .eq('bangkero_id', bangkeroId)
+        .is('deleted_at', null)
+        .order('id')
+        .limit(1)
         .maybeSingle();
-      if (!bangka) throw new Error('Set up your boat in Profile first.');
+      if (!bangka) {
+        throw new Error('Your boat is not active yet. Ask BangkaGo to approve it before you sail.');
+      }
       // No accepted trip on the pier anymore (fresh sailing window) —
       // regenerate on the previous manifest's route.
       const route = routeContext
@@ -737,9 +743,7 @@ export default function DepartureScreen() {
         )}
 
         {loading ? (
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>Loading manifest…</Text>
-          </View>
+          <LoadingState label="Loading manifest…" />
         ) : manifest ? (
           <>
             <Text style={styles.sectionLabel}>TRIP DETAILS</Text>
@@ -772,6 +776,9 @@ export default function DepartureScreen() {
                 {!!manifestError && (
                   <View style={styles.banner}>
                     <Text style={styles.bannerText}>{manifestError}</Text>
+                    <Pressable onPress={() => void reload()} hitSlop={8}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </Pressable>
                   </View>
                 )}
                 <PrimaryButton
@@ -1037,8 +1044,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
     width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
-  bannerText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
+  bannerText: { flexShrink: 1, flex: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
+  retryText: { color: colors.danger, fontSize: 13, fontWeight: '700' },
 
   sectionLabel: { ...typography.label, marginTop: spacing.xxl, marginBottom: spacing.md },
 

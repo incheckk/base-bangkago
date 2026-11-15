@@ -30,6 +30,7 @@ export default function BookingConfirmed() {
     downWarning?: string;
     payWarning?: string;
     parcelWarning?: string;
+    companionWarning?: string;
     remainder?: string;
     scheduledDate?: string;
     scheduledTime?: string;
@@ -83,7 +84,7 @@ export default function BookingConfirmed() {
               {awaitingAdmin ? 'Status' : 'Booking Reference'}
             </Text>
             {awaitingAdmin ? (
-              <Text style={styles.awaitValue}>Awaiting admin confirmation</Text>
+              <Text style={styles.awaitValue}>Awaiting BangkaGo confirmation</Text>
             ) : (
               <Text style={styles.refValue}>{bookingRef}</Text>
             )}
@@ -129,7 +130,7 @@ export default function BookingConfirmed() {
                 <Text style={styles.detailLabel}>GCash downpayment (50%)</Text>
                 <Text style={styles.detailValue} numberOfLines={2}>
                   ₱{downAmount}
-                  {params.downStatus === 'pending' ? ' · awaiting admin confirmation' : ''}
+                  {params.downStatus === 'pending' ? ' · awaiting BangkaGo confirmation' : ''}
                 </Text>
               </View>
               <View style={styles.detailRow}>
@@ -168,6 +169,14 @@ export default function BookingConfirmed() {
             <Text style={styles.warnText}>
               Your parcel record did not save. Your booking exists — give the bangkero your
               cargo details at the pier (booking ref {bookingRef}).
+            </Text>
+          </Animated.View>
+        )}
+        {params.companionWarning === '1' && (
+          <Animated.View style={[styles.warnBanner, { opacity: fadeAnim }]}>
+            <Text style={styles.warnText}>
+              Some companions were not saved. Open booking {bookingRef} and add them again
+              before boarding — they have no boarding pass yet.
             </Text>
           </Animated.View>
         )}

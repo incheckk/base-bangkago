@@ -41,6 +41,128 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — Defense-polish batch: one boat per bangkero, date-aware
+  capacity, per-person island hop, honest approvals (migration **081
+  PENDING — USER MUST RUN, after 080**; gates: tsc clean, lint 0 errors /
+  136 warnings, expo-doctor 20/21 — the 9 known SDK-57 patch drifts, not
+  bulk-upgraded).**
+  - **Pedro's fleet, root cause found:** `profile.service` read the boat
+    with `.maybeSingle()`, which ERRORS when a bangkero already has two
+    `bangkas` rows — so every save fell into the insert branch and created
+    another boat. That one bug produced `hasBangka = false`, capacity that
+    never saved, and the "lots of boats" list in Boat Rentals. The reads
+    (profile, departure, `getMyBangkaCapacity`) now take
+    `.order('id').limit(1).maybeSingle()`, and 081 RETIRES every extra
+    boat with 049's soft-delete (keep the one with the most history,
+    `is_deleted`/`deleted_at`/`is_active = false`) — history is never
+    re-pointed or deleted (046/047/048 triggers forbid both) — then adds
+    a partial UNIQUE index (`bangkas_one_per_bangkero … WHERE deleted_at
+    IS NULL`). The "my boat" reads filter `deleted_at IS NULL`, so a
+    retired row can never come back as a second boat.
+  - **The boat name is no longer editable:** the field always showed
+    `bangkeros.display_name`, never `bangkas.bangka_name`. The header and
+    the (read-only) Boat Name field now show the real boat;
+    `updateBoat` is called with `boatName: ''` so only capacity is written.
+  - **No accept without a boat:** 081's `accept_booking_hold` (071's body
+    verbatim plus the gate) raises unless the caller owns an active,
+    non-deleted boat. `departure` says the same in English instead of
+    "Set up your boat in Profile first."
+  - **Capacity is per sailing day:** `fits_booking` summed accepted pax
+    across EVERY date, so tomorrow's advance trip ate today's seats.
+    081 drops the 3-arg version and installs a 4-arg, date-scoped one
+    (`assign_next_hold`'s 3-arg calls resolve to its default). The home
+    load bar and request chips only count today's trips.
+  - **Island hop is PER PERSON again** (reverses 068's whole-boat
+    reading): `total = island_packages.price × pax`, labels read "per
+    person" and "Total (₱price × pax)". No data migration — the existing
+    prices simply mean per person now.
+  - **Approvals are honest:** admin document review is **Approve** /
+    **Reject** and the pair disappears once a decision lands (with the
+    banner kept); the operator screen has ONE **Review** button instead of
+    two that pre-picked the verdict.
+  - **Charter sailing day:** `(bangkero)/charter/[id]` shows the boat's
+    live position on the map and a party list you can tick ("✓ aboard" /
+    "Tick", `n aboard`) — passenger_details has no UPDATE policy, so this
+    goes through 081's owner-checked `set_rental_rider_boarded`.
+  - **Bangkero home:** the active-trip card is a state machine — advance →
+    **View booking**, moored → **Scan Boarding QR** / **Ready to depart**,
+    sailed → **Mark completed** (never before `depart_time`). Earnings
+    count COMPLETED trips (waiting for a paid `payments` row read ₱0
+    forever). Demand is summed per route before ranking. The confirmed
+    charter banner shows the next charter, not only today's. Accepting
+    also files a notification in the bangkero's own inbox.
+  - **Passenger copy:** an advance booking says "Your trip sails Oct 9 ·
+    5:00 PM…" and hides **Track live trip**; the home banner and accept
+    notification name the sailing date instead of "Head to the port".
+  - **"admin" left the passenger/bangkero screens:** they read BangkaGo
+    (payment, rentals, my-rentals, booking, booking-confirmed,
+    track-delivery, verify-boat, quick-guide, earnings, charter, sailing,
+    home). Admin and coastguard screens keep the word.
+  - **Junk names are refused:** `nameError` now rejects one repeated
+    letter (`www`, `qqq`, `oooooo`), any triple run (`Leee`) and names
+    where every token is one letter (`w-w`) — "Enter a real name". Tests
+    in `tests/unit/validation.test.cjs`.
+  - **Smaller fixes:** `(bangkero)/boat-under-review` lost its dead
+    "Contact Support" line; `(admin)/downpayments` filters
+    Approved/To release apart and its subtitle counts the active tab;
+    `BangkeroTripSheet` uses `slotLabel()` and says "board and scan on
+    that day".
+  - **Deferred (tracker [H]):** rental party QR boarding — the tick list
+    covers the demo; a full scanner needs a rental-scoped QR payload.
+  - **Next:** run `migrations/081_one_boat_and_dated_capacity.sql` after
+    080, then smoke: save the boat capacity twice (still one boat in Boat
+    Rentals, name unchanged), accept a trip on an account with no active
+    boat (must refuse), accept an advance trip for next week on a boat
+    that is full today (must accept), book an island hop for 3 pax (total
+    = price × 3), Approve a document set (buttons vanish), Review an
+    operator (one button), tick a charter rider aboard on the sailing day
+    and watch the boat move on the map.
+
+- **2026-11-16 — Finalization-audit fixes: crash, money and state-coverage
+  batch (migration 080 PENDING — USER MUST RUN, after 079; gates: tsc clean,
+  lint 0 errors / 137 warnings, expo-doctor 20/21 — the 9 known SDK-57 patch
+  drifts, not bulk-upgraded).**
+  - **Crash:** a new port no longer inserts an empty primary key. The id is
+    derived from the name (`portSlug`), a duplicate says so in English
+    instead of showing a Postgres error, and the admin form no longer
+    passes an id at all.
+  - **Rental escrow cannot be orphaned:** `rental-payment` reuses the rental
+    it already created and retries the escrow insert in place (the button
+    becomes "Retry downpayment"). If the insert still fails the passenger
+    stays on the screen instead of landing in My Rentals with a request no
+    admin can approve and no operator was told about. My Rentals flags an
+    `awaiting_payment` row with no escrow row, and such rows can now be
+    cancelled (before, only `pending` could).
+  - **Cancel is honest:** the passenger's Cancel booking and "I can't reach
+    my boat" both ask first, and when a downpayment is pending or approved
+    they say an admin must refund it. "You were not charged" is now
+    conditional instead of always shown.
+  - **Companion failures are visible:** `payment` reports per-companion
+    insert failures as `companionWarning`, and booking-confirmed renders a
+    fourth banner telling the passenger to re-add them before boarding.
+  - **Admin console:** booking detail gates on loading/error (no more
+    "Booking not found" flash on every open); `(admin)/bookings` is now THE
+    Trips screen (search + Cancelled filter + shared states) and
+    `active-trips.tsx` is deleted; `(admin)/alerts.tsx` and
+    `(passenger)/search-boat.tsx` are deleted — one safety-alert screen
+    remains, correctly titled; admin profile lost its duplicate All Users
+    row and its emoji icons.
+  - **States:** arrived, departure and fleet overview use the shared
+    Loading/Error/Empty states; `useTripManifest` exposes `reload` for a
+    Retry button; `LoadingState` honours reduce-motion; `ErrorState` uses a
+    vector icon; track-delivery has real terminal states (parcel returned,
+    declined piggyback) with a rebook action and a stale-data banner.
+  - **Hygiene:** sign-out clears `booking_cache:*`. 080 adds the capacity
+    guard on accept (the old check ran before the per-boat lock), refuses a
+    refund once the boat has sailed, and lets one passenger hold a ride AND
+    a padala on the same day.
+  - **Deferred (tracker [H]):** keyboard avoidance on 3 non-auth screens,
+    DB-backed parcel rates, FlatList notifications, location-off warning.
+  - **Next:** run `migrations/080_race_and_money_guards.sql` after 079,
+    then smoke: add two ports in a row; break wifi during a rental
+    downpayment and use Retry; cancel an advance booking with an approved
+    downpayment and read the dialog; try to overfill a boat.
+
 - **2026-11-13 — Operator escrow payout, charter sailing day, notification
   kinds, route/module lock split, passenger details + SOS fixes, shared
   loading animation (migration 079 PENDING — USER MUST RUN, after 078;

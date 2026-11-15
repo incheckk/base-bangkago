@@ -59,7 +59,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'home', label: 'Home', route: '/(admin)/home', section: 'OPERATIONS' },
     { icon: 'people', label: 'Operators', route: '/(admin)/operators' },
     { icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-    { icon: 'boat', label: 'Trips', route: '/(admin)/active-trips' },
+    { icon: 'boat', label: 'Trips', route: '/(admin)/bookings' },
 
     { icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', section: 'FLEET' },
     { icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },
@@ -71,12 +71,9 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'receipt', label: 'Reports', route: '/(admin)/reports' },
     { icon: 'parcel', label: 'Parcel Rates', route: '/(admin)/manage-parcel-rates' },
 
-    // Named for the screens they open. Both this and the home screen's quick
-    // action read "System Alerts" while pointing at two different screens —
-    // /system-alerts is titled "Safety Alerts", /alerts is titled "System
-    // Alerts" — so one of the two labels was always lying.
+    // One safety-alert screen. There were two (this one and /alerts, both
+    // reading safety_alerts), so one label was always lying.
     { icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', section: 'SAFETY' },
-    { icon: 'alert', label: 'System Alerts', route: '/(admin)/alerts' },
 
     { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options', section: 'SYSTEM' },
   ],

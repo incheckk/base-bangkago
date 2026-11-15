@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { ICONS, Icon, type IconName } from './Icon';
 import { PrimaryButton } from './PrimaryButton';
 import { colors, radii, spacing, typography } from '../theme/tokens';
@@ -24,7 +24,23 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   // screen runs its page loads through here, so one component covers all
   // roles; native driver keeps it off the JS thread during the fetch.
   const [bob] = React.useState(() => new Animated.Value(0));
+  // A loader that never stops is exactly what reduce-motion is for: honour it
+  // and leave the boat still.
+  const [reduceMotion, setReduceMotion] = React.useState(false);
   React.useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((v) => { if (alive) setReduceMotion(v); })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => { alive = false; sub.remove(); };
+  }, []);
+
+  React.useEffect(() => {
+    if (reduceMotion) {
+      bob.setValue(0);
+      return;
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(bob, {
@@ -37,7 +53,7 @@ export function LoadingState({ label = 'Loading…' }: { label?: string }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [bob]);
+  }, [bob, reduceMotion]);
 
   return (
     <View
@@ -79,7 +95,7 @@ export function ErrorState({
 }: { message: string; onRetry?: () => void }) {
   return (
     <View style={styles.center}>
-      <Text style={styles.icon}>⚠️</Text>
+      <StateGlyph icon="warning" tint={colors.warning} />
       <Text style={styles.title}>Something went wrong</Text>
       <Text style={styles.caption}>{message}</Text>
       {onRetry && (

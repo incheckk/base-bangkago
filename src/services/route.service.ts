@@ -38,11 +38,27 @@ export async function getAllPorts(): Promise<PortDoc[]> {
   return (data ?? []).map(mapPortRow);
 }
 
-export async function createPort(port: Omit<PortDoc, 'sortOrder'> & { sortOrder?: number }) {
+/** Port ids are slugs — the seed and the web console both use them — so a new
+ *  port derives one from its name instead of inserting an empty primary key. */
+export function portSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+export async function createPort(
+  port: Omit<PortDoc, 'portId' | 'sortOrder'> & { portId?: string; sortOrder?: number },
+) {
+  const id = port.portId?.trim() || portSlug(port.portName);
+  if (!id) throw new Error('Port name must contain at least one letter or number.');
+
   const { data, error } = await supabase
     .from('ports')
     .insert({
-      id: port.portId,
+      id,
       port_name: port.portName,
       location: port.location,
       latitude: port.latitude,
@@ -56,7 +72,14 @@ export async function createPort(port: Omit<PortDoc, 'sortOrder'> & { sortOrder?
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // 23505 = duplicate key: the slug already exists (same name, different case
+    // or punctuation). Say so instead of showing a Postgres error.
+    if ((error as any).code === '23505') {
+      throw new Error(`A port called "${port.portName}" already exists.`);
+    }
+    throw error;
+  }
   return mapPortRow(data);
 }
 

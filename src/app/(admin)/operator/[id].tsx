@@ -68,10 +68,10 @@ export default function OperatorDetailScreen() {
   const docs = getDocs(operator);
   const recentTrips = trips.filter((t) => t.operatorId === id).slice(0, 5);
 
-  const goToReview = (status?: 'approved' | 'rejected') => {
+  const goToReview = () => {
     router.push({
       pathname: '/(admin)/document-review',
-      params: { id: operator.uid, intent: status ?? 'review' },
+      params: { id: operator.uid },
     });
   };
 
@@ -129,19 +129,11 @@ export default function OperatorDetailScreen() {
       </View>
 
       {operator.verificationStat === 'pending' && (
-        <View style={styles.actions}>
-          <PrimaryButton
-            label="Review & Approve"
-            onPress={() => goToReview('approved')}
-            style={styles.actionBtn}
-          />
-          <PrimaryButton
-            label="Review & Reject"
-            onPress={() => goToReview('rejected')}
-            variant="danger"
-            style={styles.actionBtn}
-          />
-        </View>
+        <PrimaryButton
+          label="Review"
+          onPress={goToReview}
+          style={styles.actions}
+        />
       )}
 
       <Text style={[styles.sectionLabel, { marginTop: spacing.xxl }]}>RECENT TRIPS</Text>
@@ -216,12 +208,7 @@ const styles = StyleSheet.create({
   docLabel: { flexShrink: 1, color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: spacing.xs },
   docStatus: { fontSize: 12, fontWeight: '600' },
 
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-  },
-  actionBtn: { flex: 1 },
+  actions: { marginTop: spacing.xl },
 
   tripList: { gap: spacing.md },
 });

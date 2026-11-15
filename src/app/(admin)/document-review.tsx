@@ -17,7 +17,7 @@ import { colors, radii, spacing, typography } from '@/theme/tokens';
  * The four documents as the bangkero actually uploaded them — real
  * thumbnails, tap for a full-screen look. Status comes from the path
  * on the bangkeros row (nothing else writes those columns); the
- * decision is one Approve / Reject All pair because verification is
+ * decision is one Approve / Reject pair because verification is
  * granted per bangkero, never per photo (verifyBangkero, admin.service).
  */
 const DOC_TYPES: {
@@ -186,23 +186,25 @@ export default function DocumentReviewScreen() {
         </View>
       )}
 
-      <View style={styles.bottomActions}>
-        <PrimaryButton
-          label="Approve All"
-          onPress={() => void decide('approved')}
-          loading={actionLoading}
-          disabled={actionLoading}
-          style={styles.bottomBtn}
-        />
-        <PrimaryButton
-          label="Reject All"
-          onPress={() => void decide('rejected')}
-          variant="danger"
-          loading={actionLoading}
-          disabled={actionLoading}
-          style={styles.bottomBtn}
-        />
-      </View>
+      {!decided && (
+        <View style={styles.bottomActions}>
+          <PrimaryButton
+            label="Approve"
+            onPress={() => void decide('approved')}
+            loading={actionLoading}
+            disabled={actionLoading}
+            style={styles.bottomBtn}
+          />
+          <PrimaryButton
+            label="Reject"
+            onPress={() => void decide('rejected')}
+            variant="danger"
+            loading={actionLoading}
+            disabled={actionLoading}
+            style={styles.bottomBtn}
+          />
+        </View>
+      )}
       </ScrollView>
 
       {/* Full-screen document preview */}

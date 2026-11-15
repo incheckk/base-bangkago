@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useAllTrips } from '@/hooks/useAllTrips';
 import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
@@ -16,7 +17,7 @@ import type { ParcelDoc, ParcelItemDoc, PassengerDetailDoc } from '@/types/model
 
 export default function AdminBookingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data } = useAllTrips();
+  const { data, loading, error } = useAllTrips();
   const booking = data.find((b) => b.bookingId === id);
 
   // Manifest: companions + the parcel and its item lines. RLS lets an admin
@@ -82,12 +83,36 @@ export default function AdminBookingDetail() {
     return () => { alive = false; };
   }, [id]);
 
+  // The list this screen looks the booking up in starts empty, so gate on the
+  // fetch — otherwise every open flashes "Booking not found" first.
+  if (loading) {
+    return (
+      <ScreenContainer>
+        <AdminScreenHeader title="Booking" />
+        <LoadingState label="Loading booking…" />
+      </ScreenContainer>
+    );
+  }
+
+  if (error) {
+    return (
+      <ScreenContainer>
+        <AdminScreenHeader title="Booking" />
+        <ErrorState message={error} />
+      </ScreenContainer>
+    );
+  }
+
   if (!booking) {
     return (
       <ScreenContainer>
         <AdminScreenHeader title="Booking" />
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>Booking not found</Text>
+          <EmptyState
+            icon="bookings"
+            title="Booking not found"
+            message="It may have been deleted, or the list is out of date."
+          />
         </View>
       </ScreenContainer>
     );

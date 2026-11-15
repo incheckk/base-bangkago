@@ -1,17 +1,20 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { MapContainer } from '@/components/MapContainer';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
+import { usePorts } from '@/hooks/useSupabase';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
+import { useVesselTracking } from '@/hooks/useVesselTracking';
 import { friendlyError } from '@/services/booking.service';
 import { getDownpaymentByRental } from '@/services/downpayment.service';
 import { createNotification } from '@/services/notification.service';
-import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
+import { getPassengerDetailsByRentals, setRentalRiderBoarded } from '@/services/passenger-detail.service';
 import {
   type BangkeroRentalRow,
   completeRental,
@@ -40,6 +43,13 @@ export default function CharterSailingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tickBusy, setTickBusy] = useState<string | null>(null);
+
+  // The tracker runs app-wide (bangkero layout), so the boat's own fixes
+  // already exist — the charter just renders the newest one.
+  const vessel = useVesselTracking(row?.bangkaId ?? null);
+  const ports = usePorts();
+  const latest = vessel.data[0] ?? null;
 
   const load = useCallback(async () => {
     if (!uid || !id) return;
@@ -83,6 +93,19 @@ export default function CharterSailingScreen() {
     setBusy(false);
   }
 
+  async function toggleBoarded(c: PassengerDetailDoc) {
+    if (!row || tickBusy) return;
+    setTickBusy(c.passengerId);
+    setActionError(null);
+    try {
+      await setRentalRiderBoarded(row.rentalId, c.passengerId, !c.boardedAt);
+      await load();
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setTickBusy(null);
+  }
+
   async function finish() {
     if (!row || busy) return;
     // Remainder = total minus what escrow actually holds (same rule the
@@ -96,7 +119,7 @@ export default function CharterSailingScreen() {
     }
     Alert.alert(
       'Finish this charter?',
-      `Confirm the charter is over and you collected ₱${remainder} in person. The 50% escrow is released to you by the admin.`,
+      `Confirm the charter is over and you collected ₱${remainder} in person. BangkaGo releases the 50% escrow to you.`,
       [
         { text: 'Go back', style: 'cancel' },
         {
@@ -185,6 +208,19 @@ export default function CharterSailingScreen() {
           </Text>
         </View>
 
+        {row.status !== 'cancelled' && (
+          <MapContainer
+            ports={ports.data}
+            height={200}
+            draggable={false}
+            vessels={
+              latest
+                ? [{ latitude: latest.latitude, longitude: latest.longitude, bangkaId: row.bangkaId }]
+                : []
+            }
+          />
+        )}
+
         {!!actionError && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{actionError}</Text>
@@ -204,22 +240,42 @@ export default function CharterSailingScreen() {
 
           {riders.length > 0 ? (
             <>
-              <Text style={styles.partyLabel}>PARTY · {riders.length}</Text>
-              {riders.map((c) => (
-                <View key={c.passengerId} style={styles.rider}>
-                  <Text style={styles.personName} numberOfLines={1}>
-                    {c.firstName} {c.lastName}
-                    {c.age != null ? ` · ${c.age} yrs` : ''}
-                    {c.sex ? ` · ${c.sex}` : ''}
-                  </Text>
-                  {!!c.contactNumber && (
-                    <Text style={styles.address} numberOfLines={1}>{c.contactNumber}</Text>
-                  )}
-                  {!!c.address && (
-                    <Text style={styles.address} numberOfLines={2}>📍 {c.address}</Text>
-                  )}
-                </View>
-              ))}
+              <Text style={styles.partyLabel}>
+                PARTY · {riders.length} · {riders.filter((c) => c.boardedAt).length} aboard
+              </Text>
+              {riders.map((c) => {
+                const aboard = !!c.boardedAt;
+                return (
+                  <Pressable
+                    key={c.passengerId}
+                    // Before the charter starts nobody is aboard; the tick is
+                    // the boarding check the QR used to be for rides.
+                    disabled={tickBusy === c.passengerId || row.completedAt != null}
+                    onPress={() => void toggleBoarded(c)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: aboard }}
+                    accessibilityLabel={`${c.firstName} ${c.lastName} ${aboard ? 'aboard' : 'not aboard'}`}
+                    style={[styles.rider, aboard && styles.riderAboard]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.personName} numberOfLines={1}>
+                        {c.firstName} {c.lastName}
+                        {c.age != null ? ` · ${c.age} yrs` : ''}
+                        {c.sex ? ` · ${c.sex}` : ''}
+                      </Text>
+                      {!!c.contactNumber && (
+                        <Text style={styles.address} numberOfLines={1}>{c.contactNumber}</Text>
+                      )}
+                      {!!c.address && (
+                        <Text style={styles.address} numberOfLines={2}>📍 {c.address}</Text>
+                      )}
+                    </View>
+                    <Text style={[styles.tick, aboard && styles.tickOn]}>
+                      {tickBusy === c.passengerId ? '…' : aboard ? '✓ aboard' : 'Tick'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </>
           ) : (
             <Text style={styles.meta}>No other passengers listed.</Text>
@@ -254,7 +310,7 @@ export default function CharterSailingScreen() {
 
         {row.completedAt && (
           <Text style={styles.done}>
-            Charter finished {timeLabel(row.completedAt)}. The admin releases the held 50% to
+            Charter finished {timeLabel(row.completedAt)}. BangkaGo releases the held 50% to
             your GCash once confirmed.
           </Text>
         )}
@@ -321,11 +377,26 @@ const styles = StyleSheet.create({
   address: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
   partyLabel: { ...typography.label, marginTop: spacing.lg, marginBottom: spacing.sm },
   rider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
     paddingTop: spacing.md,
     marginTop: spacing.md,
   },
+  riderAboard: { borderTopColor: colors.primaryBorder },
+  tick: {
+    ...typography.label,
+    letterSpacing: 0,
+    color: colors.textMuted,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  tickOn: { color: colors.primary, borderColor: colors.primaryBorder },
 
   actions: { marginTop: spacing.xl, gap: spacing.sm },
   hint: { ...typography.caption, color: colors.textMuted },

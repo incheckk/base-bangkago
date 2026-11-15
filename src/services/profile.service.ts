@@ -101,12 +101,17 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
     .eq('id', uid);
   if (bangkeroError) throw bangkeroError;
 
-  // Upsert bangka record (one per bangkero for now)
+  // Upsert the boat. `.limit(1)` matters: duplicate bangkas rows used to
+  // make maybeSingle() error, so every save fell into the insert branch
+  // and created yet another boat.
   if (name || parsed) {
     const { data: existing } = await supabase
       .from('bangkas')
       .select('id')
       .eq('bangkero_id', uid)
+      .is('deleted_at', null)
+      .order('id')
+      .limit(1)
       .maybeSingle();
 
     if (existing) {

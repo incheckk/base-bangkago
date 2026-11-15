@@ -124,7 +124,7 @@ export default function BangkeroEarnings() {
           <>
             <Text style={styles.sectionLabel}>RELEASED TO YOU</Text>
             <Text style={styles.payoutHint}>
-              The 50% escrow the admin paid out after each completed trip.
+              The 50% escrow BangkaGo paid out after each completed trip.
             </Text>
             {payouts.map((p) => (
               <View key={p.downpaymentId} style={styles.txRow}>

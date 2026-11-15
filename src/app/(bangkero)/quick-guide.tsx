@@ -17,7 +17,7 @@ const STEPS = [
   {
     num: '1',
     title: 'Get verified',
-    desc: 'Upload your ID, boat registration and permits. The admin reviews them, then your boat can go online.',
+    desc: 'Upload your ID, boat registration and permits. BangkaGo reviews them, then your boat can go online.',
   },
   {
     num: '2',

@@ -104,10 +104,23 @@ export default function AdminDownpaymentsScreen() {
   const visible = rows.filter((r) => {
     if (filter === 'all') return true;
     if (filter === 'release') return rowState(r) === 'due';
+    // Approved is the escrow row itself; a completed trip's row belongs in
+    // "To release" instead, so the two tabs never show the same money.
+    if (filter === 'approved') return r.status === 'approved' && rowState(r) !== 'due';
     return r.status === filter;
   });
-  const pendingCount = rows.filter((r) => r.status === 'pending').length;
-  const dueCount = rows.filter((r) => rowState(r) === 'due').length;
+  // The header answers "how many are in the tab I am looking at" — the
+  // global pending/release counts used to leak into every tab.
+  const subtitle =
+    filter === 'pending'
+      ? `${visible.length} awaiting review`
+      : filter === 'release'
+        ? `${visible.length} to release`
+        : filter === 'approved'
+          ? `${visible.length} approved`
+          : filter === 'refunded'
+            ? `${visible.length} refunded`
+            : `${visible.length} total`;
 
   async function doApprove(row: AdminDownpaymentRow) {
     if (busyId) return;
@@ -186,13 +199,7 @@ export default function AdminDownpaymentsScreen() {
       <AdminScreenHeader
         eyebrow="PAYMENTS"
         title="Downpayments"
-        subtitle={
-          pendingCount > 0
-            ? `${pendingCount} awaiting review`
-            : dueCount > 0
-              ? `${dueCount} to release`
-              : `${rows.length} total`
-        }
+        subtitle={subtitle}
       />
       <FilterChips filters={FILTERS} active={filter} onChange={setFilter} />
 

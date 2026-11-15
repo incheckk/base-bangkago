@@ -14,6 +14,7 @@ interface Result {
   parcels: ManifestParcelDoc[];
   loading: boolean;
   error: string | null;
+  reload: () => Promise<void>;
   finalizeManifest: () => Promise<void>;
 }
 
@@ -77,5 +78,5 @@ export function useTripManifest(bangkeroId: string | null, includeCompleted = fa
     }
   };
 
-  return { manifest, passengers, parcels, loading, error, finalizeManifest: doFinalizeManifest };
+  return { manifest, passengers, parcels, loading, error, reload: load, finalizeManifest: doFinalizeManifest };
 }

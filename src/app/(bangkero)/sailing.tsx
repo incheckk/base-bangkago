@@ -304,7 +304,7 @@ export default function SailingScreen() {
                   </Text>
                   {!!down && (
                     <Text style={styles.payDown} numberOfLines={1}>
-                      ₱{down.amount} downpayment {down.status === 'approved' ? 'confirmed' : 'pending'} with admin
+                      ₱{down.amount} downpayment {down.status === 'approved' ? 'confirmed' : 'pending'} with BangkaGo
                     </Text>
                   )}
                 </View>

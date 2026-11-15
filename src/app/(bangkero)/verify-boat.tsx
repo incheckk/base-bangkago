@@ -153,7 +153,7 @@ export default function VerifyBoat() {
         {stat === 'rejected' && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
-              The admin rejected your documents — upload replacements below and
+              BangkaGo rejected your documents — upload replacements below and
               submit to send them back for review.
             </Text>
           </View>

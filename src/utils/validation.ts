@@ -6,6 +6,15 @@
  * actually type (#, /, ., comma, hyphen) but reject emoji/symbols.
  */
 
+/**
+ * Shared guards for user-typed information (names, addresses, free-text
+ * item names). Names follow the manifest rule the add-passenger form has
+ * always used — letters (any accent), spaces, hyphen, apostrophe — plus a
+ * two-letter minimum and a junk filter, because "www", "qqq" and "w-w"
+ * were accepted as real people. Addresses keep digits and the punctuation
+ * people actually type (#, /, ., comma, hyphen) but reject emoji/symbols.
+ */
+
 /** Letters (accents included), spaces, hyphen, apostrophe. */
 const NAME_RE = /^[A-Za-zÀ-ÖØ-öø-ÿÑñ' -]+$/;
 /** Printable address: letters, digits, spaces, , . # ( ) - / ' */
@@ -13,11 +22,19 @@ const ADDRESS_RE = /^[A-Za-z0-9À-ÖØ-öø-ÿÑñ' .,#()/-]+$/;
 /** Item/description text: letters, digits, spaces, % & , . # ( ) - / ' */
 const TEXT_RE = /^[A-Za-z0-9À-ÖØ-öø-ÿÑñ' .,#%&()/-]+$/;
 
-/** null = valid. At least 2 letters, no digits/emoji/symbols. */
+/** null = valid. At least 2 letters, no digits/emoji/x, not keyboard junk. */
 export function nameError(value: string): string | null {
   const v = value.trim();
   if (v.length < 2) return 'At least 2 letters';
   if (!NAME_RE.test(v)) return 'Letters, spaces, hyphens only';
+  const letters = v.toLowerCase().replace(/[^a-zà-öø-ÿñ]/g, '');
+  // Junk names: one letter repeated (www, qqq, oooooo) or a triple run.
+  if (new Set(letters).size < 2) return 'Enter a real name';
+  if (/([a-zà-öø-ÿñ])\1\1/.test(letters)) return 'Enter a real name';
+  // "w-w" / "   www": no token is even two letters long. O'Brien and
+  // "Maria Clara" still pass because at least one token is a real word.
+  const tokens = v.split(/[\s\-']+/).filter(Boolean);
+  if (tokens.every((t) => t.length < 2)) return 'Enter a real name';
   return null;
 }
 

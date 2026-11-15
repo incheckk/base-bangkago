@@ -1,7 +1,7 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PrimaryButton } from './PrimaryButton';
-import { todayIso } from './SchedulePicker';
+import { slotLabel, todayIso } from './SchedulePicker';
 import { StatusPill } from './StatusPill';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
 import type { BookingDoc } from '../types/models';
@@ -122,8 +122,8 @@ export function BangkeroTripSheet({
                 <Text style={styles.advanceText}>
                   This trip sails{' '}
                   {focus?.scheduledDate ? shortDate(focus.scheduledDate) : 'on its date'}
-                  {focus?.scheduledTime ? ` at ${focus.scheduledTime}` : ''}. Passengers scan on
-                  board that morning — you can keep accepting bookings for today.
+                  {focus?.scheduledTime ? ` at ${slotLabel(focus.scheduledTime)}` : ''}. Passengers
+                  board and scan on that day — you can keep accepting bookings for today.
                 </Text>
               </View>
             ) : (

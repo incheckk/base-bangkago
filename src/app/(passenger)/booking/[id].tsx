@@ -260,6 +260,22 @@ export default function BookingDetail() {
     };
   }, [id, user?.id, booking?.status]);
 
+  /** Destructive and irreversible, so it always asks first — and it tells the
+   *  truth about money: an approved escrow downpayment is NOT refunded here. */
+  function confirmCancel() {
+    const held = downpayment && (downpayment.status === 'pending' || downpayment.status === 'approved');
+    Alert.alert(
+      'Cancel this booking?',
+      held
+        ? `You filed a ₱${downpayment.amount} downpayment for this trip. Cancelling does not refund it automatically — BangkaGo refunds it for you. The fare itself is collected on board.`
+        : 'Your bangkero will be told you cancelled. The fare is collected on board, so nothing has been charged.',
+      [
+        { text: 'Keep booking', style: 'cancel' },
+        { text: 'Cancel booking', style: 'destructive', onPress: () => void cancel() },
+      ]
+    );
+  }
+
   async function cancel() {
     if (!id || acted || busy || parcelDone) return;
     setBusy(true);
@@ -274,8 +290,8 @@ export default function BookingDetail() {
           `Trip ${booking.ref} was cancelled by the passenger.`
         ).catch(() => {});
       }
-      // No refund step — the fare is collected on board, so a cancelled
-      // trip simply means nothing was ever charged.
+      // A held downpayment is not refunded here: the admin refunds it from
+      // Downpayments, where a cancelled target is flagged "refund due".
     } catch (e) {
       setActionError(friendlyError(e));
     }
@@ -390,9 +406,12 @@ export default function BookingDetail() {
   }
 
   function confirmEscape() {
+    const held = downpayment && (downpayment.status === 'pending' || downpayment.status === 'approved');
     Alert.alert(
       "I can't reach my boat",
-      'Your trip will be cancelled. You were not charged — the fare is collected on board. Your bangkero is told you did not board, and you can book again right away.',
+      held
+        ? `Your trip will be cancelled. The fare is collected on board, but your ₱${downpayment.amount} downpayment is not refunded automatically — BangkaGo refunds it for you. Your bangkero is told you did not board, and you can book again right away.`
+        : 'Your trip will be cancelled. You were not charged — the fare is collected on board. Your bangkero is told you did not board, and you can book again right away.',
       [
         { text: 'Keep booking', style: 'cancel' },
         { text: 'Cancel my trip', style: 'destructive', onPress: () => void escape() },
@@ -454,6 +473,13 @@ export default function BookingDetail() {
     const left = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
     return `Sails today${when} — in ~${left}`;
   })();
+
+  // A future-dated trip has not started: no live tracking, and the copy
+  // must say when it sails instead of "your bangkero is on the way".
+  const isAdvanceBooking = !!booking && isAdvanceDate(booking.scheduledDate);
+  const sailingWhen = booking?.scheduledDate
+    ? `${new Date(`${booking.scheduledDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}${booking.scheduledTime ? ` · ${slotLabel(booking.scheduledTime)}` : ''}`
+    : 'on its scheduled day';
 
   if (loading && !booking) {
     return <ScreenContainer><LoadingState label="Loading booking…" /></ScreenContainer>;
@@ -519,7 +545,7 @@ export default function BookingDetail() {
         {booking.status === 'pending' && !parcelDone && (
           <View style={styles.pendingBanner}>
             <Text style={styles.pendingText}>
-              Awaiting admin confirmation of your GCash downpayment. Bangkeros cannot see
+              Awaiting BangkaGo confirmation of your GCash downpayment. Bangkeros cannot see
               this booking yet — you&apos;ll get a notification the moment it&apos;s confirmed.
             </Text>
           </View>
@@ -587,10 +613,10 @@ export default function BookingDetail() {
               label="Downpayment (50%)"
               value={`₱${downpayment.amount} · ${
                 downpayment.status === 'approved'
-                  ? 'confirmed by admin'
+                  ? 'confirmed by BangkaGo'
                   : downpayment.status === 'refunded'
                     ? 'refunded'
-                    : 'awaiting admin confirmation'
+                    : 'awaiting BangkaGo confirmation'
               }`}
             />
           ) : (
@@ -639,12 +665,12 @@ export default function BookingDetail() {
           {booking.status === 'pending' && !parcelDone && (
             <>
               <Text style={styles.waiting}>
-                Waiting for the admin to confirm your downpayment. This updates on its own.
+                Waiting for BangkaGo to confirm your downpayment. This updates on its own.
               </Text>
               <PrimaryButton
                 label="Cancel booking"
                 variant="danger"
-                onPress={cancel}
+                onPress={confirmCancel}
                 loading={busy}
                 disabled={acted}
               />
@@ -671,7 +697,7 @@ export default function BookingDetail() {
                     style={styles.batchingLink}
                   />
                 )}
-              <PrimaryButton label="Cancel booking" variant="danger" onPress={cancel} loading={busy} disabled={acted} />
+              <PrimaryButton label="Cancel booking" variant="danger" onPress={confirmCancel} loading={busy} disabled={acted} />
             </>
           )}
 
@@ -684,7 +710,9 @@ export default function BookingDetail() {
                     ? 'You are confirmed on board. Safe travels!'
                     : booking.serviceType === 'cargo'
                       ? `Your parcel will ride with ${booking.operatorName ?? 'the bangkero'}. The receiver can pick it up at ${booking.toPortName}.`
-                      : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
+                      : isAdvanceBooking
+                        ? `Your trip sails ${sailingWhen}. Meet your bangkero at ${booking.fromPortName} on that day and show your boarding QR.`
+                        : `Your bangkero is on the way. Meet them at ${booking.fromPortName}.`}
               </Text>
               <PrimaryButton
                 label="View trip details"
@@ -706,14 +734,16 @@ export default function BookingDetail() {
                 />
               )}
 
-              {/* Live progress + SOS/contact — the en-route view. */}
-              <PrimaryButton
-                label="Track live trip"
-                variant="secondary"
-                onPress={() => router.push('/(passenger)/trip-en-route')}
-                style={styles.secondaryAction}
-              />
-
+              {/* Live progress + SOS/contact — the en-route view. Nothing to
+                  track until the sailing day. */}
+              {!isAdvanceBooking && (
+                <PrimaryButton
+                  label="Track live trip"
+                  variant="secondary"
+                  onPress={() => router.push('/(passenger)/trip-en-route')}
+                  style={styles.secondaryAction}
+                />
+              )}
               {/* Escape valve: opens 10 minutes after accept, closes for good
                   the moment the bangkero confirms everyone is aboard — or the
                   passenger files the not-aboard dispute (the boat has left). */}

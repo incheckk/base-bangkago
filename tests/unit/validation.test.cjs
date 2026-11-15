@@ -20,6 +20,16 @@ test('nameError rejects digits, emoji and symbols', () => {
   assert.equal(nameError('Juan@Dela'), 'Letters, spaces, hyphens only');
 });
 
+test('nameError rejects keyboard junk and one-letter repeats', () => {
+  assert.equal(nameError('www'), 'Enter a real name');
+  assert.equal(nameError('qqq'), 'Enter a real name');
+  assert.equal(nameError('oooooo'), 'Enter a real name');
+  assert.equal(nameError('   www'), 'Enter a real name');
+  assert.equal(nameError('w-w'), 'Enter a real name');
+  assert.equal(nameError('Aa'), 'Enter a real name');
+  assert.equal(nameError('Leee'), 'Enter a real name');
+});
+
 test('addressError accepts complete PH street addresses', () => {
   assert.equal(addressError('123 Mabini St., Brgy. 5'), null);
   assert.equal(addressError('Unit 2-B, #45 Sikatuna Rd. (Poblacion)'), null);

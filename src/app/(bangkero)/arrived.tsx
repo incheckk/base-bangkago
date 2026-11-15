@@ -7,6 +7,7 @@ import {
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { ErrorState, LoadingState } from '@/components/States';
 import { useLockBack } from '@/hooks/useLockBack';
 import { useTripManifest } from '@/hooks/useTripManifest';
 import { useBangkeroParcels } from '@/hooks/useBangkeroParcels';
@@ -38,7 +39,7 @@ export default function ArrivedScreen() {
   // includeCompleted, because this screen stamps the arrival itself: without
   // it, getActiveManifest stops returning the manifest the moment this screen
   // marks it arrived, and the screen empties under its own write.
-  const { manifest, passengers, loading } = useTripManifest(user?.id ?? null, true);
+  const { manifest, passengers, loading, error: manifestError, reload } = useTripManifest(user?.id ?? null, true);
   const { data: allParcels, refresh: refreshParcels } = useBangkeroParcels(user?.id ?? null);
   const devFlags = useDevFlags();
 
@@ -253,9 +254,9 @@ export default function ArrivedScreen() {
         </View>
 
         {loading ? (
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>Loading trip details…</Text>
-          </View>
+          <LoadingState label="Loading trip details…" />
+        ) : manifestError ? (
+          <ErrorState message={manifestError} onRetry={() => void reload()} />
         ) : (
           <>
             <Text style={styles.sectionLabel}>DISEMBARKATION</Text>

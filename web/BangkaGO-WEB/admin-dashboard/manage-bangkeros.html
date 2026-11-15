@@ -181,6 +181,8 @@
     let bangkeros = [];
     let deletedBangkeros = [];
     let selectedIndex = null;
+    let reviewUid = null;      // bangkero shown in the Review Documents modal
+    let previewDocIndex = null; // doc row currently previewed in that modal
 
     const bangkeroBody = document.getElementById("bangkeroBody");
     const deletedBangkeroBody = document.getElementById("deletedBangkeroBody");
@@ -355,13 +357,15 @@
     // Inline preview inside the review modal — a second stacked modal hid
     // the documents behind the review backdrop, so one image panel is used.
     function hideDocPreview(){
+      previewDocIndex = null;
       docPreviewPanel.classList.add('d-none');
       docPreviewImg.removeAttribute('src');
       docPreviewMsg.classList.add('d-none');
     }
 
-    function showDocPreview(url, label){
+    function showDocPreview(url, label, docIndex){
       if (!url) return;
+      previewDocIndex = docIndex === undefined ? null : docIndex;
       docPreviewLabel.textContent = label;
       docPreviewMsg.textContent = '';
       docPreviewMsg.classList.add('d-none');
@@ -378,101 +382,167 @@
     }
 
     docPreviewClose.addEventListener('click', hideDocPreview);
+    // Modal closed → stop refreshing docs; reopening re-reads anyway.
+    document.getElementById('reviewDocsModal').addEventListener('hidden.bs.modal', function () {
+      reviewUid = null;
+      hideDocPreview();
+    });
+
+    // Reads one bangkero's four document paths and paints them into the
+    // open Review modal. Re-runnable: the realtime handler calls it again
+    // so an upload from the phone shows up without closing the modal.
+    async function loadReviewDocs(uid){
+      const b = bangkeros.find(x => x.uid === uid);
+      if (b) {
+        docApplicantName.textContent = b.displayName;
+        docApplicantId.textContent = b.uid;
+        docAssignedBangka.textContent = b.boatName || 'Unassigned';
+      }
+
+      // Fetch full bangkero row with document fields
+      const c = window.bangkagoServices.getClient();
+      const { data: bangkeroData, error } = await c.from('bangkeros')
+        .select('gov_issued_id, boat_registration_cert, coastal_permit, brgy_clearance')
+        .eq('id', uid)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const docs = [
+        { label: "Gov't ID", field: 'gov_issued_id', icon: 'bi-person-badge' },
+        { label: 'Boat Registration', field: 'boat_registration_cert', icon: 'bi-journal-text' },
+        { label: 'Coastal Permit', field: 'coastal_permit', icon: 'bi-file-earmark-check' },
+        { label: 'Brgy Clearance', field: 'brgy_clearance', icon: 'bi-building' }
+      ];
+
+      const documentUrls = [];
+      const documentRows = await Promise.all(docs.map(async (doc, docIndex) => {
+        const path = bangkeroData?.[doc.field];
+        if (!path) {
+          return `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <span><i class="bi ${doc.icon} me-2"></i>${doc.label}</span>
+              <span class="badge text-bg-secondary">Not uploaded</span>
+            </div>
+          `;
+        }
+
+        const publicUrl = await resolveDocumentUrl(c, path);
+        documentUrls[docIndex] = publicUrl;
+        if (!publicUrl) {
+          return `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <span><i class="bi ${doc.icon} me-2"></i>${doc.label}</span>
+              <span class="badge text-bg-danger">Unavailable</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" data-doc-index="${docIndex}">
+            <div class="d-flex align-items-center gap-3">
+              <div class="doc-thumbnail bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; flex: 0 0 48px;">
+                   <img src="${publicUrl}" alt="${doc.label}" loading="eager"
+                     class="w-100 h-100" style="object-fit: cover;">
+                <i class="bi ${doc.icon} text-muted d-none" style="font-size: 1.25rem;"></i>
+              </div>
+              <div>
+                <div class="fw-medium">${doc.label}</div>
+                <small class="text-muted">Click to preview</small>
+              </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge text-bg-success" data-doc-badge><i class="bi bi-check-circle me-1"></i>Uploaded</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" data-doc-view title="Preview this document">
+                <i class="bi bi-eye me-1"></i>View
+              </button>
+              <a href="${publicUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" data-document-link title="Open document in a new tab" aria-label="Open document in a new tab">
+                <i class="bi bi-box-arrow-up-right"></i>
+              </a>
+            </div>
+          </div>
+        `;
+      }));
+      // A different bangkero (or no modal) is open by now — don't paint
+      // these URLs into the wrong Review sheet.
+      if (reviewUid !== uid) return;
+      docList.innerHTML = documentRows.join('');
+
+      docList.querySelectorAll('[data-doc-index]').forEach(row => {
+        row.addEventListener('click', () => {
+          const doc = docs[Number(row.dataset.docIndex)];
+          const url = documentUrls[Number(row.dataset.docIndex)];
+          if (url) showDocPreview(url, doc.label, Number(row.dataset.docIndex));
+        });
+        row.querySelector('[data-document-link]')?.addEventListener('click', event => {
+          event.stopPropagation();
+        });
+      });
+
+      // A path can point at a file the browser cannot decode (the phone
+      // once stored the 14-byte text "File not found", and iPhones upload
+      // HEIC). Say so instead of showing "Uploaded" next to a blank box.
+      docList.querySelectorAll('.doc-thumbnail img').forEach(img => {
+        img.addEventListener('error', () => {
+          img.hidden = true;
+          img.nextElementSibling.classList.remove('d-none');
+          const badge = img.closest('.list-group-item').querySelector('[data-doc-badge]');
+          if (badge) {
+            badge.className = 'badge text-bg-danger';
+            badge.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>Unreadable';
+          }
+        });
+      });
+
+      // Re-sign the previewed image so a re-upload (same storage path,
+      // upsert) is what the admin sees; a removed doc closes the preview.
+      const previewIdx = previewDocIndex;
+      if (previewIdx !== null) {
+        if (documentUrls[previewIdx]) {
+          showDocPreview(documentUrls[previewIdx], docs[previewIdx].label, previewIdx);
+        } else {
+          hideDocPreview();
+        }
+      }
+    }
+
+    // One read at a time; events that land mid-read queue one more pass so
+    // the last paint always reflects the latest row.
+    let docBusy = false;
+    let docDirty = false;
+    async function refreshReviewDocs(){
+      if (docBusy) { docDirty = true; return; }
+      if (!reviewUid) return;
+      docBusy = true;
+      try {
+        do {
+          docDirty = false;
+          const uid = reviewUid;
+          try {
+            await loadReviewDocs(uid);
+          } catch (e) {
+            console.error(e);
+            // Only the sheet that failed shows the error.
+            if (reviewUid === uid) docList.innerHTML = '<div class="alert alert-danger">Error loading documents: ' + e.message + '</div>';
+            break;
+          }
+        } while (docDirty && reviewUid);
+      } finally {
+        docBusy = false;
+      }
+    }
 
     window.openReviewDocs = async function(index){
       const b = bangkeros[index];
-      docApplicantName.textContent = b.displayName;
-      docApplicantId.textContent = b.uid;
-      docAssignedBangka.textContent = b.boatName || 'Unassigned';
+      if (!b) return;
+      reviewUid = b.uid;
       hideDocPreview();
 
       // Show loading state
       docList.innerHTML = '<div class="text-center py-3"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Loading documents...</p></div>';
       reviewDocsModal.show();
-
-      try {
-        // Fetch full bangkero row with document fields
-        const c = window.bangkagoServices.getClient();
-        const { data: bangkeroData, error } = await c.from('bangkeros')
-          .select('gov_issued_id, boat_registration_cert, coastal_permit, brgy_clearance')
-          .eq('id', b.uid)
-          .maybeSingle();
-        
-        if (error) throw error;
-
-        const docs = [
-          { label: "Gov't ID", field: 'gov_issued_id', icon: 'bi-person-badge' },
-          { label: 'Boat Registration', field: 'boat_registration_cert', icon: 'bi-journal-text' },
-          { label: 'Coastal Permit', field: 'coastal_permit', icon: 'bi-file-earmark-check' },
-          { label: 'Brgy Clearance', field: 'brgy_clearance', icon: 'bi-building' }
-        ];
-
-        const documentUrls = [];
-        const documentRows = await Promise.all(docs.map(async (doc, docIndex) => {
-          const path = bangkeroData?.[doc.field];
-          if (!path) {
-            return `
-              <div class="list-group-item d-flex justify-content-between align-items-center">
-                <span><i class="bi ${doc.icon} me-2"></i>${doc.label}</span>
-                <span class="badge text-bg-secondary">Not uploaded</span>
-              </div>
-            `;
-          }
-
-          const publicUrl = await resolveDocumentUrl(c, path);
-          documentUrls[docIndex] = publicUrl;
-          if (!publicUrl) {
-            return `
-              <div class="list-group-item d-flex justify-content-between align-items-center">
-                <span><i class="bi ${doc.icon} me-2"></i>${doc.label}</span>
-                <span class="badge text-bg-danger">Unavailable</span>
-              </div>
-            `;
-          }
-
-          return `
-            <div class="list-group-item d-flex justify-content-between align-items-center" style="cursor: pointer;" data-doc-index="${docIndex}">
-              <div class="d-flex align-items-center gap-3">
-                <div class="doc-thumbnail bg-light rounded overflow-hidden d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; flex: 0 0 48px;">
-                     <img src="${publicUrl}" alt="${doc.label}" loading="eager"
-                       class="w-100 h-100" style="object-fit: cover;"
-                       onerror="this.hidden=true;this.nextElementSibling.classList.remove('d-none');">
-                  <i class="bi ${doc.icon} text-muted d-none" style="font-size: 1.25rem;"></i>
-                </div>
-                <div>
-                  <div class="fw-medium">${doc.label}</div>
-                  <small class="text-muted">Click to preview</small>
-                </div>
-              </div>
-              <div class="d-flex align-items-center gap-2">
-                <span class="badge text-bg-success"><i class="bi bi-check-circle me-1"></i>Uploaded</span>
-                <button type="button" class="btn btn-sm btn-outline-primary" data-doc-view title="Preview this document">
-                  <i class="bi bi-eye me-1"></i>View
-                </button>
-                <a href="${publicUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary" data-document-link title="Open document in a new tab" aria-label="Open document in a new tab">
-                  <i class="bi bi-box-arrow-up-right"></i>
-                </a>
-              </div>
-            </div>
-          `;
-        }));
-        docList.innerHTML = documentRows.join('');
-
-        docList.querySelectorAll('[data-doc-index]').forEach(row => {
-          row.addEventListener('click', () => {
-            const doc = docs[Number(row.dataset.docIndex)];
-            const url = documentUrls[Number(row.dataset.docIndex)];
-            if (url) showDocPreview(url, doc.label);
-          });
-          row.querySelector('[data-document-link]')?.addEventListener('click', event => {
-            event.stopPropagation();
-          });
-        });
-      } catch (e) {
-        console.error(e);
-        docList.innerHTML = '<div class="alert alert-danger">Error loading documents: ' + e.message + '</div>';
-      }
-    }
+      await refreshReviewDocs();
+    };
 
     window.openDecisionModal = function(index){
       selectedIndex = index;
@@ -511,9 +581,18 @@
     // row (status + doc paths), the boat, each review round and the name/
     // phone on the account. One debounced reload for all of them.
     let reloadTimer = null;
-    function reloadSoon() {
+    function reloadSoon(payload) {
       clearTimeout(reloadTimer);
       reloadTimer = setTimeout(loadBangkeros, 400);
+
+      // Live Review modal: an upload from the phone writes the doc path onto
+      // the bangkero's row, so re-read only that row instead of making the
+      // admin close and reopen Review. id = bangkeros/users, bangkero_id =
+      // bangkas/bangkero_verification.
+      const row = payload && payload.new;
+      if (reviewUid && (!row || row.id === reviewUid || row.bangkero_id === reviewUid)) {
+        refreshReviewDocs();
+      }
     }
     ['bangkeros', 'bangkas', 'bangkero_verification', 'users'].forEach(function(table) {
       window.bangkagoRealtime.subscribe(table, null, reloadSoon);

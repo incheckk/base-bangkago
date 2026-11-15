@@ -454,9 +454,9 @@
            <td>1</td>
            <td>${esc(b.customerName || b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
            <td>${esc(b.customerPhone || b.passengerPhone || '—')}</td>
-           <td>Not on file</td>
+           <td>${b.customerAge != null ? esc(b.customerAge) : 'Not on file'}</td>
            <td>Booker</td>
-           <td>Not on file</td>
+           <td>${esc(b.customerAddress || 'Not on file')}</td>
            <td>${b.onboardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
          </tr>`,
         ...companions.map((p, i) => `
@@ -639,7 +639,7 @@
 
         // Passengers table
         const paxBody = [
-          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', 'Not on file', 'Booker', 'Not on file', b.onboardedAt ? 'Yes' : 'No']
+          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', b.customerAge != null ? String(b.customerAge) : 'Not on file', 'Booker', b.customerAddress || 'Not on file', b.onboardedAt ? 'Yes' : 'No']
         ].concat(data.companions.map(function(p, i) {
           return [
             i + 2,

@@ -41,6 +41,22 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — Semantic user activity audit (migration 082 PENDING —
+  USER MUST RUN after 081).**
+  - The audit log now records authenticated business changes from the app
+    and web as semantic activities with actor name/role snapshots, a
+    readable record label, and safe before/after values. Admins retain
+    read-only access. Generated notifications, GPS/weather telemetry,
+    SQL-editor and service-role writes are not attributed; notification
+    read-state changes are included.
+  - Migration 082 preserves and relabels existing 038 records, redacts
+    credential and document values, and replaces the admin/coastguard-only
+    trigger coverage with the app's business tables.
+  - **Next:** run 080 after 079, 081 after 080, then
+    `migrations/082_semantic_user_activity_audit.sql`; smoke a passenger
+    booking/cancel, bangkero accept/complete, and an admin update. Confirm
+    actor, activity, before/after values, and Manila timestamp.
+
 - **2026-11-16 — Defense-polish batch: one boat per bangkero, date-aware
   capacity, per-person island hop, honest approvals (migration **081
   PENDING — USER MUST RUN, after 080**; gates: tsc clean, lint 0 errors /

@@ -11,7 +11,7 @@
   // downpayment that must be refunded before the trip can be cancelled,
   // and the operator's boat (operator_boat_name is never written by the
   // accept RPCs, so the boat is read from bangkas via the operator).
-  var SELECT = '*, passenger:users!bookings_user_id_fkey(first_name,last_name,phone_number), operator:bangkeros!bookings_operator_id_fkey(display_name, bangkas(bangka_name)), downpayments(id,status,amount,created_at)';
+  var SELECT = '*, passenger:users!bookings_user_id_fkey(first_name,last_name,phone_number,age,address), operator:bangkeros!bookings_operator_id_fkey(display_name, bangkas(bangka_name)), downpayments(id,status,amount,created_at)';
 
   function fullName(user) {
     return user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : '';
@@ -45,6 +45,10 @@
       passengerPhone: row.passenger_phone,
       customerName: row.passenger_name || fullName(passenger) || null,
       customerPhone: row.passenger_phone || passenger?.phone_number || null,
+      // 079: the booker's own age/address sit on the users row (companions
+      // carry theirs on passenger_details) — same source the app's manifest uses.
+      customerAge: passenger?.age ?? null,
+      customerAddress: passenger?.address ?? null,
       fromPortName: row.from_port_name,
       toPortName: row.to_port_name,
       operatorId: row.operator_id,

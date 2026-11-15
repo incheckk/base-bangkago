@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
 import {
-  docPublicUrl, pickImage, removeGcashQr, saveGcashQr,
+  docPublicUrl, pickImageBase64, removeGcashQr, saveGcashQr,
 } from '@/services/documents.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -50,10 +50,10 @@ export default function GcashQrScreen() {
     if (!uid) return;
     try {
       setError(null);
-      const uri = await pickImage(source);
-      if (!uri) return;
+      const base64 = await pickImageBase64(source);
+      if (!base64) return;
       setBusy(true);
-      setOverride(await saveGcashQr(uid, uri));
+      setOverride(await saveGcashQr(uid, base64));
     } catch (e) {
       setError(friendlyError(e));
     }

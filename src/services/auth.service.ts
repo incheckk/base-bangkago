@@ -310,6 +310,10 @@ export function friendlyAuthError(e: unknown): string {
   if (message.includes('age and home address')) {
     return message;
   }
+  // Photo upload guard (documents.service) — the sentence already says what to do.
+  if (message.includes('could not be read from this phone')) {
+    return message;
+  }
   if (message) return `Something went wrong (${message}).`;
   return 'Something went wrong. Please try again.';
 }

@@ -18,7 +18,7 @@ import {
   type PickSource,
   docPublicUrl,
   getDocPaths,
-  pickImage,
+  pickImageBase64,
   removeDocImage,
   submitForReview,
   uploadDocImage,
@@ -86,10 +86,10 @@ export default function VerifyBoat() {
     if (!uid) return;
     try {
       setError(null);
-      const uri = await pickImage(source);
-      if (!uri) return;
+      const base64 = await pickImageBase64(source);
+      if (!base64) return;
       setUploading(key);
-      await uploadDocImage(uid, key, uri);
+      await uploadDocImage(uid, key, base64);
       await loadPaths();
     } catch (e) {
       setError(friendlyError(e));

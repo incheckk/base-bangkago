@@ -197,6 +197,15 @@ BangkeroScreenHeader, AuthErrorScreen
 **Infrastructure — done:**
 - `migrations/002_create_all_tables.sql` (full ERD), `003_add_rls_policies.sql`
   (35 policies). Both already applied to the hosted project.
+- **Audit activity refresh (2026-11-16):** migration
+  `migrations/080_semantic_user_activity_audit.sql` is pending after 079.
+  Once run, signed-in business changes from mobile and web are captured as
+  semantic activities with actor/record snapshots and safe before/after
+  values. The web Audit Log is admin-only; SQL-editor/service-role writes,
+  page views and background telemetry are not attributed. **Next:** run
+  migration 080 after 079, then smoke-test a passenger booking/cancel, a
+  bangkero accept/complete, and an admin route or user edit; confirm each
+  entry has the right actor, activity, before/after values and PHT time.
 - `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
    `npm run reset`. Seeded: 9 ports, 40 routes, 3 accounts, 4 bookings.
 - `.env` (gitignored), `.env.example` committed with **placeholders only**

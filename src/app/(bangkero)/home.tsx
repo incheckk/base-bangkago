@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { BangkeroTripSheet } from '@/components/BangkeroTripSheet';
@@ -8,6 +8,7 @@ import { DemandBadge } from '@/components/DemandBadge';
 import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
+import { TextField } from '@/components/TextField';
 import { Icon } from '@/components/Icon';
 import { sailsLabel, slotLabel, todayIso } from '@/components/SchedulePicker';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -28,6 +29,7 @@ import {
 } from '@/services/booking.service';
 import { getRouteDemandSummary, type RouteDemandSummary } from '@/services/demand.service';
 import { getIslandPackages } from '@/services/island-package.service';
+import { savePayoutAccount } from '@/services/documents.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import {
   DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
@@ -43,6 +45,7 @@ import type { BookingDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { alertPing } from '@/utils/feedback';
 import { bookingTypeLabel } from '@/utils/booking-label';
+import { nameError, payoutNumberError } from '@/utils/validation';
 import { groupAcceptedBookings, type TripGroup } from '@/utils/trip-groups';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
@@ -109,6 +112,44 @@ export default function BangkeroHome() {
   const notifications = useNotifications(uid);
   const bangkero = useBangkero(uid);
   const requests = useOpenRequests(uid);
+
+  // 095 — a payout needs an account number, not the QR image. Asked once
+  // after the walkthrough (same pattern as the passenger age/address prompt),
+  // and never blocks accepting: a seeded demo account must still sail.
+  const hasPayoutAccount =
+    !!bangkero.data?.payoutAccountName && !!bangkero.data?.payoutAccountNumber;
+  const [payoutOpen, setPayoutOpen] = useState(false);
+  const [payoutName, setPayoutName] = useState('');
+  const [payoutNumber, setPayoutNumber] = useState('');
+  const [savingPayout, setSavingPayout] = useState(false);
+  const [payoutError, setPayoutError] = useState<string | null>(null);
+
+  function finishTour() {
+    tour.dismiss();
+    if (hasPayoutAccount) return;
+    setPayoutName(bangkero.data?.payoutAccountName ?? `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim());
+    setPayoutNumber(bangkero.data?.payoutAccountNumber ?? '');
+    setPayoutError(null);
+    setPayoutOpen(true);
+  }
+
+  async function savePayout() {
+    if (!uid || savingPayout) return;
+    const invalid = nameError(payoutName) ?? payoutNumberError(payoutNumber);
+    if (invalid) {
+      setPayoutError(invalid);
+      return;
+    }
+    setSavingPayout(true);
+    setPayoutError(null);
+    try {
+      await savePayoutAccount(uid, payoutName, payoutNumber);
+      setPayoutOpen(false);
+    } catch (e) {
+      setPayoutError(friendlyError(e));
+    }
+    setSavingPayout(false);
+  }
   /** Ping for a request that just arrived — the first load is the baseline. */
   const seenRequests = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -1114,6 +1155,20 @@ export default function BangkeroHome() {
           </View>
         )}
 
+        {!!bangkero.data && !hasPayoutAccount && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              Add your payout account so BangkaGo can send your share.
+            </Text>
+            <PrimaryButton
+              label="Add payout account"
+              variant="secondary"
+              onPress={() => router.push('/(bangkero)/qr-code')}
+              style={styles.bannerBtn}
+            />
+          </View>
+        )}
+
         {/* Work first: requests hold for only 3 minutes, so they sit
             directly under the status card — demand/earnings can wait. */}
         <View style={styles.sectionHead}>
@@ -1336,12 +1391,61 @@ export default function BangkeroHome() {
         onSail={askSail}
       />
 
+      {/* Tutorial exit (095): a payout needs an account number, and the
+          bangkero is already here signing up. */}
+      <Modal
+        visible={payoutOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPayoutOpen(false)}
+      >
+        <View style={styles.payoutBackdrop}>
+          <View style={styles.payoutCard}>
+            <Text style={styles.payoutTitle}>Where should we send your share?</Text>
+            <Text style={styles.payoutBody}>
+              After each completed trip BangkaGo releases your downpayment share to
+              this GCash account. You can change it later in Payout &amp; GCash QR.
+            </Text>
+            <TextField
+              label="GCash account name"
+              value={payoutName}
+              onChangeText={setPayoutName}
+              placeholder="Name on the GCash account"
+              autoCapitalize="words"
+              maxLength={60}
+            />
+            <TextField
+              label="GCash number"
+              value={payoutNumber}
+              onChangeText={setPayoutNumber}
+              placeholder="09XX XXX XXXX"
+              keyboardType="phone-pad"
+              maxLength={16}
+            />
+            {!!payoutError && <Text style={styles.payoutError}>{payoutError}</Text>}
+            <PrimaryButton
+              label="Save payout account"
+              onPress={() => void savePayout()}
+              loading={savingPayout}
+              disabled={savingPayout || !payoutName.trim() || !payoutNumber.trim()}
+            />
+            <Pressable
+              onPress={() => setPayoutOpen(false)}
+              style={styles.payoutLater}
+              accessibilityRole="button"
+            >
+              <Text style={styles.payoutLaterText}>Later</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* First run only — see the passenger home for the keying rationale. */}
       <CoachOverlay
         visible={tour.show}
         steps={BANGKERO_COACH}
         rects={coachRects}
-        onDone={tour.dismiss}
+        onDone={finishTour}
       />
     </ScreenContainer>
   );
@@ -1556,6 +1660,33 @@ const styles = StyleSheet.create({
     flexShrink: 1, ...typography.caption, color: colors.textSecondary, lineHeight: 18,
   },
   bannerBtn: { marginTop: spacing.md, alignSelf: 'flex-start' },
+
+  payoutBackdrop: {
+    flex: 1,
+    backgroundColor: colors.backdrop,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  payoutCard: {
+    width: '100%',
+    backgroundColor: colors.bgElevated,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...elevation.e3,
+  },
+  payoutTitle: { ...typography.title, marginBottom: spacing.sm },
+  payoutBody: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    lineHeight: 18,
+    marginBottom: spacing.lg,
+  },
+  payoutError: { color: colors.danger, fontSize: 12, marginBottom: spacing.md },
+  payoutLater: { alignSelf: 'center', paddingVertical: spacing.md },
+  payoutLaterText: { ...typography.caption, color: colors.textMuted },
 
   // ---------- sections ----------
   sectionLabel: { ...typography.label, marginTop: spacing.huge, marginBottom: spacing.md },

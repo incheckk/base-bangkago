@@ -61,6 +61,7 @@
                   <th>Receipt</th>
                   <th>Filed</th>
                   <th>Status</th>
+                  <th>Payout</th>
                   <th style="min-width: 150px;">Action</th>
                 </tr>
               </thead>
@@ -96,7 +97,8 @@
           <div class="summary-box mb-2"><strong>Downpayment status:</strong> <span id="mStatus">-</span></div>
           <div class="summary-box mb-2"><strong>Filed:</strong> <span id="mFiled">-</span></div>
           <div class="summary-box mb-2"><strong>Reviewed:</strong> <span id="mReviewed">-</span></div>
-          <div class="summary-box mb-0"><strong>GCash ref:</strong> <span id="mRef">-</span></div>
+          <div class="summary-box mb-2"><strong>GCash ref:</strong> <span id="mRef">-</span></div>
+          <div class="summary-box mb-0"><strong>Commission / payout:</strong> <span id="mPayout">-</span></div>
 
           <div class="alert alert-warning mt-3 mb-0 d-none" id="mWarning"></div>
 
@@ -176,6 +178,15 @@
       return status === 'approved' ? 'Approved'
         : status === 'refunded' ? 'Refunded'
         : 'Awaiting review';
+    }
+
+    // 096 — the gateway's payout leg, beside the escrow state.
+    function payoutLabel(d){
+      if (!d.payoutStatus) return '—';
+      if (d.payoutStatus === 'paid') return d.payoutRef ? `Paid · ${d.payoutRef}` : 'Paid';
+      if (d.payoutStatus === 'processing') return 'Sending…';
+      if (d.payoutStatus === 'failed') return 'Failed';
+      return 'Queued';
     }
 
     function showLoading(show) {
@@ -265,7 +276,7 @@
 
     function render(rows){
       if (!rows.length) {
-        dpBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No downpayments match.</td></tr>';
+        dpBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">No downpayments match.</td></tr>';
         return;
       }
       dpBody.innerHTML = rows.map(d => {
@@ -286,6 +297,15 @@
               : '<span class="badge text-bg-danger">Missing</span>'}</td>
             <td>${esc(shortDate(d.createdAt))}</td>
             <td><span class="badge ${dpBadge(d.status)}">${esc(dpStatusLabel(d.status))}</span></td>
+            <td class="small">
+              ${esc(payoutLabel(d))}
+              ${d.commissionAmount != null
+                ? `<div class="text-muted">Comm ${peso(d.commissionAmount)}</div>`
+                : ''}
+              ${d.payoutStatus === 'failed' && d.payoutError
+                ? `<div class="text-danger">${esc(d.payoutError)}</div>`
+                : ''}
+            </td>
             <td>
               <button class="btn btn-sm btn-outline-primary" onclick="openReview('${d.downpaymentId}')">
                 <i class="bi bi-eye"></i> Review
@@ -371,6 +391,9 @@
       document.getElementById('mFiled').textContent = shortDateTime(d.createdAt);
       document.getElementById('mReviewed').textContent = d.reviewedAt ? shortDateTime(d.reviewedAt) : 'Not reviewed';
       document.getElementById('mRef').textContent = d.referenceNum || 'Not entered; read it from the receipt';
+      document.getElementById('mPayout').textContent = d.commissionAmount == null
+        ? payoutLabel(d)
+        : `Commission ${peso(d.commissionAmount)} of the ${peso(d.amount + d.commissionAmount)} fare · ${payoutLabel(d)}`;
 
       const warning = targetWarning(d);
       const warningBox = document.getElementById('mWarning');

@@ -150,3 +150,24 @@ export async function setRentalToday(on: boolean): Promise<void> {
   const { error } = await supabase.rpc('set_rental_today', { p_on: on });
   if (error) throw error;
 }
+
+/**
+ * 096 — the break-glass switch. true = the manual receipt upload + admin
+ * release (today's flow). false = the gateway checkout + automatic payout.
+ * Unrun 096 reads as manual, which is the safe default.
+ */
+export async function getManualPayments(): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('dev_flags')
+    .select('manual_payments')
+    .eq('id', 1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.manual_payments !== false;
+}
+
+/** Admin-only — enforced inside the RPC. */
+export async function setManualPayments(on: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_manual_payments', { p_on: on });
+  if (error) throw error;
+}

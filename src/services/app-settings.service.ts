@@ -62,3 +62,30 @@ export async function clearAdminGcashQr(): Promise<void> {
     .upsert({ key: GCASH_QR_KEY, value: '', updated_at: new Date().toISOString() });
   if (error) throw error;
 }
+
+// =============================================================
+// Commission (096) — a share of the WHOLE FARE, taken out of the
+// downpayment, so the bangkero's payout is `downpayment - commission`.
+// Snapshotted onto each downpayment when the payout is claimed, so
+// changing the rate never rewrites history.
+// =============================================================
+
+export const DEFAULT_COMMISSION_RATE = 0.07;
+
+export async function getCommissionRate(): Promise<number> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'commission_rate')
+    .maybeSingle();
+  // Pre-096 there is no row: the product default applies.
+  if (error) return DEFAULT_COMMISSION_RATE;
+  const rate = Number(data?.value);
+  return Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_COMMISSION_RATE;
+}
+
+/** Admin-only — the RPC enforces it and the 5%–9% range. */
+export async function setCommissionRate(rate: number): Promise<void> {
+  const { error } = await supabase.rpc('set_commission_rate', { p_rate: rate });
+  if (error) throw error;
+}

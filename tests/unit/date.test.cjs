@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { manilaTodayIso, toManilaIso, manilaDayStartMs } = require('../.build/utils/date.js');
+const { manilaTodayIso, toManilaIso, manilaDayStartMs } = require('./load-ts.cjs')('src/utils/date.ts');
 
 test('manilaTodayIso returns a YYYY-MM-DD Manila date', () => {
   assert.match(manilaTodayIso(), /^\d{4}-\d{2}-\d{2}$/);

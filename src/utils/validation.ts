@@ -53,3 +53,20 @@ export function textError(value: string): string | null {
   if (!TEXT_RE.test(v)) return 'Letters, numbers and basic punctuation only';
   return null;
 }
+
+/**
+ * Payout destination (095): a GCash mobile number. Stored one way —
+ * 09XXXXXXXXX — so the payout call never has to guess between +63 and 0.
+ */
+export function normalizePayoutNumber(value: string): string {
+  const compact = value.replace(/[^\d+]/g, '');
+  return compact.startsWith('+63') ? `0${compact.slice(3)}` : compact;
+}
+
+/** null = valid. */
+export function payoutNumberError(value: string): string | null {
+  if (!/^09\d{9}$/.test(normalizePayoutNumber(value))) {
+    return 'Enter a GCash number: 09XX XXX XXXX';
+  }
+  return null;
+}

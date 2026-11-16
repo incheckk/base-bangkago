@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  getArrivalBypass, getDispatchBypass, getGatesBypass, getRouteLockBypass, getShowQuickLogin,
+  getArrivalBypass, getDispatchBypass, getGatesBypass, getManualPayments,
+  getRouteLockBypass, getShowQuickLogin,
 } from '../services/dev.service';
 import { mapBangkeroRow, mapBookingRow, mapPortRow } from '../services/mappers';
 import { mapRow as mapParcelRow } from '../services/parcel.service';
@@ -553,6 +554,8 @@ export interface DevFlags {
   arrivalBypass: boolean;
   /** Demo quick-login chips on sign-in (069). Not a rule bypass. */
   showQuickLogin: boolean;
+  /** 096: true = receipt upload + admin release (manual). false = gateway. */
+  manualPayments: boolean;
 }
 
 /**
@@ -562,7 +565,7 @@ export interface DevFlags {
  * screen re-reads immediately instead of waiting for the realtime echo.
  */
 export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
-  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, routeLockBypass: false, gatesBypass: false, arrivalBypass: false, showQuickLogin: true });
+  const [data, setData] = useState<DevFlags>({ dispatchBypass: false, routeLockBypass: false, gatesBypass: false, arrivalBypass: false, showQuickLogin: true, manualPayments: true });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const seq = useRef(0);
@@ -579,6 +582,7 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
       getArrivalBypass().catch(() => false),
       getShowQuickLogin().catch(() => true),
     ]);
+    const manualPayments = await getManualPayments().catch(() => true);
     if (id !== seq.current) return;
     setData({
       dispatchBypass: dispatch,
@@ -586,6 +590,7 @@ export function useDevFlags(): Result<DevFlags> & { refresh: () => void } {
       gatesBypass: gates,
       arrivalBypass: arrival,
       showQuickLogin: quickLogin,
+      manualPayments,
     });
     setError(null);
     setLoading(false);

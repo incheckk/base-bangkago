@@ -86,6 +86,9 @@ export interface BangkeroDoc {
   ratingPenalty: number;
   /** Object path of the bangkero's GCash QR image in the public `docs` bucket. */
   gcashQrUrl: string | null;
+  /** GCash account that receives the released downpayment (095). 09XXXXXXXXX. */
+  payoutAccountName: string | null;
+  payoutAccountNumber: string | null;
   updatedAt: string; // ISO 8601
 }
 
@@ -252,6 +255,14 @@ export interface DownpaymentDoc {
   releasedAt: string | null;
   payoutMethod: 'gcash' | 'cash' | null;
   payoutRef: string | null;
+  // ---- 096: the gateway rail. Null on every pre-096 row. ----
+  gatewayCheckoutRef: string | null;
+  gatewayPayoutRef: string | null;
+  /** Whole-fare commission frozen when the payout was claimed. */
+  commissionRate: number | null;
+  commissionAmount: number | null;
+  payoutStatus: 'queued' | 'processing' | 'paid' | 'failed' | null;
+  payoutError: string | null;
 }
 
 export interface ParcelDoc {

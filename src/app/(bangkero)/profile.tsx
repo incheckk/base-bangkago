@@ -38,7 +38,7 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
   { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
   { key: 'ratings', label: 'My Ratings', icon: 'star' },
   { key: 'documents', label: 'Documents', icon: 'document' },
-  { key: 'qr', label: 'GCash QR', icon: 'qr' },
+  { key: 'qr', label: 'Payout & GCash QR', icon: 'qr' },
   { key: 'guide', label: 'Quick Guide', icon: 'guide' },
   { key: 'report-issue', label: 'Report Issue', icon: 'warning' },
   // The header burger is gone (3D) — SOS still has to be one tap away, and

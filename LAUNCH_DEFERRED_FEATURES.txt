@@ -13,14 +13,13 @@ Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
 Updated 2026-11-13 (migration 079: escrow release to operators, charter
 sailing day, notification kinds, route/module lock split, booker details,
 passenger SOS).
-<<<<<<< Updated upstream
 Updated 2026-11-16 (migration 083: RBAC matrix alignment, operations
 inboxes, passenger safety feed/report, passenger-list edit/delete; 082:
 semantic user activity audit trail; 081: one live boat per bangkero,
 date-scoped capacity, island hop priced per person, charter ticks).
-=======
-Updated 2026-11-16 (migration 080: semantic user activity audit trail).
->>>>>>> Stashed changes
+Updated 2026-11-17 (migrations 095 + 096: bangkero payout accounts, the
+gateway rail — hosted checkout, automatic downpayment confirmation,
+automatic commission-inclusive payouts — still sandbox-only; see B15).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -61,7 +60,6 @@ Updated 2026-11-16 (migration 080: semantic user activity audit trail).
    editable per boat in (bangkero)/rentals and web Manage Bangka.
    Confirm real per-boat whole-day pricing with operators before launch.
 
-<<<<<<< Updated upstream
 6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 082)
    Migration 082 records authenticated app/web business changes with
    semantic activity names, actor and record snapshots, and safe
@@ -72,20 +70,6 @@ Updated 2026-11-16 (migration 080: semantic user activity audit trail).
    through authenticated app/web actions if they must be audited. Existing
    038 entries are relabelled from their stored changes, but cannot recover
    intent that was never captured. Audit access remains admin-only.
-=======
-6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 080)
-   Migration 080 records successful authenticated changes to business
-   records from the app and web console as human-readable activities,
-   including actor name/role snapshots and redacted-safe before/after
-   values. Generated notifications, GPS/weather telemetry, and other
-   non-user activity are excluded; a user's notification read-state
-   change is included. Writes made directly in the Supabase SQL editor or
-   with the service-role key have no user JWT and are not attributable;
-   route administrative changes through authenticated app/web actions if
-   they must be audited. Existing 038 entries are re-labelled from their
-   recorded row changes, but cannot recover intent that was never captured.
-   Audit access remains admin-only.
->>>>>>> Stashed changes
 
 7. FLEET MAP ETA/DIRECTION TEXT IS AN ESTIMATE (web batch 2026-10-16)
    The Leaflet/OSM fleet maps (fleet-map.js on admin + coastguard
@@ -286,6 +270,8 @@ B9. REAL GCASH PAYMENT INTEGRATION
     and notifies the operator. No commission is withheld, and a
     released row cannot be refunded. This closes the "escrow money has
     no way back to the boat" gap, not the gateway gap above.
+    (2026-11-17: B15's gateway rail DOES withhold commission; this
+    manual release path still withholds none.)
     B9a. RECEIPT OCR — deferred by decision (2026-10), researched:
          auto-reading the Ref No. off the uploaded receipt instead of
          the admin doing it by eye. Chosen candidate when revived:
@@ -335,6 +321,40 @@ B14. PASSENGER ISSUE / COMPLAINT REPORTING — removed 2026-11-13.
      (booking ref + ports, no bangka_id). A general complaint/ticket
      flow (trip, payment, other) is still not built; decide whether it
      reads into safety_alerts or needs its own table at launch.
+
+B15. PAYMENT GATEWAY — SANDBOX ONLY (095 + 096, 2026-11-17)
+     The money loop now runs itself in code: hosted checkout → signed
+     webhook confirms the downpayment (confirm_gateway_downpayment, which
+     re-runs 020's two effects: booking pending → open + assign_next_hold,
+     rental awaiting_payment → pending) → trip completion queues a payout
+     (trigger) → gateway payout → record_gateway_payout stamps
+     released_at / payout_ref. No admin click in the happy path.
+     TODAY THE PROVIDER IS OUR OWN EDGE FUNCTION
+     (supabase/functions/gateway, action-routed: create-checkout,
+     webhook, payout, plus its signed sandbox page), which moves ZERO
+     pesos and says SANDBOX on the page. PayMongo sign-ups are paused, so
+     the live branch (GATEWAY_MODE=live + GATEWAY_BASE_URL + GATEWAY_KEY)
+     is UNTESTED against a real account — verify with sandbox keys before
+     switching. The function must be deployed with "Enforce JWT
+     verification" OFF (the sandbox page and webhook are unauthenticated;
+     each action authenticates itself with auth.getUser() or the HMAC).
+     dev_flags.manual_payments ships TRUE, so the receipt-upload + admin
+     release flow above stays the default; Admin → Developer Options
+     flips it OFF for the gateway demo and back ON if the API breaks.
+     Money still lives in our ledger: copy says "held by BangkaGo", never
+     "held by the provider". Payouts batch — every completed, unpaid
+     downpayment a bangkero is owed goes out as ONE transfer with one
+     provider ref, and a failed batch marks every row failed (retry from
+     Admin → Downpayments).
+     Fee: none. Commission is app_settings.commission_rate (default 7%,
+     Admin → Downpayments), a share of the WHOLE FARE deducted from the
+     downpayment, snapshotted onto each row when the payout is claimed so
+     a later rate change never rewrites history. Admins see it; the
+     bangkero app shows GROSS / RELEASED only.
+     Payout account: 095 adds bangkeros.payout_account_name / _number /
+     _channel (gcash only). A bangkero without one can still sail — no
+     gate — but there is nowhere for the money to land, so the app
+     prompts for it on Home, Earnings and Payout & GCash QR.
 
 [C] CODE TODOs LEFT IN THE APP
 --------------------------------------------------------------------------------

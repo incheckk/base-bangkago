@@ -32,6 +32,8 @@ function mapBangkeroRow(row: any): BangkeroDoc {
     isAvailable: row.is_available,
     ratingPenalty: row.rating_penalty ?? 0,
     gcashQrUrl: row.gcash_qr_url ?? null,
+    payoutAccountName: row.payout_account_name ?? null,
+    payoutAccountNumber: row.payout_account_number ?? null,
     updatedAt: row.updated_at,
   };
 }

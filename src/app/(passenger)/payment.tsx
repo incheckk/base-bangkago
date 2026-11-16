@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -7,9 +8,12 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { slotLabel } from '@/components/SchedulePicker';
 import { useAuth } from '@/hooks/useAuth';
+import { useDevFlags } from '@/hooks/useSupabase';
 import { getAdminGcashQr } from '@/services/app-settings.service';
 import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
-import { createDownpayment, uploadDownpaymentProof } from '@/services/downpayment.service';
+import {
+  createDownpayment, getDownpaymentByBooking, startGatewayCheckout, uploadDownpaymentProof,
+} from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
 import { createParcel, validateParcelItems } from '@/services/parcel.service';
 import { assignToBatch } from '@/services/parcel-batching.service';
@@ -42,6 +46,21 @@ function scheduleLabel(dateIso: string, time: string | null): string {
   return time ? `${day} · ${slotLabel(time)}` : day;
 }
 
+/**
+ * The provider's webhook normally lands while the checkout page is still
+ * open; this only covers the last hop back into the app. Gives up after
+ * ~12 s — the booking screen keeps showing the real state either way.
+ */
+async function waitForApproval(bookingId: string): Promise<boolean> {
+  for (let i = 0; i < 8; i += 1) {
+    const row = await getDownpaymentByBooking(bookingId).catch(() => null);
+    if (row?.status === 'approved') return true;
+    if (row?.status === 'refunded') return false;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return false;
+}
+
 export default function PaymentScreen() {
   const { profile, profileLoading } = useAuth();
   const params = useLocalSearchParams<{
@@ -71,6 +90,11 @@ export default function PaymentScreen() {
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 096: while Developer Options → Manual payments is OFF the downpayment
+  // goes through the gateway's hosted page and confirms itself; ON keeps
+  // today's receipt upload + admin review. Unrun 096 reads as manual.
+  const devFlags = useDevFlags();
+  const gateway = !devFlags.loading && devFlags.data.manualPayments === false;
   // One intent id for the lifetime of this screen (087): a retry after a
   // lost response returns the booking instead of creating a second one.
   const clientRef = useRef(
@@ -168,9 +192,10 @@ export default function PaymentScreen() {
     setError(null);
     try {
       // Escrow mode files the proof FIRST — a booking must never exist
-      // without the screenshot that documents its downpayment.
+      // without the screenshot that documents its downpayment. In gateway
+      // mode there is no screenshot: the provider's confirmation replaces it.
       let proofPath: string | null = null;
-      if (isEscrow) {
+      if (isEscrow && !gateway) {
         if (!proofUri) throw new Error('Attach your GCash receipt screenshot.');
         setProofUploading(true);
         try {
@@ -339,17 +364,37 @@ export default function PaymentScreen() {
       // Escrow row — the booking already exists, so a failed insert must
       // never block the confirmation screen: flag it and move on.
       let downWarning = false;
-      if (isEscrow && proofPath) {
+      let downpaymentId: string | null = null;
+      if (isEscrow && (proofPath || gateway)) {
         try {
-          await createDownpayment({
+          const row = await createDownpayment({
             amount: actualDownAmount,
             // No manual ref input (prof's rule): the admin reads the
             // Ref No. off the attached receipt while verifying in GCash.
+            // The gateway path leaves reference_num to the provider.
             referenceNum: '',
-            proofUrl: proofPath,
+            proofUrl: proofPath ?? '',
             bookingId,
           });
+          downpaymentId = row.downpaymentId;
         } catch {
+          downWarning = true;
+        }
+      }
+
+      // 096: hand the passenger to the provider's hosted page. The webhook
+      // flips the row while they are on it, so the happy path needs no admin.
+      let downStatus: 'approved' | 'pending' = 'pending';
+      if (isEscrow && gateway && downpaymentId) {
+        try {
+          const url = await startGatewayCheckout(downpaymentId);
+          if (url) {
+            await WebBrowser.openBrowserAsync(url);
+            if (await waitForApproval(bookingId)) downStatus = 'approved';
+          }
+        } catch {
+          // The booking (and its row) already exist — land on the
+          // confirmation screen and let them retry from the booking.
           downWarning = true;
         }
       }
@@ -381,7 +426,7 @@ export default function PaymentScreen() {
           ...(companionWarning ? { companionWarning: '1' } : {}),
           ...(isEscrow
             ? {
-                downStatus: 'pending',
+                downStatus,
                 downAmount: String(actualDownAmount),
                 remainder: String(actualRemainder),
                 ...(downWarning ? { downWarning: '1' } : {}),
@@ -451,10 +496,12 @@ export default function PaymentScreen() {
 
           {isEscrow ? (
             <View>
-              <Text style={[styles.sectionLabel, styles.mtLg]}>GCASH DOWNPAYMENT (50%)</Text>
+              <Text style={[styles.sectionLabel, styles.mtLg]}>
+                {gateway ? 'DOWNPAYMENT' : 'GCASH DOWNPAYMENT (50%)'}
+              </Text>
               <View style={styles.escrowCard}>
                 <View style={styles.escrowAmountRow}>
-                  <Text style={styles.escrowLabel}>Pay now to BangkaGo&apos;s GCash</Text>
+                  <Text style={styles.escrowLabel}>Downpayment · goes to your bangkero</Text>
                   <Text style={styles.escrowAmount}>₱{downAmount}</Text>
                 </View>
                 <View style={styles.summaryDivider} />
@@ -464,49 +511,59 @@ export default function PaymentScreen() {
                 </View>
               </View>
 
-              <Text style={styles.inputLabel}>SCAN &amp; PAY VIA GCASH</Text>
-              {qrUrl ? (
-                <Image source={{ uri: qrUrl }} style={styles.qrImage} resizeMode="contain" />
+              {gateway ? (
+                <Text style={styles.escrowHint}>
+                  You&apos;ll pay ₱{downAmount} on BangkaGo&apos;s secure checkout page. The
+                  downpayment is held by BangkaGo until your trip, then released to your
+                  bangkero.
+                </Text>
               ) : (
-                <View style={styles.qrPlaceholder}>
-                  <Text style={styles.qrPlaceholderText}>
-                    {qrLoaded
-                      ? 'BangkaGo has not set up its GCash QR yet. Try again later, or book today and pay on board.'
-                      : 'Loading QR…'}
+                <>
+                  <Text style={styles.inputLabel}>SCAN &amp; PAY VIA GCASH</Text>
+                  {qrUrl ? (
+                    <Image source={{ uri: qrUrl }} style={styles.qrImage} resizeMode="contain" />
+                  ) : (
+                    <View style={styles.qrPlaceholder}>
+                      <Text style={styles.qrPlaceholderText}>
+                        {qrLoaded
+                          ? 'BangkaGo has not set up its GCash QR yet. Try again later, or book today and pay on board.'
+                          : 'Loading QR…'}
+                      </Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
+                  <Text style={styles.proofHint}>
+                    Attach the digital receipt of your Express Send — our team reads the
+                    Ref No. straight from this image.
                   </Text>
-                </View>
-              )}
+                  <View style={styles.proofRow}>
+                    <Pressable
+                      onPress={() => void chooseProof('gallery')}
+                      disabled={proofUploading}
+                      style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
+                    >
+                      <Text style={styles.proofBtnText}>🖼 Gallery</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void chooseProof('camera')}
+                      disabled={proofUploading}
+                      style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
+                    >
+                      <Text style={styles.proofBtnText}>📷 Camera</Text>
+                    </Pressable>
+                  </View>
+                  {proofUri && (
+                    <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />
+                  )}
 
-              <Text style={styles.inputLabel}>GCASH RECEIPT SCREENSHOT</Text>
-              <Text style={styles.proofHint}>
-                Attach the digital receipt of your Express Send — our team reads the
-                Ref No. straight from this image.
-              </Text>
-              <View style={styles.proofRow}>
-                <Pressable
-                  onPress={() => void chooseProof('gallery')}
-                  disabled={proofUploading}
-                  style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
-                >
-                  <Text style={styles.proofBtnText}>🖼 Gallery</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => void chooseProof('camera')}
-                  disabled={proofUploading}
-                  style={({ pressed }) => [styles.proofBtn, pressed && styles.proofBtnPressed]}
-                >
-                  <Text style={styles.proofBtnText}>📷 Camera</Text>
-                </Pressable>
-              </View>
-              {proofUri && (
-                <Image source={{ uri: proofUri }} style={styles.proofPreview} resizeMode="cover" />
+                  <Text style={styles.escrowHint}>
+                    {isAdvance
+                      ? 'We review your payment first — your sailing is confirmed and offered to bangkeros only after that. This downpayment is held in escrow until your trip.'
+                      : 'We confirm your payment on our side. Booking goes ahead either way — this downpayment is held in escrow until your trip.'}
+                  </Text>
+                </>
               )}
-
-              <Text style={styles.escrowHint}>
-                {isAdvance
-                  ? 'We review your payment first — your sailing is confirmed and offered to bangkeros only after that. This downpayment is held in escrow until your trip.'
-                  : 'We confirm your payment on our side. Booking goes ahead either way — this downpayment is held in escrow until your trip.'}
-              </Text>
             </View>
           ) : (
             <View>
@@ -553,7 +610,13 @@ export default function PaymentScreen() {
 
           <View style={styles.bottomPad}>
             <PrimaryButton
-              label={isEscrow ? `Pay ₱${downAmount} & Book` : 'Confirm Booking'}
+              label={
+                !isEscrow
+                  ? 'Confirm Booking'
+                  : gateway
+                    ? 'Pay downpayment'
+                    : `Pay ₱${downAmount} & Book`
+              }
               onPress={confirm}
               loading={busy || proofUploading}
               disabled={
@@ -561,9 +624,14 @@ export default function PaymentScreen() {
                 proofUploading ||
                 profileLoading ||
                 !profile ||
-                (isEscrow && !proofUri)
+                (isEscrow && !gateway && !proofUri)
               }
             />
+            {isEscrow && gateway && (
+              <Text style={styles.paySubline}>
+                50% of your fare · held for your bangkero until the trip
+              </Text>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -703,6 +771,12 @@ const styles = StyleSheet.create({
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
 
   bottomPad: { marginTop: spacing.xl },
+  paySubline: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
 
   errorBanner: {
     backgroundColor: colors.dangerTint,

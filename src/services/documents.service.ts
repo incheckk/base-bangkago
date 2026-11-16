@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import type { Href } from 'expo-router';
 
 import type { VerificationStatus } from '../types/models';
+import { normalizePayoutNumber } from '../utils/validation';
 import { supabase } from './supabase';
 
 // =============================================================
@@ -248,6 +249,29 @@ export async function removeGcashQr(uid: string): Promise<void> {
   const { error } = await supabase
     .from('bangkeros')
     .update({ gcash_qr_url: null, updated_at: new Date().toISOString() })
+    .eq('id', uid);
+  if (error) throw error;
+}
+
+// =============================================================
+// Payout account (095) — where a released downpayment is sent.
+// Same row, different concern: the QR is for on-board fares, this is
+// the account a disbursement API can actually pay into.
+// =============================================================
+
+export async function savePayoutAccount(
+  uid: string,
+  accountName: string,
+  accountNumber: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('bangkeros')
+    .update({
+      payout_account_name: accountName.trim(),
+      payout_account_number: normalizePayoutNumber(accountNumber),
+      payout_channel: 'gcash',
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', uid);
   if (error) throw error;
 }

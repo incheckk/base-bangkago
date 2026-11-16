@@ -5,7 +5,7 @@ const {
   getParcelZone,
   isParcelAllowed,
   calculateParcelFare,
-} = require('../.build/services/parcel-pricing.service.js');
+} = require('./load-ts.cjs')('src/services/parcel-pricing.service.ts');
 
 const mactan = { portId: 'mactan-port', islandGroup: 'mactan' };
 const olango = { portId: 'olango-port', islandGroup: 'olango' };

@@ -655,7 +655,6 @@
           columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold' } }
         });
 
-<<<<<<< Updated upstream
         const passengerRows = [
           [
             '1',
@@ -670,16 +669,6 @@
             String(i + 2),
             ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Unknown',
             p.contact_number || '-',
-=======
-        // Passengers table
-        const paxBody = [
-          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', b.customerAge != null ? String(b.customerAge) : 'Not on file', 'Booker', b.customerAddress || 'Not on file', b.onboardedAt ? 'Yes' : 'No']
-        ].concat(data.companions.map(function(p, i) {
-          return [
-            i + 2,
-            ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
-            p.contact_number || '—',
->>>>>>> Stashed changes
             p.age != null ? String(p.age) : 'Not on file',
             label(p.passenger_type || 'regular'),
             p.address || 'Not on file',

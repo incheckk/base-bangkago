@@ -36,7 +36,7 @@ export default function AdminBookings() {
   return (
     <ScreenContainer padded={false}>
       <AdminScreenHeader
-        title="Trips"
+        title="Manage Bookings"
         subtitle={`${filtered.length} booking${filtered.length === 1 ? '' : 's'}`}
       />
 
@@ -54,7 +54,7 @@ export default function AdminBookings() {
 
       <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
         {loading ? (
-          <LoadingState label="Loading trips…" />
+          <LoadingState label="Loading bookings…" />
         ) : error ? (
           <ErrorState message={error} />
         ) : filtered.length === 0 ? (

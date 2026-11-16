@@ -4,10 +4,12 @@ import {
 } from 'react-native';
 
 import { FilterChips } from './FilterChips';
+import { PortSelect } from './PortSelect';
 import { PrimaryButton } from './PrimaryButton';
 import { ScreenContainer } from './ScreenContainer';
 import { TextField } from './TextField';
 import { useAuth } from '@/hooks/useAuth';
+import { usePorts } from '@/hooks/useSupabase';
 import { createAlert } from '@/services/safety-alert.service';
 import { friendlyError } from '@/services/booking.service';
 import type { AlertSeverity } from '@/types/models';
@@ -38,15 +40,17 @@ interface Props {
  */
 export function ReportIssueForm({ header }: Props) {
   const { profile } = useAuth();
+  const ports = usePorts();
   const [category, setCategory] = useState(CATEGORIES[0].key);
   const [subject, setSubject] = useState('');
-  const [zone, setZone] = useState('');
+  const [portId, setPortId] = useState<string | null>(null);
   const [details, setDetails] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
   const selected = CATEGORIES.find((c) => c.key === category) ?? CATEGORIES[0];
+  const selectedPort = ports.data.find((p) => p.portId === portId) ?? null;
 
   async function submit() {
     setError(null);
@@ -69,14 +73,18 @@ export function ReportIssueForm({ header }: Props) {
         `Filed By: ${who} (${profile?.role ?? 'user'})`,
         `Category: ${selected.label}`,
         `Subject: ${subject.trim()}`,
-        `Zone: ${zone.trim() || 'Not specified'}`,
+        `Zone: ${selectedPort?.portName ?? 'Not specified'}`,
         '',
         details.trim(),
       ].join('\n');
 
-      await createAlert({ message, severity: selected.severity });
+      await createAlert({
+        message,
+        severity: selected.severity,
+        portId: selectedPort?.portId,
+      });
       setSubject('');
-      setZone('');
+      setPortId(null);
       setDetails('');
       setSent(true);
     } catch (e) {
@@ -126,14 +134,19 @@ export function ReportIssueForm({ header }: Props) {
           maxLength={160}
         />
 
-        <TextField
-          label="Location / Zone"
-          value={zone}
-          onChangeText={(value) => { setZone(value); setSent(false); }}
-          placeholder="e.g. Mactan Wharf, East Marker 4"
-          autoCapitalize="sentences"
-          maxLength={160}
-        />
+        <View style={styles.locationField}>
+          <PortSelect
+            label="Location / Zone"
+            sheetTitle="Select location / zone"
+            ports={ports.data}
+            value={portId}
+            onChange={(value) => { setPortId(value); setSent(false); }}
+            placeholder={ports.loading ? 'Loading ports...' : 'Select a port or zone'}
+          />
+          {!!ports.error && (
+            <Text style={styles.fieldError}>Could not load ports: {ports.error}</Text>
+          )}
+        </View>
 
         <Text style={styles.label}>DETAILS</Text>
         <View style={styles.detailsField}>
@@ -186,6 +199,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   label: { ...typography.label, marginBottom: spacing.sm },
+  locationField: { marginBottom: spacing.lg },
+  fieldError: { color: colors.danger, fontSize: 12, marginTop: spacing.xs },
   detailsField: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,

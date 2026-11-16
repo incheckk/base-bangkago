@@ -41,22 +41,72 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
-- **2026-11-16 - Manifest PDF export restored + Bangkero Manage Bookings.**
+- **2026-11-16 - Web manifest PDFs + Bangkero Manage Bookings (mobile PDF
+  abandoned).**
   - **Web PDFs:** Admin `manage-bookings.html` and Coast Guard
-    `export-manifest.html` regain lazy-loaded jsPDF/autoTable **Export PDF**
-    buttons. Admin exports the current booking manifest (booker, companions,
-    parcels/items); Coast Guard exports the current `trip_manifest` snapshot
-    with passengers and parcels.
+    `export-manifest.html` retain their lazy-loaded jsPDF/autoTable
+    **Export PDF** buttons. Admin exports the current booking manifest
+    (booker, companions, parcels/items); Coast Guard exports the current
+    `trip_manifest` snapshot with passengers and parcels.
   - **Bangkero mobile:** new `(bangkero)/manage-bookings` list shows bookings
     individually by `BGO-XXXX` ref with booker, route, date, status and pax
     count. Each opens a manifest detail screen with the booker, companions,
-    `PassengerEditModal` edit/remove actions, and **Share Manifest PDF**.
-    `sailing.tsx` also gains a per-booking PDF share button. Dependencies:
-    `expo-print`, `expo-sharing`. Profile menu entry added.
+    and `PassengerEditModal` edit/remove actions. Profile menu entry added.
+  - **Smoke fix:** Manage Bookings was sorting by the random `BGO-XXXX` ref,
+    which pushed older completed rows above today's bookings. `useMyTrips`
+    now orders by `created_at DESC` in Postgres, and the list sorts by
+    `createdAt` newest-first. No status filter was added; all statuses were
+    already fetched.
+  - **Mobile PDF abandoned:** mobile PDF generation/sharing still failed on
+    the demo device, so all **Share Manifest PDF** buttons were removed from
+    Bangkero Manage Bookings, Bangkero sailing, and Admin booking detail.
+    `manifest-export.service.ts` was deleted; `expo-print` and
+    `expo-sharing` were uninstalled. `expo-file-system` is no longer a direct
+    dependency (it remains transitively under `expo`). The web jsPDF export
+    code is untouched and remains the working export path.
+  - **Admin mobile access:** the admin drawer/home row formerly labelled
+    "Trips" is now **Manage Bookings** (`/(admin)/bookings`). Admins use
+    their own guarded route instead of the bangkero-only screens.
+  - **Web notifications layout:** Admin and Coast Guard
+    `notifications.html` now use the shared `cg-shell` / `sidebarMount` /
+    `topbarMount` / `cg-content` / `cg-card` wrappers. Coast Guard uses
+    `coastguard-theme.css`; notification rows stay inside the standard card.
+    Inline scripts syntax-checked; not browser-smoke-tested yet.
+  - **Report Issue location:** the shared passenger/bangkero compliance form
+    now uses `PortSelect` fed by `usePorts` (the same source as Book a Ride)
+    instead of free text. Submitting writes the chosen `safety_alerts.port_id`
+    and includes the port name in the Zone line. `npx tsc --noEmit` and
+    targeted ESLint clean; not device-smoke-tested.
+  - **Bangkero demand forecast:** home now mirrors the Admin
+    `analyze-demand.html` aggregation. New `getRouteDemandSummary` sums
+    every `demand_predictions` row per route across all dates, ranks by
+    total predicted passengers, and Home shows only the top 3 under
+    TODAY'S PREDICTION as clean rows. Each row is the route name (one line,
+    ellipsis) plus a compact right-side pill: Low/Steady/High Demand and
+    `~N pax` from the route's average daily prediction (Low <50, Steady
+    50-100, High >100). Read-only. `npx tsc --noEmit` clean;
+    `npm run lint` 0 errors / 137 known warnings; not device-smoke-tested.
+  - **Admin view-weather is live:** `sea-weather.js` now exposes
+    `window.bangkagoSeaWeather.getLive(lat, lon)` and returns visibility
+    (km) and humidity as well as the existing wind/wave/condition. Admin
+    `view-weather.html` no longer renders mock rows: it shows a green
+    **LIVE WEATHER** badge, fills Wind/Wave/Visibility/Safety from the
+    Open-Meteo strait reading, loads real active routes (one per origin)
+    for the snapshot, and computes SAFE / CAUTION / WATCHLIST with the
+    trigger shown under each Advisory badge. Rules: CAUTION at wind
+    ≥ 25 km/h, waves ≥ 1.0 m, visibility < 5 km, or rain; WATCHLIST at
+    wind ≥ 40 km/h, waves ≥ 1.5 m, visibility < 2 km, or thunderstorm.
+    API failure shows **Data Unavailable** everywhere (no stale mock
+    numbers); a partial response missing wind, waves, or visibility also
+    refuses to claim SAFE. The safety modal evaluates the selected route
+    against the same live reading. Inline script and `sea-weather.js`
+    pass `node --check`; Open-Meteo endpoints returned live test data
+    from this machine; not browser-smoke-tested.
   - **Gates:** typed routes regenerated, new detail route uses no cast;
-    `npx tsc --noEmit` clean; `npm run lint` 0 errors / 138 known warnings;
-    inline scripts in both edited web pages pass `node --check`. Not
-    manually smoke-tested in Expo Go or a browser yet.
+    `npx tsc --noEmit` clean; `npm run lint` 0 errors / 137 known warnings;
+    `npx expo-doctor` 17/18 (the 9 known SDK-57 patch drifts, not
+    bulk-upgraded); inline scripts in both edited web pages pass
+    `node --check`. Not manually smoke-tested in Expo Go or a browser yet.
 
 - **2026-11-16 — RBAC matrix alignment, operations inboxes, passenger safety
   feed/report, passenger-list edit/delete (migration 083 PENDING — USER MUST

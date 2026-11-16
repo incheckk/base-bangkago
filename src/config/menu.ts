@@ -63,7 +63,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'home', label: 'Home', route: '/(admin)/home', section: 'OPERATIONS' },
     { icon: 'people', label: 'Operators', route: '/(admin)/operators' },
     { icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-    { icon: 'boat', label: 'Trips', route: '/(admin)/bookings' },
+    { icon: 'boat', label: 'Manage Bookings', route: '/(admin)/bookings' },
 
     { icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', section: 'FLEET' },
     { icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },

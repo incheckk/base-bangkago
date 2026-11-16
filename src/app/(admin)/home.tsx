@@ -27,7 +27,7 @@ import { colors, elevation, numeric, radii, spacing, touchTarget, typography } f
 const MANAGE: { key: string; icon: IconName; label: string; route: string; group?: string }[] = [
   { key: 'operators', icon: 'people', label: 'Operators', route: '/(admin)/operators', group: 'OPERATIONS' },
   { key: 'users', icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-  { key: 'trips', icon: 'bookings', label: 'Trips', route: '/(admin)/bookings' },
+  { key: 'trips', icon: 'bookings', label: 'Manage Bookings', route: '/(admin)/bookings' },
 
   // The drawer uses `anchor` for this same destination; one place, one glyph.
   { key: 'fleet', icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', group: 'FLEET' },

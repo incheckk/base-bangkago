@@ -1,19 +1,17 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View,
+  Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PassengerEditModal } from '@/components/PassengerEditModal';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useBooking } from '@/hooks/useSupabase';
 import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
-import { shareManifestPdf } from '@/services/manifest-export.service';
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { BookingDoc, PassengerDetailDoc } from '@/types/models';
@@ -49,7 +47,6 @@ export default function BookingManifestScreen() {
   const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
   const [booker, setBooker] = useState<BookerDetails | null>(null);
   const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
-  const [sharing, setSharing] = useState(false);
 
   const loadDetails = useCallback(async () => {
     if (!booking.data) return;
@@ -72,21 +69,6 @@ export default function BookingManifestScreen() {
       ? [{ table: 'passenger_details' }, { table: 'users' }]
       : []
   );
-
-  async function sharePdf() {
-    if (!booking.data || sharing) return;
-    setSharing(true);
-    try {
-      await shareManifestPdf([{ booking: booking.data, companions, booker }]);
-    } catch (e) {
-      Alert.alert(
-        'Could not share manifest',
-        e instanceof Error ? e.message : 'Please try again.'
-      );
-    } finally {
-      setSharing(false);
-    }
-  }
 
   if (booking.loading) {
     return (
@@ -221,19 +203,6 @@ export default function BookingManifestScreen() {
           ))
         )}
 
-        <PrimaryButton
-          label={sharing ? 'Preparing PDF...' : 'Share Manifest PDF'}
-          onPress={() => void sharePdf()}
-          loading={sharing}
-          disabled={sharing}
-          style={styles.shareBtn}
-        />
-        {sharing && (
-          <View style={styles.shareHint}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.shareHintText}>Opening the share sheet...</Text>
-          </View>
-        )}
       </ScrollView>
 
       <PassengerEditModal
@@ -330,8 +299,5 @@ const styles = StyleSheet.create({
   },
   noCompanionsText: { ...typography.caption, color: colors.textMuted, textAlign: 'center' },
 
-  shareBtn: { marginTop: spacing.lg },
-  shareHint: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  shareHintText: { ...typography.caption, color: colors.textMuted, fontSize: 11 },
   pressed: { opacity: 0.72 },
 });

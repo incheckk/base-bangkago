@@ -27,7 +27,7 @@ import {
 import {
   acceptBooking, completeBooking, friendlyError, rejectBooking, setAvailability,
 } from '@/services/booking.service';
-import { getTodayPredictions } from '@/services/demand.service';
+import { getRouteDemandSummary, type RouteDemandSummary } from '@/services/demand.service';
 import { getIslandPackages } from '@/services/island-package.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import {
@@ -39,7 +39,7 @@ import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
-import type { BookingDoc, DemandPredictionDoc, ParcelDoc } from '@/types/models';
+import type { BookingDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { alertPing } from '@/utils/feedback';
 import { bookingTypeLabel } from '@/utils/booking-label';
@@ -54,9 +54,8 @@ const clock = (ms: number) => {
 /** Future-dated trip → escrow + admin gate; today stays the fast same-day flow. */
 const isAdvance = (b: BookingDoc) => !!b.scheduledDate && b.scheduledDate > todayIso();
 
-// ponytail: fixed cutoffs (≥25 high, ≥12 med) — recalibrate once real rows accumulate.
-const demandLevel = (pax: number): 'low' | 'medium' | 'high' =>
-  pax >= 25 ? 'high' : pax >= 12 ? 'medium' : 'low';
+const demandLevel = (pax: number): 'low' | 'steady' | 'high' =>
+  pax > 100 ? 'high' : pax >= 50 ? 'steady' : 'low';
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -126,28 +125,18 @@ export default function BangkeroHome() {
       .then((rows) => setPkgNames(Object.fromEntries(rows.map((r) => [r.packageId, r.packageName]))))
       .catch(() => {});
   }, []);
-  // Today's model predictions behind the demand badges.
-  const [todayDemand, setTodayDemand] = useState<DemandPredictionDoc[]>([]);
+  const [demandSummary, setDemandSummary] = useState<RouteDemandSummary[]>([]);
   useEffect(() => {
     let alive = true;
-    getTodayPredictions()
-      .then((rows) => { if (alive) setTodayDemand(rows); })
+    getRouteDemandSummary()
+      .then((rows) => { if (alive) setDemandSummary(rows); })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
-  // The model stores one row per route PER HOUR. Summing the route's day
-  // before ranking is what makes "top demand" mean a route, not an hour.
-  const topDemand = useMemo(() => {
-    const byRoute = new Map<string, number>();
-    for (const r of todayDemand) {
-      if (r.routeId == null || r.predictedPassengers == null) continue;
-      byRoute.set(r.routeId, (byRoute.get(r.routeId) ?? 0) + r.predictedPassengers);
-    }
-    return [...byRoute.entries()]
-      .map(([routeId, predictedPassengers]) => ({ routeId, predictedPassengers }))
-      .sort((a, b) => b.predictedPassengers - a.predictedPassengers)
-      .slice(0, 3);
-  }, [todayDemand]);
+  const topDemand = useMemo(
+    () => [...demandSummary].sort((a, b) => b.totalPredicted - a.totalPredicted).slice(0, 3),
+    [demandSummary],
+  );
   const trips = useMyTrips(uid);
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
@@ -1299,17 +1288,19 @@ export default function BangkeroHome() {
         {topDemand.length > 0 && (
           <>
             <Text style={styles.sectionLabel}>TODAY&apos;S PREDICTION</Text>
-            {topDemand.map((row) => (
-              <View key={row.routeId} style={styles.demandRow}>
-                <Text style={styles.demandRoute} numberOfLines={1}>
-                  {demandRouteName(row.routeId)}
-                </Text>
-                <DemandBadge
-                  level={demandLevel(row.predictedPassengers)}
-                  predictedPassengers={row.predictedPassengers}
-                />
-              </View>
-            ))}
+            <View style={styles.demandList}>
+              {topDemand.map((row) => {
+                const pax = Math.round(row.avgDailyPredicted);
+                return (
+                  <View key={row.routeId} style={styles.demandRow}>
+                    <Text style={styles.demandRoute} numberOfLines={1}>
+                      {demandRouteName(row.routeId)}
+                    </Text>
+                    <DemandBadge level={demandLevel(pax)} predictedPassengers={pax} />
+                  </View>
+                );
+              })}
+            </View>
           </>
         )}
 
@@ -1587,8 +1578,14 @@ const styles = StyleSheet.create({
   countPillLive: { backgroundColor: colors.primary },
   countPillTextLive: { flexShrink: 1, ...typography.label, color: colors.primaryText, letterSpacing: 0 },
 
-  demandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.sm },
-  demandRoute: { ...typography.body, flex: 1, color: colors.textSecondary },
+  demandList: { gap: spacing.md },
+  demandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  demandRoute: { ...typography.body, flex: 1, color: colors.text },
 
   // ---------- earnings ----------
   earningsRow: { flexDirection: 'row', gap: spacing.md },

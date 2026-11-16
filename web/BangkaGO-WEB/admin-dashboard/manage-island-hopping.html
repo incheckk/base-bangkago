@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Admin — Manage Island Hopping</title>
+  <link rel="icon" type="image/png" href="../../images/favicon.png" />
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+  <style>
+    .itinerary-stop{display:flex;align-items:center;gap:.5rem;border:1px solid var(--gray-200);border-radius:10px;padding:.45rem .6rem;margin-bottom:.4rem;background:var(--gray-50)}
+    .itinerary-stop .stop-name{flex:1}
+    .capacity-note{font-size:.82rem;color:var(--gray-600)}
+    .nav-pills .nav-link{color:var(--gray-700)}
+    .nav-pills .nav-link.active{background:var(--brand-primary,#0f766e)}
+  </style>
+</head>
+<body data-page="manage-island-hopping">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+    <main class="cg-main">
+      <div id="topbarMount"></div>
+      <section class="cg-content container-fluid">
+        <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+        <div id="loadingState" class="cg-card text-center py-4">
+          <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
+          <p class="mt-2 text-muted mb-0">Loading island-hopping data...</p>
+        </div>
+
+        <div id="moduleContent" class="d-none">
+          <div class="cg-card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+              <ul class="nav nav-pills" role="tablist">
+                <li class="nav-item"><button class="nav-link active" id="packagesTab" type="button">Packages</button></li>
+                <li class="nav-item"><button class="nav-link" id="bookingsTab" type="button">Customer Bookings</button></li>
+              </ul>
+              <button class="btn btn-bangkago" id="addPackageBtn">
+                <i class="bi bi-plus-circle me-1"></i> Add Package
+              </button>
+            </div>
+          </div>
+
+          <div class="cg-card p-3" id="packagesPanel">
+            <div class="panel-head">
+              <h6 class="mb-0">Island-Hopping Packages</h6>
+              <span class="muted-note">Price is per passenger; booking seats are capped by package and assigned Bangka capacity.</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-theme align-middle mb-0">
+                <thead><tr><th>Package</th><th>Destinations</th><th>Price</th><th>Capacity</th><th>Assigned Bangka</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="packageBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="cg-card p-3 d-none" id="bookingsPanel">
+            <div class="panel-head">
+              <h6 class="mb-0">Island-Hopping Customer Bookings</h6>
+              <span class="muted-note">Schedules and assignments are taken from each real booking.</span>
+            </div>
+            <div class="row g-2 mb-3">
+              <div class="col-md-5"><input id="bookingSearch" class="form-control" placeholder="Search reference, customer, package"></div>
+              <div class="col-md-3">
+                <select id="bookingStatus" class="form-select">
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option><option value="open">Open</option>
+                  <option value="accepted">Accepted</option><option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-theme align-middle mb-0">
+                <thead><tr><th>Booking</th><th>Customer</th><th>Package</th><th>Sailing</th><th>Passengers</th><th>Bangka</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="bookingBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal fade" id="packageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <form class="modal-content" id="packageForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="packageModalTitle">Add Island-Hopping Package</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="packageFormError" class="alert alert-danger d-none"></div>
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label" for="packageName">Package name</label>
+              <input id="packageName" class="form-control" maxlength="100" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="packagePrice">Price per passenger (₱)</label>
+              <input id="packagePrice" class="form-control" type="number" min="0.01" step="0.01" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="packageDescription">Description</label>
+              <textarea id="packageDescription" class="form-control" rows="2" maxlength="500"></textarea>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="packageCapacity">Package passenger limit</label>
+              <input id="packageCapacity" class="form-control" type="number" min="1" max="200" step="1" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="packageDuration">Duration (hours)</label>
+              <input id="packageDuration" class="form-control" type="number" min="0.25" max="24" step="0.25" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="packageBangka">Assigned active Bangka</label>
+              <select id="packageBangka" class="form-select"></select>
+              <div id="capacityNote" class="capacity-note mt-1"></div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="stopSelect">Destinations, in sailing order</label>
+              <div class="input-group">
+                <select id="stopSelect" class="form-select"></select>
+                <button type="button" class="btn btn-outline-primary" id="addStopBtn">Add destination</button>
+              </div>
+              <div class="form-text">The first and last destinations must have an active route between them.</div>
+              <div id="itineraryList" class="mt-2"></div>
+            </div>
+            <div class="col-12">
+              <div class="form-check">
+                <input id="packageActive" class="form-check-input" type="checkbox">
+                <label class="form-check-label" for="packageActive">Available to passengers</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-bangkago" id="savePackageBtn">Save Package</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="packageDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Package Details</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="packageDetails"></div>
+    </div></div>
+  </div>
+
+  <div class="modal fade" id="bookingDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Island-Hop Booking</h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="bookingDetails"></div>
+    </div></div>
+  </div>
+
+  <div class="modal fade" id="rescheduleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog"><form class="modal-content" id="rescheduleForm">
+      <div class="modal-header">
+        <h5 class="modal-title">Reschedule Island-Hop Booking</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="rescheduleError" class="alert alert-danger d-none"></div>
+        <label class="form-label" for="rescheduleDate">Sailing date</label>
+        <input id="rescheduleDate" class="form-control mb-3" type="date" required>
+        <label class="form-label" for="rescheduleTime">Departure time</label>
+        <select id="rescheduleTime" class="form-select">
+          <option value="">Same-day / no selected slot</option>
+          <option value="07:00">07:00</option>
+          <option value="10:00">10:00</option>
+          <option value="13:00">13:00</option>
+          <option value="17:00">17:00</option>
+        </select>
+        <div class="form-text">Future bookings require a time. The assigned Bangka must have enough capacity on the selected date.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
+        <button type="submit" class="btn btn-bangkago" id="saveRescheduleBtn">Save Schedule</button>
+      </div>
+    </form></div>
+  </div>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/bookings.js"></script>
+  <script src="../../assets/js/services/island-packages.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+  <script>
+    (function() {
+      'use strict';
+      var packages = [];
+      var ports = [];
+      var bangkas = [];
+      var bookings = [];
+      var itinerary = [];
+      var editingId = null;
+      var packageModal = new bootstrap.Modal(document.getElementById('packageModal'));
+      var packageDetailsModal = new bootstrap.Modal(document.getElementById('packageDetailsModal'));
+      var bookingDetailsModal = new bootstrap.Modal(document.getElementById('bookingDetailsModal'));
+      var rescheduleModal = new bootstrap.Modal(document.getElementById('rescheduleModal'));
+      var packageBody = document.getElementById('packageBody');
+      var bookingBody = document.getElementById('bookingBody');
+      var loadingState = document.getElementById('loadingState');
+      var moduleContent = document.getElementById('moduleContent');
+      var errorState = document.getElementById('errorState');
+      var packageFormError = document.getElementById('packageFormError');
+
+      function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
+          return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+        });
+      }
+      function peso(value) {
+        return '₱' + Number(value || 0).toLocaleString('en-PH', {minimumFractionDigits:2});
+      }
+      function label(value) {
+        return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      }
+      function portName(id) {
+        var port = ports.find(function(p) { return p.id === id; });
+        return port ? port.port_name : id;
+      }
+      function getPackage(id) { return packages.find(function(p) { return p.packageId === id; }); }
+      function getBooking(id) { return bookings.find(function(b) { return b.bookingId === id; }); }
+      function showError(error) {
+        errorState.textContent = error && error.message ? error.message : String(error);
+        errorState.classList.remove('d-none');
+      }
+
+      function renderPackages() {
+        if (!packages.length) {
+          packageBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No packages in the database yet.</td></tr>';
+          return;
+        }
+        packageBody.innerHTML = packages.map(function(p) {
+          var effective = p.bangkaCapacity == null ? null : Math.min(p.maxCapacity, p.bangkaCapacity);
+          return '<tr><td><strong>' + esc(p.packageName) + '</strong><div class="small text-muted">' +
+            esc(p.description || '') + '</div></td><td>' + esc(p.stops.map(portName).join(' → ') || 'No itinerary') +
+            '</td><td>' + peso(p.price) + '</td><td>' + (effective == null ? '—' : effective + ' seats') +
+            '<div class="small text-muted">Package limit ' + p.maxCapacity + '</div></td><td>' +
+            esc(p.bangkaName || 'Unassigned') + (p.bangkaCapacity ? '<div class="small text-muted">Boat capacity ' + p.bangkaCapacity + '</div>' : '') +
+            '</td><td><span class="badge ' + (p.isActive ? 'text-bg-success' : 'text-bg-secondary') + '">' +
+            (p.isActive ? 'Available' : 'Inactive') + '</span></td><td><div class="d-flex gap-1 flex-wrap">' +
+            '<button class="btn btn-sm btn-outline-primary" onclick="viewPackage(\'' + esc(p.packageId) + '\')">View</button>' +
+            '<button class="btn btn-sm btn-outline-secondary" onclick="editPackage(\'' + esc(p.packageId) + '\')">Edit</button>' +
+            '<button class="btn btn-sm btn-outline-danger" onclick="deletePackage(\'' + esc(p.packageId) + '\')">Delete</button>' +
+            '</div></td></tr>';
+        }).join('');
+      }
+
+      function renderBookings() {
+        var query = document.getElementById('bookingSearch').value.trim().toLowerCase();
+        var status = document.getElementById('bookingStatus').value;
+        var rows = bookings.filter(function(b) {
+          var pkg = getPackage(b.packageId);
+          var search = [b.ref, b.customerName, pkg && pkg.packageName].join(' ').toLowerCase();
+          return (!query || search.indexOf(query) !== -1) && (!status || b.status === status);
+        });
+        if (!rows.length) {
+          bookingBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">' +
+            (bookings.length ? 'No bookings match these filters.' : 'No island-hopping bookings found.') + '</td></tr>';
+          return;
+        }
+        bookingBody.innerHTML = rows.map(function(b) {
+          var pkg = getPackage(b.packageId);
+          var canCancel = ['pending','open','accepted'].indexOf(b.status) !== -1 && !b.departed && !b.boarded;
+          var canReschedule = ['pending','open'].indexOf(b.status) !== -1 && !b.departed && !b.boarded;
+          return '<tr><td><strong>' + esc(b.ref) + '</strong></td><td>' + esc(b.customerName) +
+            '<div class="small text-muted">' + esc(b.customerPhone) + '</div></td><td>' +
+            esc(pkg ? pkg.packageName : 'Package removed') + '</td><td>' + esc(b.scheduledDate || 'Not scheduled') +
+            (b.scheduledTime ? '<div class="small text-muted">' + esc(b.scheduledTime) + '</div>' : '') +
+            '</td><td>' + b.passengerCount + '</td><td>' + esc(b.bangkaName || (pkg && pkg.bangkaName) || 'Unassigned') +
+            '</td><td><span class="badge text-bg-' + (b.status === 'accepted' ? 'primary' : b.status === 'completed' ? 'success' : b.status === 'cancelled' ? 'secondary' : 'warning') +
+            '">' + esc(label(b.status)) + '</span></td><td><div class="d-flex gap-1">' +
+            '<button class="btn btn-sm btn-outline-primary" onclick="viewBooking(\'' + esc(b.bookingId) + '\')">View</button>' +
+            '<button class="btn btn-sm btn-outline-secondary" onclick="rescheduleBooking(\'' + esc(b.bookingId) + '\')" ' +
+            (canReschedule ? '' : 'disabled') + '>Schedule</button>' +
+            '<button class="btn btn-sm btn-outline-danger" onclick="cancelBooking(\'' + esc(b.bookingId) + '\')" ' +
+            (canCancel ? '' : 'disabled') + '>Cancel</button></div></td></tr>';
+        }).join('');
+      }
+
+      function renderItinerary() {
+        var list = document.getElementById('itineraryList');
+        if (!itinerary.length) {
+          list.innerHTML = '<div class="text-muted small">Add at least two destinations.</div>';
+          return;
+        }
+        list.innerHTML = itinerary.map(function(id, index) {
+          return '<div class="itinerary-stop"><span class="badge text-bg-secondary">' + (index + 1) +
+            '</span><span class="stop-name">' + esc(portName(id)) + '</span>' +
+            '<button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveStop(' + index + ',-1)" ' +
+            (index === 0 ? 'disabled' : '') + ' aria-label="Move up"><i class="bi bi-arrow-up"></i></button>' +
+            '<button class="btn btn-sm btn-outline-secondary" type="button" onclick="moveStop(' + index + ',1)" ' +
+            (index === itinerary.length - 1 ? 'disabled' : '') + ' aria-label="Move down"><i class="bi bi-arrow-down"></i></button>' +
+            '<button class="btn btn-sm btn-outline-danger" type="button" onclick="removeStop(' + index + ')" aria-label="Remove destination"><i class="bi bi-x-lg"></i></button></div>';
+        }).join('');
+      }
+
+      function renderOptions() {
+        var selectedBoat = document.getElementById('packageBangka').value;
+        document.getElementById('packageBangka').innerHTML = '<option value="">Select an active Bangka...</option>' +
+          bangkas.map(function(b) {
+            return '<option value="' + esc(b.id) + '">' + esc(b.bangka_name) + ' · ' + b.capacity + ' seats</option>';
+          }).join('');
+        document.getElementById('packageBangka').value = selectedBoat;
+        var select = document.getElementById('stopSelect');
+        select.innerHTML = '<option value="">Select a destination...</option>' +
+          ports.filter(function(p) { return p.is_active; }).map(function(p) {
+            return '<option value="' + esc(p.id) + '">' + esc(p.port_name) + '</option>';
+          }).join('');
+      }
+
+      async function load() {
+        loadingState.classList.remove('d-none');
+        moduleContent.classList.add('d-none');
+        errorState.classList.add('d-none');
+        try {
+          var api = window.bangkagoIslandPackages;
+          var data = await Promise.all([
+            api.listPackages(), api.listPorts(), api.listBangkas(), api.listBookings()
+          ]);
+          packages = data[0]; ports = data[1]; bangkas = data[2]; bookings = data[3];
+          renderOptions(); renderPackages(); renderBookings();
+          moduleContent.classList.remove('d-none');
+        } catch (e) {
+          showError(e);
+        } finally {
+          loadingState.classList.add('d-none');
+        }
+      }
+
+      function resetForm() {
+        document.getElementById('packageForm').reset();
+        document.getElementById('packageActive').checked = true;
+        document.getElementById('packageFormError').classList.add('d-none');
+        document.getElementById('packageModalTitle').textContent = 'Add Island-Hopping Package';
+        document.getElementById('savePackageBtn').textContent = 'Save Package';
+        editingId = null;
+        itinerary = [];
+        renderItinerary();
+        renderOptions();
+      }
+
+      window.viewPackage = function(id) {
+        var p = getPackage(id); if (!p) return;
+        var effective = p.bangkaCapacity == null ? 'Unavailable until a Bangka is assigned' :
+          Math.min(p.maxCapacity, p.bangkaCapacity) + ' seats';
+        document.getElementById('packageDetails').innerHTML =
+          '<div class="info-box mb-2"><strong>Name:</strong> ' + esc(p.packageName) + '</div>' +
+          '<div class="info-box mb-2"><strong>Description:</strong> ' + esc(p.description || '—') + '</div>' +
+          '<div class="info-box mb-2"><strong>Destinations:</strong> ' + esc(p.stops.map(portName).join(' → ') || 'None') + '</div>' +
+          '<div class="info-box mb-2"><strong>Price:</strong> ' + peso(p.price) + ' per passenger</div>' +
+          '<div class="info-box mb-2"><strong>Duration:</strong> ' + p.durationHours + ' hours</div>' +
+          '<div class="info-box mb-2"><strong>Passenger limit:</strong> ' + effective + '</div>' +
+          '<div class="info-box mb-0"><strong>Assigned Bangka:</strong> ' + esc(p.bangkaName || 'Unassigned') + '</div>';
+        packageDetailsModal.show();
+      };
+
+      window.editPackage = function(id) {
+        var p = getPackage(id); if (!p) return;
+        resetForm();
+        editingId = id;
+        document.getElementById('packageModalTitle').textContent = 'Edit Island-Hopping Package';
+        document.getElementById('savePackageBtn').textContent = 'Save Changes';
+        document.getElementById('packageName').value = p.packageName;
+        document.getElementById('packageDescription').value = p.description || '';
+        document.getElementById('packagePrice').value = p.price;
+        document.getElementById('packageCapacity').value = p.maxCapacity;
+        document.getElementById('packageDuration').value = p.durationHours;
+        document.getElementById('packageBangka').value = p.bangkaId || '';
+        document.getElementById('packageActive').checked = p.isActive;
+        itinerary = p.stops.slice();
+        renderItinerary();
+        packageModal.show();
+      };
+
+      window.moveStop = function(index, delta) {
+        var target = index + delta;
+        if (target < 0 || target >= itinerary.length) return;
+        var value = itinerary[index]; itinerary[index] = itinerary[target]; itinerary[target] = value;
+        renderItinerary();
+      };
+      window.removeStop = function(index) { itinerary.splice(index, 1); renderItinerary(); };
+
+      window.deletePackage = async function(id) {
+        var p = getPackage(id); if (!p) return;
+        if (!confirm('Delete "' + p.packageName + '"? Packages with booking history cannot be deleted.')) return;
+        try {
+          await window.bangkagoIslandPackages.deletePackage(id);
+          await load();
+        } catch (e) { showError(e); }
+      };
+
+      window.viewBooking = function(id) {
+        var b = getBooking(id); if (!b) return;
+        var p = getPackage(b.packageId);
+        document.getElementById('bookingDetails').innerHTML =
+          '<div class="info-box mb-2"><strong>Reference:</strong> ' + esc(b.ref) + '</div>' +
+          '<div class="info-box mb-2"><strong>Customer:</strong> ' + esc(b.customerName) + ' · ' + esc(b.customerPhone || 'No phone') + '</div>' +
+          '<div class="info-box mb-2"><strong>Package:</strong> ' + esc(p ? p.packageName : 'Package removed') + '</div>' +
+          '<div class="info-box mb-2"><strong>Sailing:</strong> ' + esc(b.scheduledDate || 'Not scheduled') + (b.scheduledTime ? ' · ' + esc(b.scheduledTime) : '') + '</div>' +
+          '<div class="info-box mb-2"><strong>Passengers:</strong> ' + b.passengerCount + '</div>' +
+          '<div class="info-box mb-2"><strong>Assigned Bangka:</strong> ' + esc(b.bangkaName || (p && p.bangkaName) || 'Unassigned') + '</div>' +
+          '<div class="info-box mb-2"><strong>Status:</strong> ' + esc(label(b.status)) + '</div>' +
+          '<div class="info-box mb-0"><strong>Total:</strong> ' + peso(b.totalPrice) + '</div>';
+        bookingDetailsModal.show();
+      };
+
+      window.cancelBooking = async function(id) {
+        var b = getBooking(id); if (!b) return;
+        if (!confirm('Cancel booking ' + b.ref + '? The standard admin cancellation rules still apply.')) return;
+        try {
+          await window.bangkagoIslandPackages.cancelBooking(id, 'Cancelled by admin from Island Hopping.');
+          await load();
+        } catch (e) { showError(e); }
+      };
+
+      window.rescheduleBooking = function(id) {
+        var b = getBooking(id); if (!b) return;
+        if (['pending', 'open'].indexOf(b.status) === -1 || b.departed || b.boarded) {
+          showError(new Error('Only pending or open, unboarded bookings can be rescheduled.'));
+          return;
+        }
+        document.getElementById('rescheduleError').classList.add('d-none');
+        document.getElementById('rescheduleDate').value = b.scheduledDate || '';
+        document.getElementById('rescheduleTime').value = b.scheduledTime || '';
+        document.getElementById('rescheduleForm').dataset.bookingId = id;
+        rescheduleModal.show();
+      };
+
+      document.getElementById('packagesTab').addEventListener('click', function() {
+        this.classList.add('active');
+        document.getElementById('bookingsTab').classList.remove('active');
+        document.getElementById('packagesPanel').classList.remove('d-none');
+        document.getElementById('bookingsPanel').classList.add('d-none');
+        document.getElementById('addPackageBtn').classList.remove('d-none');
+      });
+      document.getElementById('bookingsTab').addEventListener('click', function() {
+        this.classList.add('active');
+        document.getElementById('packagesTab').classList.remove('active');
+        document.getElementById('bookingsPanel').classList.remove('d-none');
+        document.getElementById('packagesPanel').classList.add('d-none');
+        document.getElementById('addPackageBtn').classList.add('d-none');
+      });
+      document.getElementById('bookingSearch').addEventListener('input', renderBookings);
+      document.getElementById('bookingStatus').addEventListener('change', renderBookings);
+      document.getElementById('packageBangka').addEventListener('change', function() {
+        var boat = bangkas.find(function(b) { return b.id === this.value; }, this);
+        var packageCap = Number(document.getElementById('packageCapacity').value);
+        document.getElementById('capacityNote').textContent = boat
+          ? 'Effective booking limit: ' + Math.min(packageCap || 0, Number(boat.capacity)) + ' seats.'
+          : '';
+      });
+      document.getElementById('packageCapacity').addEventListener('input', function() {
+        document.getElementById('packageBangka').dispatchEvent(new Event('change'));
+      });
+      document.getElementById('addStopBtn').addEventListener('click', function() {
+        var select = document.getElementById('stopSelect');
+        if (!select.value) return;
+        if (itinerary.indexOf(select.value) !== -1) {
+          packageFormError.textContent = 'That destination is already in this itinerary.';
+          packageFormError.classList.remove('d-none');
+          return;
+        }
+        itinerary.push(select.value);
+        packageFormError.classList.add('d-none');
+        renderItinerary();
+      });
+      document.getElementById('addPackageBtn').addEventListener('click', function() {
+        resetForm();
+        packageModal.show();
+      });
+      document.getElementById('packageForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var button = document.getElementById('savePackageBtn');
+        packageFormError.classList.add('d-none');
+        button.disabled = true;
+        try {
+          await window.bangkagoIslandPackages.savePackage(editingId, {
+            packageName: document.getElementById('packageName').value,
+            description: document.getElementById('packageDescription').value,
+            price: document.getElementById('packagePrice').value,
+            maxCapacity: document.getElementById('packageCapacity').value,
+            durationHours: document.getElementById('packageDuration').value,
+            bangkaId: document.getElementById('packageBangka').value,
+            stops: itinerary,
+            isActive: document.getElementById('packageActive').checked
+          });
+          document.getElementById('rescheduleForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var button = document.getElementById('saveRescheduleBtn');
+            var error = document.getElementById('rescheduleError');
+            error.classList.add('d-none');
+            button.disabled = true;
+            try {
+              await window.bangkagoIslandPackages.rescheduleBooking(
+                this.dataset.bookingId,
+                document.getElementById('rescheduleDate').value,
+                document.getElementById('rescheduleTime').value
+              );
+              rescheduleModal.hide();
+              await load();
+            } catch (e) {
+              error.textContent = e.message || 'Could not reschedule this booking.';
+              error.classList.remove('d-none');
+            } finally {
+              button.disabled = false;
+            }
+          });
+          packageModal.hide();
+          await load();
+        } catch (error) {
+          packageFormError.textContent = error.message || 'Could not save this package.';
+          packageFormError.classList.remove('d-none');
+        } finally {
+          button.disabled = false;
+        }
+      });
+      document.getElementById('packageModal').addEventListener('hidden.bs.modal', resetForm);
+
+      window.bangkagoRealtime.subscribe('island_packages', null, load);
+      window.bangkagoRealtime.subscribe('bookings', null, load);
+      window.bangkagoRealtime.subscribe('bangkas', null, load);
+      window.bangkagoRealtime.subscribe('ports', null, load);
+      window.addEventListener('bangkago-auth-ready', load);
+      if (window.bangkagoAuthReady) {
+        window.bangkagoAuthReady.then(load).catch(showError);
+      }
+    })();
+  </script>
+</body>
+</html>

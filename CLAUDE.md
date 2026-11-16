@@ -206,6 +206,19 @@ BangkeroScreenHeader, AuthErrorScreen
   migration 080 after 079, then smoke-test a passenger booking/cancel, a
   bangkero accept/complete, and an admin route or user edit; confirm each
   entry has the right actor, activity, before/after values and PHT time.
+- **Manage Island Hopping (2026-11-16):** the admin dashboard module uses
+  existing `island_packages`, `bookings`, `ports`, `routes`, and `bangkas`
+  rows; it adds no tables. Packages have one assigned active Bangka, ordered
+  port stops, per-passenger price, package limit, and active state. Effective
+  seats are capped by both package and boat limits; live availability and
+  database booking guards account for all same-day load on that Bangka.
+  Admins can view packages and bookings, edit/deactivate or delete only
+  packages without booking history, reschedule pending/open sailings, and
+  cancel through the guarded admin cancellation RPC. Sailing dates/times live
+  on booking records, not a separate schedule table. **Migration 083 is
+  pending after 082:** run 080 → 081 → 082 → 083 after 079, then smoke package
+  CRUD, assignment validation, assigned-boat capacity and concurrent booking
+  refusal, schedule edits, booking cancellation, and passenger-side live seats.
 - `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
    `npm run reset`. Seeded: 9 ports, 40 routes, 3 accounts, 4 bookings.
 - `.env` (gitignored), `.env.example` committed with **placeholders only**

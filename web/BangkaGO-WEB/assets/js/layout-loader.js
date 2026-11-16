@@ -98,6 +98,7 @@
     'manage-users': { title: 'Manage Users', subtitle: 'Create, update, and monitor user access' },
     'manage-bangkeros': { title: 'Manage Bangkeros', subtitle: 'Maintain bangkero records and status' },
     'manage-bangka': { title: 'Manage Bangka', subtitle: 'Maintain vessel master list and availability' },
+    'manage-island-hopping': { title: 'Manage Island Hopping', subtitle: 'Packages, assigned boats, capacity and customer bookings' },
     'manage-routes': { title: 'Manage Ports & Routes', subtitle: 'Ports, travel corridors, fares and stops' },
     'manage-bookings': { title: 'Manage Bookings', subtitle: 'Review booking flow, assignments, and status' },
     'downpayments': { title: 'Downpayments', subtitle: 'Confirm GCash escrow before trips are released' },

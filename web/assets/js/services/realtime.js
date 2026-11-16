@@ -1,7 +1,7 @@
 /**
  * Shared realtime subscription manager for web dashboards.
  *
- * Two fixes over the original:
+ * Fixes over the original:
  *  1. QUEUED ATTACH — pages call subscribe() while the auth guard is
  *     still loading config.js/UMD/client (getClient() null at parse
  *     time). Those calls used to silently no-op, so "live" pages
@@ -10,6 +10,9 @@
  *  2. DEBOUNCE — a venue-wifi GPS stream fires vessel_tracking
  *     events many times a second; each callback used to trigger a
  *     full data reload. Callbacks are now coalesced per key.
+ *  3. STATUS — the last join status of every channel is kept and
+ *     announced, so a page can show whether its live feed is really
+ *     subscribed instead of guessing. getStatuses() reads a copy.
  */
 (function() {
   'use strict';
@@ -17,6 +20,7 @@
   var channels = {};
   var pending = [];
   var timers = {};
+  var statuses = {};
 
   function attach(table, filter, callback) {
     var c = svc.getClient(); if (!c) return null;
@@ -30,7 +34,12 @@
         timers[key] = null;
         channels[key].callbacks.forEach(function(cb) { cb(payload); });
       }, 400);
-    }).subscribe();
+    }).subscribe(function(status) {
+      // Latest join status only (SUBSCRIBED / CHANNEL_ERROR / TIMED_OUT /
+      // CLOSED); re-joins overwrite it, so the map is never stale.
+      statuses[key] = status;
+      window.dispatchEvent(new CustomEvent('bangkago-realtime-status'));
+    });
     channels[key] = { channel: channel, callbacks: [callback] };
     return key;
   }
@@ -59,10 +68,12 @@
   window.addEventListener('bangkago-auth-ready', flush);
 
   function unsubscribe(key) {
-    if (channels[key]) { channels[key].channel.unsubscribe(); delete channels[key]; }
+    if (channels[key]) { channels[key].channel.unsubscribe(); delete channels[key]; delete statuses[key]; }
   }
 
   function unsubscribeAll() { Object.keys(channels).forEach(unsubscribe); }
 
-  window.bangkagoRealtime = { subscribe, unsubscribe, unsubscribeAll };
+  function getStatuses() { return Object.assign({}, statuses); }
+
+  window.bangkagoRealtime = { subscribe, unsubscribe, unsubscribeAll, getStatuses };
 })();

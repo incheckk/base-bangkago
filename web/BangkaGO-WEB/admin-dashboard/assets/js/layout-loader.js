@@ -88,7 +88,6 @@
     'monitor-fleet': { title: 'Monitor Fleet', subtitle: 'Live fleet monitoring and real-time vessel tracking' },
     'track-vessel': { title: 'Track Vessel', subtitle: 'Merged fleet monitoring and real-time vessel tracking' },
     'manage-payments': { title: 'Manage Payments', subtitle: 'Track transactions, verification, and settlements' },
-    'manage-alerts': { title: 'Manage Alerts', subtitle: 'Create and monitor operational alert rules' },
     'view-reports': { title: 'View Reports', subtitle: 'Operations, compliance, and system reports' },
     'analyze-demand': { title: 'Analyze Demand', subtitle: 'Demand trends, peak windows, and forecast insights' },
     'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests and view the passenger list' },
@@ -98,7 +97,7 @@
     'suspend-user': { title: 'Suspend User', subtitle: 'Confirm user suspension' },
     'document-review': { title: 'Document Review', subtitle: 'Review bangkero verification documents' },
     'boat-rentals': { title: 'Boat Rentals', subtitle: 'View all boat charter bookings' },
-    'system-alerts': { title: 'System Alerts', subtitle: 'System-wide alerts and notifications' },
+    'system-alerts': { title: 'Safety Alerts', subtitle: 'SOS and operational safety alerts' },
     'notifications': { title: 'Notifications', subtitle: 'Booking lifecycle updates and operational notices' },
     'profile': { title: 'Profile', subtitle: 'Admin account settings' }
   };

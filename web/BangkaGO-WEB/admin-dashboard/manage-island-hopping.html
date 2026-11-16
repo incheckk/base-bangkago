@@ -12,7 +12,6 @@
   <style>
     .itinerary-stop{display:flex;align-items:center;gap:.5rem;border:1px solid var(--gray-200);border-radius:10px;padding:.45rem .6rem;margin-bottom:.4rem;background:var(--gray-50)}
     .itinerary-stop .stop-name{flex:1}
-    .capacity-note{font-size:.82rem;color:var(--gray-600)}
     .nav-pills .nav-link{color:var(--gray-700)}
     .nav-pills .nav-link.active{background:var(--brand-primary,#0f766e)}
   </style>
@@ -45,11 +44,11 @@
           <div class="cg-card p-3" id="packagesPanel">
             <div class="panel-head">
               <h6 class="mb-0">Island-Hopping Packages</h6>
-              <span class="muted-note">Price is per passenger; booking seats are capped by package and assigned Bangka capacity.</span>
+              <span class="muted-note">Price is per passenger.</span>
             </div>
             <div class="table-responsive">
               <table class="table table-theme align-middle mb-0">
-                <thead><tr><th>Package</th><th>Destinations</th><th>Price</th><th>Capacity</th><th>Assigned Bangka</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Package</th><th>Destinations</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="packageBody"></tbody>
               </table>
             </div>
@@ -105,18 +104,12 @@
               <label class="form-label" for="packageDescription">Description</label>
               <textarea id="packageDescription" class="form-control" rows="2" maxlength="500"></textarea>
             </div>
-            <div class="col-md-4">
-              <label class="form-label" for="packageCapacity">Package passenger limit</label>
-              <input id="packageCapacity" class="form-control" type="number" min="1" max="200" step="1" required>
-            </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label" for="packageDuration">Duration (hours)</label>
               <input id="packageDuration" class="form-control" type="number" min="0.25" max="24" step="0.25" required>
             </div>
-            <div class="col-md-4">
-              <label class="form-label" for="packageBangka">Assigned active Bangka</label>
-              <select id="packageBangka" class="form-select"></select>
-              <div id="capacityNote" class="capacity-note mt-1"></div>
+            <div class="col-12">
+              <div class="form-text">New packages are assigned an eligible active Bangka automatically; its capacity sets the passenger limit. Edits keep existing package assignments and limits.</div>
             </div>
             <div class="col-12">
               <label class="form-label" for="stopSelect">Destinations, in sailing order</label>
@@ -235,17 +228,13 @@
 
       function renderPackages() {
         if (!packages.length) {
-          packageBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No packages in the database yet.</td></tr>';
+          packageBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No packages in the database yet.</td></tr>';
           return;
         }
         packageBody.innerHTML = packages.map(function(p) {
-          var effective = p.bangkaCapacity == null ? null : Math.min(p.maxCapacity, p.bangkaCapacity);
           return '<tr><td><strong>' + esc(p.packageName) + '</strong><div class="small text-muted">' +
             esc(p.description || '') + '</div></td><td>' + esc(p.stops.map(portName).join(' → ') || 'No itinerary') +
-            '</td><td>' + peso(p.price) + '</td><td>' + (effective == null ? '—' : effective + ' seats') +
-            '<div class="small text-muted">Package limit ' + p.maxCapacity + '</div></td><td>' +
-            esc(p.bangkaName || 'Unassigned') + (p.bangkaCapacity ? '<div class="small text-muted">Boat capacity ' + p.bangkaCapacity + '</div>' : '') +
-            '</td><td><span class="badge ' + (p.isActive ? 'text-bg-success' : 'text-bg-secondary') + '">' +
+            '</td><td>' + peso(p.price) + '</td><td><span class="badge ' + (p.isActive ? 'text-bg-success' : 'text-bg-secondary') + '">' +
             (p.isActive ? 'Available' : 'Inactive') + '</span></td><td><div class="d-flex gap-1 flex-wrap">' +
             '<button class="btn btn-sm btn-outline-primary" onclick="viewPackage(\'' + esc(p.packageId) + '\')">View</button>' +
             '<button class="btn btn-sm btn-outline-secondary" onclick="editPackage(\'' + esc(p.packageId) + '\')">Edit</button>' +
@@ -304,12 +293,6 @@
       }
 
       function renderOptions() {
-        var selectedBoat = document.getElementById('packageBangka').value;
-        document.getElementById('packageBangka').innerHTML = '<option value="">Select an active Bangka...</option>' +
-          bangkas.map(function(b) {
-            return '<option value="' + esc(b.id) + '">' + esc(b.bangka_name) + ' · ' + b.capacity + ' seats</option>';
-          }).join('');
-        document.getElementById('packageBangka').value = selectedBoat;
         var select = document.getElementById('stopSelect');
         select.innerHTML = '<option value="">Select a destination...</option>' +
           ports.filter(function(p) { return p.is_active; }).map(function(p) {
@@ -350,16 +333,12 @@
 
       window.viewPackage = function(id) {
         var p = getPackage(id); if (!p) return;
-        var effective = p.bangkaCapacity == null ? 'Unavailable until a Bangka is assigned' :
-          Math.min(p.maxCapacity, p.bangkaCapacity) + ' seats';
         document.getElementById('packageDetails').innerHTML =
           '<div class="info-box mb-2"><strong>Name:</strong> ' + esc(p.packageName) + '</div>' +
           '<div class="info-box mb-2"><strong>Description:</strong> ' + esc(p.description || '—') + '</div>' +
           '<div class="info-box mb-2"><strong>Destinations:</strong> ' + esc(p.stops.map(portName).join(' → ') || 'None') + '</div>' +
           '<div class="info-box mb-2"><strong>Price:</strong> ' + peso(p.price) + ' per passenger</div>' +
-          '<div class="info-box mb-2"><strong>Duration:</strong> ' + p.durationHours + ' hours</div>' +
-          '<div class="info-box mb-2"><strong>Passenger limit:</strong> ' + effective + '</div>' +
-          '<div class="info-box mb-0"><strong>Assigned Bangka:</strong> ' + esc(p.bangkaName || 'Unassigned') + '</div>';
+          '<div class="info-box mb-0"><strong>Duration:</strong> ' + p.durationHours + ' hours</div>';
         packageDetailsModal.show();
       };
 
@@ -372,9 +351,7 @@
         document.getElementById('packageName').value = p.packageName;
         document.getElementById('packageDescription').value = p.description || '';
         document.getElementById('packagePrice').value = p.price;
-        document.getElementById('packageCapacity').value = p.maxCapacity;
         document.getElementById('packageDuration').value = p.durationHours;
-        document.getElementById('packageBangka').value = p.bangkaId || '';
         document.getElementById('packageActive').checked = p.isActive;
         itinerary = p.stops.slice();
         renderItinerary();
@@ -451,16 +428,6 @@
       });
       document.getElementById('bookingSearch').addEventListener('input', renderBookings);
       document.getElementById('bookingStatus').addEventListener('change', renderBookings);
-      document.getElementById('packageBangka').addEventListener('change', function() {
-        var boat = bangkas.find(function(b) { return b.id === this.value; }, this);
-        var packageCap = Number(document.getElementById('packageCapacity').value);
-        document.getElementById('capacityNote').textContent = boat
-          ? 'Effective booking limit: ' + Math.min(packageCap || 0, Number(boat.capacity)) + ' seats.'
-          : '';
-      });
-      document.getElementById('packageCapacity').addEventListener('input', function() {
-        document.getElementById('packageBangka').dispatchEvent(new Event('change'));
-      });
       document.getElementById('addStopBtn').addEventListener('click', function() {
         var select = document.getElementById('stopSelect');
         if (!select.value) return;
@@ -483,13 +450,23 @@
         packageFormError.classList.add('d-none');
         button.disabled = true;
         try {
+          var existingPackage = editingId ? getPackage(editingId) : null;
+          var assignedBangka = existingPackage
+            ? bangkas.find(function(b) { return b.id === existingPackage.bangkaId; })
+            : bangkas.find(function(b) {
+              var capacity = Number(b.capacity);
+              return Number.isInteger(capacity) && capacity >= 1 && capacity <= 200;
+            });
+          if (!existingPackage && !assignedBangka) {
+            throw new Error('No eligible active Bangka with a supported capacity is available for a new package.');
+          }
           await window.bangkagoIslandPackages.savePackage(editingId, {
             packageName: document.getElementById('packageName').value,
             description: document.getElementById('packageDescription').value,
             price: document.getElementById('packagePrice').value,
-            maxCapacity: document.getElementById('packageCapacity').value,
+            maxCapacity: existingPackage ? existingPackage.maxCapacity : Number(assignedBangka.capacity),
             durationHours: document.getElementById('packageDuration').value,
-            bangkaId: document.getElementById('packageBangka').value,
+            bangkaId: existingPackage ? existingPackage.bangkaId : assignedBangka.id,
             stops: itinerary,
             isActive: document.getElementById('packageActive').checked
           });

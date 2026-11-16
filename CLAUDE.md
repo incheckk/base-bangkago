@@ -221,8 +221,14 @@ BangkeroScreenHeader, AuthErrorScreen
   package CRUD, assignment validation, assigned-boat capacity and concurrent
   booking refusal, schedule edits, booking cancellation, and passenger-side
   live seats.
-=======
->>>>>>> Stashed changes
+- **Compliance report dismissal + alert audiences (2026-11-16):** Safety Alerts
+  can notify Passenger, Bangkero, Admin, Coastguard, or All; creating an alert
+  still notifies everyone. Compliance & Feedback keeps Resolve visible as a
+  resolved record, while Dismiss sets `safety_alerts.dismissed_at` and removes
+  that report from the review list without deleting its record. Migration
+  `migrations/090_compliance_report_dismissal.sql` is pending after 089; run
+  migrations 080 → 090 in order after 079, then verify each audience receives
+  the notification and a dismissed report stays hidden after refresh.
 - `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
    `npm run reset`. Seeded: 9 ports, 40 routes, 3 accounts, 4 bookings.
 - `.env` (gitignored), `.env.example` committed with **placeholders only**

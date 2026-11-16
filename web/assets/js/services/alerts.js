@@ -8,6 +8,8 @@
   var EVIDENCE_BUCKET = 'compliance-evidence';
   var MAX_EVIDENCE_FILES = 5;
   var MAX_EVIDENCE_SIZE = 20 * 1024 * 1024;
+  var COMPLIANCE_REPORT_PREFIX = '[Compliance Report]';
+  var LEGACY_COMPLIANCE_REPORT_PREFIX = 'Zone:';
 
   function mapRow(row) {
     return {
@@ -15,6 +17,7 @@
       message: row.message,
       severity: row.severity,
       isResolved: row.is_resolved,
+      dismissedAt: row.dismissed_at || null,
       createdAt: row.created_at,
       bangkaId: row.bangka_id,
       portId: row.port_id,
@@ -33,6 +36,12 @@
     if (filters.isResolved !== undefined) q = q.eq('is_resolved', filters.isResolved);
     if (filters.bangkaId) q = q.eq('bangka_id', filters.bangkaId);
     if (filters.portId) q = q.eq('port_id', filters.portId);
+    if (filters.messagePrefix) q = q.like('message', filters.messagePrefix + '%');
+    if (filters.excludeComplianceReports) {
+      q = q
+        .not('message', 'like', COMPLIANCE_REPORT_PREFIX + '%')
+        .not('message', 'like', LEGACY_COMPLIANCE_REPORT_PREFIX + '%');
+    }
     q = q.order('created_at', { ascending: false });
     if (filters.limit) q = q.limit(filters.limit);
     var r = await q;
@@ -130,54 +139,89 @@
     return result.data.signedUrl;
   }
 
-  async function resolve(alertId, notes) {
-    var c = svc.getClient(); if (!c) throw new Error('No client');
-    // Check if resolution_notes column exists, if not just update is_resolved
-    var updateData = { is_resolved: true };
-    // Try to add resolution_notes - if column doesn't exist, Supabase will ignore or error
-    // We'll try with the column and if it fails, retry without
-    try {
-      updateData.resolution_notes = notes || null;
-      var r = await c.from('safety_alerts').update(updateData).eq('id', alertId);
-      if (r.error) throw r.error;
-    } catch (e) {
-      // Column might not exist, retry without
-      var r = await c.from('safety_alerts').update({ is_resolved: true }).eq('id', alertId);
-      if (r.error) throw r.error;
-    }
+  async function resolve(alertId) {
+    const c = svc.getClient(); if (!c) throw new Error('No client');
+    const r = await c.from('safety_alerts')
+      .update({ is_resolved: true })
+      .eq('id', alertId)
+      .select('id')
+      .maybeSingle();
+    if (r.error) throw r.error;
+    if (!r.data) throw new Error('The alert no longer exists or you do not have permission to resolve it.');
   }
 
-  async function notify(alertId, recipients, message) {
-    var c = svc.getClient(); if (!c) throw new Error('No client');
-    // recipients: 'all_operators', 'coastguard', 'admins', 'all'
-    // ('lgu' removed — not a valid users.user_role since migration 025)
-    var roleMap = {
-      'all_operators': 'bangkero',
+  async function dismissComplianceReport(alertId) {
+    const c = svc.getClient(); if (!c) throw new Error('No client');
+    const r = await c.from('safety_alerts')
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq('id', alertId)
+      .is('dismissed_at', null)
+      .select('id')
+      .maybeSingle();
+    if (r.error) {
+      if ((r.error.code === 'PGRST204' || r.error.code === '42703') && /dismissed_at/i.test(r.error.message || '')) {
+        throw new Error('Persistent report dismissal is not configured. Apply migrations/090_compliance_report_dismissal.sql after migration 089, then retry.');
+      }
+      throw r.error;
+    }
+    if (!r.data) throw new Error('The report was already dismissed, no longer exists, or you do not have permission to dismiss it.');
+  }
+
+  async function notify(recipients, message) {
+    const c = svc.getClient(); if (!c) throw new Error('No client');
+    // Recipients are role groups or 'all'.
+    const roleMap = {
+      'passenger': 'passenger',
+      'bangkero': 'bangkero',
+      'admin': 'admin',
       'coastguard': 'coastguard',
-      'admins': 'admin',
-      'all': null // all users
+      'all': null,
+      'all_operators': 'bangkero',
+      'admins': 'admin'
     };
-    if (recipients && !Object.prototype.hasOwnProperty.call(roleMap, recipients)) {
+    if (!Object.prototype.hasOwnProperty.call(roleMap, recipients)) {
       throw new Error('Unknown recipients: ' + recipients);
     }
-    var targetRole = roleMap[recipients];
-    var query = c.from('users').select('id');
-    if (targetRole) query = query.eq('user_role', targetRole);
-    var r = await query;
-    if (r.error) throw r.error;
-    var users = r.data || [];
+    const targetRole = roleMap[recipients];
+    const users = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      let query = c.from('users').select('id').order('id', { ascending: true });
+      if (targetRole) query = query.eq('user_role', targetRole);
+      const r = await query.range(offset, offset + pageSize - 1);
+      if (r.error) throw r.error;
+      const page = r.data || [];
+      users.push(...page);
+      if (page.length < pageSize) break;
+    }
     if (users.length === 0) return { count: 0 };
 
-    var notifications = users.map(u => ({
+    const notifications = users.map(u => ({
       user_id: u.id,
       title: 'Safety Alert',
       message: message,
-      is_read: false
+      is_read: false,
+      category: 'safety'
     }));
-    var n = await c.from('notifications').insert(notifications);
-    if (n.error) throw n.error;
-    return { count: users.length };
+    let sentCount = 0;
+    for (let start = 0; start < notifications.length; start += pageSize) {
+      const batch = notifications.slice(start, start + pageSize);
+      const n = await c.from('notifications').insert(batch);
+      if (n.error) {
+        let detail = n.error.message || 'Unknown database error';
+        if ((n.error.code === 'PGRST204' || n.error.code === '42703') && /category/i.test(detail)) {
+          detail = 'Safety notification categories are not configured. Apply migrations/079_release_charter_profiles_categories_locks.sql, then retry.';
+        }
+        if (sentCount) {
+          throw new Error(`Notifications reached ${sentCount} of ${users.length} users before sending failed: ${detail}`);
+        }
+        if (detail !== n.error.message) throw new Error(detail);
+        throw n.error;
+      }
+      sentCount += batch.length;
+    }
+    return { count: sentCount };
   }
 
-  window.bangkagoAlerts = { listAll, create, uploadEvidence, removeEvidence, getEvidenceUrl, resolve, notify };
+  window.bangkagoAlerts = { listAll, create, uploadEvidence, removeEvidence, getEvidenceUrl, resolve, dismissComplianceReport, notify };
 })();

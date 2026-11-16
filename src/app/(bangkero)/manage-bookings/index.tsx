@@ -67,7 +67,7 @@ export default function ManageBookingsScreen() {
           .toLowerCase()
           .includes(q)
       )
-      .sort((a, b) => b.ref.localeCompare(a.ref));
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [trips.data, filter, search]);
 
   return (

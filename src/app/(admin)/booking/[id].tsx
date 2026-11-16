@@ -1,6 +1,6 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
 import { PassengerEditModal } from '@/components/PassengerEditModal';
@@ -125,7 +125,7 @@ export default function AdminBookingDetail() {
     <ScreenContainer padded={false}>
       <AdminScreenHeader title="Booking Details" />
 
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.refRow}>
           <Text style={styles.ref}>{booking.ref}</Text>
           <StatusPill status={booking.status as any} />
@@ -296,7 +296,7 @@ export default function AdminBookingDetail() {
             </>
           )}
         </View>
-      </View>
+      </ScrollView>
 
       <PassengerEditModal
         visible={!!editing}
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
   },
 
-  content: { paddingHorizontal: spacing.xl },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl },
 
   refRow: {
     flexDirection: 'row', alignItems: 'center',

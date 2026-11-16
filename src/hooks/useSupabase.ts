@@ -296,7 +296,8 @@ export function useMyTrips(bangkeroUid: string | null): Result<BookingDoc[]> {
     const { data: rows, error: err } = await supabase
       .from('bookings')
       .select('*')
-      .eq('operator_id', bangkeroUid);
+      .eq('operator_id', bangkeroUid)
+      .order('created_at', { ascending: false });
     if (id !== seq.current) return;
     if (err) { setError(err.message); setLoading(false); return; }
     setData((rows ?? []).map(mapBookingRow).sort(byNewest));

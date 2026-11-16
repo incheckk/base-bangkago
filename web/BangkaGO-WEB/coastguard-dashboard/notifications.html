@@ -9,33 +9,27 @@
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
   <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
-  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+  <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
 
   <style>
-    .nf-wrap{max-width:980px}
-    .nf-toolbar{
-      display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;
-      background:var(--gray-50);border:1px solid var(--gray-200);border-radius:12px;
-      padding:.8rem .9rem;margin-bottom:.85rem;
-    }
-    .nf-summary{font-size:.82rem;color:var(--gray-600)}
-    .nf-summary strong{color:var(--blue-900)}
-    .nf-list{border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;background:#fff}
+    .nf-summary{font-size:.82rem;color:var(--cg-gray-500,var(--gray-500))}
+    .nf-summary strong{color:var(--cg-navy-900,var(--blue-900))}
+    .nf-list{border:1px solid var(--cg-gray-200,var(--gray-200));border-radius:12px;overflow:hidden;background:#fff}
     .nf-row{
       width:100%;display:flex;align-items:flex-start;gap:.75rem;text-align:left;
-      padding:.85rem .9rem;background:#fff;border:0;border-bottom:1px solid var(--gray-200);
-      font:inherit;color:inherit;transition:background var(--ease-fast);
+      padding:.85rem .9rem;background:#fff;border:0;border-bottom:1px solid var(--cg-gray-200,var(--gray-200));
+      font:inherit;color:inherit;transition:background var(--cg-ease-fast,var(--ease-fast));
     }
     .nf-row:last-child{border-bottom:0}
     .nf-row:hover{background:#f8fbff}
-    .nf-row:focus-visible{outline:2px solid var(--blue-500);outline-offset:-2px}
+    .nf-row:focus-visible{outline:2px solid var(--cg-accent,var(--blue-500));outline-offset:-2px}
     .nf-row.is-unread{background:#f4f9ff}
     .nf-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.42rem;background:transparent}
-    .nf-row.is-unread .nf-dot{background:var(--blue-500)}
+    .nf-row.is-unread .nf-dot{background:var(--cg-accent,var(--blue-500))}
     .nf-main{flex:1;min-width:0}
-    .nf-title{display:block;font-weight:600;color:var(--blue-900);line-height:1.25}
+    .nf-title{display:block;font-weight:600;color:var(--cg-navy-900,var(--blue-900));line-height:1.25}
     .nf-row.is-unread .nf-title{font-weight:700}
-    .nf-msg{display:block;margin-top:.15rem;font-size:.82rem;color:var(--gray-600);line-height:1.4}
+    .nf-msg{display:block;margin-top:.15rem;font-size:.82rem;color:var(--cg-gray-500,var(--gray-500));line-height:1.4}
     .nf-meta{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex-shrink:0}
     .nf-kind{
       font-size:.65rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
@@ -46,40 +40,47 @@
     .nf-kind-cargo{background:#fffbeb;color:#92400e;border-color:#fde68a}
     .nf-kind-safety{background:#fef2f2;color:#b42318;border-color:#fecaca}
     .nf-kind-account{background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe}
-    .nf-kind-system{background:var(--gray-100);color:var(--gray-700);border-color:var(--gray-200)}
-    .nf-time{font-size:.7rem;color:var(--gray-500);white-space:nowrap}
-    .nf-empty{padding:2.2rem 1rem;text-align:center;color:var(--gray-500);font-size:.86rem}
+    .nf-kind-system{background:var(--cg-gray-100,var(--gray-100));color:var(--cg-gray-700,var(--gray-700));border-color:var(--cg-gray-200,var(--gray-200))}
+    .nf-time{font-size:.7rem;color:var(--cg-gray-500,var(--gray-500));white-space:nowrap}
+    .nf-empty{padding:2.2rem 1rem;text-align:center;color:var(--cg-gray-500,var(--gray-500));font-size:.86rem}
     @media (max-width:575.98px){
       .nf-meta{display:none}
       .nf-row{padding:.8rem .75rem}
     }
   </style>
 </head>
-<body>
-  <div id="sidebar-container"></div>
-  <div id="main-wrapper">
-    <div id="topbar-container"></div>
-    <main class="content">
-      <div class="nf-wrap">
-        <div class="nf-toolbar">
-          <div class="nf-summary" id="nfSummary">Loading notifications...</div>
-          <div class="d-flex align-items-center gap-2 flex-wrap">
-            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfRefreshBtn">
-              <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfMarkAllBtn">
-              <i class="bi bi-check2-all me-1"></i>Mark all read
-            </button>
-            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfClearBtn">
-              <i class="bi bi-trash3 me-1"></i>Clear old
-            </button>
+<body data-page="notifications">
+  <div class="cg-shell">
+    <div id="sidebarMount"></div>
+
+    <main class="cg-main" id="cgMain">
+      <div id="topbarMount"></div>
+
+      <section class="cg-content container-fluid">
+        <div class="cg-card">
+          <div class="panel-head">
+            <div>
+              <h6 class="mb-1">Notifications</h6>
+              <span class="muted-note" id="nfSummary">Loading notifications...</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="nfRefreshBtn">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="nfMarkAllBtn">
+                <i class="bi bi-check2-all me-1"></i>Mark all read
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="nfClearBtn">
+                <i class="bi bi-trash3 me-1"></i>Clear old
+              </button>
+            </div>
+          </div>
+
+          <div class="nf-list" id="nfList">
+            <div class="nf-empty">Loading notifications...</div>
           </div>
         </div>
-
-        <div class="nf-list" id="nfList">
-          <div class="nf-empty">Loading notifications...</div>
-        </div>
-      </div>
+      </section>
     </main>
   </div>
 

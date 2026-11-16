@@ -20,6 +20,11 @@
       border:1px solid #e4e9f2;border-radius:12px;padding:1rem;background:#fff;height:100%;
     }
     .kpi-val{font-size:1.8rem;font-weight:700;}
+    .live-dot{
+      width:8px;height:8px;border-radius:50%;background:#fff;display:inline-block;
+      box-shadow:0 0 0 3px rgba(255,255,255,.18);
+    }
+    .rule-note{font-size:.72rem;line-height:1.3;max-width:260px;}
   </style>
 </head>
 <body data-page="view-weather">
@@ -45,37 +50,42 @@
           <div class="col-md-3">
             <div class="kpi-box">
               <div class="text-muted">Wind Speed</div>
-              <div class="kpi-val">18 km/h</div>
-              <small class="text-success">Normal range</small>
+              <div class="kpi-val" id="kpiWind">Loading...</div>
+              <small class="text-muted" id="kpiWindNote">Checking Open-Meteo...</small>
             </div>
           </div>
           <div class="col-md-3">
             <div class="kpi-box">
               <div class="text-muted">Wave Height</div>
-              <div class="kpi-val">1.2 m</div>
-              <small class="text-warning">Moderate</small>
+              <div class="kpi-val" id="kpiWave">Loading...</div>
+              <small class="text-muted" id="kpiWaveNote">Checking Open-Meteo...</small>
             </div>
           </div>
           <div class="col-md-3">
             <div class="kpi-box">
               <div class="text-muted">Visibility</div>
-              <div class="kpi-val">8 km</div>
-              <small class="text-success">Clear</small>
+              <div class="kpi-val" id="kpiVisibility">Loading...</div>
+              <small class="text-muted" id="kpiVisibilityNote">Checking Open-Meteo...</small>
             </div>
           </div>
           <div class="col-md-3">
             <div class="kpi-box">
               <div class="text-muted">Safety Level</div>
-              <div class="kpi-val">Level 2</div>
-              <small class="text-warning">Proceed with caution</small>
+              <div class="kpi-val" id="kpiSafety">Loading...</div>
+              <small class="text-muted" id="kpiSafetyNote">Checking live weather...</small>
             </div>
           </div>
         </div>
 
         <div class="panel-card p-3">
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
             <h5 class="mb-0">Route Weather Snapshot</h5>
-            <span class="badge text-bg-info">Live Feed (Mock)</span>
+            <div class="d-flex align-items-center gap-2">
+              <small class="text-muted" id="liveStamp"></small>
+              <span class="badge text-bg-secondary d-inline-flex align-items-center gap-2" id="liveBadge">
+                <span class="live-dot" aria-hidden="true"></span> LIVE WEATHER
+              </span>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="table table-theme align-middle mb-0">
@@ -88,30 +98,18 @@
                   <th>Advisory</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td>R-01 (Marigondon Port → Olango)</td>
-                  <td>Partly Cloudy</td>
-                  <td>16 km/h</td>
-                  <td>1.1 m</td>
-                  <td><span class="badge text-bg-success">Safe</span></td>
-                </tr>
-                <tr>
-                  <td>R-02 (Mactan Port → Olango)</td>
-                  <td>Cloudy</td>
-                  <td>19 km/h</td>
-                  <td>1.3 m</td>
-                  <td><span class="badge text-bg-warning">Caution</span></td>
-                </tr>
-                <tr>
-                  <td>R-04 (Mactan Port → Caohagan)</td>
-                  <td>Light Rain</td>
-                  <td>24 km/h</td>
-                  <td>1.8 m</td>
-                  <td><span class="badge text-bg-danger">Watchlist</span></td>
-                </tr>
+              <tbody id="routeWeatherBody">
+                <tr><td colspan="5" class="text-muted">Checking Open-Meteo...</td></tr>
               </tbody>
             </table>
+          </div>
+          <div class="small text-muted mt-2" id="routeSourceNote">
+            Live data by Open-Meteo · Mactan–Olango strait
+          </div>
+          <div class="small text-muted mt-1">
+            Rules: <strong>CAUTION</strong> when wind ≥ 25 km/h, waves ≥ 1.0 m,
+            visibility &lt; 5 km, or rain. <strong>WATCHLIST</strong> when wind ≥ 40 km/h,
+            waves ≥ 1.5 m, visibility &lt; 2 km, or thunderstorm.
           </div>
         </div>
       </section>
@@ -128,11 +126,15 @@
         </div>
         <div class="modal-body">
           <ul class="list-group">
-            <li class="list-group-item d-flex justify-content-between"><span>Temperature</span><strong>31°C</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>Humidity</span><strong>74%</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>Wind Direction</span><strong>NE</strong></li>
-            <li class="list-group-item d-flex justify-content-between"><span>Rain Probability</span><strong>35%</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Temperature</span><strong id="detailTemp">Loading...</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Condition</span><strong id="detailCondition">Loading...</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Humidity</span><strong id="detailHumidity">Loading...</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Wind Direction</span><strong id="detailWindDir">Loading...</strong></li>
+            <li class="list-group-item d-flex justify-content-between"><span>Visibility</span><strong id="detailVisibility">Loading...</strong></li>
           </ul>
+          <div class="small text-muted mt-3">
+            Live data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>.
+          </div>
         </div>
       </div>
     </div>
@@ -149,11 +151,9 @@
         <div class="modal-body">
           <label class="form-label">Select Route</label>
           <select id="safetyRoute" class="form-select mb-3">
-            <option>R-01 (Marigondon Port → Olango)</option>
-            <option>R-02 (Mactan Port → Olango)</option>
-            <option>R-04 (Mactan Port → Caohagan)</option>
+            <option value="">Select a route...</option>
           </select>
-          <div id="safetyOutput" class="alert alert-info mb-0">Click Check to evaluate route safety.</div>
+          <div id="safetyOutput" class="alert alert-info mb-0">Select a route, then click Check to evaluate it against the live strait reading.</div>
         </div>
         <div class="modal-footer">
           <button type="submit" class="btn btn-outline-dark">Check</button>
@@ -161,37 +161,405 @@
       </form>
     </div>
   </div>
+
   <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
+  <script src="../assets/js/sea-weather.js"></script>
   <!-- Service scripts -->
   <script src="../../assets/js/services/supabase.js"></script>
-  <script src="../../assets/js/services/weather.js"></script>
   <script src="../../assets/js/services/portsRoutes.js"></script>
-  <script src="../../assets/js/services/realtime.js"></script>
   <script>
+    const STRAIT = { lat: 10.27, lon: 124.03 };
+    const RULES = { cautionWind: 25, watchWind: 40, cautionWave: 1.0, watchWave: 1.5, cautionVisibility: 5, watchVisibility: 2 };
+
     const weatherModal = new bootstrap.Modal('#weatherDataModal');
     const safetyModal = new bootstrap.Modal('#safetyStatusModal');
 
-    document.getElementById('btnWeatherData').addEventListener('click', ()=>weatherModal.show());
-    document.getElementById('btnSafetyStatus').addEventListener('click', ()=>safetyModal.show());
+    const liveBadge = document.getElementById('liveBadge');
+    const liveStamp = document.getElementById('liveStamp');
+    const routeWeatherBody = document.getElementById('routeWeatherBody');
+    const routeSourceNote = document.getElementById('routeSourceNote');
+    const safetyRoute = document.getElementById('safetyRoute');
+    const safetyOutput = document.getElementById('safetyOutput');
 
-    document.getElementById('safetyForm').addEventListener('submit', function(e){
-      e.preventDefault();
-      const route = document.getElementById('safetyRoute').value;
-      const box = document.getElementById('safetyOutput');
+    const kpiWind = document.getElementById('kpiWind');
+    const kpiWindNote = document.getElementById('kpiWindNote');
+    const kpiWave = document.getElementById('kpiWave');
+    const kpiWaveNote = document.getElementById('kpiWaveNote');
+    const kpiVisibility = document.getElementById('kpiVisibility');
+    const kpiVisibilityNote = document.getElementById('kpiVisibilityNote');
+    const kpiSafety = document.getElementById('kpiSafety');
+    const kpiSafetyNote = document.getElementById('kpiSafetyNote');
 
-      if(route.includes('R-01')){
-        box.className = 'alert alert-success mb-0';
-        box.textContent = 'Safety Status: SAFE. Operations may proceed normally.';
-      } else if(route.includes('R-02')){
-        box.className = 'alert alert-warning mb-0';
-        box.textContent = 'Safety Status: CAUTION. Reduce speed and monitor updates.';
-      } else {
-        box.className = 'alert alert-danger mb-0';
-        box.textContent = 'Safety Status: WATCHLIST. Prepare contingency route.';
+    const detailTemp = document.getElementById('detailTemp');
+    const detailCondition = document.getElementById('detailCondition');
+    const detailHumidity = document.getElementById('detailHumidity');
+    const detailWindDir = document.getElementById('detailWindDir');
+    const detailVisibility = document.getElementById('detailVisibility');
+
+    let liveWeather = null;
+    let routes = [];
+    let requestId = 0;
+
+    function valueOrUnavailable(value, suffix) {
+      return value == null ? 'Data Unavailable' : value + suffix;
+    }
+
+    function assess(weather) {
+      if (!weather) {
+        return {
+          level: 'DATA UNAVAILABLE',
+          badgeClass: 'text-bg-secondary',
+          textClass: 'text-secondary',
+          alertClass: 'alert-secondary',
+          reason: 'Open-Meteo request failed.',
+          rule: 'No live reading is available.'
+        };
       }
+
+      const missing = [];
+      if (weather.wind == null) missing.push('wind speed');
+      if (weather.wave == null) missing.push('wave height');
+      if (weather.visibility == null) missing.push('visibility');
+      if (missing.length) {
+        return {
+          level: 'DATA UNAVAILABLE',
+          badgeClass: 'text-bg-secondary',
+          textClass: 'text-secondary',
+          alertClass: 'alert-warning',
+          reason: `${missing.join(', ')} missing from the Open-Meteo response.`,
+          rule: 'Safety cannot be fully evaluated with incomplete data.'
+        };
+      }
+
+      const wind = weather.wind;
+      const wave = weather.wave;
+      const visibility = weather.visibility;
+      const storm = /thunderstorm/i.test(weather.label || '');
+      const rain = /rain|drizzle|showers|fog/i.test(weather.label || '');
+      const reasons = [];
+
+      if (storm || wind >= RULES.watchWind || (wave != null && wave >= RULES.watchWave) || (visibility != null && visibility < RULES.watchVisibility)) {
+        if (storm) reasons.push('Thunderstorm');
+        if (wind >= RULES.watchWind) reasons.push(`Wind ${wind} km/h ≥ ${RULES.watchWind}`);
+        if (wave != null && wave >= RULES.watchWave) reasons.push(`Waves ${wave} m ≥ ${RULES.watchWave}`);
+        if (visibility != null && visibility < RULES.watchVisibility) reasons.push(`Visibility ${visibility} km < ${RULES.watchVisibility}`);
+        return {
+          level: 'WATCHLIST',
+          badgeClass: 'text-bg-danger',
+          textClass: 'text-danger',
+          alertClass: 'alert-danger',
+          reason: reasons.join(' · '),
+          rule: 'WATCHLIST: thunderstorm, wind ≥ 40 km/h, waves ≥ 1.5 m, or visibility < 2 km.'
+        };
+      }
+
+      if (wind >= RULES.cautionWind || (wave != null && wave >= RULES.cautionWave) || (visibility != null && visibility < RULES.cautionVisibility) || rain) {
+        if (wind >= RULES.cautionWind) reasons.push(`Wind ${wind} km/h ≥ ${RULES.cautionWind}`);
+        if (wave != null && wave >= RULES.cautionWave) reasons.push(`Waves ${wave} m ≥ ${RULES.cautionWave}`);
+        if (visibility != null && visibility < RULES.cautionVisibility) reasons.push(`Visibility ${visibility} km < ${RULES.cautionVisibility}`);
+        if (rain) reasons.push(weather.label);
+        return {
+          level: 'CAUTION',
+          badgeClass: 'text-bg-warning',
+          textClass: 'text-warning',
+          alertClass: 'alert-warning',
+          reason: reasons.join(' · '),
+          rule: 'CAUTION: wind ≥ 25 km/h, waves ≥ 1.0 m, visibility < 5 km, or rain.'
+        };
+      }
+
+      const safeReasons = [`Wind ${wind} km/h < ${RULES.cautionWind}`];
+      if (wave != null) safeReasons.push(`waves ${wave} m < ${RULES.cautionWave}`);
+      if (visibility != null) safeReasons.push(`visibility ${visibility} km ≥ ${RULES.cautionVisibility}`);
+      return {
+        level: 'SAFE',
+        badgeClass: 'text-bg-success',
+        textClass: 'text-success',
+        alertClass: 'alert-success',
+        reason: safeReasons.join(' · '),
+        rule: 'SAFE: wind < 25 km/h, waves < 1.0 m, visibility ≥ 5 km, and no rain.'
+      };
+    }
+
+    function setLiveBadge(ok, at) {
+      if (ok) {
+        liveBadge.className = 'badge text-bg-success d-inline-flex align-items-center gap-2';
+        liveBadge.innerHTML = '<span class="live-dot" aria-hidden="true"></span> LIVE WEATHER';
+        liveStamp.textContent = at
+          ? 'Updated ' + new Date(at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
+          : '';
+      } else {
+        liveBadge.className = 'badge text-bg-danger d-inline-flex align-items-center gap-2';
+        liveBadge.innerHTML = '<span class="live-dot" aria-hidden="true"></span> DATA UNAVAILABLE';
+        liveStamp.textContent = '';
+      }
+    }
+
+    function renderKpis(weather) {
+      const assessment = assess(weather);
+
+      if (!weather) {
+        kpiWind.textContent = 'Data Unavailable';
+        kpiWindNote.textContent = 'Open-Meteo request failed.';
+        kpiWindNote.className = 'text-danger';
+        kpiWave.textContent = 'Data Unavailable';
+        kpiWaveNote.textContent = 'Open-Meteo request failed.';
+        kpiWaveNote.className = 'text-danger';
+        kpiVisibility.textContent = 'Data Unavailable';
+        kpiVisibilityNote.textContent = 'Open-Meteo request failed.';
+        kpiVisibilityNote.className = 'text-danger';
+        kpiSafety.textContent = 'Data Unavailable';
+        kpiSafety.className = 'kpi-val text-secondary';
+        kpiSafetyNote.textContent = 'Open-Meteo request failed.';
+        kpiSafetyNote.className = 'text-danger';
+        return;
+      }
+
+      if (weather.wind == null) {
+        kpiWind.textContent = 'Data Unavailable';
+        kpiWindNote.textContent = 'Wind speed missing from Open-Meteo.';
+        kpiWindNote.className = 'text-danger';
+      } else {
+        kpiWind.textContent = weather.wind + ' km/h';
+        kpiWindNote.textContent = weather.wind >= RULES.watchWind
+          ? `Watchlist threshold (≥ ${RULES.watchWind} km/h)`
+          : weather.wind >= RULES.cautionWind
+            ? `Caution threshold (≥ ${RULES.cautionWind} km/h)`
+            : `Normal range (< ${RULES.cautionWind} km/h)`;
+        kpiWindNote.className = weather.wind >= RULES.watchWind
+          ? 'text-danger'
+          : weather.wind >= RULES.cautionWind ? 'text-warning' : 'text-success';
+      }
+
+      if (weather.wave == null) {
+        kpiWave.textContent = 'Data Unavailable';
+        kpiWaveNote.textContent = 'Marine endpoint unavailable.';
+        kpiWaveNote.className = 'text-danger';
+      } else {
+        kpiWave.textContent = weather.wave + ' m';
+        kpiWaveNote.textContent = weather.wave >= RULES.watchWave
+          ? `Watchlist threshold (≥ ${RULES.watchWave} m)`
+          : weather.wave >= RULES.cautionWave
+            ? `Caution threshold (≥ ${RULES.cautionWave} m)`
+            : `Normal range (< ${RULES.cautionWave} m)`;
+        kpiWaveNote.className = weather.wave >= RULES.watchWave
+          ? 'text-danger'
+          : weather.wave >= RULES.cautionWave ? 'text-warning' : 'text-success';
+      }
+
+      if (weather.visibility == null) {
+        kpiVisibility.textContent = 'Data Unavailable';
+        kpiVisibilityNote.textContent = 'Visibility not returned by Open-Meteo.';
+        kpiVisibilityNote.className = 'text-danger';
+      } else {
+        kpiVisibility.textContent = weather.visibility + ' km';
+        kpiVisibilityNote.textContent = weather.visibility < RULES.watchVisibility
+          ? `Low visibility (< ${RULES.watchVisibility} km)`
+          : weather.visibility < RULES.cautionVisibility
+            ? `Reduced visibility (< ${RULES.cautionVisibility} km)`
+            : 'Clear visibility';
+        kpiVisibilityNote.className = weather.visibility < RULES.watchVisibility
+          ? 'text-danger'
+          : weather.visibility < RULES.cautionVisibility ? 'text-warning' : 'text-success';
+      }
+
+      kpiSafety.textContent = assessment.level;
+      kpiSafety.className = 'kpi-val ' + assessment.textClass;
+      kpiSafetyNote.textContent = assessment.reason;
+      kpiSafetyNote.className = assessment.textClass;
+    }
+
+    function renderDetails(weather) {
+      detailTemp.textContent = weather ? valueOrUnavailable(weather.temp, '°C') : 'Data Unavailable';
+      detailCondition.textContent = weather ? weather.label : 'Data Unavailable';
+      detailHumidity.textContent = weather ? valueOrUnavailable(weather.humidity, '%') : 'Data Unavailable';
+      detailWindDir.textContent = weather ? weather.dir : 'Data Unavailable';
+      detailVisibility.textContent = weather ? valueOrUnavailable(weather.visibility, ' km') : 'Data Unavailable';
+    }
+
+    function snapshotRoutes() {
+      const origins = new Set();
+      const picked = [];
+      for (const route of routes) {
+        if (origins.has(route.startPortId)) continue;
+        origins.add(route.startPortId);
+        picked.push(route);
+      }
+      return picked;
+    }
+
+    function renderRoutes(weather) {
+      const assessment = assess(weather);
+      routeWeatherBody.innerHTML = '';
+
+      if (routes.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 5;
+        td.className = 'text-muted';
+        td.textContent = 'Route list unavailable. Live weather is still shown above.';
+        tr.appendChild(td);
+        routeWeatherBody.appendChild(tr);
+        return;
+      }
+
+      snapshotRoutes().forEach(function (route) {
+        const tr = document.createElement('tr');
+
+        const routeCell = document.createElement('td');
+        routeCell.textContent = route.name;
+        tr.appendChild(routeCell);
+
+        const conditionCell = document.createElement('td');
+        conditionCell.textContent = weather ? weather.label : 'Data Unavailable';
+        tr.appendChild(conditionCell);
+
+        const windCell = document.createElement('td');
+        windCell.textContent = weather ? valueOrUnavailable(weather.wind, ' km/h ' + weather.dir) : 'Data Unavailable';
+        tr.appendChild(windCell);
+
+        const waveCell = document.createElement('td');
+        waveCell.textContent = weather ? valueOrUnavailable(weather.wave, ' m') : 'Data Unavailable';
+        tr.appendChild(waveCell);
+
+        const advisoryCell = document.createElement('td');
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + assessment.badgeClass;
+        badge.textContent = assessment.level;
+        advisoryCell.appendChild(badge);
+
+        const note = document.createElement('div');
+        note.className = 'rule-note text-muted mt-1';
+        note.textContent = assessment.reason;
+        advisoryCell.appendChild(note);
+        tr.appendChild(advisoryCell);
+
+        routeWeatherBody.appendChild(tr);
+      });
+
+      routeSourceNote.textContent = 'Live data by Open-Meteo · Mactan–Olango strait · showing ' +
+        snapshotRoutes().length + ' of ' + routes.length + ' active routes (one per origin)';
+    }
+
+    function renderSafety() {
+      const routeId = safetyRoute.value;
+      const route = routes.find(function (item) { return item.routeId === routeId; });
+
+      if (!route) {
+        safetyOutput.className = 'alert alert-info mb-0';
+        safetyOutput.textContent = 'Select a route, then click Check to evaluate it against the live strait reading.';
+        return;
+      }
+
+      if (!liveWeather) {
+        safetyOutput.className = 'alert alert-warning mb-0';
+        safetyOutput.textContent = 'Data Unavailable — the live Open-Meteo reading could not be loaded.';
+        return;
+      }
+
+      const assessment = assess(liveWeather);
+      safetyOutput.className = 'alert ' + assessment.alertClass + ' mb-0';
+      safetyOutput.innerHTML = '';
+
+      const title = document.createElement('strong');
+      title.textContent = route.name + ': ' + assessment.level;
+
+      const reason = document.createElement('div');
+      reason.className = 'small mt-1';
+      reason.textContent = assessment.reason;
+
+      const rule = document.createElement('div');
+      rule.className = 'small text-muted mt-1';
+      rule.textContent = 'Rule: ' + assessment.rule;
+
+      safetyOutput.append(title, reason, rule);
+    }
+
+    async function loadRoutes() {
+      const results = await Promise.all([
+        window.bangkagoPortsRoutes.listPorts(true),
+        window.bangkagoPortsRoutes.listRoutes(true)
+      ]);
+      const portNames = new Map(results[0].map(function (port) { return [port.portId, port.portName]; }));
+      routes = results[1].map(function (route) {
+        const from = portNames.get(route.startPortId) || route.startPortId;
+        const to = portNames.get(route.endPortId) || route.endPortId;
+        return Object.assign({}, route, { name: from + ' \u2192 ' + to });
+      }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+      safetyRoute.innerHTML = '<option value="">Select a route...</option>';
+      routes.forEach(function (route) {
+        const option = document.createElement('option');
+        option.value = route.routeId;
+        option.textContent = route.name;
+        safetyRoute.appendChild(option);
+      });
+    }
+
+    async function refreshWeather() {
+      const id = ++requestId;
+      try {
+        const weather = await window.bangkagoSeaWeather.getLive(STRAIT.lat, STRAIT.lon, { allowStale: false });
+        if (id !== requestId) return;
+        liveWeather = weather;
+        renderKpis(weather);
+        renderDetails(weather);
+        renderRoutes(weather);
+        setLiveBadge(true, weather.at);
+        if (safetyRoute.value) renderSafety();
+      } catch (error) {
+        if (id !== requestId) return;
+        liveWeather = null;
+        renderKpis(null);
+        renderDetails(null);
+        renderRoutes(null);
+        setLiveBadge(false);
+        if (safetyRoute.value) renderSafety();
+        console.error('Failed to load Open-Meteo weather:', error);
+      }
+    }
+
+    document.getElementById('btnWeatherData').addEventListener('click', function () {
+      renderDetails(liveWeather);
+      weatherModal.show();
     });
+    document.getElementById('btnSafetyStatus').addEventListener('click', function () {
+      safetyModal.show();
+    });
+    document.getElementById('safetyForm').addEventListener('submit', function (event) {
+      event.preventDefault();
+      renderSafety();
+    });
+
+    async function init() {
+      await refreshWeather();
+
+      if (window.bangkagoAuthReady && typeof window.bangkagoAuthReady.then === 'function') {
+        window.bangkagoAuthReady
+          .then(loadRoutes)
+          .then(function () {
+            renderRoutes(liveWeather);
+            if (safetyRoute.value) renderSafety();
+          })
+          .catch(function (error) {
+            console.error('Failed to load routes:', error);
+            routes = [];
+            renderRoutes(liveWeather);
+          });
+      } else {
+        loadRoutes()
+          .then(function () { renderRoutes(liveWeather); })
+          .catch(function (error) {
+            console.error('Failed to load routes:', error);
+            routes = [];
+            renderRoutes(liveWeather);
+          });
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>

@@ -39,6 +39,39 @@ export async function getDemandForRoute(
   return (data ?? []).map(mapRow);
 }
 
+export interface RouteDemandSummary {
+  routeId: string;
+  totalPredicted: number;
+  avgDailyPredicted: number;
+  daysWithData: number;
+}
+
+export async function getRouteDemandSummary(): Promise<RouteDemandSummary[]> {
+  const { data, error } = await supabase
+    .from('demand_predictions')
+    .select('route_id, predicted_passengers, prediction_date');
+
+  if (error) throw error;
+
+  const byRoute = new Map<string, { total: number; dates: Set<string> }>();
+  for (const row of data ?? []) {
+    if (!row.route_id) continue;
+    const entry = byRoute.get(row.route_id) ?? { total: 0, dates: new Set<string>() };
+    entry.total += row.predicted_passengers ?? 0;
+    if (row.prediction_date) entry.dates.add(row.prediction_date);
+    byRoute.set(row.route_id, entry);
+  }
+
+  return [...byRoute.entries()]
+    .map(([routeId, entry]) => ({
+      routeId,
+      totalPredicted: entry.total,
+      avgDailyPredicted: entry.dates.size > 0 ? Math.round(entry.total / entry.dates.size) : 0,
+      daysWithData: entry.dates.size,
+    }))
+    .sort((a, b) => b.totalPredicted - a.totalPredicted);
+}
+
 export async function getTodayPredictions(): Promise<DemandPredictionDoc[]> {
   const today = manilaTodayIso();
 

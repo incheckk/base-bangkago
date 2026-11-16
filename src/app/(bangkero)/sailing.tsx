@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -16,7 +16,6 @@ import { useMyTrips } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
 import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
 import { getDownpaymentsForBookings } from '@/services/downpayment.service';
-import { shareManifestPdf } from '@/services/manifest-export.service';
 import {
   getPassengerDetailsByBooking,
 } from '@/services/passenger-detail.service';
@@ -68,7 +67,6 @@ export default function SailingScreen() {
   // across rows when several bookings were unpaid at once.
   const [references, setReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
-  const [sharingId, setSharingId] = useState<string | null>(null);
 
   const sailing: Sailing | null = useMemo(() => {
     const key = `${day}|${from}|${to}`;
@@ -156,26 +154,6 @@ export default function SailingScreen() {
       setPayError(friendlyError(e));
     }
     setPayingId(null);
-  }
-
-  async function shareBookingManifest(bookingId: string, bookerId: string) {
-    const b = sailing?.bookings.find((row) => row.bookingId === bookingId);
-    if (!b || sharingId) return;
-    setSharingId(bookingId);
-    try {
-      await shareManifestPdf([{
-        booking: b,
-        companions: details[bookingId] ?? [],
-        booker: bookers[bookerId] ?? null,
-      }]);
-    } catch (e) {
-      Alert.alert(
-        'Could not share manifest',
-        e instanceof Error ? e.message : 'Please try again.'
-      );
-    } finally {
-      setSharingId(null);
-    }
   }
 
   if (trips.loading) {
@@ -302,14 +280,6 @@ export default function SailingScreen() {
                 </View>
               )}
 
-              <PrimaryButton
-                label="Share Manifest PDF"
-                variant="secondary"
-                onPress={() => void shareBookingManifest(b.bookingId, b.userId)}
-                loading={sharingId === b.bookingId}
-                disabled={sharingId !== null}
-                style={styles.shareBtn}
-              />
             </View>
           );
         })}
@@ -525,7 +495,6 @@ const styles = StyleSheet.create({
   payDone: { ...typography.label, color: colors.success, letterSpacing: 0 },
   payPending: { ...typography.label, color: colors.warning, letterSpacing: 0 },
   payBtn: { flexBasis: '100%', minHeight: 40 },
-  shareBtn: { marginTop: spacing.md, minHeight: 44 },
   refInput: {
     marginTop: spacing.sm,
     backgroundColor: colors.bgElevated,

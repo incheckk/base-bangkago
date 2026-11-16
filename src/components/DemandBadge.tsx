@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii, spacing } from '../theme/tokens';
 
-type DemandLevel = 'low' | 'medium' | 'high';
+type DemandLevel = 'low' | 'steady' | 'high';
 
 interface Props {
   level: DemandLevel;
@@ -10,9 +10,9 @@ interface Props {
 }
 
 const CONFIG: Record<DemandLevel, { text: string; color: string; bg: string }> = {
-  low: { text: 'Low Demand', color: colors.textSecondary, bg: colors.neutralTint },
-  medium: { text: 'Moderate', color: colors.warning, bg: colors.warningTint },
-  high: { text: 'High Demand', color: colors.primary, bg: colors.primaryTint },
+  low: { text: 'Low Demand', color: colors.textSecondary, bg: colors.surfaceAlt },
+  steady: { text: 'Steady Demand', color: colors.warning, bg: colors.warningTint },
+  high: { text: 'High Demand', color: colors.success, bg: colors.successTint },
 };
 
 export function DemandBadge({ level, predictedPassengers }: Props) {
@@ -29,10 +29,10 @@ export function DemandBadge({ level, predictedPassengers }: Props) {
 
 const styles = StyleSheet.create({
   badge: {
-    alignSelf: 'flex-start',
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     borderRadius: radii.pill,

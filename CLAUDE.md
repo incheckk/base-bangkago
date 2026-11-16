@@ -215,10 +215,11 @@ BangkeroScreenHeader, AuthErrorScreen
   Admins can view packages and bookings, edit/deactivate or delete only
   packages without booking history, reschedule pending/open sailings, and
   cancel through the guarded admin cancellation RPC. Sailing dates/times live
-  on booking records, not a separate schedule table. **Migration 083 is
-  pending after 082:** run 080 → 081 → 082 → 083 after 079, then smoke package
-  CRUD, assignment validation, assigned-boat capacity and concurrent booking
-  refusal, schedule edits, booking cancellation, and passenger-side live seats.
+  on booking records, not a separate schedule table. **Migration 084 is
+  pending after 083:** run 080 → 081 → 082 → 083 → 084 after 079, then smoke
+  package CRUD, assignment validation, assigned-boat capacity and concurrent
+  booking refusal, schedule edits, booking cancellation, and passenger-side
+  live seats.
 - `scripts/seed.js`, `scripts/reset.js`, `scripts/supabase.js` — `npm run seed` /
    `npm run reset`. Seeded: 9 ports, 40 routes, 3 accounts, 4 bookings.
 - `.env` (gitignored), `.env.example` committed with **placeholders only**

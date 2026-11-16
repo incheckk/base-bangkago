@@ -120,6 +120,9 @@
           </div>
         </div>
         <div class="modal-footer">
+          <button type="button" class="btn btn-outline-dark" id="manifestPdfBtn" disabled>
+            <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
+          </button>
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
         </div>
       </div>
@@ -136,7 +139,9 @@
 
   <script>
     let manifests = [];
+    let currentManifestPdf = null;
 
+    const manifestPdfBtn = document.getElementById("manifestPdfBtn");
     const tableBody = document.getElementById("expTableBody");
     const searchInput = document.getElementById("expSearchInput");
     const statusFilter = document.getElementById("expStatusFilter");
@@ -221,6 +226,8 @@
       }
 
       viewingManifestId = manifestId;
+      currentManifestPdf = null;
+      manifestPdfBtn.disabled = true;
       viewManifestId.textContent = manifest.manifestId;
       document.getElementById("vsVessel").textContent = manifest.bangkaName || 'Unassigned';
       document.getElementById("vsBangkero").textContent = manifest.bangkeroName || 'Unknown';
@@ -238,7 +245,15 @@
 
       try {
         const passengers = await window.bangkagoManifests.getPassengers(manifestId);
+        let parcels = [];
+        try {
+          parcels = await window.bangkagoManifests.getParcels(manifestId);
+        } catch (parcelError) {
+          console.warn('Could not load manifest parcels for PDF:', parcelError);
+        }
         if (viewingManifestId !== manifestId) return;
+        currentManifestPdf = { manifest: manifest, passengers: passengers, parcels: parcels };
+        manifestPdfBtn.disabled = false;
         if (!passengers.length) {
           viewPassengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No passengers recorded.</td></tr>';
           return;
@@ -254,9 +269,155 @@
       } catch (e) {
         console.error(e);
         if (viewingManifestId !== manifestId) return;
+        currentManifestPdf = null;
+        manifestPdfBtn.disabled = true;
         viewPassengerBody.innerHTML = '<tr><td colspan="4" class="text-center text-danger">Could not load passengers.</td></tr>';
       }
     }
+
+    function loadPdfScript(src) {
+      return new Promise(function(resolve, reject) {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF library.'));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function ensurePdfLibrary() {
+      if (!window.jspdf?.jsPDF) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        throw new Error('PDF library did not initialize.');
+      }
+    }
+
+    async function exportManifestPdf(button) {
+      if (!currentManifestPdf) {
+        alert('Open a manifest before exporting it.');
+        return;
+      }
+
+      const originalLabel = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating PDF...';
+
+      try {
+        await ensurePdfLibrary();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const generatedAt = new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+        const manifest = currentManifestPdf.manifest;
+        const passengers = currentManifestPdf.passengers;
+        const parcels = currentManifestPdf.parcels;
+
+        doc.setFillColor(23, 42, 66);
+        doc.rect(0, 0, pageWidth, 27, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.text('BangkaGo Manifest', margin, 12);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Generated ' + generatedAt, pageWidth - margin, 12, { align: 'right' });
+        doc.text('Manifest ' + (manifest.manifestId || '-'), pageWidth - margin, 18, { align: 'right' });
+        doc.setTextColor(40, 40, 40);
+
+        doc.autoTable({
+          startY: 34,
+          head: [['Manifest summary', 'Details']],
+          body: [
+            ['Manifest ID', manifest.manifestId || '-'],
+            ['Vessel', manifest.bangkaName || 'Unassigned'],
+            ['Bangkero', manifest.bangkeroName || 'Unknown'],
+            ['Route', (manifest.departurePortName || 'Unknown') + ' to ' + (manifest.arrivalPortName || 'Unknown')],
+            ['Departure', formatDate(manifest.actualDepartureTime)],
+            ['Arrival', formatDate(manifest.actualArrivalTime)],
+            ['Status', statusText(manifest.status)],
+            ['Passengers', String(manifest.totalPassengersOnBoard ?? passengers.length)],
+            ['Parcels', String(manifest.totalParcelsOnBoard ?? parcels.length)],
+            ['Snapshot created', formatDate(manifest.generatedAt)]
+          ],
+          styles: { fontSize: 9, cellPadding: 2.5, overflow: 'linebreak' },
+          headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin },
+          columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold' } }
+        });
+
+        const passengerRows = passengers.map((p, i) => [
+          String(i + 1),
+          p.passengerName || 'Unknown',
+          p.actualWeightKg == null ? '-' : String(p.actualWeightKg),
+          p.boardedAt ? 'Yes' : 'No',
+          p.bookingId || '-'
+        ]);
+
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [['#', 'Passenger', 'Weight (kg)', 'Boarded', 'Booking ID']],
+          body: passengerRows.length
+            ? passengerRows
+            : [['-', 'No passengers recorded', '-', '-', '-']],
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin },
+          columnStyles: {
+            0: { cellWidth: 9 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 42 }
+          }
+        });
+
+        const parcelRows = parcels.map((p, i) => [
+          String(i + 1),
+          p.parcelDescription || '-',
+          p.weightKg == null ? '-' : String(p.weightKg),
+          p.loadedAt ? 'Yes' : 'No'
+        ]);
+
+        doc.autoTable({
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [['#', 'Parcel', 'Weight (kg)', 'Loaded']],
+          body: parcelRows.length
+            ? parcelRows
+            : [['-', 'No parcels recorded', '-', '-']],
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+          headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin },
+          columnStyles: {
+            0: { cellWidth: 9 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: 20 }
+          }
+        });
+
+        const stamp = new Date().toLocaleString('en-CA', {
+          timeZone: 'Asia/Manila', hour12: false
+        }).replace(/[^\d]/g, '').slice(0, 12);
+        doc.save('BangkaGo-manifest-' + (manifest.manifestId || 'trip') + '-' + stamp + '.pdf');
+      } catch (error) {
+        console.error(error);
+        alert('Could not generate manifest PDF: ' + error.message);
+      } finally {
+        button.disabled = !currentManifestPdf;
+        button.innerHTML = originalLabel;
+      }
+    }
+
+    manifestPdfBtn.addEventListener('click', function() {
+      void exportManifestPdf(manifestPdfBtn);
+    });
 
     function runFilters() {
       const q = searchInput.value.trim().toLowerCase();

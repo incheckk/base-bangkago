@@ -41,6 +41,23 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 - Manifest PDF export restored + Bangkero Manage Bookings.**
+  - **Web PDFs:** Admin `manage-bookings.html` and Coast Guard
+    `export-manifest.html` regain lazy-loaded jsPDF/autoTable **Export PDF**
+    buttons. Admin exports the current booking manifest (booker, companions,
+    parcels/items); Coast Guard exports the current `trip_manifest` snapshot
+    with passengers and parcels.
+  - **Bangkero mobile:** new `(bangkero)/manage-bookings` list shows bookings
+    individually by `BGO-XXXX` ref with booker, route, date, status and pax
+    count. Each opens a manifest detail screen with the booker, companions,
+    `PassengerEditModal` edit/remove actions, and **Share Manifest PDF**.
+    `sailing.tsx` also gains a per-booking PDF share button. Dependencies:
+    `expo-print`, `expo-sharing`. Profile menu entry added.
+  - **Gates:** typed routes regenerated, new detail route uses no cast;
+    `npx tsc --noEmit` clean; `npm run lint` 0 errors / 138 known warnings;
+    inline scripts in both edited web pages pass `node --check`. Not
+    manually smoke-tested in Expo Go or a browser yet.
+
 - **2026-11-16 — RBAC matrix alignment, operations inboxes, passenger safety
   feed/report, passenger-list edit/delete (migration 083 PENDING — USER MUST
   RUN after 082).**
@@ -61,7 +78,8 @@ gracefully. Don't mass-refactor hooks to silence warnings.
   - **Admin compliance is read-only:** Admin submit was removed from
     `report-compliance.html`; Admin `safety_alerts` INSERT remains because
     `manage-alerts.html` legitimately needs it. Admin and Coast Guard
-    manifest PDF export was removed; manifests stay view-only.
+    manifest PDF export is available again (2026-11-16); manifests stay
+    read-only apart from exporting.
   - **Admin web auth wait fixed:** `admin-dashboard/assets/js/layout-loader.js`
     now exposes `window.bangkagoAuthReady` like the Coast Guard loader. Every
     Admin page already awaited it, but `await undefined` resolved immediately,

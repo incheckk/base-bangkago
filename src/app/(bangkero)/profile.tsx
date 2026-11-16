@@ -33,6 +33,7 @@ import { nameError } from '@/utils/validation';
  */
 const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[] = [
   { key: 'earnings', label: 'Earnings', icon: 'cash' },
+  { key: 'manage-bookings', label: 'Manage Bookings', icon: 'bookings' },
   { key: 'trips', label: 'Trip History', icon: 'history' },
   { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
   { key: 'ratings', label: 'My Ratings', icon: 'star' },
@@ -47,6 +48,7 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
 
 const ROUTE_MAP: Record<string, string> = {
   earnings: '/(bangkero)/earnings',
+  'manage-bookings': '/(bangkero)/manage-bookings',
   trips: '/(bangkero)/trips',
   rentals: '/(bangkero)/rentals',
   ratings: '/(bangkero)/ratings',

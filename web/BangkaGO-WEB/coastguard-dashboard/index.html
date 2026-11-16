@@ -39,7 +39,7 @@
           </div>
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Live Fleet Map</p>
+              <p>Live Bangka Map</p>
               <h3 id="kpiFleet">-</h3>
               <span class="kpi-up" id="kpiFleetDetail">Loading...</span>
               <div class="kpi-mini-chart chart-up"></div>
@@ -60,14 +60,14 @@
           <div class="col-12">
             <div class="cg-card map-box">
               <div class="panel-head">
-                <h6 class="mb-0">Live Fleet Monitoring Map</h6>
+                <h6 class="mb-0">Live Bangka Monitoring Map</h6>
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
               <div id="fleetMap" style="height:300px"></div>
 
               <div class="route-pill-wrap" id="cgRoutePills">
-                <span class="route-pill">Loading vessels...</span>
+                <span class="route-pill">Loading bangka...</span>
               </div>
             </div>
           </div>
@@ -126,7 +126,7 @@
 
     function getWeatherStatus(positions) {
       // Mock weather based on vessel positions - in real app would use weather_data table
-      if (positions.length === 0) return { status: 'Unknown', detail: 'No vessel data' };
+      if (positions.length === 0) return { status: 'Unknown', detail: 'No bangka data' };
       return { status: 'Moderate', detail: 'Wind advisory in East Channel' };
     }
 
@@ -193,7 +193,7 @@
             return `<span class="route-pill">${name} • ${signal}</span>`;
           }).join('') + `<span class="route-pill">Last refresh: ${new Date().toLocaleTimeString()}</span>`;
         } else {
-          routePills.innerHTML = '<span class="route-pill">No active vessels</span>';
+          routePills.innerHTML = '<span class="route-pill">No active bangka</span>';
         }
 
         // Alert feed
@@ -243,7 +243,7 @@
         try {
           fleetMap = await window.bangkagoFleetMap.mount('fleetMap');
         } catch (err) {
-          console.error('Fleet map failed to load:', err); // dashboard still works without it
+          console.error('Bangka map failed to load:', err); // dashboard still works without it
         }
         loadCgDashboard();
       } catch (e) {

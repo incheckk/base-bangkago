@@ -142,7 +142,7 @@ export default function AdminBookingDetail() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>OPERATOR</Text>
+          <Text style={styles.cardLabel}>BANGKERO</Text>
           <Text style={styles.info} numberOfLines={1}>{booking.operatorName ?? 'Not assigned'}</Text>
         </View>
 

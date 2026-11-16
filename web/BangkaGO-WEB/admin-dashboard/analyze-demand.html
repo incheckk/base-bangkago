@@ -295,7 +295,7 @@
       if (summary.length > 1) {
         html += `
           <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Maintain current fleet on <strong>${summary[1]?.routeName || 'other routes'}</strong></span>
+            <span>Maintain current bangka on <strong>${summary[1]?.routeName || 'other routes'}</strong></span>
             <span class="text-muted">priority normal</span>
           </div>
         `;
@@ -459,10 +459,10 @@
         if (route) {
           if (route.totalPredicted > 100) {
             message = `High demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
-              `Add extra trips and prioritize larger vessels.`;
+              `Add extra trips and prioritize larger bangka.`;
           } else if (route.totalPredicted > 50) {
             message = `Moderate demand on ${route.routeName}. Maintain current schedule; ` +
-              `consider a standby vessel during high-demand days.`;
+              `consider a standby bangka during high-demand days.`;
           } else {
             message = `Low demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
               `Monitor weather and consider reducing frequency to optimize costs.`;

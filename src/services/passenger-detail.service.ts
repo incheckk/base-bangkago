@@ -83,13 +83,13 @@ export async function getPassengerDetailsByRentals(
 }
 
 export type PassengerDetailUpdate = {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   age?: number | null;
   sex?: string | null;
   contactNumber?: string | null;
   address?: string | null;
-  passengerType: PassengerType;
+  passengerType?: PassengerType;
   declaredWeightKg?: number | null;
 };
 
@@ -97,18 +97,22 @@ export async function updatePassengerDetail(
   id: string,
   detail: PassengerDetailUpdate
 ): Promise<void> {
+  // Only write what the caller owns. The edit sheet dropped weight and
+  // passenger type, so sending them as null would have wiped real values.
+  const patch: Record<string, unknown> = {};
+  if (detail.firstName !== undefined) patch.first_name = detail.firstName;
+  if (detail.lastName !== undefined) patch.last_name = detail.lastName;
+  if (detail.age !== undefined) patch.age = detail.age;
+  if (detail.sex !== undefined) patch.sex = detail.sex;
+  if (detail.contactNumber !== undefined) patch.contact_number = detail.contactNumber;
+  if (detail.address !== undefined) patch.address = detail.address;
+  if (detail.passengerType !== undefined) patch.passenger_type = detail.passengerType;
+  if (detail.declaredWeightKg !== undefined) patch.declared_weight_kg = detail.declaredWeightKg;
+  if (Object.keys(patch).length === 0) return;
+
   const { error } = await supabase
     .from('passenger_details')
-    .update({
-      first_name: detail.firstName,
-      last_name: detail.lastName,
-      age: detail.age ?? null,
-      sex: detail.sex ?? null,
-      contact_number: detail.contactNumber ?? null,
-      address: detail.address ?? null,
-      passenger_type: detail.passengerType,
-      declared_weight_kg: detail.declaredWeightKg ?? null,
-    })
+    .update(patch)
     .eq('id', id);
 
   if (error) throw error;

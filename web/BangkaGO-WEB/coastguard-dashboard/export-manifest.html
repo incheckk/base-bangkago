@@ -30,7 +30,7 @@
               <div class="row g-2 mb-3 align-items-end filter-row">
                 <div class="col-12 col-md-4">
                   <label class="form-label visually-hidden" for="expSearchInput">Search</label>
-                  <input id="expSearchInput" class="form-control w-100" type="text" placeholder="Search manifest, vessel, route">
+                  <input id="expSearchInput" class="form-control w-100" type="text" placeholder="Search manifest, bangka, route">
                 </div>
                 <div class="col-6 col-md-3">
                   <label class="form-label visually-hidden" for="expStatusFilter">Status</label>
@@ -57,7 +57,7 @@
                   <thead>
                     <tr>
                       <th>Manifest ID</th>
-                      <th>Vessel</th>
+                      <th>Bangka</th>
                       <th>Bangkero</th>
                       <th>Date</th>
                       <th>Route</th>
@@ -91,7 +91,7 @@
         </div>
         <div class="modal-body">
           <dl class="row small mb-3">
-            <dt class="col-sm-3 text-muted">Vessel</dt><dd class="col-sm-9" id="vsVessel">-</dd>
+            <dt class="col-sm-3 text-muted">Bangka</dt><dd class="col-sm-9" id="vsVessel">-</dd>
             <dt class="col-sm-3 text-muted">Bangkero</dt><dd class="col-sm-9" id="vsBangkero">-</dd>
             <dt class="col-sm-3 text-muted">Route</dt><dd class="col-sm-9" id="vsRoute">-</dd>
             <dt class="col-sm-3 text-muted">Departure</dt><dd class="col-sm-9" id="vsDeparture">-</dd>
@@ -335,7 +335,7 @@
           head: [['Manifest summary', 'Details']],
           body: [
             ['Manifest ID', manifest.manifestId || '-'],
-            ['Vessel', manifest.bangkaName || 'Unassigned'],
+            ['Bangka', manifest.bangkaName || 'Unassigned'],
             ['Bangkero', manifest.bangkeroName || 'Unknown'],
             ['Route', (manifest.departurePortName || 'Unknown') + ' to ' + (manifest.arrivalPortName || 'Unknown')],
             ['Departure', formatDate(manifest.actualDepartureTime)],

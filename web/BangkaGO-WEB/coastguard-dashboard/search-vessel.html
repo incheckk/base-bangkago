@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BangkaGo Coast Guard — Search Vessel</title>
+  <title>BangkaGo Coast Guard — Search Bangka</title>
   <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
@@ -23,7 +23,7 @@
           <div class="col-12">
             <div class="cg-card">
               <div class="panel-head">
-                <h6 class="mb-0">Search Vessel (Read-Only)</h6>
+                <h6 class="mb-0">Search Bangka (Read-Only)</h6>
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
@@ -31,7 +31,7 @@
               <div class="row g-2 mb-3 align-items-end filter-row">
                 <div class="col-12 col-md-5">
                   <label class="form-label visually-hidden" for="searchInput">Search</label>
-                  <input id="searchInput" class="form-control w-100" type="text" placeholder="Search by Vessel name, permit, operator">
+                  <input id="searchInput" class="form-control w-100" type="text" placeholder="Search by Bangka name, permit, bangkero">
                 </div>
                 <div class="col-6 col-md-3">
                   <label class="form-label visually-hidden" for="statusFilter">Tracking Status</label>
@@ -59,11 +59,11 @@
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
-                      <th>Vessel ID</th>
+                      <th>Bangka ID</th>
                       <th>Name</th>
                       <th>Type</th>
                       <th>Capacity</th>
-                      <th>Operator</th>
+                      <th>Bangkero</th>
                       <th>Last Ping</th>
                       <th>Location</th>
                       <th>Status</th>
@@ -74,7 +74,7 @@
               </div>
 
               <p id="emptyState" class="cg-empty d-none">
-                No vessels found for your search.
+                No bangka found for your search.
               </p>
             </div>
           </div>
@@ -155,7 +155,7 @@
         tbody.appendChild(tr);
       });
 
-      resultCount.textContent = `Showing ${data.length} vessel(s)`;
+      resultCount.textContent = `Showing ${data.length} bangka`;
     }
 
     function runSearch() {
@@ -191,7 +191,7 @@
         renderRows(vessels);
       } catch (e) {
         console.error(e);
-        emptyState.textContent = 'Error loading vessels: ' + e.message;
+        emptyState.textContent = 'Error loading bangka: ' + e.message;
         emptyState.classList.remove("d-none");
       }
     }

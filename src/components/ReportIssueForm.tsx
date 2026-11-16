@@ -23,7 +23,7 @@ const CATEGORIES: {
   { key: 'safety', label: 'Safety hazard', severity: 'high' },
   { key: 'overcharge', label: 'Overcharging', severity: 'medium' },
   { key: 'behavior', label: 'Behavior', severity: 'medium' },
-  { key: 'vessel', label: 'Vessel condition', severity: 'medium' },
+  { key: 'vessel', label: 'Bangka condition', severity: 'medium' },
   { key: 'other', label: 'Other', severity: 'low' },
 ];
 

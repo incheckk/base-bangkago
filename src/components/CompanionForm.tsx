@@ -6,6 +6,7 @@ import {
 
 import { PrimaryButton } from './PrimaryButton';
 import { TextField } from './TextField';
+import { AddressPicker, AgePicker } from './PassengerInfoFields';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
 import { normalizePhone } from '../utils/phone';
 import { addressError, nameError } from '../utils/validation';
@@ -274,13 +275,9 @@ export function CompanionForm({
               />
               <View style={styles.modalRow}>
                 <View style={styles.modalHalf}>
-                  <TextField
-                    label="Age"
+                  <AgePicker
                     value={draftAge}
-                    onChangeText={edit(setDraftAge)}
-                    placeholder="e.g. 27"
-                    keyboardType="number-pad"
-                    maxLength={3}
+                    onChange={edit(setDraftAge)}
                     error={errors.age ?? null}
                   />
                 </View>
@@ -296,13 +293,10 @@ export function CompanionForm({
                 </View>
               </View>
 
-              <TextField
-                label="Address"
+              <AddressPicker
+                key={`${modalOpen}-${editIndex ?? 'new'}`}
                 value={draftAddress}
-                onChangeText={edit(setDraftAddress)}
-                placeholder="House no., barangay, city"
-                autoCapitalize="words"
-                maxLength={120}
+                onChange={edit(setDraftAddress)}
                 error={errors.address ?? null}
               />
 

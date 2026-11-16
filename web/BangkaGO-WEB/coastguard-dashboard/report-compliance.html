@@ -29,7 +29,7 @@
 
               <form id="complianceForm" class="row g-3">
                 <div class="col-md-6">
-                  <label class="form-label">Vessel (optional)</label>
+                  <label class="form-label">Bangka (optional)</label>
                   <select class="form-select" id="vesselSelect">
                     <option value="">None — General Report</option>
                   </select>
@@ -170,7 +170,7 @@
           window.bangkagoPortsRoutes.listPorts(true)
         ]);
 
-        // Vessel dropdown
+        // Bangka dropdown
         bangkas.forEach(b => {
           const opt = document.createElement('option');
           opt.value = b.bangkaId;

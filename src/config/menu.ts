@@ -61,11 +61,12 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
    */
   admin: [
     { icon: 'home', label: 'Home', route: '/(admin)/home', section: 'OPERATIONS' },
-    { icon: 'people', label: 'Operators', route: '/(admin)/operators' },
+    { icon: 'people', label: 'Bangkeros', route: '/(admin)/operators' },
     { icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
     { icon: 'boat', label: 'Manage Bookings', route: '/(admin)/bookings' },
 
-    { icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', section: 'FLEET' },
+    { icon: 'anchor', label: 'Bangka', route: '/(admin)/fleet-overview', section: 'FLEET' },
+    { icon: 'anchor', label: 'Port Queues', route: '/(admin)/port-queues' },
     { icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },
     { icon: 'route', label: 'Manage Routes', route: '/(admin)/manage-routes' },
     { icon: 'rental', label: 'Boat Rentals', route: '/(admin)/boat-rentals' },
@@ -86,7 +87,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
   // advisory controls on Overview. Nothing here writes money.
   coastguard: [
     { icon: 'home', label: 'Overview', route: '/(coastguard)/home' },
-    { icon: 'boat', label: 'Fleet', route: '/(coastguard)/fleet' },
+    { icon: 'boat', label: 'Bangka', route: '/(coastguard)/fleet' },
     { icon: 'anchor', label: 'Port Queues', route: '/(coastguard)/queues' },
     { icon: 'route', label: 'Departures', route: '/(coastguard)/departures' },
     { icon: 'port', label: 'Routes & Fares', route: '/(coastguard)/routes' },

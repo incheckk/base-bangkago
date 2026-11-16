@@ -58,7 +58,7 @@ export default function EnRouteScreen() {
   const { user } = useAuth();
   const uid = user?.id ?? null;
   const ports = usePorts();
-  const { manifest, loading } = useTripManifest(uid);
+  const { manifest, passengers, loading } = useTripManifest(uid);
   const devFlags = useDevFlags();
   const arrivalBypass = devFlags.data.arrivalBypass;
 
@@ -150,6 +150,12 @@ export default function EnRouteScreen() {
   }, [positions, lastQueued]);
 
   // ---------- progress + ETA ----------
+  // A fix from before this sailing is not this boat's position. The old
+  // screen took any newest row, so a stale run at the destination read 100%.
+  const departTimeIso = manifest?.actualDepartureTime ?? null;
+  const departMs = departTimeIso ? Date.parse(departTimeIso) : null;
+  const progressFix =
+    latest && departMs != null && Date.parse(latest.recordedAt) >= departMs ? latest : null;
   const depPort = depPortId ? ports.data.find((p) => p.portId === depPortId) : undefined;
   const arrPort = arrPortId ? ports.data.find((p) => p.portId === arrPortId) : undefined;
   const totalM =
@@ -158,18 +164,20 @@ export default function EnRouteScreen() {
       ? haversineM(depPort.latitude, depPort.longitude, arrPort.latitude, arrPort.longitude)
       : null;
   const coveredM =
-    totalM != null && depPort?.latitude != null && depPort.longitude != null && latest
-      ? haversineM(depPort.latitude, depPort.longitude, latest.latitude, latest.longitude)
+    totalM != null && depPort?.latitude != null && depPort.longitude != null && progressFix
+      ? haversineM(depPort.latitude, depPort.longitude, progressFix.latitude, progressFix.longitude)
       : null;
+  // 0% until the first post-departure fix; 99% until "I have arrived".
   const progress =
-    totalM != null && totalM > 0 && coveredM != null ? Math.min(1, coveredM / totalM) : 0;
-  const departTimeIso = manifest?.actualDepartureTime ?? null;
+    totalM != null && totalM > 0 && coveredM != null
+      ? Math.max(0, Math.min(0.99, coveredM / totalM))
+      : 0;
   const etaLabel = useMemo(() => {
-    const departMs = departTimeIso ? Date.parse(departTimeIso) : null;
-    if (departMs == null || routeMins == null) return null;
-    const eta = departMs + routeMins * 60_000 * (1 - progress);
+    const startMs = departMs;
+    if (startMs == null || routeMins == null) return null;
+    const eta = startMs + routeMins * 60_000 * (1 - progress);
     return new Date(eta).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
-  }, [departTimeIso, routeMins, progress]);
+  }, [departMs, routeMins, progress]);
   const remainingLabel =
     totalM != null && coveredM != null ? formatDistance(Math.max(0, totalM - coveredM)) : null;
 
@@ -186,12 +194,12 @@ export default function EnRouteScreen() {
   const promptStuck = useCallback(() => {
     let answered = false;
     Alert.alert(
-      'Your boat has not moved in 4 minutes.',
-      'Is there a problem?',
+      'Your boat hasn’t moved in 4 minutes.',
+      'Are you and your passengers okay? If nobody answers in 60 seconds, the Coast Guard is alerted.',
       [
-        { text: 'Yes — we’re fine', onPress: () => { answered = true; } },
+        { text: 'We’re fine', onPress: () => { answered = true; } },
         {
-          text: 'No — we need help',
+          text: 'We need help',
           style: 'destructive',
           onPress: () => {
             answered = true;
@@ -314,8 +322,8 @@ export default function EnRouteScreen() {
           // Inside a ScrollView — the page keeps the vertical drag.
           draggable={false}
           vessels={
-            latest
-              ? [{ latitude: latest.latitude, longitude: latest.longitude, bangkaId: manifest.bangkaId }]
+            progressFix
+              ? [{ latitude: progressFix.latitude, longitude: progressFix.longitude, bangkaId: manifest.bangkaId }]
               : []
           }
         />
@@ -344,8 +352,10 @@ export default function EnRouteScreen() {
             </View>
             <View style={styles.progressLabels}>
               <Text style={styles.progressPct}>{Math.round(progress * 100)}%</Text>
-              {!!remainingLabel && (
+              {remainingLabel ? (
                 <Text style={styles.progressRemaining}>{remainingLabel} to {arrPort?.portName ?? 'destination'}</Text>
+              ) : (
+                <Text style={styles.progressRemaining}>Waiting for first GPS fix</Text>
               )}
             </View>
           </View>
@@ -365,13 +375,13 @@ export default function EnRouteScreen() {
           </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaLabel}>Aboard</Text>
-            <Text style={styles.metaValue}>{manifest.totalPassengersOnBoard} pax</Text>
+            <Text style={styles.metaValue}>{passengers.length} pax</Text>
           </View>
-          {!!latest && (
+          {!!progressFix && (
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Last fix</Text>
               <Text style={styles.metaValue}>
-                {new Date(latest.recordedAt).toLocaleTimeString('en-PH', {
+                {new Date(progressFix.recordedAt).toLocaleTimeString('en-PH', {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}

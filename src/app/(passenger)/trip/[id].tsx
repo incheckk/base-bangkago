@@ -159,7 +159,7 @@ export default function TripDetailScreen() {
           <InfoRow label="Service" value={capitalize(booking.serviceType)} />
         </View>
 
-        {/* Operator */}
+        {/* Bangkero */}
         {booking.operatorName && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>OPERATOR</Text>

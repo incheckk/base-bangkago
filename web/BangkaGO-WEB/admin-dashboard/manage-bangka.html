@@ -22,14 +22,14 @@
         <div class="cg-card p-3">
           <div class="panel-head">
             <h6 class="mb-0">Manage Bangka</h6>
-            <span class="muted-note">Vessel registry and readiness</span>
+            <span class="muted-note">Bangka registry and readiness</span>
           </div>
 
           <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
-            <select class="form-select" id="bangkaFilter" aria-label="Filter vessels" style="max-width: 220px;">
-              <option value="active">Active vessels</option>
-              <option value="deactivated">Inactive vessels</option>
-              <option value="all">All vessels</option>
+            <select class="form-select" id="bangkaFilter" aria-label="Filter bangka" style="max-width: 220px;">
+              <option value="active">Active bangka</option>
+              <option value="deactivated">Inactive bangka</option>
+              <option value="all">All bangka</option>
             </select>
             <button class="btn btn-bangkago" id="addBangkaBtn">
               <i class="bi bi-plus-circle me-1"></i> Add Bangka
@@ -40,7 +40,7 @@
             <table class="table table-theme align-middle mb-0" id="bangkaTable">
               <thead>
                 <tr>
-                  <th>Vessel</th>
+                  <th>Bangka</th>
                   <th>Capacity</th>
                   <th>Current Use</th>
                   <th>Max Load (kg)</th>
@@ -54,7 +54,7 @@
           
           <div id="loadingState" class="text-center py-4 d-none">
             <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>
-            <p class="mt-2 text-muted">Loading vessels...</p>
+            <p class="mt-2 text-muted">Loading bangka...</p>
           </div>
           
           <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
@@ -63,13 +63,13 @@
         <div class="cg-card p-3 mt-3">
           <div class="panel-head">
             <h6 class="mb-0">Deleted Bangkas</h6>
-            <span class="muted-note">Deleted vessels retain their original records and trip history</span>
+            <span class="muted-note">Deleted bangka retain their original records and trip history</span>
           </div>
           <div class="table-responsive">
             <table class="table table-theme align-middle mb-0">
               <thead>
                 <tr>
-                  <th>Vessel</th>
+                  <th>Bangka</th>
                   <th>Capacity</th>
                   <th>Owner</th>
                   <th>Deleted</th>
@@ -94,7 +94,7 @@
         </div>
         <div class="modal-body">
           <div class="row g-3">
-            <div class="col-md-6"><div class="form-control bg-light"><strong>Vessel:</strong> <span id="dVessel">-</span></div></div>
+            <div class="col-md-6"><div class="form-control bg-light"><strong>Bangka:</strong> <span id="dVessel">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Type:</strong> <span id="dType">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Capacity:</strong> <span id="dCapacity">-</span></div></div>
             <div class="col-md-6"><div class="form-control bg-light"><strong>Max Load (kg):</strong> <span id="dMaxLoad">-</span></div></div>
@@ -111,7 +111,7 @@
     </div>
   </div>
 
-  <!-- UPDATE VESSEL ASSIGNMENT -->
+  <!-- UPDATE BANGKA ASSIGNMENT -->
   <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="updateStatusForm">
@@ -120,11 +120,11 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <div class="mb-2"><strong>Vessel:</strong> <span id="uVessel">-</span></div>
+          <div class="mb-2"><strong>Bangka:</strong> <span id="uVessel">-</span></div>
           <div class="alert alert-info">
             <i class="bi bi-info-circle me-2"></i>
-            Vessel status is based on its verified owner, operator availability, and active trips.
-            Deactivate keeps the owner and marks this vessel unavailable. Activate returns it to service.
+            Bangka status is based on its verified owner, bangkero availability, and active trips.
+            Deactivate keeps the owner and marks this bangka unavailable. Activate returns it to service.
           </div>
           <div class="mb-3">
             <label class="form-label" for="uStatus">Action</label>
@@ -149,7 +149,7 @@
     </div>
   </div>
 
-  <!-- REMOVE VESSEL MODAL -->
+  <!-- REMOVE BANGKA MODAL -->
   <div class="modal fade" id="deactivateModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <form class="modal-content" id="deactivateForm">
@@ -159,7 +159,7 @@
         </div>
         <div class="modal-body">
           <p class="mb-2">Move <strong id="xVessel">-</strong> to Deleted Bangkas?</p>
-          <p class="text-muted mb-3">The vessel record and trip history will be preserved. Vessels with active bookings or rentals cannot be deleted until their use is complete.</p>
+          <p class="text-muted mb-3">The bangka record and trip history will be preserved. Bangka with active bookings or rentals cannot be deleted until their use is complete.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancel</button>
@@ -180,7 +180,7 @@
         <div class="modal-body">
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label">Vessel Name <span class="text-danger">*</span></label>
+              <label class="form-label">Bangka Name <span class="text-danger">*</span></label>
               <input type="text" class="form-control" id="aName" required placeholder="e.g. Boat 01">
             </div>
             <div class="col-md-6">
@@ -325,7 +325,7 @@
 
     function renderTable() {
       if (!bangkas.length) {
-        bangkaBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No vessels match this filter.</td></tr>';
+        bangkaBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No bangka match this filter.</td></tr>';
         return;
       }
       bangkaBody.innerHTML = bangkas.map(function(b) {
@@ -422,7 +422,7 @@
         showLoading(false);
       } catch (e) {
         console.error(e);
-        showError('Failed to load vessels: ' + e.message);
+        showError('Failed to load bangka: ' + e.message);
       }
     }
 
@@ -467,7 +467,7 @@
       const b = findBangka(id);
       if (!b) return;
       if (b.inUse || b.blockedDelete) {
-        alert('This vessel has an active or upcoming trip or rental. Complete or cancel it before deleting the vessel.');
+        alert('This bangka has an active or upcoming trip or rental. Complete or cancel it before deleting the bangka.');
         return;
       }
       selectedId = id;
@@ -508,7 +508,7 @@
     window.restoreBangka = async function(id) {
       const b = deletedBangkas.find(function(v) { return v.bangkaId === id; });
       if (!b) return;
-      if (!confirm('Restore "' + b.bangkaName + '" to the active vessel list?')) return;
+      if (!confirm('Restore "' + b.bangkaName + '" to the active bangka list?')) return;
       try {
         await window.bangkagoBangkas.restore(id);
         await loadBangkas();
@@ -530,11 +530,11 @@
         return;
       }
       if (action === 'Deactivate' && b.inUse &&
-          !confirm('This vessel has an active trip or rental. Deactivate it anyway?')) {
+          !confirm('This bangka has an active trip or rental. Deactivate it anyway?')) {
         return;
       }
       if (action === 'Activate' && b.inUse && uBangkeroId.value !== b.bangkeroId &&
-          !confirm('This vessel is in use. Reassign it to another bangkero anyway?')) {
+          !confirm('This bangka is in use. Reassign it to another bangkero anyway?')) {
         return;
       }
       try {
@@ -556,7 +556,7 @@
       const b = findBangka(selectedId);
       if (!b) return;
       if (b.inUse || b.blockedDelete) {
-        alert('This vessel has an active or upcoming trip or rental. Complete or cancel it first.');
+        alert('This bangka has an active or upcoming trip or rental. Complete or cancel it first.');
         return;
       }
       if (!confirm('Move "' + b.bangkaName + '" to Deleted Bangkas? Its record and trip history will be retained.')) return;
@@ -587,7 +587,7 @@
       };
 
       if (!data.bangkaName) {
-        alert('Vessel Name is required.');
+        alert('Bangka Name is required.');
         return;
       }
       if (!Number.isInteger(data.capacity) || data.capacity < 1 || data.capacity > 200) {
@@ -595,7 +595,7 @@
         return;
       }
       if (!isEdit && !data.bangkeroId) {
-        alert('Choose the verified bangkero who owns this vessel.');
+        alert('Choose the verified bangkero who owns this bangka.');
         return;
       }
       if (isEdit) {

@@ -81,7 +81,7 @@ export default function BoatRentalScreen() {
           <EmptyState
             icon="🚤"
             title="No boats yet"
-            message="Verified operators' boats will appear here once they are registered."
+            message="Verified bangkeros' boats will appear here once they are registered."
           />
         ) : (
           <View style={styles.list}>

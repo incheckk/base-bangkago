@@ -229,7 +229,7 @@
             </div>
             <label class="alert-search">
               <span class="visually-hidden">Search safety alerts</span>
-              <input id="alertSearch" type="search" class="form-control form-control-sm" placeholder="Search message, vessel or port">
+              <input id="alertSearch" type="search" class="form-control form-control-sm" placeholder="Search message, bangka or port">
             </label>
           </div>
           <p class="small text-secondary mb-3">Showing up to 100 newest alerts; counts reflect this loaded set. Critical and high severity appear first. Times are shown in Philippine Time (PHT).</p>
@@ -393,7 +393,7 @@
 
     function getLocation(alert) {
       const locations = [];
-      if (alert.bangkaName) locations.push('Vessel: ' + alert.bangkaName);
+      if (alert.bangkaName) locations.push('Bangka: ' + alert.bangkaName);
       if (alert.portName) locations.push('Port: ' + alert.portName);
       return locations.length ? locations.join(' · ') : 'Location not attached';
     }
@@ -467,7 +467,7 @@
         emptyState.classList.remove('d-none');
         emptyTitle.textContent = searchQuery ? 'No matching alerts' : currentFilter === 'active' ? 'No unresolved alerts' : 'No alerts';
         emptyMessage.textContent = searchQuery
-          ? 'Try another message, vessel or port.'
+          ? 'Try another message, bangka or port.'
           : currentFilter === 'active' ? 'There are no unresolved safety alerts.' : 'No alerts match this filter.';
         return;
       }

@@ -14,7 +14,7 @@ export default function FleetOverviewScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <AdminScreenHeader title="Fleet Overview" />
+      <AdminScreenHeader title="Bangka" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         <View style={styles.mapArea}>
@@ -24,21 +24,21 @@ export default function FleetOverviewScreen() {
             <Text style={styles.countText} numberOfLines={1}>
               {tracking.loading
                 ? 'Loading…'
-                : `${tracking.data.length} vessel${tracking.data.length === 1 ? '' : 's'} tracked`}
+                : `${tracking.data.length} bangka tracked`}
             </Text>
           </View>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ACTIVE VESSELS</Text>
+          <Text style={styles.sectionLabel}>ACTIVE BANGKA</Text>
           {tracking.loading ? (
-            <LoadingState label="Loading vessels…" />
+            <LoadingState label="Loading bangka…" />
           ) : tracking.error ? (
             <ErrorState message={tracking.error} />
           ) : tracking.data.length === 0 ? (
             <EmptyState
               icon="boat"
-              title="No vessels tracked"
+              title="No bangka tracked"
               message="No boat is reporting its position right now."
             />
           ) : (
@@ -47,7 +47,7 @@ export default function FleetOverviewScreen() {
                 <View key={v.trackId} style={styles.vesselCard}>
                   <View style={styles.vesselHeader}>
                     <View style={styles.vesselDot} />
-                    <Text style={styles.vesselId}>Vessel {v.bangkaId}</Text>
+                    <Text style={styles.vesselId}>Bangka {v.bangkaId}</Text>
                   </View>
                   <View style={styles.vesselInfo}>
                     <View style={styles.infoBlock}>

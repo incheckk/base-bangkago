@@ -304,7 +304,7 @@ export default function EnRouteScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <BangkeroScreenHeader eyebrow="SAILING" title="En Route" />
+      <BangkeroScreenHeader eyebrow="SAILING" title="En Route" showBack={false} />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <MapContainer
           ports={ports.data}

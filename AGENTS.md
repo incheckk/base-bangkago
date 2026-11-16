@@ -41,6 +41,60 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — Departure lock, demo ports, rental advance visibility,
+  suspension banner, idempotent booking, per-passenger no-show (migrations
+  **085 → 086 → 087 → 088 PENDING — USER MUST RUN, after 084**; gates:
+  tsc clean, lint 0 errors / 143 known warnings).**
+  - **Departure lock (085):** `set_booking_boarded` and `verify_boarding_qr`
+    refuse once `depart_time` is stamped. Departure shows a read-only "This
+    sailing is already under way → Open live trip" card; Booking Status
+    hides scan/no-show and turns Prepare Departure into **Open live trip**
+    after sailing; en-route lost its back arrow. Cargo was already closed
+    by 073/078. Advance bookings (depart_time NULL) are unaffected.
+  - **Demo ports (086 + Developer Options):** `demo-stb` (ST Building) and
+    `demo-home` (Home), both ~900 m geofence, plus one directed route each
+    way, inserted INACTIVE. Admin → Developer Options has a **Show demo
+    ports** switch (hidden until 086 is run) that flips
+    `ports.is_active` / `routes.is_active` for `id LIKE 'demo-%'`.
+    `demo-home` is labelled `island_group='olango'` on purpose so
+    book-ride's same-island filter still offers the pair.
+  - **Rentals:** `SchedulePicker` grew `dayOptions()`, `fromTomorrow`,
+    `hideSlots` and `blockedDays`, and `rental-form` now uses the same
+    14-day strip as every other module (was 7 bespoke chips). The bangkero
+    home banner also shows a **pending** charter request
+    ("CHARTER REQUEST · RESPOND" → Boat Rentals), not only confirmed ones.
+  - **Passenger suspension banner:** `(passenger)/home` shows a red
+    "Sailing is suspended" card above the weather, with the coastguard's
+    reason and a note that booking still works.
+  - **No duplicate bookings (087):** `bookings.client_ref` + a partial
+    unique index makes `createBooking` idempotent (same payment screen →
+    same booking on retry; 23505 returns the winner). Pre-087 inserts
+    retry without the column. Booking-confirmed without a ref/bookingId
+    redirects Home, and `batched-waiting` lost its swipe-back.
+  - **Tutorial save:** the age/address modal's button is **Save details**
+    and lands on Home (`router.replace`), never on a stale Booking
+    Requested screen.
+  - **Per-passenger no-show (088):** new `PartyNoShowSheet` lists the party;
+    only not-boarded passengers are selectable, last-minute unticked rows
+    are marked aboard, and ticking everyone cancels the booking as a
+    whole. Companions go through `set_passenger_boarded`; a companion left
+    behind while the booker sailed stamps the booker's `no_show_at`
+    (ban + notice) without cancelling the trip. Other accepted bookings on
+    the boat keep their seats, holds and manifest rows.
+  - **Deferred (tracker 16–18):** demo port rows must be deleted before
+    public launch; the companion-no-show-stamps-the-booker rule is a
+    product decision; the departure lock is UI + RPC only, the broad
+    `bookings` UPDATE policy (E1) still needs its trigger.
+  - **Next:** run `085` → `086` → `087` → `088` after 084, then smoke:
+    sail a trip and confirm Departure / Booking Status / en-route cannot
+    re-open boarding; flip Show demo ports and book ST Building → Home in
+    both directions; charter a boat tomorrow from the shared 14-day strip;
+    approve a rental escrow and see the pending banner on bangkero home;
+    suspend sailing and read the passenger banner; break wifi during a
+    payment and tap Pay again (one booking); finish the tutorial and land
+    on Home; mark one companion no-show and confirm the booker sailed +
+    the other trip on the boat still sails.
+
 - **2026-11-16 - Manifest PDF export restored + Bangkero Manage Bookings.**
   - **Web PDFs:** Admin `manage-bookings.html` and Coast Guard
     `export-manifest.html` regain lazy-loaded jsPDF/autoTable **Export PDF**

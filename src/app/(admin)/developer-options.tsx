@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
@@ -9,7 +9,10 @@ import { useDevFlags } from '@/hooks/useSupabase';
 import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import { setSailingAdvisory } from '@/services/advisory.service';
 import { friendlyError } from '@/services/booking.service';
-import { setArrivalBypass, setDispatchBypass, setGatesBypass, setRouteLockBypass, setShowQuickLogin } from '@/services/dev.service';
+import {
+  getDemoPorts, setArrivalBypass, setDemoPorts, setDispatchBypass, setGatesBypass,
+  setRouteLockBypass, setShowQuickLogin,
+} from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
 const LIFTED = [
@@ -41,6 +44,12 @@ export default function DeveloperOptions() {
   const { advisory, active: advisoryActive, refresh: refreshAdvisory } = useSailingAdvisory();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // null = migration 086 not run yet (hide the switch).
+  const [demoPortsOn, setDemoPortsOn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getDemoPorts().then(setDemoPortsOn).catch(() => setDemoPortsOn(null));
+  }, []);
 
   const dispatchOn = flags.data.dispatchBypass;
   const routeLockOn = flags.data.routeLockBypass;
@@ -50,7 +59,7 @@ export default function DeveloperOptions() {
   const on = dispatchOn || routeLockOn || gatesOn || arrivalOn;
 
   async function toggle(
-    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin',
+    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin' | 'demoports',
     next: boolean
   ) {
     setBusy(which);
@@ -60,6 +69,10 @@ export default function DeveloperOptions() {
       else if (which === 'routelock') await setRouteLockBypass(next);
       else if (which === 'gates') await setGatesBypass(next);
       else if (which === 'quicklogin') await setShowQuickLogin(next);
+      else if (which === 'demoports') {
+        await setDemoPorts(next);
+        setDemoPortsOn(next);
+      }
       else await setArrivalBypass(next);
       flags.refresh();
     } catch (e) {
@@ -232,6 +245,35 @@ export default function DeveloperOptions() {
                   ? 'ON — chips are visible on sign-in'
                   : 'OFF — chips are hidden'}
             </Text>
+
+            {demoPortsOn !== null && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowLabel}>Show demo ports</Text>
+                    <Text style={styles.rowHint}>
+                      The school (ST Building) and Home stops used in the presentation. They
+                      appear in the port picker only while this is on.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={demoPortsOn}
+                    onValueChange={(next) => void toggle('demoports', next)}
+                    disabled={busy !== null}
+                    trackColor={{ false: colors.border, true: colors.warningTint }}
+                    thumbColor={demoPortsOn ? colors.warning : colors.surface}
+                  />
+                </View>
+                <Text style={[styles.rowStatus, { color: demoPortsOn ? colors.danger : colors.textMuted }]}>
+                  {busy === 'demoports'
+                    ? 'Saving…'
+                    : demoPortsOn
+                      ? 'ON — demo ports are bookable'
+                      : 'OFF — demo ports are hidden'}
+                </Text>
+              </>
+            )}
           </View>
         )}
 

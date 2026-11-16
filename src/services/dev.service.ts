@@ -102,3 +102,34 @@ export async function setShowQuickLogin(on: boolean): Promise<void> {
   const { error } = await supabase.rpc('set_show_quick_login', { p_on: on });
   if (error) throw error;
 }
+
+/**
+ * The demo ports switch (migration 086). The school (ST Building) and Home
+ * stops are ordinary ports/routes inserted INACTIVE by the migration; this
+ * flips every `demo-` row. Returns null when 086 has not been run, so the
+ * screen hides the switch instead of offering a dead toggle.
+ */
+export async function getDemoPorts(): Promise<boolean | null> {
+  const { data, error } = await supabase
+    .from('ports')
+    .select('is_active')
+    .like('id', 'demo-%')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? data.is_active : null;
+}
+
+/** Admin-only via the existing ports/routes admin UPDATE policies. */
+export async function setDemoPorts(on: boolean): Promise<void> {
+  const { error: portErr } = await supabase
+    .from('ports')
+    .update({ is_active: on })
+    .like('id', 'demo-%');
+  if (portErr) throw portErr;
+  const { error: routeErr } = await supabase
+    .from('routes')
+    .update({ is_active: on })
+    .like('id', 'demo-%');
+  if (routeErr) throw routeErr;
+}

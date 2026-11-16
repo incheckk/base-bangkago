@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { PartyNoShowSheet } from '@/components/PartyNoShowSheet';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -20,8 +21,8 @@ import { useAcceptedBookings, useNoShowTrips } from '@/hooks/useSupabase';
 import {
   friendlyError,
   markBatchParcelPaid,
+  markPartyNoShow,
   rejectBooking,
-  resolveGroupNoShow,
   stampBookingDepart,
 } from '@/services/booking.service';
 import {
@@ -35,7 +36,9 @@ import { supabase } from '@/services/supabase';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { BookingDoc, ParcelDoc, PaymentDoc, PaymentMethod } from '@/types/models';
+import type {
+  BookingDoc, ParcelDoc, PassengerDetailDoc, PaymentDoc, PaymentMethod,
+} from '@/types/models';
 
 const CHECKLIST_ITEMS = [
   { key: 'lifeJackets', label: 'Life jackets accounted for', icon: '🦺' },
@@ -121,6 +124,7 @@ export default function DepartureScreen() {
   const allBoarded = pendingTrips.length === 0;
   const anyoneAboard = boardedTrips.length > 0;
   const [noShowId, setNoShowId] = useState<string | null>(null);
+  const [noShowFor, setNoShowFor] = useState<BookingDoc | null>(null);
   const [actedNoShow, setActedNoShow] = useState<Set<string>>(new Set());
 
   // No-shows scoped to this trip: everything since the draft manifest was
@@ -134,6 +138,9 @@ export default function DepartureScreen() {
   );
   const noShowedTrips = noShows.data.filter(
     (t) =>
+      // A partial no-show stamps the BOOKER while they stay aboard; that
+      // booking is not a no-showed trip, so it must not free its own seats.
+      !t.onboardedAt &&
       (!t.scheduledDate || t.scheduledDate <= todayIso) &&
       (sailingRouteIds.size === 0 || !t.routeId || sailingRouteIds.has(t.routeId)),
   );
@@ -427,25 +434,21 @@ export default function DepartureScreen() {
 
   function confirmNoShow(t: BookingDoc) {
     if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
-    Alert.alert(
-      'Passenger didn’t board',
-      `The boat leaves with everyone who boarded on ${t.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
-      [
-        { text: 'Go back', style: 'cancel' },
-        { text: 'Mark no-show', style: 'destructive', onPress: () => void doNoShow(t) },
-      ]
-    );
+    setNoShowFor(t);
   }
 
-  async function doNoShow(t: BookingDoc) {
-    if (t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
+  async function doNoShow(missing: string[], companions: PassengerDetailDoc[]) {
+    const t = noShowFor;
+    if (!t || t.serviceType === 'cargo' || actedNoShow.has(t.bookingId)) return;
     setNoShowId(t.bookingId);
+    setGenError(null);
     try {
-      await resolveGroupNoShow(t);
+      await markPartyNoShow(t, companions, missing);
       setActedNoShow((prev) => new Set(prev).add(t.bookingId));
     } catch (e) {
       setGenError(friendlyError(e));
     }
+    setNoShowFor(null);
     setNoShowId(null);
   }
 
@@ -533,7 +536,7 @@ export default function DepartureScreen() {
   }
 
   async function handleDepart() {
-    if (departInFlight.current || !manifest) return;
+    if (departInFlight.current || !manifest || manifest.actualDepartureTime) return;
     if (cargoNotReady) {
       setGenError(
         'Load every cargo parcel or mark it not at port on Booking Status before departing.'
@@ -610,6 +613,14 @@ export default function DepartureScreen() {
     router.push('/(bangkero)/en-route');
   }
 
+  // The boat is already at sea — boarding, checklist and "Ready to
+  // Depart" are closed. Re-entering here after departure was the
+  // "back into an already-sailed trip" bug.
+  const sailedAt =
+    manifest?.actualDepartureTime ??
+    acceptedTrips.find((t) => !!t.departTime)?.departTime ??
+    null;
+
   const steps = ['Manifest', 'Checklist', 'Weather', 'Ready'];
   // The highlight follows the section on screen, not the phase state: the
   // labels name sections, so tapping a checklist box used to leave "Weather"
@@ -629,6 +640,30 @@ export default function DepartureScreen() {
       next = steps.length - 1;
     }
     setCurrentStep((prev) => (prev === next ? prev : next));
+  }
+
+  // All hooks are above this point.
+  if (sailedAt) {
+    return (
+      <ScreenContainer padded={false}>
+        <BangkeroScreenHeader eyebrow="MANIFEST & CHECKLIST" title="Departure" />
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyTitle}>This sailing is already under way</Text>
+          <Text style={styles.emptyText}>
+            Boarding closed when the boat left the port. Continue from the live trip
+            screen.
+          </Text>
+          <PrimaryButton
+            label="Open live trip"
+            onPress={() =>
+              router.replace(
+                manifest?.actualArrivalTime ? '/(bangkero)/arrived' : '/(bangkero)/en-route'
+              )
+            }
+          />
+        </View>
+      </ScreenContainer>
+    );
   }
 
   return (
@@ -1004,6 +1039,12 @@ export default function DepartureScreen() {
         )}
         </View>
       </ScrollView>
+      <PartyNoShowSheet
+        booking={noShowFor}
+        busy={noShowId === noShowFor?.bookingId}
+        onClose={() => setNoShowFor(null)}
+        onConfirm={(missing, companions) => void doNoShow(missing, companions)}
+      />
     </ScreenContainer>
   );
 }

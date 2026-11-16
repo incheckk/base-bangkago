@@ -41,6 +41,8 @@ export default function PassengerLayout() {
     >
       {/* Success screen — swipe-back would re-open the payment form. */}
       <Stack.Screen name="booking-confirmed" options={{ gestureEnabled: false }} />
+      {/* Batched hand-off — the payment form is already replaced. */}
+      <Stack.Screen name="batched-waiting" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }

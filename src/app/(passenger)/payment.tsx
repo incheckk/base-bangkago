@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
@@ -71,6 +71,11 @@ export default function PaymentScreen() {
   const [method, setMethod] = useState<PaymentMethod>('cash');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One intent id for the lifetime of this screen (087): a retry after a
+  // lost response returns the booking instead of creating a second one.
+  const clientRef = useRef(
+    `pay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  );
 
   // Display-only quotes. createBooking recomputes the real fare and passenger
   // count server-side, so editing these URL params can no longer change what
@@ -209,6 +214,7 @@ export default function PaymentScreen() {
         // Piggyback/batched/solo stubs stay invisible to FCFS until the
         // carrier link (or create_solo_sailing) promotes them.
         isDispatchable: serviceType !== 'cargo' || deliveryMode === 'accompanied',
+        clientRef: clientRef.current,
         ...(isPackage && params.packageId ? { packageId: params.packageId } : {}),
         ...(params.scheduledDate
           ? { scheduledDate: params.scheduledDate, scheduledTime: params.scheduledTime || undefined }

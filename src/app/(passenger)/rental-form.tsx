@@ -1,30 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CompanionForm, type Companion } from '@/components/CompanionForm';
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { SchedulePicker, dayOptions } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
-import { ScrollHintBar } from '@/components/ScrollHintBar';
 import { ErrorState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { getBangkaBlockedDates, tierStandardPrice } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
-/** The next 7 days starting TOMORROW — rentals are always advance, so they always escrow. */
-function nextDays(count: number): { iso: string; label: string }[] {
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i + 1);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const label =
-      i === 0
-        ? 'Tomorrow'
-        : d.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' });
-    return { iso, label };
-  });
-}
+/** Rentals are always advance, so the strip starts TOMORROW. */
+const RENTAL_DAYS = dayOptions(14, true);
 
 /**
  * Step 1 of renting a boat: who rides, when, how many (Phase 4C). The GCash
@@ -45,7 +34,7 @@ export default function RentalFormScreen() {
   }>();
 
   const rate = Number(params.rate) || tierStandardPrice(Number(params.capacity) || 0);
-  const days = nextDays(7);
+  const days = RENTAL_DAYS;
 
   const [date, setDate] = useState(() => days[0]?.iso ?? '');
   const [eventName, setEventName] = useState('');
@@ -62,7 +51,7 @@ export default function RentalFormScreen() {
         setBlocked(v);
         // Never leave the selection sitting on a day that came back booked.
         setDate((cur) =>
-          v.includes(cur) ? nextDays(7).find((d) => !v.includes(d.iso))?.iso ?? '' : cur
+          v.includes(cur) ? days.find((d) => !v.includes(d.iso))?.iso ?? '' : cur
         );
       })
       .catch(() => {
@@ -135,34 +124,18 @@ export default function RentalFormScreen() {
           />
 
           <Text style={[styles.fieldLabel, styles.mtLg]}>DATE</Text>
-          <ScrollHintBar contentContainerStyle={styles.chips}>
-            {days.map((d) => {
-              const active = d.iso === date;
-              const off = blocked.includes(d.iso);
-              return (
-                <Pressable
-                  key={d.iso}
-                  onPress={off ? undefined : () => setDate(d.iso)}
-                  disabled={off}
-                  accessibilityRole="button"
-                  accessibilityLabel={off ? `${d.label}, booked` : d.label}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    active && styles.chipActive,
-                    off && styles.chipOff,
-                    pressed && !active && styles.chipPressed,
-                  ]}
-                >
-                  <Text style={[styles.chipText, active && styles.chipTextActive, off && styles.chipTextOff]}>
-                    {d.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollHintBar>
+          <SchedulePicker
+            date={date}
+            time={null}
+            onDate={setDate}
+            onTime={() => {}}
+            fromTomorrow
+            hideSlots
+            blockedDays={blocked}
+          />
           {blocked.length > 0 && (
             <Text style={styles.dateHint}>
-              Crossed-out dates are already booked for this boat.
+              Dates marked Booked are already taken for this boat.
             </Text>
           )}
         </View>
@@ -244,20 +217,6 @@ const styles = StyleSheet.create({
   mtLg: { marginTop: spacing.lg },
 
   chips: { gap: spacing.sm, paddingVertical: 2 },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-  },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryTint },
-  chipPressed: { opacity: 0.7 },
-  chipOff: { opacity: 0.45 },
-  chipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
-  chipTextOff: { color: colors.textMuted, textDecorationLine: 'line-through' },
   dateHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
 
   sumRow: {

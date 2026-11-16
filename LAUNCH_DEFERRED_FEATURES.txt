@@ -161,6 +161,31 @@ date-scoped capacity, island hop priced per person, charter ticks).
     app's single-boat reads (profile, departure, getMyBangkaCapacity) to
     become a boat picker first, and the index to be dropped.
 
+16. DEMO PORTS LIVE IN THE PRODUCTION TABLES (2026-11-16)
+    Migration 086 inserts two presentation-only ports (demo-stb "ST
+    Building", demo-home "Home") and their two directed routes, all
+    INACTIVE. Admin -> Developer Options flips ports.is_active /
+    routes.is_active for id LIKE 'demo-%'. They are normal rows, so a
+    passenger could book one if an admin ever leaves the switch on.
+    Delete the id LIKE 'demo-%' rows before public launch (and remove
+    the Developer Options switch with them).
+
+17. COMPANION NO-SHOW LANDS ON THE BOOKER'S BAN (2026-11-16)
+    Migration 088 stamps bookings.no_show_at when a companion is marked
+    not_boarded while the booker already sailed, so the BOOKER carries
+    the 30/60-minute booking ban and notification even though they rode.
+    That was the product decision (the booking is the accountable unit)
+    but it is worth revisiting if a booker complains about a companion
+    who missed the boat on their own.
+
+18. DEPARTURE LOCK IS UI + RPC, NOT A TABLE TRIGGER (2026-11-16)
+    085 refuses boarding/QR writes once depart_time is stamped, and
+    088 refuses companion boarding after departure. The screens also
+    close themselves (Departure / Booking Status go read-only, en-route
+    absorbs back). The raw bookings UPDATE policy (E1) is still broad:
+    a crafted client could stamp onboarded_at or un-cancel a sailed
+    trip. That narrowing belongs with E1.
+
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
 B1. BACKGROUND GPS TRACKING
@@ -373,6 +398,11 @@ E1. bookings UPDATE STATE-MACHINE BYPASS
     depart_time is stamped, so the RPC path can no longer cancel a
     boat that has sailed. That is ONE path — the broad client UPDATE
     policy itself is untouched and still open here.
+    Narrowing 2026-11-16 (085/088): boarding and QR writes are refused
+    once depart_time is set, and a companion cannot be un-boarded after
+    a scan. That closes the RPCs the app calls, not the raw policy.
+    Migration 087's bookings.client_ref adds idempotent creates only —
+    a passenger can still UPDATE any column of their own row.
 
 E2. CLIENT-WRITABLE WALLET
     wallets / wallet top-ups are written from the client (RLS allows

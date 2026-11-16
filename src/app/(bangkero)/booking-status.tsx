@@ -5,6 +5,7 @@ import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } 
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { Icon } from '@/components/Icon';
+import { PartyNoShowSheet } from '@/components/PartyNoShowSheet';
 import { sailsLabel, todayIso } from '@/components/SchedulePicker';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -13,7 +14,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { useAuth } from '@/hooks/useAuth';
 import { useAcceptedBookings, useBangkero, useBooking, usePorts } from '@/hooks/useSupabase';
 import {
-  acceptBooking, rejectBooking, friendlyError, resolveGroupNoShow, setOnboarded,
+  acceptBooking, markPartyNoShow, rejectBooking, friendlyError, setOnboarded,
   setPassengerBoarded, verifyBoardingQr,
 } from '@/services/booking.service';
 import { getIslandPackage } from '@/services/island-package.service';
@@ -92,6 +93,8 @@ export default function BookingStatus() {
   /** Latched per passenger member so a second tap cannot re-run the RPC. */
   const [noShowDoneByBookingId, setNoShowDoneByBookingId] =
     useState<Record<string, boolean>>({});
+  /** The booking whose party checklist is open. */
+  const [noShowFor, setNoShowFor] = useState<BookingDoc | null>(null);
 
   // Companions ride under their own booker. null means the read failed, so
   // the gate stays closed until the roster is actually known.
@@ -293,9 +296,12 @@ export default function BookingStatus() {
       && (boardedFor(m) || !!m.disputedAt || !!m.noShowAt)
       && companions.every((c) => c.boardedAt || c.noShowAt);
   };
+  // The boat already left: boarding, scanning and no-show are closed. This is
+  // the read-only state the home card and Departure send the bangkero to.
+  const sailed = members.some((m) => !!m.departTime) || !!booking?.departTime;
   const canStart =
     groupLoaded && members.length > 0 && members.every(memberResolved)
-    && !advanceLocked && !parcelBusy;
+    && !advanceLocked && !parcelBusy && !sailed;
   const contactPassenger =
     passengerMembers.find((m) => !memberResolved(m) && !!m.passengerPhone)
     ?? passengerMembers.find((m) => !!m.passengerPhone)
@@ -616,26 +622,16 @@ export default function BookingStatus() {
 
   function confirmNoShow(member: BookingDoc) {
     if (noShowDoneByBookingId[member.bookingId]) return;
-    Alert.alert(
-      'Passenger(s) didn’t board',
-      `The boat leaves with everyone who boarded on ${member.ref}. If nobody from this booking boarded, it is cancelled as a no-show and the booker is banned for a while — otherwise only the missing passengers are marked and the trip continues.`,
-      [
-        { text: 'Go back', style: 'cancel' },
-        {
-          text: 'Mark no-show',
-          style: 'destructive',
-          onPress: () => void handleNoShow(member),
-        },
-      ]
-    );
+    setNoShowFor(member);
   }
 
-  async function handleNoShow(member: BookingDoc) {
-    if (noShowDoneByBookingId[member.bookingId]) return;
+  async function handleNoShow(missing: string[], companions: PassengerDetailDoc[]) {
+    const member = noShowFor;
+    if (!member || noShowDoneByBookingId[member.bookingId]) return;
     setBoardPending(true);
     setActionError(null);
     try {
-      await resolveGroupNoShow(member);
+      await markPartyNoShow(member, companions, missing);
       setNoShowDoneByBookingId((prev) => ({ ...prev, [member.bookingId]: true }));
       const fresh = await getPassengerDetailsByBooking(member.bookingId).catch(() => null);
       if (fresh) {
@@ -647,6 +643,7 @@ export default function BookingStatus() {
     } catch (e) {
       setActionError(friendlyError(e));
     }
+    setNoShowFor(null);
     setBoardPending(false);
   }
 
@@ -801,10 +798,10 @@ export default function BookingStatus() {
             <Text style={styles.cardLabel}>PASSENGERS ON BOARD</Text>
             <Pressable
               onPress={() => void toggleBoarded(member, !boarded)}
-              disabled={boardPending}
+              disabled={boardPending || sailed}
               style={({ pressed }) => [styles.boardRow, pressed && styles.boardRowPressed]}
               accessibilityRole="checkbox"
-              accessibilityState={{ checked: boarded }}
+              accessibilityState={{ checked: boarded, disabled: boardPending || sailed }}
               accessibilityLabel="Passengers on board"
             >
               <View style={[styles.checkbox, boarded && styles.checkboxOn]}>
@@ -816,7 +813,9 @@ export default function BookingStatus() {
                 </Text>
                 <Text style={styles.boardSub}>
                   {member.noShowAt
-                    ? 'Marked no-show — companions sailed'
+                    ? boarded
+                      ? 'A companion did not board — you still sailed'
+                      : 'Marked no-show — companions sailed'
                     : member.disputedAt
                       ? 'Reported NOT aboard — trip continues'
                       : `Booker · ${boarded ? 'confirmed aboard' : 'not confirmed yet'}`}
@@ -827,13 +826,16 @@ export default function BookingStatus() {
               <Pressable
                 key={c.passengerId}
                 onPress={() => void toggleCompanion(member, c)}
-                disabled={!!c.noShowAt}
+                disabled={!!c.noShowAt || sailed}
                 style={({ pressed }) => [
                   styles.boardRow,
                   pressed && !c.noShowAt && styles.boardRowPressed,
                 ]}
                 accessibilityRole="checkbox"
-                accessibilityState={{ checked: !!c.boardedAt, disabled: !!c.noShowAt }}
+                accessibilityState={{
+                  checked: !!c.boardedAt,
+                  disabled: !!c.noShowAt || sailed,
+                }}
                 accessibilityLabel={`${c.firstName} ${c.lastName} on board`}
               >
                 <View style={[styles.checkbox, c.boardedAt && styles.checkboxOn]}>
@@ -859,7 +861,7 @@ export default function BookingStatus() {
                 Could not load this party&apos;s companions — reopen the screen to retry.
               </Text>
             )}
-            {!advanceTrip && (
+            {!advanceTrip && !sailed && (
               <PrimaryButton
                 label="Scan boarding QR"
                 variant="secondary"
@@ -867,7 +869,7 @@ export default function BookingStatus() {
                 style={styles.scanBtn}
               />
             )}
-            {!advanceLocked && companions != null && !resolved && (
+            {!advanceLocked && !sailed && companions != null && !resolved && (
               <PrimaryButton
                 label={noShowDone ? 'No-show marked' : 'Passenger(s) didn’t board'}
                 variant="danger"
@@ -1020,10 +1022,14 @@ export default function BookingStatus() {
                     />
                   )}
                   <PrimaryButton
-                    label="Prepare Departure"
-                    onPress={handleStartTrip}
+                    label={sailed ? 'Open live trip' : 'Prepare Departure'}
+                    onPress={
+                      sailed
+                        ? () => router.replace('/(bangkero)/en-route')
+                        : handleStartTrip
+                    }
                     loading={pending}
-                    disabled={!canStart}
+                    disabled={!sailed && !canStart}
                     style={styles.actionBtn}
                   />
                 </>
@@ -1048,7 +1054,7 @@ export default function BookingStatus() {
               />
             )}
 
-            {booking.status === 'accepted' && !canStart && (
+            {booking.status === 'accepted' && !canStart && !sailed && (
               <Text style={styles.gateHint}>
                 {advanceLocked
                   ? `Scheduled sail: ${booking.scheduledDate} ${booking.scheduledTime} — Prepare Departure opens when the slot arrives.`
@@ -1067,6 +1073,12 @@ export default function BookingStatus() {
 
       {/* One scanner for the whole party — the bangkero reopens it per
           passenger so a frame burst can never double-fire the RPC. */}
+      <PartyNoShowSheet
+        booking={noShowFor}
+        busy={boardPending}
+        onClose={() => setNoShowFor(null)}
+        onConfirm={(missing, companions) => void handleNoShow(missing, companions)}
+      />
       <Modal visible={scanOpen} animationType="fade" onRequestClose={() => setScanOpen(false)}>
         <View style={styles.scanWrap}>
           {permission?.granted ? (

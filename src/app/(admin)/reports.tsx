@@ -107,7 +107,7 @@ export default function Reports() {
               />
               <Kpi
                 label="Completion rate"
-                value={data.requests > 0 ? `${Math.round((data.completed / data.requests) * 100)}%` : '—'}
+                value={data.requests > 0 ? `${Math.round((data.completedRequests / data.requests) * 100)}%` : '—'}
                 note="completed ÷ requests"
               />
               <Kpi

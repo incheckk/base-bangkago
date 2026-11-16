@@ -222,7 +222,7 @@
 
     async function loadAlerts() {
       try {
-        alerts = await window.bangkagoAlerts.listAll({ limit: 100 });
+        alerts = await window.bangkagoAlerts.listAll({ limit: 100, excludeComplianceReports: true });
         renderRows(alerts);
       } catch (e) {
         console.error(e);

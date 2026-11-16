@@ -250,6 +250,7 @@ export interface ReportData {
   /** Completed trips in range, and the money they collected. */
   revenue: number;
   completed: number;
+  completedRequests: number;
   /** Bookings created in range. */
   requests: number;
   cancelled: number;
@@ -264,7 +265,6 @@ export interface ReportData {
 }
 
 interface ReportRow {
-  status: string | null;
   trip_stat: string | null;
   total_price: number | null;
   created_at: string | null;
@@ -311,29 +311,29 @@ function makeBuckets(range: ReportRange, startIso: string, endIso: string): Repo
 export async function getReportData(range: ReportRange): Promise<ReportData> {
   const endIso = manilaTodayIso();
   const startIso = addDaysIso(endIso, -RANGE_DAYS[range]);
+  const endExclusiveIso = addDaysIso(endIso, 1);
   const startTs = new Date(manilaDayStartMs(startIso)).toISOString();
+  const endTs = new Date(manilaDayStartMs(endExclusiveIso)).toISOString();
   const monthMode = RANGE_BY_MONTH.includes(range);
-
-  const [bookingsResult, usersCount, bangkerosCount, pendingCount, alertsCount] = await Promise.all([
-    supabase
-      .from('bookings')
-      // A completion in range can belong to a request created long before it,
-      // so the filter has to accept either timestamp.
-      .select('status, trip_stat, total_price, created_at, completed_at, from_port_name, to_port_name')
-      .or(`created_at.gte.${startTs},completed_at.gte.${startTs}`),
-    supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', startTs),
+  const [rows, usersCount, bangkerosCount, pendingCount, alertsCount] = await Promise.all([
+    fetchReportBookings(startTs, endTs),
+    supabase.from('users').select('*', { count: 'exact', head: true })
+      .eq('user_role', 'passenger').gte('created_at', startTs).lt('created_at', endTs),
     supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('is_available', true).eq('is_deleted', false),
     supabase.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending').eq('is_deleted', false),
     supabase.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
   ]);
-  if (bookingsResult.error) throw bookingsResult.error;
+  if (usersCount.error) throw usersCount.error;
+  if (bangkerosCount.error) throw bangkerosCount.error;
+  if (pendingCount.error) throw pendingCount.error;
+  if (alertsCount.error) throw alertsCount.error;
 
-  const rows = (bookingsResult.data ?? []) as ReportRow[];
   const buckets = makeBuckets(range, startIso, endIso);
   const bucketFor = new Map(buckets.map((b) => [b.key, b]));
 
   let revenue = 0;
   let completed = 0;
+  let completedRequests = 0;
   let requests = 0;
   let cancelled = 0;
   const statusCounts: Record<string, number> = {};
@@ -343,14 +343,15 @@ export async function getReportData(range: ReportRange): Promise<ReportData> {
     const createdIso = toManilaIso(row.created_at);
     const completedIso = toManilaIso(row.completed_at);
 
-    if (createdIso && createdIso >= startIso) {
+    if (createdIso && createdIso >= startIso && createdIso <= endIso) {
       requests += 1;
-      const status = row.status ?? 'unknown';
+      const status = row.trip_stat ?? 'unknown';
       statusCounts[status] = (statusCounts[status] ?? 0) + 1;
       if (status === 'cancelled') cancelled += 1;
+      if (status === 'completed') completedRequests += 1;
     }
 
-    if (row.trip_stat === 'completed' && completedIso && completedIso >= startIso) {
+    if (row.trip_stat === 'completed' && completedIso && completedIso >= startIso && completedIso <= endIso) {
       const price = row.total_price ?? 0;
       completed += 1;
       revenue += price;
@@ -376,6 +377,7 @@ export async function getReportData(range: ReportRange): Promise<ReportData> {
     endIso,
     revenue,
     completed,
+    completedRequests,
     requests,
     cancelled,
     newUsers: usersCount.count ?? 0,
@@ -389,4 +391,23 @@ export async function getReportData(range: ReportRange): Promise<ReportData> {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 5),
   };
+}
+
+async function fetchReportBookings(startTs: string, endTs: string): Promise<ReportRow[]> {
+  const pageSize = 1000;
+  const rows: ReportRow[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('trip_stat, total_price, created_at, completed_at, from_port_name, to_port_name')
+      .or(`and(created_at.gte.${startTs},created_at.lt.${endTs}),and(completed_at.gte.${startTs},completed_at.lt.${endTs})`)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const page = (data ?? []) as ReportRow[];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }

@@ -13,9 +13,31 @@
   </div>
 
   <div class="topbar-actions d-flex align-items-center gap-2">
-    <button class="btn btn-sm btn-outline-secondary" type="button" title="Notifications">
-      <i class="bi bi-bell"></i>
-    </button>
+    <div class="topbar-notifications" id="topbarNotifications">
+      <button class="btn topbar-btn topbar-notifications-toggle" id="notificationsToggle" type="button"
+        aria-label="Notifications" aria-expanded="false" aria-controls="notificationsPanel">
+        <i class="bi bi-bell" aria-hidden="true"></i>
+        <span class="topbar-notifications-badge" id="notificationsBadge" hidden></span>
+      </button>
+      <section class="topbar-notifications-panel" id="notificationsPanel" aria-label="Notifications" hidden>
+        <header class="topbar-notifications-header">
+          <div>
+            <strong>Notifications</strong>
+            <span class="topbar-notifications-summary" id="notificationsSummary">Loading...</span>
+          </div>
+          <button class="topbar-notifications-icon" id="notificationsRefresh" type="button" aria-label="Refresh notifications" title="Refresh">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="topbar-notifications-list" id="notificationsList" aria-live="polite">
+          <div class="topbar-notifications-state">Loading notifications...</div>
+        </div>
+        <footer class="topbar-notifications-footer">
+          <button class="topbar-notifications-action" id="notificationsMarkAll" type="button">Mark all read</button>
+          <button class="topbar-notifications-action" id="notificationsClearOld" type="button">Clear old</button>
+        </footer>
+      </section>
+    </div>
     <a class="btn btn-sm btn-outline-danger" href="../../bangkaGo-access.html" aria-label="Logout" onclick="event.preventDefault();try{sessionStorage.clear();}catch(e){}var p=window.bangkago?window.bangkago.signOut():null;Promise.resolve(p).finally(function(){location.href='../../bangkaGo-access.html';})">
       <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Logout
     </a>

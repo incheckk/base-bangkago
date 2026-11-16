@@ -105,7 +105,6 @@
     'monitor-fleet': { title: 'Monitor Fleet', subtitle: 'Live fleet monitoring and real-time vessel tracking' },
     'track-vessel': { title: 'Track Vessel', subtitle: 'Merged fleet monitoring and real-time vessel tracking' },
     'manage-payments': { title: 'Manage Payments', subtitle: 'Track transactions, verification, and settlements' },
-    'manage-alerts': { title: 'Manage Alerts', subtitle: 'Create and monitor operational alert rules' },
     'view-reports': { title: 'View Reports', subtitle: 'Operations, compliance, and system reports' },
     'analyze-demand': { title: 'Analyze Demand', subtitle: 'Demand trends, peak windows, and forecast insights' },
     'ratings': { title: 'Bangkero Ratings', subtitle: 'Effective ratings, penalties, and accept-gate locks' },
@@ -153,6 +152,48 @@
       }
     }catch(e){}
   })();
+
+  async function loadScript(src, ready) {
+    if (ready()) return;
+    await new Promise(function (resolve, reject) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = function () { reject(new Error('Failed to load ' + src)); };
+      document.head.appendChild(script);
+    });
+    if (!ready()) throw new Error('Script loaded without initializing its service: ' + src);
+  }
+
+  async function initAdminNotifications() {
+    const root = document.getElementById('topbarNotifications');
+    if (!root || location.pathname.indexOf('/coastguard-dashboard/') !== -1) return;
+    const role = await window.bangkagoAuthReady;
+    if (role !== 'admin') throw new Error('Admin session is not available.');
+    await loadScript('../../assets/js/services/supabase.js', function () {
+      return !!window.bangkagoServices;
+    });
+    await loadScript('../../assets/js/services/realtime.js', function () {
+      return !!window.bangkagoRealtime;
+    });
+    await loadScript('../../assets/js/services/notifications.js', function () {
+      return !!window.bangkagoNotifications;
+    });
+    await loadScript('../../assets/js/admin-notifications.js', function () {
+      return !!window.AdminNotifications;
+    });
+    window.AdminNotifications.init();
+  }
+
+  initAdminNotifications().catch(function (error) {
+    console.error('Notification panel initialization failed:', error);
+    const list = document.getElementById('notificationsList');
+    const summary = document.getElementById('notificationsSummary');
+    if (summary) summary.textContent = 'Unavailable';
+    if (list) {
+      list.innerHTML = '<div class="topbar-notifications-state topbar-notifications-error">Notifications could not be loaded. Refresh the page to try again.</div>';
+    }
+  });
 
   // init theme after partials injected
   if (window.AdminTheme && typeof window.AdminTheme.init === 'function'){

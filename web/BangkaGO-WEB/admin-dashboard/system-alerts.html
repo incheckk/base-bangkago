@@ -19,6 +19,9 @@
       transition: box-shadow 0.15s;
     }
     .alert-card:hover { box-shadow: 0 4px 12px rgba(16,24,40,.1); }
+    .alert-card .alert-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .alert-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .alert-actions .btn { flex: 1 1 7rem; }
     .alert-card.critical { background-color: #fef2f2; border-color: #fecaca; }
     .alert-card.high { background-color: #fef2f2; border-color: #fecaca; }
     .alert-card.medium { background-color: #fffbeb; border-color: #fde68a; }
@@ -43,7 +46,7 @@
       font-size: 0.8rem;
       font-weight: 700;
     }
-    .compose-hint { color: var(--text-muted); font-size: 0.8rem; text-align: center; margin-top: 0.5rem; }
+    .notify-alert-summary { max-height: 6rem; overflow-y: auto; white-space: pre-wrap; }
   </style>
 </head>
 <body data-page="system-alerts">
@@ -56,8 +59,13 @@
       <section class="cg-content container-fluid">
         <div class="cg-card p-3">
           <div class="panel-head">
-            <h6 class="mb-0">Safety Alerts</h6>
-            <span class="muted-note" id="alertSubtitle">Loading...</span>
+            <div>
+              <h6 class="mb-0">Safety Alerts</h6>
+              <span class="muted-note" id="alertSubtitle">Loading...</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createAlertModal">
+              <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Create Alert
+            </button>
           </div>
 
           <!-- Filter Chips -->
@@ -73,6 +81,7 @@
           </div>
 
           <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
+          <div id="actionFeedback" class="alert d-none" role="status" aria-live="polite"></div>
 
           <div id="alertsContainer" class="d-none">
             <!-- Alert cards rendered here -->
@@ -84,16 +93,76 @@
             <p class="text-muted" id="emptyMessage"></p>
           </div>
 
-          <!-- Compose Notification (Coming Soon) -->
-          <div class="mt-4 text-center">
-            <button class="btn btn-outline-secondary" disabled>
-              <i class="bi bi-bell-plus me-2"></i> Compose Notification
-            </button>
-            <div class="compose-hint">Coming soon</div>
-          </div>
         </div>
       </section>
     </main>
+  </div>
+
+  <div class="modal fade" id="createAlertModal" tabindex="-1" aria-labelledby="createAlertTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <form class="modal-content" id="createAlertForm">
+        <div class="modal-header">
+          <div>
+            <div class="small text-secondary">Safety Alerts</div>
+            <h5 class="modal-title" id="createAlertTitle">Create alert</h5>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="createAlertError" class="alert alert-danger d-none" role="alert"></div>
+          <label class="form-label" for="createAlertMessage">Alert message</label>
+          <textarea id="createAlertMessage" class="form-control mb-3" rows="5" maxlength="2000" required placeholder="Describe the safety alert clearly."></textarea>
+          <label class="form-label" for="createAlertSeverity">Severity</label>
+          <select id="createAlertSeverity" class="form-select" required>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+          <p class="small text-secondary mb-0 mt-3">Creating an alert also sends a safety notification to all users.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="createAlertSubmit">
+            <i class="bi bi-send me-1" aria-hidden="true"></i>Create &amp; Notify All
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="notifyAlertModal" tabindex="-1" aria-labelledby="notifyAlertTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <form class="modal-content" id="notifyAlertForm">
+        <div class="modal-header">
+          <div>
+            <div class="small text-secondary">Safety Alerts</div>
+            <h5 class="modal-title" id="notifyAlertTitle">Notify users</h5>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="notifyError" class="alert alert-danger d-none" role="alert"></div>
+          <p id="notifyAlertSummary" class="notify-alert-summary small text-secondary text-break"></p>
+          <label class="form-label" for="notifyRecipient">Recipient group</label>
+          <select id="notifyRecipient" class="form-select" required>
+            <option value="" selected disabled>Choose an audience</option>
+            <option value="passenger">Passenger</option>
+            <option value="bangkero">Bangkero</option>
+            <option value="admin">Admin</option>
+            <option value="coastguard">Coastguard</option>
+            <option value="all">All users</option>
+          </select>
+          <p class="small text-secondary mb-0 mt-2">Choose a role group or notify all users.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="notifySubmit" disabled>
+            <i class="bi bi-bell me-1" aria-hidden="true"></i>Send notification
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -113,9 +182,33 @@
     const errorState = document.getElementById('errorState');
     const alertSubtitle = document.getElementById('alertSubtitle');
     const filterChips = document.getElementById('filterChips');
+    const actionFeedback = document.getElementById('actionFeedback');
+    const createAlertForm = document.getElementById('createAlertForm');
+    const createAlertSubmit = document.getElementById('createAlertSubmit');
+    const createAlertError = document.getElementById('createAlertError');
+    const createAlertModal = new bootstrap.Modal(document.getElementById('createAlertModal'));
+    const notifyAlertForm = document.getElementById('notifyAlertForm');
+    const notifyAlertSummary = document.getElementById('notifyAlertSummary');
+    const notifyRecipient = document.getElementById('notifyRecipient');
+    const notifySubmit = document.getElementById('notifySubmit');
+    const notifyError = document.getElementById('notifyError');
+    const notifyAlertModal = new bootstrap.Modal(document.getElementById('notifyAlertModal'));
 
     let alerts = [];
     let currentFilter = 'active';
+    let activeNotifyAlertId = null;
+    const busyAlertIds = new Set();
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[character]);
+    }
+
+    function showActionFeedback(type, message) {
+      actionFeedback.className = `alert alert-${type} mb-3`;
+      actionFeedback.textContent = message;
+    }
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
@@ -146,31 +239,39 @@
 
     function renderAlert(alert) {
       const cfg = severityConfig(alert.severity);
-      const timeAgo = formatDate(alert.createdAt);
-      const location = getLocation(alert);
+      const timeAgo = escapeHtml(formatDate(alert.createdAt));
+      const location = escapeHtml(getLocation(alert));
       const isResolved = alert.isResolved;
+      const alertId = escapeHtml(alert.alertId);
+      const busy = busyAlertIds.has(alert.alertId);
 
       return `
-        <div class="alert-card ${cfg.cardClass}" data-alert-id="${alert.alertId}">
+        <div class="alert-card ${cfg.cardClass}" data-alert-id="${alertId}">
           <div class="d-flex justify-content-between align-items-start mb-2">
-            <span class="severity-badge ${cfg.badgeClass}"><i class="bi ${cfg.icon} me-1"></i>${cfg.label}</span>
+            <span class="severity-badge ${cfg.badgeClass}"><i class="bi ${cfg.icon} me-1" aria-hidden="true"></i>${cfg.label}</span>
             <span class="text-muted small">${timeAgo}</span>
           </div>
           <div class="mb-2">
             <span class="text-muted small">${location}</span>
           </div>
-          <p class="mb-3" style="font-size: 0.95rem; line-height: 1.6;">${alert.message}</p>
+          <p class="alert-message mb-3" style="font-size: 0.95rem; line-height: 1.6;">${escapeHtml(alert.message)}</p>
           ${isResolved ? `
-            <div class="d-flex justify-content-between align-items-center">
+            <div class="alert-actions">
               <span class="resolved-badge"><i class="bi bi-check-circle me-1"></i>Resolved</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" data-alert-action="notify" data-alert-id="${alertId}" ${busy ? 'disabled' : ''}>
+                <i class="bi bi-bell me-1" aria-hidden="true"></i>Notify
+              </button>
             </div>
           ` : `
-            <div class="d-flex gap-2">
-              <button class="btn btn-sm btn-primary flex-fill" onclick="resolveAlert('${alert.alertId}')">
+            <div class="alert-actions">
+              <button type="button" class="btn btn-sm btn-primary" data-alert-action="resolve" data-alert-id="${alertId}" ${busy ? 'disabled' : ''}>
                 <i class="bi bi-check-lg me-1"></i> Resolve
               </button>
-              <button class="btn btn-sm btn-outline-secondary flex-fill" onclick="dismissAlert('${alert.alertId}')">
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-alert-action="dismiss" data-alert-id="${alertId}" ${busy ? 'disabled' : ''}>
                 <i class="bi bi-x-lg me-1"></i> Dismiss
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-primary" data-alert-action="notify" data-alert-id="${alertId}" ${busy ? 'disabled' : ''}>
+                <i class="bi bi-bell me-1" aria-hidden="true"></i>Notify
               </button>
             </div>
           `}
@@ -222,7 +323,7 @@
       emptyState.classList.add('d-none');
 
       try {
-        alerts = await window.bangkagoAlerts.listAll({ limit: 100 });
+        alerts = await window.bangkagoAlerts.listAll({ limit: 100, excludeComplianceReports: true });
         renderAlerts();
         loadingState.classList.add('d-none');
       } catch (e) {
@@ -238,37 +339,126 @@
       btn.addEventListener('click', () => setFilter(btn.dataset.filter));
     });
 
-    // Resolve alert
-    window.resolveAlert = async function(alertId) {
-      const alert = alerts.find(a => a.alertId === alertId);
-      if (!alert) return;
-      
-      if (!confirm('Mark this alert as resolved?')) return;
+    async function closeAlert(alertId, action) {
+      const alertRow = alerts.find(item => item.alertId === alertId);
+      if (!alertRow || alertRow.isResolved || busyAlertIds.has(alertId)) return;
+      const prompt = action === 'resolve'
+        ? 'Mark this safety alert as resolved?'
+        : 'Dismiss this safety alert? It will be marked as resolved.';
+      if (!window.confirm(prompt)) return;
+      busyAlertIds.add(alertId);
+      renderAlerts();
+      try {
+        await window.bangkagoAlerts.resolve(alertId);
+        const updated = alerts.find(item => item.alertId === alertId);
+        if (updated) updated.isResolved = true;
+        renderAlerts();
+        showActionFeedback('success', action === 'resolve' ? 'Alert resolved.' : 'Alert dismissed.');
+      } catch (e) {
+        showActionFeedback('danger', 'Could not update alert: ' + (e.message || 'Please try again.'));
+      } finally {
+        busyAlertIds.delete(alertId);
+        renderAlerts();
+      }
+    }
+
+    alertsContainer.addEventListener('click', function(event) {
+      const button = event.target.closest('[data-alert-action]');
+      if (!button) return;
+      const alertId = button.dataset.alertId;
+      const action = button.dataset.alertAction;
+      if (action === 'notify') {
+        openNotifyModal(alertId);
+      } else if (action === 'resolve' || action === 'dismiss') {
+        closeAlert(alertId, action);
+      }
+    });
+
+    function setFormError(element, message) {
+      element.textContent = message;
+      element.classList.toggle('d-none', !message);
+    }
+
+    function openNotifyModal(alertId) {
+      const alertRow = alerts.find(item => item.alertId === alertId);
+      if (!alertRow) return;
+      activeNotifyAlertId = alertId;
+      notifyAlertSummary.textContent = alertRow.message;
+      setFormError(notifyError, '');
+      notifyRecipient.value = '';
+      notifySubmit.disabled = true;
+      notifyAlertModal.show();
+    }
+
+    notifyRecipient.addEventListener('change', function() {
+      notifySubmit.disabled = !notifyRecipient.value;
+    });
+
+    notifyAlertForm.addEventListener('submit', async function(event) {
+      event.preventDefault();
+      const recipient = notifyRecipient.value;
+      if (!activeNotifyAlertId || !recipient || notifySubmit.disabled) return;
+      const alertRow = alerts.find(item => item.alertId === activeNotifyAlertId);
+      if (!alertRow) {
+        setFormError(notifyError, 'This alert is no longer available. Refresh the page and try again.');
+        return;
+      }
+      notifySubmit.disabled = true;
+      setFormError(notifyError, '');
+      try {
+        const result = await window.bangkagoAlerts.notify(recipient, alertRow.message);
+        if (!result.count) throw new Error('No matching users were found.');
+        notifyAlertModal.hide();
+        showActionFeedback('success', `Safety notification sent to ${result.count} user${result.count === 1 ? '' : 's'}.`);
+      } catch (error) {
+        setFormError(notifyError, 'Could not send notification: ' + (error.message || 'Please try again.'));
+        notifySubmit.disabled = false;
+      }
+    });
+
+    createAlertForm.addEventListener('submit', async function(event) {
+      event.preventDefault();
+      const message = document.getElementById('createAlertMessage').value.trim();
+      const severity = document.getElementById('createAlertSeverity').value;
+      if (!message) {
+        setFormError(createAlertError, 'Enter a message for the alert.');
+        return;
+      }
+      createAlertSubmit.disabled = true;
+      createAlertSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Creating and notifying...';
+      setFormError(createAlertError, '');
+      actionFeedback.classList.add('d-none');
+
+      let created;
+      try {
+        created = await window.bangkagoAlerts.create({ message, severity });
+        alerts = [created, ...alerts.filter(item => item.alertId !== created.alertId)];
+        renderAlerts();
+      } catch (error) {
+        setFormError(createAlertError, 'Could not create alert: ' + (error.message || 'Please try again.'));
+        createAlertSubmit.disabled = false;
+        createAlertSubmit.innerHTML = '<i class="bi bi-send me-1" aria-hidden="true"></i>Create &amp; Notify All';
+        return;
+      }
 
       try {
-        await window.bangkagoAlerts.resolve(alertId, 'Resolved via System Alerts');
-        alert.isResolved = true;
-        renderAlerts();
-      } catch (e) {
-        alert('Error: ' + e.message);
+        const result = await window.bangkagoAlerts.notify('all', message);
+        createAlertModal.hide();
+        createAlertForm.reset();
+        if (result.count) {
+          showActionFeedback('success', `Alert created and notification sent to ${result.count} user${result.count === 1 ? '' : 's'}.`);
+        } else {
+          showActionFeedback('warning', 'Alert created, but there were no users to notify. You can retry from the Notify button.');
+        }
+      } catch (error) {
+        createAlertModal.hide();
+        createAlertForm.reset();
+        showActionFeedback('warning', `Alert created, but notification failed: ${error.message || 'Please retry using the Notify button.'}`);
+      } finally {
+        createAlertSubmit.disabled = false;
+        createAlertSubmit.innerHTML = '<i class="bi bi-send me-1" aria-hidden="true"></i>Create &amp; Notify All';
       }
-    };
-
-    // Dismiss alert (same as resolve for now)
-    window.dismissAlert = async function(alertId) {
-      const alert = alerts.find(a => a.alertId === alertId);
-      if (!alert) return;
-      
-      if (!confirm('Dismiss this alert?')) return;
-
-      try {
-        await window.bangkagoAlerts.resolve(alertId, 'Dismissed via System Alerts');
-        alert.isResolved = true;
-        renderAlerts();
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-    };
+    });
 
     window.bangkagoAuthReady.then(function(role) {
       if (role !== 'admin') return;

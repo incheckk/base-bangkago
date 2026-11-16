@@ -205,7 +205,14 @@
         return;
       }
 
-      const message = `Zone: ${zone}\n\n${details}`;
+      const message = [
+        '[Compliance Report]',
+        'Filed By: Coast Guard (coastguard)',
+        'Category: Compliance',
+        `Zone: ${zone}`,
+        '',
+        details
+      ].join('\n');
 
       const submitBtn = form.querySelector('button[type="submit"]');
       let uploadedPaths = [];

@@ -41,6 +41,24 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — Same-day rentals demo switch (migration 089 PENDING — USER
+  MUST RUN, after 088; gates: tsc clean, lint 0 errors / 142 known
+  warnings).**
+  - Charters stay advance-only unless Admin → Developer Options →
+    **Same-day rentals** is ON. It writes `dev_flags.rental_today` (089,
+    admin-only `set_rental_today()`), which `rental-form` reads through the
+    anon-safe `demo_rental_today_enabled()` and passes as
+    `fromTomorrow={!sameDay}`.
+  - Today joins the same 14-day strip and reads **Booked** when that boat's
+    operator already has an accepted trip today (027/079). Nothing else
+    changed: 50% GCash downpayment → admin escrow approval → bangkero
+    confirm → charter screen today.
+  - The switch hides itself until 089 runs. No rental, escrow or day-lock
+    rule was touched; the flag exists so the presentation can book a boat
+    for today without changing the production rule (tracker 19).
+  - **Next:** run `089_rental_today.sql` after `088`, flip the switch, then
+    book a boat for Today and walk it through escrow → confirm.
+
 - **2026-11-16 — Departure lock, demo ports, rental advance visibility,
   suspension banner, idempotent booking, per-passenger no-show (migrations
   **085 → 086 → 087 → 088 PENDING — USER MUST RUN, after 084**; gates:

@@ -43,8 +43,8 @@ export interface DayOption {
 }
 
 /**
- * The shared 14-day strip. `fromTomorrow` is for rentals — a charter is
- * always an advance booking, so today is never offered.
+ * The shared 14-day strip. `fromTomorrow` is for charters, which are advance
+ * bookings unless the admin flips the 089 same-day demo switch.
  */
 export function dayOptions(count = 14, fromTomorrow = false): DayOption[] {
   const out: DayOption[] = [];
@@ -75,7 +75,7 @@ interface Props {
   time: string | null;
   onDate: (date: string) => void;
   onTime: (time: string | null) => void;
-  /** Start tomorrow — rentals are always advance, so today is never offered. */
+  /** Start tomorrow — charters are advance unless 089's same-day switch is on. */
   fromTomorrow?: boolean;
   /** Whole-day bookings (charters) have no departure slot. */
   hideSlots?: boolean;

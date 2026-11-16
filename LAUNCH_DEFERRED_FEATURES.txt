@@ -186,6 +186,15 @@ date-scoped capacity, island hop priced per person, charter ticks).
     a crafted client could stamp onboarded_at or un-cancel a sailed
     trip. That narrowing belongs with E1.
 
+19. SAME-DAY RENTALS ARE A DEMO SWITCH (2026-11-16)
+    Migration 089 adds dev_flags.rental_today + demo_rental_today_enabled()
+    + admin-only set_rental_today(). OFF is the production rule (the
+    rental strip starts tomorrow). ON offers Today so a charter can be
+    booked for the presentation day; the 50% downpayment, admin escrow
+    approval and the 027/079 day locks are unchanged. Decide the
+    commercial rule for same-day charters before launch, or delete the
+    switch and the flag with it.
+
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
 B1. BACKGROUND GPS TRACKING

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { CompanionForm, type Companion } from '@/components/CompanionForm';
@@ -9,11 +9,9 @@ import { SchedulePicker, dayOptions } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
+import { getRentalToday } from '@/services/dev.service';
 import { getBangkaBlockedDates, tierStandardPrice } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-/** Rentals are always advance, so the strip starts TOMORROW. */
-const RENTAL_DAYS = dayOptions(14, true);
 
 /**
  * Step 1 of renting a boat: who rides, when, how many (Phase 4C). The GCash
@@ -34,13 +32,20 @@ export default function RentalFormScreen() {
   }>();
 
   const rate = Number(params.rate) || tierStandardPrice(Number(params.capacity) || 0);
-  const days = RENTAL_DAYS;
+  // Demo switch (089): OFF is the production rule, so the strip starts
+  // tomorrow. ON adds today — the escrow flow below is unchanged.
+  const [sameDay, setSameDay] = useState(false);
+  const days = useMemo(() => dayOptions(14, !sameDay), [sameDay]);
 
-  const [date, setDate] = useState(() => days[0]?.iso ?? '');
+  const [date, setDate] = useState(() => dayOptions(14, true)[0]?.iso ?? '');
   const [eventName, setEventName] = useState('');
   const [companions, setCompanions] = useState<Companion[]>([]);
   // Days this boat/operator is already committed to (027) — dehighlighted below.
   const [blocked, setBlocked] = useState<string[]>([]);
+
+  useEffect(() => {
+    getRentalToday().then((v) => setSameDay(v === true)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -60,7 +65,7 @@ export default function RentalFormScreen() {
     return () => {
       alive = false;
     };
-  }, [params.bangkaId]);
+  }, [params.bangkaId, days]);
 
   const total = rate;
   const down = Math.round(total * 0.5);
@@ -129,7 +134,7 @@ export default function RentalFormScreen() {
             time={null}
             onDate={setDate}
             onTime={() => {}}
-            fromTomorrow
+            fromTomorrow={!sameDay}
             hideSlots
             blockedDays={blocked}
           />

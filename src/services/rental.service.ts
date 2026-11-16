@@ -139,8 +139,8 @@ export async function createRental(args: CreateRentalArgs): Promise<BoatRentalDo
       rental_date: args.rentalDate,
       hours: CHARTER_HOURS,
       total_price: total,
-      // Rental dates start tomorrow (020), so every charter is advance:
-      // escrow first, admin flips it to 'pending', then it hits the desk.
+      // Advance charter: escrow first, admin flips it to 'pending', then it
+      // hits the desk. A demo same-day charter (089) rides the same flow.
       status: 'awaiting_payment',
     })
     .select()

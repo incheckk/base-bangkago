@@ -10,8 +10,8 @@ import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import { setSailingAdvisory } from '@/services/advisory.service';
 import { friendlyError } from '@/services/booking.service';
 import {
-  getDemoPorts, setArrivalBypass, setDemoPorts, setDispatchBypass, setGatesBypass,
-  setRouteLockBypass, setShowQuickLogin,
+  getDemoPorts, getRentalToday, setArrivalBypass, setDemoPorts, setDispatchBypass,
+  setGatesBypass, setRentalToday, setRouteLockBypass, setShowQuickLogin,
 } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -46,9 +46,12 @@ export default function DeveloperOptions() {
   const [actionError, setActionError] = useState<string | null>(null);
   // null = migration 086 not run yet (hide the switch).
   const [demoPortsOn, setDemoPortsOn] = useState<boolean | null>(null);
+  // null = migration 089 not run yet (hide the switch).
+  const [rentalTodayOn, setRentalTodayOn] = useState<boolean | null>(null);
 
   useEffect(() => {
     getDemoPorts().then(setDemoPortsOn).catch(() => setDemoPortsOn(null));
+    getRentalToday().then(setRentalTodayOn).catch(() => setRentalTodayOn(null));
   }, []);
 
   const dispatchOn = flags.data.dispatchBypass;
@@ -59,7 +62,7 @@ export default function DeveloperOptions() {
   const on = dispatchOn || routeLockOn || gatesOn || arrivalOn;
 
   async function toggle(
-    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin' | 'demoports',
+    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin' | 'demoports' | 'rentaltoday',
     next: boolean
   ) {
     setBusy(which);
@@ -72,6 +75,10 @@ export default function DeveloperOptions() {
       else if (which === 'demoports') {
         await setDemoPorts(next);
         setDemoPortsOn(next);
+      }
+      else if (which === 'rentaltoday') {
+        await setRentalToday(next);
+        setRentalTodayOn(next);
       }
       else await setArrivalBypass(next);
       flags.refresh();
@@ -271,6 +278,36 @@ export default function DeveloperOptions() {
                     : demoPortsOn
                       ? 'ON — demo ports are bookable'
                       : 'OFF — demo ports are hidden'}
+                </Text>
+              </>
+            )}
+
+            {rentalTodayOn !== null && (
+              <>
+                <View style={styles.divider} />
+                <View style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={styles.rowLabel}>Same-day rentals</Text>
+                    <Text style={styles.rowHint}>
+                      Charters are advance-only. Turn this on to offer TODAY in the rental date
+                      strip, so a boat can be booked for the presentation day. The 50% downpayment
+                      and admin escrow approval still apply.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={rentalTodayOn}
+                    onValueChange={(next) => void toggle('rentaltoday', next)}
+                    disabled={busy !== null}
+                    trackColor={{ false: colors.border, true: colors.warningTint }}
+                    thumbColor={rentalTodayOn ? colors.warning : colors.surface}
+                  />
+                </View>
+                <Text style={[styles.rowStatus, { color: rentalTodayOn ? colors.danger : colors.textMuted }]}>
+                  {busy === 'rentaltoday'
+                    ? 'Saving…'
+                    : rentalTodayOn
+                      ? 'ON — today is bookable in Rent a Boat'
+                      : 'OFF — rentals start tomorrow'}
                 </Text>
               </>
             )}

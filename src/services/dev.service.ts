@@ -133,3 +133,20 @@ export async function setDemoPorts(on: boolean): Promise<void> {
     .like('id', 'demo-%');
   if (routeErr) throw routeErr;
 }
+
+/**
+ * The same-day rental switch (migration 089). OFF is the production rule:
+ * the rental form's strip starts tomorrow. null when 089 has not run, so
+ * the admin screen hides the switch.
+ */
+export async function getRentalToday(): Promise<boolean | null> {
+  const { data, error } = await supabase.rpc('demo_rental_today_enabled');
+  if (error) return null;
+  return data === true;
+}
+
+/** Admin-only — enforced inside the RPC (users.user_role = 'admin'). */
+export async function setRentalToday(on: boolean): Promise<void> {
+  const { error } = await supabase.rpc('set_rental_today', { p_on: on });
+  if (error) throw error;
+}

@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { FilterChips } from '@/components/FilterChips';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
+import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import { type AdminRentalRow, listAllRentals, rentalDurationLabel } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { RentalStatus } from '@/types/models';
+import type { PassengerDetailDoc, RentalStatus } from '@/types/models';
 
 const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: 'Pending', fg: colors.warning, bg: colors.warningTint },
@@ -40,12 +42,14 @@ function formatDate(iso: string): string {
 }
 
 /**
- * Every boat charter on the platform (016), read-only. Money actions
- * live in Downpayments — an awaiting_payment row is one escrow review
- * away from landing on the bangkero's desk.
+ * Every boat charter on the platform (016). Passenger lists are editable
+ * until departure; money actions live in Downpayments - an awaiting_payment
+ * row is one escrow review away from landing on the bangkero's desk.
  */
 export default function AdminBoatRentalsScreen() {
   const [rows, setRows] = useState<AdminRentalRow[]>([]);
+  const [riders, setRiders] = useState<Record<string, PassengerDetailDoc[]>>({});
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,14 @@ export default function AdminBoatRentalsScreen() {
     try {
       const data = await listAllRentals();
       setRows(data);
+      const details = await getPassengerDetailsByRentals(
+        data.map((r) => r.rentalId)
+      ).catch(() => []);
+      const byRental: Record<string, PassengerDetailDoc[]> = {};
+      for (const d of details) {
+        if (d.boatRentalId) (byRental[d.boatRentalId] ??= []).push(d);
+      }
+      setRiders(byRental);
       setError(null);
     } catch (e) {
       setError(friendlyError(e));
@@ -92,6 +104,7 @@ export default function AdminBoatRentalsScreen() {
         ) : (
           visible.map((row) => {
             const status = STATUS_STYLES[row.status] ?? STATUS_STYLES.pending;
+            const rideList = riders[row.rentalId] ?? [];
             return (
               <View key={row.rentalId} style={styles.card}>
                 <View style={styles.cardTop}>
@@ -108,8 +121,30 @@ export default function AdminBoatRentalsScreen() {
                   {row.renterName ?? 'Passenger'} · {row.operatorName ?? 'Bangkero'}
                 </Text>
                 <Text style={styles.meta} numberOfLines={1}>
-                  {formatDate(row.rentalDate)} · {rentalDurationLabel(row.hours)} · ₱{row.totalPrice}
+                  {formatDate(row.rentalDate)} / {rentalDurationLabel(row.hours)} / PHP {row.totalPrice}
                 </Text>
+
+                {rideList.length > 0 && (
+                  <View style={styles.riders}>
+                    <Text style={styles.ridersLabel}>
+                      RIDERS ({rideList.length}) - tap to edit or remove
+                    </Text>
+                    {rideList.map((c) => (
+                      <Pressable
+                        key={c.passengerId}
+                        onPress={() => setEditing(c)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                        style={({ pressed }) => [styles.riderRow, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.riderName} numberOfLines={1}>
+                          {c.firstName} {c.lastName}
+                        </Text>
+                        <Text style={styles.riderAction}>Edit</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
 
                 {row.status === 'awaiting_payment' && (
                   <Text style={styles.escrowHint}>
@@ -121,6 +156,13 @@ export default function AdminBoatRentalsScreen() {
           })
         )}
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void load()}
+      />
     </ScreenContainer>
   );
 }
@@ -149,4 +191,10 @@ const styles = StyleSheet.create({
   event: { flexShrink: 1, ...typography.bodyStrong, marginTop: spacing.sm },
   meta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 2 },
   escrowHint: { flexShrink: 1, ...typography.caption, color: colors.warning, marginTop: spacing.sm },
+  riders: { marginTop: spacing.md, gap: spacing.xxs },
+  ridersLabel: { ...typography.label, color: colors.textMuted, marginBottom: spacing.xs },
+  riderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 3 },
+  riderName: { flex: 1, color: colors.textSecondary, fontSize: 13 },
+  riderAction: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  pressed: { opacity: 0.65 },
 });

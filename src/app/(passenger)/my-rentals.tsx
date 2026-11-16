@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -41,6 +42,7 @@ export default function MyRentalsScreen() {
   const [rows, setRows] = useState<PassengerRentalRow[]>([]);
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
   const [riders, setRiders] = useState<Record<string, PassengerDetailDoc[]>>({});
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -175,9 +177,25 @@ export default function MyRentalsScreen() {
                   {row.operatorName ? ` · ${row.operatorName}` : ''}
                 </Text>
                 {rideList.length > 0 && (
-                  <Text style={styles.meta} numberOfLines={2}>
-                    Riders: {rideList.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
-                  </Text>
+                  <View style={styles.riderList}>
+                    <Text style={styles.meta}>
+                      Riders ({rideList.length}) - tap one to edit or remove
+                    </Text>
+                    {rideList.map((c) => (
+                      <Pressable
+                        key={c.passengerId}
+                        onPress={() => setEditing(c)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                        style={({ pressed }) => [styles.riderRow, pressed && styles.pressed]}
+                      >
+                        <Text style={styles.riderName} numberOfLines={1}>
+                          {c.firstName} {c.lastName}
+                        </Text>
+                        <Text style={styles.riderAction}>Edit</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 )}
 
                 <View style={styles.divider} />
@@ -226,6 +244,13 @@ export default function MyRentalsScreen() {
           style={styles.backBtn}
         />
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void load()}
+      />
     </ScreenContainer>
   );
 }
@@ -276,6 +301,16 @@ const styles = StyleSheet.create({
 
   event: { flexShrink: 1, ...typography.bodyStrong, marginTop: spacing.sm },
   meta: { flexShrink: 1, ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  riderList: { marginTop: spacing.sm, gap: spacing.xxs },
+  riderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 4,
+  },
+  riderName: { flex: 1, color: colors.textSecondary, fontSize: 13 },
+  riderAction: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  pressed: { opacity: 0.65 },
 
   divider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: spacing.md },
 

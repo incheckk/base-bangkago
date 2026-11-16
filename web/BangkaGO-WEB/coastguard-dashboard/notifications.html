@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BangkaGo Coast Guard - Notifications</title>
+  <link rel="icon" type="image/png" href="../../images/favicon.png" />
+
+  <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
+  <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
+  <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
+
+  <style>
+    .nf-wrap{max-width:980px}
+    .nf-toolbar{
+      display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;
+      background:var(--gray-50);border:1px solid var(--gray-200);border-radius:12px;
+      padding:.8rem .9rem;margin-bottom:.85rem;
+    }
+    .nf-summary{font-size:.82rem;color:var(--gray-600)}
+    .nf-summary strong{color:var(--blue-900)}
+    .nf-list{border:1px solid var(--gray-200);border-radius:12px;overflow:hidden;background:#fff}
+    .nf-row{
+      width:100%;display:flex;align-items:flex-start;gap:.75rem;text-align:left;
+      padding:.85rem .9rem;background:#fff;border:0;border-bottom:1px solid var(--gray-200);
+      font:inherit;color:inherit;transition:background var(--ease-fast);
+    }
+    .nf-row:last-child{border-bottom:0}
+    .nf-row:hover{background:#f8fbff}
+    .nf-row:focus-visible{outline:2px solid var(--blue-500);outline-offset:-2px}
+    .nf-row.is-unread{background:#f4f9ff}
+    .nf-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:.42rem;background:transparent}
+    .nf-row.is-unread .nf-dot{background:var(--blue-500)}
+    .nf-main{flex:1;min-width:0}
+    .nf-title{display:block;font-weight:600;color:var(--blue-900);line-height:1.25}
+    .nf-row.is-unread .nf-title{font-weight:700}
+    .nf-msg{display:block;margin-top:.15rem;font-size:.82rem;color:var(--gray-600);line-height:1.4}
+    .nf-meta{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex-shrink:0}
+    .nf-kind{
+      font-size:.65rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+      padding:.24rem .48rem;border-radius:999px;border:1px solid transparent;line-height:1;
+    }
+    .nf-kind-booking{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+    .nf-kind-payment{background:#ecfdf5;color:#166534;border-color:#bbf7d0}
+    .nf-kind-cargo{background:#fffbeb;color:#92400e;border-color:#fde68a}
+    .nf-kind-safety{background:#fef2f2;color:#b42318;border-color:#fecaca}
+    .nf-kind-account{background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe}
+    .nf-kind-system{background:var(--gray-100);color:var(--gray-700);border-color:var(--gray-200)}
+    .nf-time{font-size:.7rem;color:var(--gray-500);white-space:nowrap}
+    .nf-empty{padding:2.2rem 1rem;text-align:center;color:var(--gray-500);font-size:.86rem}
+    @media (max-width:575.98px){
+      .nf-meta{display:none}
+      .nf-row{padding:.8rem .75rem}
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar-container"></div>
+  <div id="main-wrapper">
+    <div id="topbar-container"></div>
+    <main class="content">
+      <div class="nf-wrap">
+        <div class="nf-toolbar">
+          <div class="nf-summary" id="nfSummary">Loading notifications...</div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfRefreshBtn">
+              <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfMarkAllBtn">
+              <i class="bi bi-check2-all me-1"></i>Mark all read
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" id="nfClearBtn">
+              <i class="bi bi-trash3 me-1"></i>Clear old
+            </button>
+          </div>
+        </div>
+
+        <div class="nf-list" id="nfList">
+          <div class="nf-empty">Loading notifications...</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+  <script src="../assets/js/admin-theme.js"></script>
+  <script src="../assets/js/layout-loader.js"></script>
+  <script src="../../assets/js/services/supabase.js"></script>
+  <script src="../../assets/js/services/realtime.js"></script>
+  <script src="../../assets/js/services/notifications.js"></script>
+
+  <script>
+    const listEl = document.getElementById('nfList');
+    const summaryEl = document.getElementById('nfSummary');
+    const markAllBtn = document.getElementById('nfMarkAllBtn');
+    const clearBtn = document.getElementById('nfClearBtn');
+    const refreshBtn = document.getElementById('nfRefreshBtn');
+
+    const KIND_LABEL = {
+      booking: 'Booking',
+      payment: 'Payment',
+      cargo: 'Cargo',
+      safety: 'Safety',
+      account: 'Account',
+      system: 'System',
+    };
+
+    let rows = [];
+
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function relativeTime(iso) {
+      const then = new Date(iso).getTime();
+      if (!Number.isFinite(then)) return '';
+      const diff = Date.now() - then;
+      const min = Math.floor(diff / 60000);
+      if (min < 1) return 'Just now';
+      if (min < 60) return min + 'm ago';
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return hr + 'h ago';
+      const day = Math.floor(hr / 24);
+      if (day < 7) return day + 'd ago';
+      return new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+    }
+
+    function render() {
+      const unread = rows.filter(function (n) { return !n.isRead; }).length;
+      summaryEl.innerHTML = rows.length
+        ? '<strong>' + unread + '</strong> unread of ' + rows.length + ' notifications'
+        : 'No notifications';
+
+      if (!rows.length) {
+        listEl.innerHTML = '<div class="nf-empty">You are all caught up.</div>';
+        return;
+      }
+
+      listEl.innerHTML = rows.map(function (n) {
+        const kind = KIND_LABEL[n.category] ? n.category : 'system';
+        return '<button class="nf-row' + (n.isRead ? '' : ' is-unread') + '" type="button" data-id="' + esc(n.id) + '">'
+          + '<span class="nf-dot" aria-hidden="true"></span>'
+          + '<span class="nf-main">'
+          + '<span class="nf-title">' + esc(n.title || 'Notification') + '</span>'
+          + '<span class="nf-msg">' + esc(n.message || '') + '</span>'
+          + '</span>'
+          + '<span class="nf-meta">'
+          + '<span class="nf-kind nf-kind-' + kind + '">' + esc(KIND_LABEL[kind] || kind) + '</span>'
+          + '<span class="nf-time" title="' + esc(new Date(n.createdAt).toLocaleString('en-PH')) + '">'
+          + esc(relativeTime(n.createdAt)) + '</span>'
+          + '</span>'
+          + '</button>';
+      }).join('');
+    }
+
+    async function load() {
+      try {
+        rows = await window.bangkagoNotifications.list(100);
+        render();
+      } catch (e) {
+        summaryEl.textContent = 'Failed to load notifications';
+        listEl.innerHTML = '<div class="nf-empty">' + esc(e.message) + '</div>';
+      }
+    }
+
+    listEl.addEventListener('click', async function (event) {
+      const row = event.target.closest('.nf-row[data-id]');
+      if (!row) return;
+      const id = row.dataset.id;
+      const item = rows.find(function (n) { return n.id === id; });
+      if (!item || item.isRead) return;
+      try {
+        await window.bangkagoNotifications.markRead(id);
+        item.isRead = true;
+        render();
+      } catch (e) {
+        summaryEl.textContent = 'Failed to mark notification read: ' + e.message;
+      }
+    });
+
+    markAllBtn.addEventListener('click', async function () {
+      markAllBtn.disabled = true;
+      try {
+        await window.bangkagoNotifications.markAllRead();
+        await load();
+      } catch (e) {
+        summaryEl.textContent = 'Failed to mark all read: ' + e.message;
+      } finally {
+        markAllBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener('click', async function () {
+      clearBtn.disabled = true;
+      try {
+        await window.bangkagoNotifications.clearOld();
+        await load();
+      } catch (e) {
+        summaryEl.textContent = 'Failed to clear old notifications: ' + e.message;
+      } finally {
+        clearBtn.disabled = false;
+      }
+    });
+
+    refreshBtn.addEventListener('click', load);
+
+    async function waitForRole() {
+      if (window.bangkagoAuthReady) {
+        await window.bangkagoAuthReady;
+      }
+      for (let i = 0; i < 100; i += 1) {
+        if (window.bangkago && typeof window.bangkago.role === 'function') {
+          return window.bangkago.role();
+        }
+        await new Promise(function (resolve) { setTimeout(resolve, 100); });
+      }
+      throw new Error('Authentication did not initialize.');
+    }
+
+    (async function init() {
+      try {
+        const role = await waitForRole();
+        if (role !== 'coastguard') return;
+        window.bangkagoRealtime.subscribe('notifications', null, load);
+        load();
+      } catch (e) {
+        summaryEl.textContent = 'Failed to initialize notifications';
+        listEl.innerHTML = '<div class="nf-empty">' + esc(e.message) + '</div>';
+      }
+    })();
+  </script>
+</body>
+</html>

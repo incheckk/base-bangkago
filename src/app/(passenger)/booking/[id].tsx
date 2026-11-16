@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { slotLabel, todayIso } from '@/components/SchedulePicker';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -19,6 +20,7 @@ import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
 import { getPaymentByBooking } from '@/services/payment.service';
 import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.service';
+import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { startPortOf } from '@/services/queue.service';
 import {
   PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
@@ -27,7 +29,7 @@ import { createAlert } from '@/services/safety-alert.service';
 import { supabase } from '@/services/supabase';
 import { getLatestPositionForBangkero } from '@/services/tracking.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { BookingDoc, DownpaymentDoc, IslandPackageDoc, ParcelDoc, PaymentDoc } from '@/types/models';
+import type { BookingDoc, DownpaymentDoc, IslandPackageDoc, ParcelDoc, PassengerDetailDoc, PaymentDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -107,6 +109,9 @@ export default function BookingDetail() {
   const [parcel, setParcel] = useState<ParcelDoc | null>(null);
   // A piggyback parcel riding on this booking (someone else's cargo).
   const [attachedParcel, setAttachedParcel] = useState<ParcelDoc | null>(null);
+  const [companions, setCompanions] = useState<PassengerDetailDoc[]>([]);
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
+  const [riderReload, setRiderReload] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -164,6 +169,23 @@ export default function BookingDetail() {
       alive = false;
     };
   }, [id, booking?.serviceType]);
+
+  // Companions on this booking. The passenger owns the booking, so RLS lets
+  // them edit or remove anyone who has not boarded or sailed yet.
+  useEffect(() => {
+    if (!id || booking?.serviceType === 'cargo') return;
+    let alive = true;
+    getPassengerDetailsByBooking(id)
+      .then((rows) => {
+        if (alive) setCompanions(rows);
+      })
+      .catch(() => {
+        // the trip still renders without the passenger list
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id, booking?.serviceType, riderReload]);
 
   // Only a legacy demoted stub needs redirecting. 077 group members are
   // accepted under the same operator and own their parcel directly.
@@ -553,9 +575,43 @@ export default function BookingDetail() {
 
         <View style={styles.card}>
           <Text style={styles.route} numberOfLines={1}>{booking.fromPortName}</Text>
-          <Text style={styles.arrow}>↓</Text>
+          <Text style={styles.arrow}>→</Text>
           <Text style={styles.route} numberOfLines={1}>{booking.toPortName}</Text>
         </View>
+
+        {booking.serviceType !== 'cargo' && (
+          <View style={styles.details}>
+            <Text style={styles.rowLabel}>
+              PASSENGERS ({booking.numOfPassenger})
+            </Text>
+            <Row label="Booker" value={booking.passengerName ?? 'You'} />
+            {companions.map((c) => (
+              <Pressable
+                key={c.passengerId}
+                onPress={() => setEditing(c)}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                style={({ pressed }) => [styles.riderRow, pressed && styles.pressed]}
+              >
+                <Text style={styles.riderName} numberOfLines={1}>
+                  {c.firstName} {c.lastName}
+                  {c.boardedAt ? ' / boarded' : c.noShowAt ? ' / no-show' : ''}
+                </Text>
+                <Text style={styles.riderAction}>Edit</Text>
+              </Pressable>
+            ))}
+            {companions.length === 0 && (
+              <Text style={styles.rowLabel}>
+                No companions on this booking. Only the booker is sailing.
+              </Text>
+            )}
+            {companions.length > 0 && (
+              <Text style={styles.riderHint}>
+                Tap a companion to edit or remove. Changes lock after boarding.
+              </Text>
+            )}
+          </View>
+        )}
 
         {!!pkg && pkg.stops.length > 1 && (
           <View style={styles.itinerary}>
@@ -817,6 +873,13 @@ export default function BookingDetail() {
           />
         </View>
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => setRiderReload((t) => t + 1)}
+      />
     </ScreenContainer>
   );
 }
@@ -930,6 +993,16 @@ const styles = StyleSheet.create({
   rowLabel: { flexShrink: 1, ...typography.caption },
   rowValue: { color: colors.text, fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
   rowValueStrong: { color: colors.primary, fontSize: 15, fontWeight: '700' },
+  riderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 5,
+  },
+  riderName: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '600' },
+  riderAction: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  riderHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  pressed: { opacity: 0.65 },
 
   banner: {
     marginTop: spacing.lg,

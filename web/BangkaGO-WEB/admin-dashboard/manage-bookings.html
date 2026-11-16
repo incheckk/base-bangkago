@@ -135,8 +135,8 @@
           <div id="manifestDetails"></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" id="manifestExportPdf" disabled>
-            <i class="bi bi-file-earmark-pdf"></i> Export PDF
+          <button type="button" class="btn btn-outline-dark" id="manifestPdfBtn" disabled>
+            <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
           </button>
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
         </div>
@@ -156,6 +156,8 @@
     let bookings = [];
     let selectedBookingId = null;
     let cancelDirty = false;
+    let currentManifest = null;
+    const manifestPdfBtn = document.getElementById('manifestPdfBtn');
 
     const bookingBody = document.getElementById('bookingBody');
     const bookingSearch = document.getElementById('bookingSearch');
@@ -443,7 +445,6 @@
 
     // ---- Manifest: built from THIS booking (booker + companions from
     // passenger_details + parcels), not from a guessed trip_manifest row.
-    let manifestBooking = null;
 
     function renderManifestHtml(b, companions, parcels, items) {
       const itemsByParcel = {};
@@ -542,10 +543,9 @@
       const idx = bookingIndex(id);
       if (idx === -1) return;
       const b = bookings[idx];
-      manifestBooking = null;
       const box = document.getElementById('manifestDetails');
-      const exportBtn = document.getElementById('manifestExportPdf');
-      exportBtn.disabled = true;
+      currentManifest = null;
+      manifestPdfBtn.disabled = true;
 
       box.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2 text-muted">Loading manifest...</p></div>';
       manifestModal.show();
@@ -568,137 +568,184 @@
           items = itRes.data || [];
         }
 
+        currentManifest = { b: b, companions: companions, parcels: parcels, items: items };
+        manifestPdfBtn.disabled = false;
         box.innerHTML = renderManifestHtml(b, companions, parcels, items);
-        manifestBooking = { booking: b, companions: companions, parcels: parcels, items: items };
-        exportBtn.disabled = false;
       } catch(e) {
         console.error(e);
+        currentManifest = null;
+        manifestPdfBtn.disabled = true;
         box.innerHTML = '<div class="alert alert-danger">Error loading manifest: ' + esc(e.message) + '</div>';
       }
     }
 
-    // ---- PDF export (jsPDF + autoTable vendored, loaded on first use
-    // so the400KB never hits this page unless someone exports).
-    function loadScript(src) {
+    function loadPdfScript(src) {
       return new Promise(function(resolve, reject) {
-        const s = document.createElement('script');
-        s.src = src; s.onload = resolve; s.onerror = reject;
-        document.head.appendChild(s);
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Could not load PDF library.'));
+        document.head.appendChild(script);
       });
     }
 
-    async function ensureJsPdf() {
-      if (window.jspdf && window.jspdf.jsPDF) return;
-      await loadScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
-      await loadScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+    async function ensurePdfLibrary() {
+      if (!window.jspdf?.jsPDF) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.umd.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        await loadPdfScript('../../assets/vendor/jspdf/jspdf.plugin.autotable.min.js');
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        throw new Error('PDF library did not initialize.');
+      }
     }
 
-    document.getElementById('manifestExportPdf').addEventListener('click', async function() {
-      const data = manifestBooking;
-      if (!data) return;
-      const btn = this;
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating...';
+    async function exportManifestPdf(button) {
+      if (!currentManifest) {
+        alert('Open a manifest before exporting it.');
+        return;
+      }
+
+      const originalLabel = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating PDF...';
+
       try {
-        await ensureJsPdf();
+        await ensurePdfLibrary();
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-        const pageW = doc.internal.pageSize.getWidth();
-        const b = data.booking;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 14;
+        const generatedAt = new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
+        const b = currentManifest.b;
+        const companions = currentManifest.companions;
+        const parcels = currentManifest.parcels;
+        const items = currentManifest.items;
 
-        // Header band
         doc.setFillColor(23, 42, 66);
-        doc.rect(0, 0, pageW, 22, 'F');
+        doc.rect(0, 0, pageWidth, 27, 'F');
         doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
-        doc.text('BangkaGo — Trip Manifest', 14, 11);
-        doc.setFont('helvetica', 'normal');
+        doc.text('BangkaGo Manifest', margin, 12);
         doc.setFontSize(9);
-        doc.text('Generated ' + new Date().toLocaleString('en-PH'), 14, 17);
-        doc.text('Ref ' + b.ref, pageW - 14, 11, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.text('Generated ' + generatedAt, pageWidth - margin, 12, { align: 'right' });
+        doc.text('Booking ' + (b.ref || '-'), pageWidth - margin, 18, { align: 'right' });
         doc.setTextColor(40, 40, 40);
 
-        // Trip summary block
-        const info = [
-          ['Booking Ref', b.ref, 'Trip Date', tripDateText(b)],
-          ['Route', (b.fromPortName || '') + ' -> ' + (b.toPortName || ''), 'Status', mapStatusToDisplay(b.status)],
-          ['Booker', (b.customerName || b.passengerName || 'Unknown') + ' (' + (b.customerPhone || b.passengerPhone || 'no number') + ')', 'Passengers', String(b.passengerCount)],
-          ['Operator', b.operatorName || 'Unassigned', 'Boat', b.operatorBoatName || 'Unassigned']
-        ];
-        doc.setFontSize(9);
-        let y = 30;
-        info.forEach(function(row) {
-          doc.setFont('helvetica', 'bold'); doc.text(row[0] + ':', 14, y);
-          doc.setFont('helvetica', 'normal'); doc.text(String(row[1]), 40, y);
-          doc.setFont('helvetica', 'bold'); doc.text(row[2] + ':', 110, y);
-          doc.setFont('helvetica', 'normal'); doc.text(String(row[3]), 135, y);
-          y += 6;
+        doc.autoTable({
+          startY: 34,
+          head: [['Manifest summary', 'Details']],
+          body: [
+            ['Booking reference', b.ref || '-'],
+            ['Status', mapStatusToDisplay(b.status)],
+            ['Booker', (b.customerName || b.passengerName || 'Unknown') + (b.customerPhone || b.passengerPhone ? ' - ' + (b.customerPhone || b.passengerPhone) : '')],
+            ['Route', (b.fromPortName || '-') + ' to ' + (b.toPortName || '-')],
+            ['Trip date', tripDateText(b)],
+            ['Operator / boat', (b.operatorName || 'Unassigned') + ' / ' + (b.operatorBoatName || 'Unassigned')],
+            ['Passengers', (b.passengerCount || 0) + ' booked, ' + companions.length + ' companion(s) listed'],
+            ['Fare', 'PHP ' + Number(b.totalPrice || 0).toFixed(2)],
+          ],
+          styles: { fontSize: 9, cellPadding: 2.5, overflow: 'linebreak' },
+          headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [242, 246, 250] },
+          margin: { left: margin, right: margin },
+          columnStyles: { 0: { cellWidth: 48, fontStyle: 'bold' } }
         });
 
-        // Passengers table
-        const paxBody = [
-          [1, b.customerName || b.passengerName || 'Unknown', b.customerPhone || b.passengerPhone || '—', b.customerAge != null ? String(b.customerAge) : 'Not on file', 'Booker', b.customerAddress || 'Not on file', b.onboardedAt ? 'Yes' : 'No']
-        ].concat(data.companions.map(function(p, i) {
-          return [
-            i + 2,
-            ((p.first_name || '') + ' ' + (p.last_name || '')).trim(),
-            p.contact_number || '—',
+        const passengerRows = [
+          [
+            '1',
+            (b.customerName || b.passengerName || 'Unknown') + ' (Booker)',
+            b.customerPhone || b.passengerPhone || '-',
+            b.customerAge != null ? String(b.customerAge) : 'Not on file',
+            'Booker',
+            b.customerAddress || 'Not on file',
+            b.onboardedAt ? 'Yes' : 'No'
+          ],
+          ...companions.map((p, i) => [
+            String(i + 2),
+            ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Unknown',
+            p.contact_number || '-',
             p.age != null ? String(p.age) : 'Not on file',
             label(p.passenger_type || 'regular'),
             p.address || 'Not on file',
             p.boarded_at ? 'Yes' : 'No'
-          ];
-        }));
+          ])
+        ];
+
         doc.autoTable({
-          startY: y + 3,
+          startY: doc.lastAutoTable.finalY + 8,
           head: [['#', 'Name', 'Contact', 'Age', 'Type', 'Address', 'Boarded']],
-          body: paxBody,
-          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+          body: passengerRows,
+          styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
           headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
           alternateRowStyles: { fillColor: [242, 246, 250] },
-          margin: { left: 14, right: 14 }
+          margin: { left: margin, right: margin },
+          columnStyles: {
+            0: { cellWidth: 8 },
+            3: { cellWidth: 16 },
+            4: { cellWidth: 20 },
+            6: { cellWidth: 18 }
+          }
         });
 
-        // Parcels table
-        if (data.parcels.length) {
+        if (parcels.length) {
           const itemsByParcel = {};
-          data.items.forEach(function(it) { (itemsByParcel[it.parcel_id] = itemsByParcel[it.parcel_id] || []).push(it); });
-          const parcelBody = data.parcels.map(function(p, i) {
-            const list = itemsByParcel[p.id] || [];
-            const desc = list.map(function(it) { return it.item_name + (it.quantity > 1 ? ' x' + it.quantity : ''); }).join(', ') || '—';
-            const kg = list.reduce(function(s, it) { return s + Number(it.kilogram || 0); }, 0);
-            return [i + 1, p.receiver_name || '—', p.receiver_contact || '—', label(p.delivery_type || 'accompanied'), desc, kg ? kg.toFixed(1) : '—', p.status || 'pending', 'PHP ' + Number(p.total_price || 0).toFixed(2)];
+          items.forEach(it => {
+            (itemsByParcel[it.parcel_id] = itemsByParcel[it.parcel_id] || []).push(it);
           });
+          const parcelRows = parcels.map((p, i) => {
+            const list = itemsByParcel[p.id] || [];
+            const description = list
+              .map(it => (it.item_name || 'Item') + (Number(it.quantity) > 1 ? ' x' + it.quantity : ''))
+              .join(', ') || '-';
+            const kg = list.reduce((sum, it) => sum + Number(it.kilogram || 0), 0);
+            return [
+              String(i + 1),
+              p.receiver_name || '-',
+              p.receiver_contact || '-',
+              label(p.delivery_type || 'accompanied'),
+              description,
+              kg ? kg.toFixed(1) : '-',
+              p.status || 'pending',
+              'PHP ' + Number(p.total_price || 0).toFixed(2)
+            ];
+          });
+
           doc.autoTable({
             startY: doc.lastAutoTable.finalY + 8,
             head: [['#', 'Receiver', 'Contact', 'Mode', 'Items', 'Weight (kg)', 'Status', 'Price']],
-            body: parcelBody,
-            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
-            headStyles: { fillColor: [0, 180, 216], textColor: 255, fontStyle: 'bold' },
+            body: parcelRows,
+            styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
+            headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
             alternateRowStyles: { fillColor: [242, 246, 250] },
-            margin: { left: 14, right: 14 }
+            margin: { left: margin, right: margin },
+            columnStyles: {
+              0: { cellWidth: 8 },
+              5: { cellWidth: 18 },
+              7: { cellWidth: 20 }
+            }
           });
         }
 
-        // Footer with page numbers on every page
-        const pages = doc.internal.getNumberOfPages();
-        for (let pg = 1; pg <= pages; pg++) {
-          doc.setPage(pg);
-          doc.setFontSize(8);
-          doc.setTextColor(120, 120, 120);
-          doc.text('BangkaGo manifest — ' + b.ref + '   |   Page ' + pg + ' of ' + pages, 14, doc.internal.pageSize.getHeight() - 8);
-        }
-
-        doc.save('BangkaGo-manifest-' + b.ref + '.pdf');
-      } catch (e) {
-        console.error(e);
-        alert('PDF export failed: ' + e.message);
+        const stamp = new Date().toLocaleString('en-CA', {
+          timeZone: 'Asia/Manila', hour12: false
+        }).replace(/[^\d]/g, '').slice(0, 12);
+        doc.save('BangkaGo-manifest-' + (b.ref || 'booking') + '-' + stamp + '.pdf');
+      } catch (error) {
+        console.error(error);
+        alert('Could not generate manifest PDF: ' + error.message);
       } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
+        button.disabled = !currentManifest;
+        button.innerHTML = originalLabel;
       }
+    }
+
+    manifestPdfBtn.addEventListener('click', function() {
+      void exportManifestPdf(manifestPdfBtn);
     });
 
     bookingSearch.addEventListener('input', runFilter);

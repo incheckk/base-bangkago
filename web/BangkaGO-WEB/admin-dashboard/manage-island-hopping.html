@@ -14,6 +14,7 @@
     .itinerary-stop .stop-name{flex:1}
     .nav-pills .nav-link{color:var(--gray-700)}
     .nav-pills .nav-link.active{background:var(--brand-primary,#0f766e)}
+    .package-select option{white-space:normal}
   </style>
 </head>
 <body data-page="manage-island-hopping">
@@ -48,8 +49,19 @@
             </div>
             <div class="table-responsive">
               <table class="table table-theme align-middle mb-0">
-                <thead><tr><th>Package</th><th>Destinations</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Package</th><th>Destinations</th><th>Bangkero / Bangka</th><th>Capacity</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="packageBody"></tbody>
+              </table>
+            </div>
+
+            <div class="panel-head mt-4">
+              <h6 class="mb-0">Deleted Packages</h6>
+              <span class="muted-note">Deleted packages are retained and can be restored</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-theme align-middle mb-0">
+                <thead><tr><th>Package</th><th>Assigned Bangkero / Bangka</th><th>Deleted</th><th>Action</th></tr></thead>
+                <tbody id="deletedPackageBody"></tbody>
               </table>
             </div>
           </div>
@@ -108,8 +120,15 @@
               <label class="form-label" for="packageDuration">Duration (hours)</label>
               <input id="packageDuration" class="form-control" type="number" min="0.25" max="24" step="0.25" required>
             </div>
-            <div class="col-12">
-              <div class="form-text">New packages are assigned an eligible active Bangka automatically; its capacity sets the passenger limit. Edits keep existing package assignments and limits.</div>
+            <div class="col-md-8">
+              <label class="form-label" for="packageBangka">Assign Bangkero / Bangka</label>
+              <select id="packageBangka" class="form-select package-select" required></select>
+              <div class="form-text">Only active Bangkas owned by verified, non-deleted Bangkeros are available.</div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" for="packageCapacity">Effective passenger limit</label>
+              <input id="packageCapacity" class="form-control" type="number" readonly aria-describedby="packageCapacityHelp">
+              <div id="packageCapacityHelp" class="form-text">Matches the app: package limit capped by the assigned Bangka capacity.</div>
             </div>
             <div class="col-12">
               <label class="form-label" for="stopSelect">Destinations, in sailing order</label>
@@ -188,6 +207,8 @@
     (function() {
       'use strict';
       var packages = [];
+      var deletedPackages = [];
+      var packageCapacityLimit = null;
       var ports = [];
       var bangkas = [];
       var bookings = [];
@@ -198,11 +219,13 @@
       var bookingDetailsModal = new bootstrap.Modal(document.getElementById('bookingDetailsModal'));
       var rescheduleModal = new bootstrap.Modal(document.getElementById('rescheduleModal'));
       var packageBody = document.getElementById('packageBody');
+      var deletedPackageBody = document.getElementById('deletedPackageBody');
       var bookingBody = document.getElementById('bookingBody');
       var loadingState = document.getElementById('loadingState');
       var moduleContent = document.getElementById('moduleContent');
       var errorState = document.getElementById('errorState');
       var packageFormError = document.getElementById('packageFormError');
+      var loadSequence = 0;
 
       function esc(value) {
         return String(value == null ? '' : value).replace(/[&<>"']/g, function(ch) {
@@ -219,27 +242,72 @@
         var port = ports.find(function(p) { return p.id === id; });
         return port ? port.port_name : id;
       }
-      function getPackage(id) { return packages.find(function(p) { return p.packageId === id; }); }
+      function getPackage(id) {
+        return packages.find(function(p) { return p.packageId === id; }) ||
+          deletedPackages.find(function(p) { return p.packageId === id; });
+      }
       function getBooking(id) { return bookings.find(function(b) { return b.bookingId === id; }); }
       function showError(error) {
         errorState.textContent = error && error.message ? error.message : String(error);
         errorState.classList.remove('d-none');
       }
 
+      function renderBangkaOptions() {
+        var select = document.getElementById('packageBangka');
+        var selected = select.value;
+        select.innerHTML = '<option value="">Select a verified Bangkero and active Bangka...</option>' +
+          bangkas.map(function(b) {
+            var owner = Array.isArray(b.bangkeros) ? b.bangkeros[0] : b.bangkeros;
+            var ownerName = owner ? owner.display_name : 'Bangkero';
+            return '<option value="' + esc(b.id) + '">' + esc(ownerName) + ' · ' + esc(b.bangka_name) +
+              ' · ' + esc(b.capacity) + ' passengers</option>';
+          }).join('');
+        if (bangkas.some(function(b) { return b.id === selected; })) select.value = selected;
+        updatePackageCapacity();
+      }
+
+      function updatePackageCapacity() {
+        var selectedId = document.getElementById('packageBangka').value;
+        var assigned = bangkas.find(function(b) { return b.id === selectedId; });
+        var capacity = assigned
+          ? Math.min(packageCapacityLimit == null ? Number(assigned.capacity) : packageCapacityLimit, Number(assigned.capacity))
+          : '';
+        document.getElementById('packageCapacity').value = capacity;
+      }
+
       function renderPackages() {
         if (!packages.length) {
-          packageBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">No packages in the database yet.</td></tr>';
+          packageBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">No packages in the database yet.</td></tr>';
           return;
         }
         packageBody.innerHTML = packages.map(function(p) {
+          var available = p.isActive && p.assignmentEligible;
+          var statusText = available ? 'Available' : p.isActive ? 'Needs eligible Bangka' : 'Inactive';
+          var statusClass = available ? 'text-bg-success' : p.isActive ? 'text-bg-warning' : 'text-bg-secondary';
           return '<tr><td><strong>' + esc(p.packageName) + '</strong><div class="small text-muted">' +
             esc(p.description || '') + '</div></td><td>' + esc(p.stops.map(portName).join(' → ') || 'No itinerary') +
-            '</td><td>' + peso(p.price) + '</td><td><span class="badge ' + (p.isActive ? 'text-bg-success' : 'text-bg-secondary') + '">' +
-            (p.isActive ? 'Available' : 'Inactive') + '</span></td><td><div class="d-flex gap-1 flex-wrap">' +
+            '</td><td>' + esc(p.bangkeroName || 'Unassigned') + '<div class="small text-muted">' + esc(p.bangkaName || 'No Bangka') +
+            '</div></td><td>' + (p.bangkaCapacity ? esc(Math.min(p.maxCapacity, p.bangkaCapacity)) + ' passengers' : '—') +
+            '</td><td>' + peso(p.price) + '</td><td><span class="badge ' + statusClass + '">' +
+            esc(statusText) + '</span></td><td><div class="d-flex gap-1 flex-wrap">' +
             '<button class="btn btn-sm btn-outline-primary" onclick="viewPackage(\'' + esc(p.packageId) + '\')">View</button>' +
             '<button class="btn btn-sm btn-outline-secondary" onclick="editPackage(\'' + esc(p.packageId) + '\')">Edit</button>' +
             '<button class="btn btn-sm btn-outline-danger" onclick="deletePackage(\'' + esc(p.packageId) + '\')">Delete</button>' +
             '</div></td></tr>';
+        }).join('');
+      }
+
+      function renderDeletedPackages() {
+        if (!deletedPackages.length) {
+          deletedPackageBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No deleted packages.</td></tr>';
+          return;
+        }
+        deletedPackageBody.innerHTML = deletedPackages.map(function(p) {
+          return '<tr><td><strong>' + esc(p.packageName) + '</strong></td><td>' +
+            esc(p.bangkeroName || 'Unassigned') + '<div class="small text-muted">' + esc(p.bangkaName || 'No Bangka') +
+            '</div></td><td>' + esc(p.deletedAt ? new Date(p.deletedAt).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) : '—') +
+            '</td><td><button class="btn btn-sm btn-outline-success" onclick="restorePackage(\'' + esc(p.packageId) + '\')">' +
+            '<i class="bi bi-arrow-counterclockwise"></i> Restore</button></td></tr>';
         }).join('');
       }
 
@@ -301,27 +369,32 @@
       }
 
       async function load() {
+        var sequence = ++loadSequence;
         loadingState.classList.remove('d-none');
         moduleContent.classList.add('d-none');
         errorState.classList.add('d-none');
         try {
           var api = window.bangkagoIslandPackages;
           var data = await Promise.all([
-            api.listPackages(), api.listPorts(), api.listBangkas(), api.listBookings()
+            api.listPackages(), api.listDeletedPackages(), api.listPorts(), api.listBangkas(), api.listBookings()
           ]);
-          packages = data[0]; ports = data[1]; bangkas = data[2]; bookings = data[3];
-          renderOptions(); renderPackages(); renderBookings();
+          if (sequence !== loadSequence) return;
+          packages = data[0]; deletedPackages = data[1]; ports = data[2]; bangkas = data[3]; bookings = data[4];
+          renderOptions(); renderBangkaOptions(); renderPackages(); renderDeletedPackages(); renderBookings();
           moduleContent.classList.remove('d-none');
         } catch (e) {
-          showError(e);
+          if (sequence === loadSequence) showError(e);
         } finally {
-          loadingState.classList.add('d-none');
+          if (sequence === loadSequence) loadingState.classList.add('d-none');
         }
       }
 
       function resetForm() {
         document.getElementById('packageForm').reset();
         document.getElementById('packageActive').checked = true;
+        document.getElementById('packageBangka').value = '';
+        document.getElementById('packageCapacity').value = '';
+        packageCapacityLimit = null;
         document.getElementById('packageFormError').classList.add('d-none');
         document.getElementById('packageModalTitle').textContent = 'Add Island-Hopping Package';
         document.getElementById('savePackageBtn').textContent = 'Save Package';
@@ -337,6 +410,8 @@
           '<div class="info-box mb-2"><strong>Name:</strong> ' + esc(p.packageName) + '</div>' +
           '<div class="info-box mb-2"><strong>Description:</strong> ' + esc(p.description || '—') + '</div>' +
           '<div class="info-box mb-2"><strong>Destinations:</strong> ' + esc(p.stops.map(portName).join(' → ') || 'None') + '</div>' +
+          '<div class="info-box mb-2"><strong>Bangkero / Bangka:</strong> ' + esc(p.bangkeroName || 'Unassigned') + ' · ' + esc(p.bangkaName || 'No Bangka') + '</div>' +
+          '<div class="info-box mb-2"><strong>Effective passenger limit:</strong> ' + esc(p.bangkaCapacity ? Math.min(p.maxCapacity, p.bangkaCapacity) : p.maxCapacity) + ' passengers</div>' +
           '<div class="info-box mb-2"><strong>Price:</strong> ' + peso(p.price) + ' per passenger</div>' +
           '<div class="info-box mb-0"><strong>Duration:</strong> ' + p.durationHours + ' hours</div>';
         packageDetailsModal.show();
@@ -353,6 +428,9 @@
         document.getElementById('packagePrice').value = p.price;
         document.getElementById('packageDuration').value = p.durationHours;
         document.getElementById('packageActive').checked = p.isActive;
+        packageCapacityLimit = p.maxCapacity;
+        document.getElementById('packageBangka').value = p.bangkaId || '';
+        updatePackageCapacity();
         itinerary = p.stops.slice();
         renderItinerary();
         packageModal.show();
@@ -368,10 +446,23 @@
 
       window.deletePackage = async function(id) {
         var p = getPackage(id); if (!p) return;
-        if (!confirm('Delete "' + p.packageName + '"? Packages with booking history cannot be deleted.')) return;
+        if (!confirm('Move "' + p.packageName + '" to Deleted Packages? It will be hidden from new bookings; existing bookings and history will be retained.')) return;
         try {
           await window.bangkagoIslandPackages.deletePackage(id);
           await load();
+        } catch (e) { showError(e); }
+      };
+
+      window.restorePackage = async function(id) {
+        var p = deletedPackages.find(function(row) { return row.packageId === id; });
+        if (!p || !confirm('Restore "' + p.packageName + '"? If its Bangka is no longer eligible, the package will remain unavailable to passengers until you assign an eligible Bangka.')) return;
+        try {
+          await window.bangkagoIslandPackages.restorePackage(id);
+          await load();
+          var restored = getPackage(id);
+          if (restored && restored.isActive && !restored.assignmentEligible) {
+            alert('Package restored, but it is unavailable to passengers until you edit it and assign an active Bangka with a verified Bangkero. Existing bookings are unchanged.');
+          }
         } catch (e) { showError(e); }
       };
 
@@ -442,7 +533,30 @@
       });
       document.getElementById('addPackageBtn').addEventListener('click', function() {
         resetForm();
+        renderBangkaOptions();
         packageModal.show();
+      });
+      document.getElementById('packageBangka').addEventListener('change', updatePackageCapacity);
+      document.getElementById('rescheduleForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var button = document.getElementById('saveRescheduleBtn');
+        var error = document.getElementById('rescheduleError');
+        error.classList.add('d-none');
+        button.disabled = true;
+        try {
+          await window.bangkagoIslandPackages.rescheduleBooking(
+            this.dataset.bookingId,
+            document.getElementById('rescheduleDate').value,
+            document.getElementById('rescheduleTime').value
+          );
+          rescheduleModal.hide();
+          await load();
+        } catch (e) {
+          error.textContent = e.message || 'Could not reschedule this booking.';
+          error.classList.remove('d-none');
+        } finally {
+          button.disabled = false;
+        }
       });
       document.getElementById('packageForm').addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -450,46 +564,15 @@
         packageFormError.classList.add('d-none');
         button.disabled = true;
         try {
-          var existingPackage = editingId ? getPackage(editingId) : null;
-          var assignedBangka = existingPackage
-            ? bangkas.find(function(b) { return b.id === existingPackage.bangkaId; })
-            : bangkas.find(function(b) {
-              var capacity = Number(b.capacity);
-              return Number.isInteger(capacity) && capacity >= 1 && capacity <= 200;
-            });
-          if (!existingPackage && !assignedBangka) {
-            throw new Error('No eligible active Bangka with a supported capacity is available for a new package.');
-          }
           await window.bangkagoIslandPackages.savePackage(editingId, {
             packageName: document.getElementById('packageName').value,
             description: document.getElementById('packageDescription').value,
             price: document.getElementById('packagePrice').value,
-            maxCapacity: existingPackage ? existingPackage.maxCapacity : Number(assignedBangka.capacity),
+            maxCapacity: document.getElementById('packageCapacity').value,
             durationHours: document.getElementById('packageDuration').value,
-            bangkaId: existingPackage ? existingPackage.bangkaId : assignedBangka.id,
+            bangkaId: document.getElementById('packageBangka').value,
             stops: itinerary,
             isActive: document.getElementById('packageActive').checked
-          });
-          document.getElementById('rescheduleForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            var button = document.getElementById('saveRescheduleBtn');
-            var error = document.getElementById('rescheduleError');
-            error.classList.add('d-none');
-            button.disabled = true;
-            try {
-              await window.bangkagoIslandPackages.rescheduleBooking(
-                this.dataset.bookingId,
-                document.getElementById('rescheduleDate').value,
-                document.getElementById('rescheduleTime').value
-              );
-              rescheduleModal.hide();
-              await load();
-            } catch (e) {
-              error.textContent = e.message || 'Could not reschedule this booking.';
-              error.classList.remove('d-none');
-            } finally {
-              button.disabled = false;
-            }
           });
           packageModal.hide();
           await load();
@@ -505,6 +588,7 @@
       window.bangkagoRealtime.subscribe('island_packages', null, load);
       window.bangkagoRealtime.subscribe('bookings', null, load);
       window.bangkagoRealtime.subscribe('bangkas', null, load);
+      window.bangkagoRealtime.subscribe('bangkeros', null, load);
       window.bangkagoRealtime.subscribe('ports', null, load);
       window.addEventListener('bangkago-auth-ready', load);
       if (window.bangkagoAuthReady) {

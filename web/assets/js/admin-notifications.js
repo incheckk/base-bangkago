@@ -46,18 +46,19 @@
     const markAll = document.getElementById('notificationsMarkAll');
     const clearOld = document.getElementById('notificationsClearOld');
     let rows = [];
+    let unreadTotal = 0;
     let loaded = false;
     let busy = false;
     let reloadPending = false;
 
     function updateToggleLabel() {
-      const unread = rows.filter(function (row) { return !row.isRead; }).length;
+      const unread = unreadTotal;
       const label = toggle.classList.contains('has-new') ? 'New notification' : 'Notifications';
       toggle.setAttribute('aria-label', label + (unread ? ', ' + unread + ' unread' : ''));
     }
 
     function render() {
-      const unread = rows.filter(function (row) { return !row.isRead; }).length;
+      const unread = unreadTotal;
       summary.textContent = unread ? unread + ' unread' : 'All caught up';
       badge.hidden = unread === 0;
       badge.textContent = unread > 99 ? '99+' : String(unread);
@@ -102,7 +103,12 @@
       refresh.disabled = true;
       markAll.disabled = true;
       try {
-        rows = await window.bangkagoNotifications.list(100);
+        const result = await Promise.all([
+          window.bangkagoNotifications.list(100),
+          window.bangkagoNotifications.unreadCount()
+        ]);
+        rows = result[0];
+        unreadTotal = result[1];
         loaded = true;
         render();
       } catch (error) {
@@ -110,7 +116,7 @@
       } finally {
         busy = false;
         refresh.disabled = false;
-        markAll.disabled = !rows.some(function (row) { return !row.isRead; });
+        markAll.disabled = unreadTotal === 0;
         if (reloadPending) {
           reloadPending = false;
           load();
@@ -156,6 +162,7 @@
       try {
         await window.bangkagoNotifications.markRead(row.id);
         row.isRead = true;
+        unreadTotal = Math.max(0, unreadTotal - 1);
         render();
       } catch (error) {
         rowEl.disabled = false;
@@ -165,19 +172,20 @@
     });
 
     markAll.addEventListener('click', async function () {
-      if (busy || !rows.some(function (row) { return !row.isRead; })) return;
+      if (busy || unreadTotal === 0) return;
       busy = true;
       markAll.disabled = true;
       try {
         await window.bangkagoNotifications.markAllRead();
         rows.forEach(function (row) { row.isRead = true; });
+        unreadTotal = 0;
         render();
       } catch (error) {
         console.error('Failed to mark all notifications read:', error);
         summary.textContent = 'Could not mark all read';
       } finally {
         busy = false;
-        markAll.disabled = !rows.some(function (row) { return !row.isRead; });
+        markAll.disabled = unreadTotal === 0;
         if (reloadPending) {
           reloadPending = false;
           load();
@@ -210,4 +218,5 @@
   }
 
   window.AdminNotifications = { init: init };
+  window.BangkagoTopbarNotifications = window.AdminNotifications;
 })();

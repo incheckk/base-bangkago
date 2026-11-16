@@ -108,6 +108,7 @@
     };
 
     let rows = [];
+    let unreadTotal = 0;
 
     function esc(value) {
       return String(value == null ? '' : value)
@@ -133,9 +134,8 @@
     }
 
     function render() {
-      const unread = rows.filter(function (n) { return !n.isRead; }).length;
       summaryEl.innerHTML = rows.length
-        ? '<strong>' + unread + '</strong> unread of ' + rows.length + ' notifications'
+        ? '<strong>' + unreadTotal + '</strong> unread of ' + rows.length + ' recent notifications'
         : 'No notifications';
 
       if (!rows.length) {
@@ -162,7 +162,12 @@
 
     async function load() {
       try {
-        rows = await window.bangkagoNotifications.list(100);
+        const result = await Promise.all([
+          window.bangkagoNotifications.list(100),
+          window.bangkagoNotifications.unreadCount()
+        ]);
+        rows = result[0];
+        unreadTotal = result[1];
         render();
       } catch (e) {
         summaryEl.textContent = 'Failed to load notifications';
@@ -179,6 +184,7 @@
       try {
         await window.bangkagoNotifications.markRead(id);
         item.isRead = true;
+        unreadTotal = Math.max(0, unreadTotal - 1);
         render();
       } catch (e) {
         summaryEl.textContent = 'Failed to mark notification read: ' + e.message;
@@ -189,6 +195,9 @@
       markAllBtn.disabled = true;
       try {
         await window.bangkagoNotifications.markAllRead();
+        rows.forEach(function (item) { item.isRead = true; });
+        unreadTotal = 0;
+        render();
         await load();
       } catch (e) {
         summaryEl.textContent = 'Failed to mark all read: ' + e.message;

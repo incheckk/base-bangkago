@@ -36,9 +36,9 @@
                 </div>
 
                 <div class="col-md-6">
-                  <label class="form-label">Port (optional)</label>
-                  <select class="form-select" id="portSelect">
-                    <option value="">None</option>
+                  <label class="form-label" for="portSelect">Port / Destination</label>
+                  <select class="form-select" id="portSelect" required>
+                    <option value="">Choose a port or destination</option>
                   </select>
                 </div>
 
@@ -50,11 +50,6 @@
                     <option value="high">High</option>
                     <option value="critical">Critical</option>
                   </select>
-                </div>
-
-                <div class="col-md-6">
-                  <label class="form-label">Location / Zone</label>
-                  <input type="text" class="form-control" id="zone" placeholder="e.g. East Marker 4" required>
                 </div>
 
                 <div class="col-12">
@@ -164,29 +159,26 @@
     });
 
     async function loadDropdowns() {
-      try {
-        const [bangkas, ports] = await Promise.all([
-          window.bangkagoBangkas.listAll({}),
-          window.bangkagoPortsRoutes.listPorts(true)
-        ]);
+      const [bangkas, ports] = await Promise.all([
+        window.bangkagoBangkas.listAll({}),
+        window.bangkagoPortsRoutes.listPorts(true)
+      ]);
 
-        // Vessel dropdown
-        bangkas.forEach(b => {
-          const opt = document.createElement('option');
-          opt.value = b.bangkaId;
-          opt.textContent = b.bangkaName + (b.bangkeroName ? ' (' + b.bangkeroName + ')' : '');
-          vesselSelect.appendChild(opt);
-        });
+      bangkas.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.bangkaId;
+        opt.textContent = b.bangkaName + (b.bangkeroName ? ' (' + b.bangkeroName + ')' : '');
+        vesselSelect.appendChild(opt);
+      });
 
-        // Port dropdown
-        ports.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.portId;
-          opt.textContent = p.portName;
-          portSelect.appendChild(opt);
-        });
-      } catch (e) {
-        console.error('Failed to load dropdowns:', e);
+      ports.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.portId;
+        opt.textContent = p.portName;
+        portSelect.appendChild(opt);
+      });
+      if (!ports.length) {
+        throw new Error('No active ports are available. Activate a port before filing a report.');
       }
     }
 
@@ -196,8 +188,14 @@
       const vesselId = vesselSelect.value || null;
       const portId = portSelect.value || null;
       const severity = document.getElementById("severity").value;
-      const zone = document.getElementById("zone").value.trim();
+      const location = portSelect.selectedOptions[0]?.textContent.trim() || '';
       const details = document.getElementById("details").value.trim();
+
+      if (!portId) {
+        submitError.textContent = 'Choose a port or destination for this report.';
+        submitError.classList.remove("d-none");
+        return;
+      }
 
       if (!details) {
         submitError.textContent = 'Please enter report details.';
@@ -209,7 +207,7 @@
         '[Compliance Report]',
         'Filed By: Coast Guard (coastguard)',
         'Category: Compliance',
-        `Zone: ${zone}`,
+        `Zone: ${location}`,
         '',
         details
       ].join('\n');
@@ -267,7 +265,7 @@
 
     window.bangkagoAuthReady.then(function(role) {
       if (role !== 'coastguard') return;
-      loadDropdowns();
+      return loadDropdowns();
     }).catch(function(e) {
       console.error('Failed to initialize compliance report:', e);
       submitError.textContent = 'Failed to initialize dropdowns: ' + e.message;

@@ -37,12 +37,24 @@
     return (res.data || []).map(mapRow);
   }
 
+  async function unreadCount() {
+    var res = await client()
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_read', false);
+    if (res.error) throw res.error;
+    return res.count || 0;
+  }
+
   async function markRead(id) {
     var res = await client()
       .from('notifications')
       .update({ is_read: true })
-      .eq('id', id);
+      .eq('id', id)
+      .select('id')
+      .maybeSingle();
     if (res.error) throw res.error;
+    if (!res.data) throw new Error('Notification is no longer available or you do not have permission to update it.');
   }
 
   async function markAllRead() {
@@ -62,5 +74,11 @@
     if (res.error) throw res.error;
   }
 
-  window.bangkagoNotifications = { list: list, markRead: markRead, markAllRead: markAllRead, clearOld: clearOld };
+  window.bangkagoNotifications = {
+    list: list,
+    unreadCount: unreadCount,
+    markRead: markRead,
+    markAllRead: markAllRead,
+    clearOld: clearOld
+  };
 })();

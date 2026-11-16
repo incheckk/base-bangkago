@@ -381,48 +381,42 @@ export default function BookingDetail() {
     if (!booking || acted || busy) return;
     setBusy(true);
     setActionError(null);
-    // Solo — nobody else is aboard, so cancel exactly as before. Group —
-    // mark ONLY this passenger absent (022): the rest of the party sails.
-    const isGroup = booking.numOfPassenger > 1;
-    let done: boolean;
-    if (isGroup) {
-      try {
-        await disputeBoarding(booking.bookingId);
-        done = true;
-      } catch (e) {
-        setActionError(friendlyError(e));
-        done = false;
-      }
-    } else {
-      done = await finishCancelled(
-        'Passenger disputes being aboard — reports the boat departed without them.'
-      );
+    // The reporter is marked NOT aboard (022) whether solo or group: the
+    // trip belongs to the boat, which already sailed, so it continues.
+    // No ban, no cancel — complete_trip accepts disputed_at.
+    const wasOnboarded = !!booking.onboardedAt;
+    try {
+      await disputeBoarding(booking.bookingId);
+    } catch (e) {
+      setActionError(friendlyError(e));
+      setBusy(false);
+      return;
     }
-    if (done) {
-      if (booking.operatorId) {
-        // False-onboard: a harsher deduction — this one is an accusation.
+    setActed(true);
+    if (booking.operatorId) {
+      // False-onboard only when the crew had claimed this person was aboard.
+      // A passenger who simply missed the boat gets no operator penalty.
+      if (wasOnboarded) {
         applyRatingPenalty(booking.operatorId, PENALTY_FALSE_ONBOARD).catch(() => {});
-        createNotification(
-          booking.operatorId,
-          'Passenger disputes departure',
-          isGroup
-            ? `A passenger reports they were NOT on board for ${booking.ref}. They are marked not aboard — the rest of the booking continues and the trip will complete normally.`
-            : `A passenger reports they were NOT on board for ${booking.ref}. The trip was cancelled and your rating has been penalised.`
-        ).catch(() => {});
-        // Boat's last known position, so whoever investigates has a starting point.
-        getLatestPositionForBangkero(booking.operatorId)
-          .then((found) => createAlert({
-            message:
-              `Passenger disputes departure for ${booking.ref} (${booking.fromPortName} → ${booking.toPortName}). ` +
-              (isGroup ? 'Booking continues — passenger marked not aboard. ' : 'Trip cancelled. ') +
-              (found
-                ? `Boat last seen at ${found.position.latitude.toFixed(5)}, ${found.position.longitude.toFixed(5)} at ${new Date(found.position.recordedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}.`
-                : 'No GPS fix on record.'),
-            severity: 'critical',
-            bangkaId: found?.bangkaId,
-          }))
-          .catch(() => {});
       }
+      createNotification(
+        booking.operatorId,
+        'Passenger disputes departure',
+        `A passenger reports they were NOT on board for ${booking.ref}. They are marked not aboard — the trip continues and will complete normally.`
+      ).catch(() => {});
+      // Boat's last known position, so whoever investigates has a starting point.
+      getLatestPositionForBangkero(booking.operatorId)
+        .then((found) => createAlert({
+          message:
+            `Passenger disputes departure for ${booking.ref} (${booking.fromPortName} → ${booking.toPortName}). ` +
+            'Passenger marked not aboard — trip continues. ' +
+            (found
+              ? `Boat last seen at ${found.position.latitude.toFixed(5)}, ${found.position.longitude.toFixed(5)} at ${new Date(found.position.recordedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}.`
+              : 'No GPS fix on record.'),
+          severity: 'critical',
+          bangkaId: found?.bangkaId,
+        }))
+        .catch(() => {});
     }
     setBusy(false);
   }
@@ -444,9 +438,7 @@ export default function BookingDetail() {
   function confirmDispute() {
     Alert.alert(
       "I'm NOT on board",
-      booking && booking.numOfPassenger > 1
-        ? 'Use this only if the boat has already left without you. You are marked as not aboard — the rest of your group\u2019s trip continues and the boat crew is investigated.'
-        : 'Use this only if the boat has already left without you. Your trip is cancelled and the boat crew is investigated.',
+      'Use this only if the boat has already left without you. You are marked as not aboard — the trip continues for the boat, and the bangkero and Coast Guard are notified. You are not banned from booking again.',
       [
         { text: 'Go back', style: 'cancel' },
         { text: 'Report it', style: 'destructive', onPress: () => void dispute() },
@@ -761,7 +753,7 @@ export default function BookingDetail() {
             <>
               <Text style={styles.waiting}>
                 {booking.disputedAt
-                  ? 'You reported that you were NOT on board. The trip continues for the rest of your group — the bangkero and Coastguard have been notified.'
+                  ? 'You reported that you were NOT on board. The trip continues for the boat — the bangkero and Coast Guard have been notified.'
                   : booking.onboardedAt
                     ? 'You are confirmed on board. Safe travels!'
                     : booking.serviceType === 'cargo'
@@ -803,7 +795,7 @@ export default function BookingDetail() {
               {/* Escape valve: opens 10 minutes after accept, closes for good
                   the moment the bangkero confirms everyone is aboard — or the
                   passenger files the not-aboard dispute (the boat has left). */}
-              {!booking.onboardedAt && !booking.disputedAt &&
+              {!booking.onboardedAt && !booking.disputedAt && !booking.departTime &&
                 (escapeReady ? (
                   <PrimaryButton
                     label="I can't reach my boat"
@@ -819,8 +811,12 @@ export default function BookingDetail() {
                   </Text>
                 ))}
 
-              {/* Once aboard, the only complaint left is "you left without me". Passenger-only — no boarding for cargo. */}
-              {booking.serviceType !== 'cargo' && booking.onboardedAt && (
+              {/* After departure (or a confirmed boarding) the passenger can
+                  report the boat left without them. Available even when the
+                  crew never scanned them. */}
+              {booking.serviceType !== 'cargo' &&
+                (booking.onboardedAt || booking.departTime) &&
+                !booking.disputedAt && (
                 <PrimaryButton
                   label="I'm NOT on board"
                   variant="danger"
@@ -834,7 +830,11 @@ export default function BookingDetail() {
           )}
 
           {booking.status === 'completed' && (
-            ratedScore !== null ? (
+            booking.disputedAt ? (
+              <Text style={styles.waiting}>
+                You reported that you were not aboard. The boat completed this trip without you.
+              </Text>
+            ) : ratedScore !== null ? (
               <Text style={styles.waiting}>
                 You rated this trip {ratedScore}★ — thanks for helping other passengers.
               </Text>

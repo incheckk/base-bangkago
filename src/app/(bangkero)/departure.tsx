@@ -79,7 +79,6 @@ export default function DepartureScreen() {
   const departInFlight = useRef(false);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
-  const [routeContext, setRouteContext] = useState<{ from: string; to: string } | null>(null);
   const [hasBangka, setHasBangka] = useState<boolean | null>(null);
   // A manifest from a previous day that never sailed is ignored by
   // getActiveManifest, so the screen can show "No manifest" while accepted
@@ -95,6 +94,17 @@ export default function DepartureScreen() {
     () => accepted.data.filter((t) => !t.scheduledDate || t.scheduledDate <= todayIso),
     [accepted.data, todayIso],
   );
+  // One sailing = one route. The route comes from today's accepted trips,
+  // never from the newest accepted row — an advance or other-route booking
+  // used to hijack the manifest's ports.
+  const routeContext = useMemo(() => {
+    const ids = [
+      ...new Set(acceptedTrips.map((t) => t.routeId).filter((id): id is string => !!id)),
+    ];
+    if (ids.length !== 1) return null;
+    const [from, to] = ids[0].split('__');
+    return from && to ? { from, to } : null;
+  }, [acceptedTrips]);
   // Client-side per-parcel loaded read (073): a cargo booking whose parcel
   // has loaded_at set counts as boarded even before its booking row's
   // onboarded_at catches up (pre-078 DBs never stamped batch members).
@@ -401,29 +411,19 @@ export default function DepartureScreen() {
   const load = useCallback(async () => {
     if (!bangkeroId) return;
     try {
-      const [bangkaRes, bookingRes] = await Promise.all([
-        supabase.from('bangkas').select('id').eq('bangkero_id', bangkeroId).is('deleted_at', null).order('id').limit(1).maybeSingle(),
-        supabase
-          .from('bookings')
-          .select('route_id')
-          .eq('operator_id', bangkeroId)
-          .eq('trip_stat', 'accepted')
-          // Same today-only scope as the working set above: an advance
-          // route must not seed today's manifest/departure context.
-          .or(`scheduled_date.is.null,scheduled_date.lte.${todayIso}`)
-          .order('accepted_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-      setHasBangka(!!bangkaRes.data);
-      if (bookingRes.data?.route_id) {
-        const [from, to] = bookingRes.data.route_id.split('__');
-        if (from && to) setRouteContext({ from, to });
-      }
+      const { data: bangka } = await supabase
+        .from('bangkas')
+        .select('id')
+        .eq('bangkero_id', bangkeroId)
+        .is('deleted_at', null)
+        .order('id')
+        .limit(1)
+        .maybeSingle();
+      setHasBangka(!!bangka);
     } catch {
       setHasBangka(false);
     }
-  }, [bangkeroId, todayIso]);
+  }, [bangkeroId]);
 
   useEffect(() => { void load(); }, [load]);
   useRefetchOnFocus(load);
@@ -468,19 +468,17 @@ export default function DepartureScreen() {
       if (!bangka) {
         throw new Error('Your boat is not active yet. Ask BangkaGo to approve it before you sail.');
       }
-      // No accepted trip on the pier anymore (fresh sailing window) —
-      // regenerate on the previous manifest's route.
-      const route = routeContext
-        ?? (manifest ? { from: manifest.departurePortId, to: manifest.arrivalPortId } : null);
-      if (!route) {
-        throw new Error('No active accepted trip found for this route.');
+      // The route belongs to today's boarding set — never to an older
+      // manifest or the newest accepted row.
+      if (!routeContext) {
+        throw new Error('Today’s accepted trips must all be on one route before you can sail.');
       }
       await cancelActiveManifests(bangkeroId);
       await createManifest({
         bangkaId: bangka.id,
         bangkeroId,
-        departurePortId: route.from,
-        arrivalPortId: route.to,
+        departurePortId: routeContext.from,
+        arrivalPortId: routeContext.to,
       });
     } catch (e) {
       setGenError(friendlyError(e));
@@ -488,20 +486,36 @@ export default function DepartureScreen() {
     setGenerating(false);
   }
 
-  // Fresh draft for today's accepted trips when no live manifest resolves.
-  // handleGenerate cancels stale actives first and never touches a manifest
-  // that already sailed.
+  // Fresh draft for today's accepted trips. Also replaces a live manifest
+  // whose route is not today's route (the old sailing that never arrived).
   useEffect(() => {
-    if (autoDraftTried.current || loading || generating || manifest) return;
-    if (!routeContext || hasBangka !== true || acceptedTrips.length === 0) return;
+    if (autoDraftTried.current || loading || generating || hasBangka !== true) return;
+    if (!routeContext || acceptedTrips.length === 0) return;
+    const matches =
+      manifest?.departurePortId === routeContext.from &&
+      manifest?.arrivalPortId === routeContext.to;
+    if (matches) return;
     autoDraftTried.current = true;
     void handleGenerate();
     // handleGenerate changes identity every render; the ref guard makes the
     // extra runs no-ops.
   }, [acceptedTrips.length, generating, handleGenerate, hasBangka, loading, manifest, routeContext]);
 
+  /** Finalize/depart only today's route — a mismatched manifest is stale. */
+  function manifestMatchesRoute(): boolean {
+    if (!manifest || !routeContext) return false;
+    return (
+      manifest.departurePortId === routeContext.from &&
+      manifest.arrivalPortId === routeContext.to
+    );
+  }
+
   async function handleFinalize() {
     if (finalizeInFlight.current || !manifest) return;
+    if (!manifestMatchesRoute()) {
+      setGenError('This sailing record is for another route. Reopen Departure to create today’s manifest.');
+      return;
+    }
     finalizeInFlight.current = true;
     setFinalizing(true);
     setGenError(null);
@@ -537,6 +551,10 @@ export default function DepartureScreen() {
 
   async function handleDepart() {
     if (departInFlight.current || !manifest || manifest.actualDepartureTime) return;
+    if (!manifestMatchesRoute()) {
+      setGenError('This sailing record is for another route. Reopen Departure to create today’s manifest.');
+      return;
+    }
     if (cargoNotReady) {
       setGenError(
         'Load every cargo parcel or mark it not at port on Booking Status before departing.'
@@ -547,12 +565,15 @@ export default function DepartureScreen() {
     setDeparting(true);
     setGenError(null);
 
-    // 1. Who is aboard — best effort. A snapshot failure must not strand the
-    //    boat at the pier; the boarding state is already on the bookings.
+    // 1. Who is aboard — required. Sailing with an empty manifest is how
+    //    Arrived ended up showing 0 parties; retry instead.
     try {
       await populateManifestDeparture(manifest, manifestTrips, { stampDeparture: false });
     } catch (e) {
-      if (__DEV__) console.warn('[departure] manifest snapshot failed:', e);
+      setGenError(`Could not record who is aboard — ${friendlyError(e)} Try again.`);
+      departInFlight.current = false;
+      setDeparting(false);
+      return;
     }
 
     // 2. The sailing clock — required. En Route reads `departure &&

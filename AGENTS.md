@@ -41,6 +41,83 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — Honest en-route/arrived, passenger info pickers, boatless
+  island hop, real earnings, Port Queues, Bangka/Bangkero naming (no
+  migration; gates: tsc clean, lint 0 errors / 136 known warnings,
+  expo-doctor 1 failed check — the 9 known SDK-57 patch drifts, not
+  bulk-upgraded).**
+  - **Stale manifest was the en-route/arrived bug:** a departed-not-arrived
+    snapshot never expired, so an old Marigondon → Caohagan trip beat the
+    one actually sailing — wrong route, 3 pax aboard, 100% progress, and 0
+    parties at Arrived. `getActiveManifest` now ignores a departed,
+    not-arrived manifest older than **18 h**; `departure` derives the route
+    from today's accepted trips, regenerates a manifest whose route does not
+    match, and **refuses to Finalize or Depart** when the live route and the
+    manifest route disagree or when the passenger/parcel snapshot write
+    fails (it used to sail with 0 rows).
+  - **En route tells the truth:** progress counts only fixes at or after
+    `actual_departure_time` (0% and "Waiting for first GPS fix" before the
+    first one, 99% cap), a stale fix is no longer drawn, aboard = the live
+    manifest rows, and the stuck prompt offers **We're fine** / **We need
+    help**.
+  - **Arrived tells the truth:** parties = distinct `bookingId`, pax = live
+    manifest rows, and **View Summary is gone** — Complete Trip is the one
+    exit.
+  - **"I'm NOT on board" is honest:** it always calls `dispute_boarding`
+    (022) — never cancels, never bans, the trip still completes. The button
+    appears once `depart_time` is stamped even if the passenger was never
+    scanned, the 10-minute escape hatch disappears after departure, an
+    operator penalty is applied **only** when the crew had already marked
+    that person aboard, the bangkero gets a notification and the Coast Guard
+    gets a critical `safety_alerts` row with the boat's last fix. A
+    completed + disputed booking shows a message instead of the rate
+    prompt.
+  - **Passenger info is picked, not typed:** new
+    `src/components/PassengerInfoFields.tsx` — `AgePicker` (1–120 list) and
+    `AddressPicker` (house/street + city + barangay over bundled **Region
+    VII** data, `src/data/region7.ts`: 132 cities/municipalities, 3,003
+    barangays). Wired into `CompanionForm` and `PassengerEditModal`; weight
+    and passenger type left the edit sheet, and `updatePassengerDetail` is
+    now a **partial patch** (omitted keys are preserved, not nulled). The
+    address is still one string in `passenger_details.address` (028) — no
+    migration.
+  - **Island hop needs no boat:** packages carry no bangka. The service
+    reads plain `island_packages` rows (no joins, no availability RPC), the
+    booking form dropped its seat check and says BangkaGo assigns a boat and
+    bangkero, and capacity comes from `max_capacity`. 084's nullable
+    `bangka_id` already covers the row; dispatch picks the bangkero.
+  - **Earnings are truthful:** one shared `src/utils/earnings.ts`
+    (completed-trip fares bucketed by Manila day: today / week / month /
+    all-time) now backs **both** Home and Earnings, so the two cannot
+    disagree. `earnings.tsx` is a 2×2 summary, **RELEASED TO YOU** (escrow
+    payouts, shown but never double-counted) and a completed-trip history.
+    Quick Top-Up / Available Balance are gone; `useWallet` and
+    `wallet.service` are deleted.
+  - **Port Queues on both consoles:** one shared `PortQueuesScreen`
+    (per-port groups, FCFS rank, 5-minute dwell countdown, ready/offline
+    dot, realtime on `port_queue`) behind `(coastguard)/queues` and the new
+    `(admin)/port-queues`. The web has
+    `admin-dashboard/port-queues.html` + `assets/js/services/queues.js` with
+    the same grouping, search and port filter. No migration: 008 already
+    makes `port_queue` readable and realtime for signed-in users.
+  - **Naming:** Fleet/Vessels → **Bangka**, Operators → **Bangkeros** across
+    the app (`menu.ts`, admin home quick actions, operators + operator
+    detail, fleet overview, coastguard fleet, booking detail, report-issue
+    and SOS copy, map marker fallback) and both web dashboards (sidebar,
+    Manage Bangka, Monitor Bangka, Search Bangka, manifests, alerts).
+    Internal identifiers, file names and route names keep their old names
+    on purpose — only what a person reads changed.
+  - **Deferred (tracker [H]):** rental party QR boarding still relies on the
+    tick list; a full scanner needs a rental-scoped QR payload.
+  - **Next:** smoke — sail a trip and confirm En route opens at 0% on the
+    booked route with the real pax count and Arrived shows the real parties
+    with no View Summary; tap **I'm NOT on board** on a passenger who was
+    never scanned (trip continues, bangkero notified, Coast Guard alert, no
+    ban); add a companion through the age/address pickers and edit one
+    (weight and passenger type unchanged); book an island hop with no boat
+    assigned; open Earnings next to Home and compare the four buckets; join
+    a port queue and watch it appear on admin mobile and admin web.
+
 - **2026-11-16 — Same-day rentals demo switch (migration 089 PENDING — USER
   MUST RUN, after 088; gates: tsc clean, lint 0 errors / 142 known
   warnings).**

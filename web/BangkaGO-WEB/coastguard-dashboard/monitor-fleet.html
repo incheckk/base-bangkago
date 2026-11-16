@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BangkaGo LGU/Coast Guard — Track Vessel</title>
+  <title>BangkaGo LGU/Coast Guard — Track Bangka</title>
   <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
@@ -18,11 +18,11 @@
       <div id="topbarMount"></div>
 
       <section class="cg-content container-fluid">
-        <!-- Monitor Fleet summary — same border, little gap -->
+        <!-- Monitor Bangka summary — same border, little gap -->
         <div class="row g-2 mb-3 kpi-strip">
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Tracked Vessels</p>
+              <p>Tracked Bangka</p>
               <h3 id="kpiTracked">-</h3>
               <span class="kpi-up">Live updates every 30s</span>
               <div class="kpi-mini-chart chart-up"></div>
@@ -59,29 +59,29 @@
           <div class="col-xl-8">
             <div class="cg-card mb-3 map-box">
               <div class="panel-head">
-                <h6 class="mb-0">Monitor Fleet • View Live Map</h6>
+                <h6 class="mb-0">Monitor Bangka • View Live Map</h6>
                 <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
               </div>
 
               <div id="fleetMap"></div>
 
               <div class="route-pill-wrap" id="routePills">
-                <span class="route-pill">Loading vessels...</span>
+                <span class="route-pill">Loading bangka...</span>
               </div>
             </div>
           </div>
 
-          <!-- RIGHT: Vessel Location + ETA -->
+          <!-- RIGHT: Bangka Location + ETA -->
           <div class="col-xl-4">
             <div class="cg-card mb-3">
               <div class="panel-head">
-                <h6 class="mb-0">View Vessel Location</h6>
+                <h6 class="mb-0">View Bangka Location</h6>
               </div>
 
               <div class="row g-2 mb-2 filter-row">
                 <div class="col-12">
                   <select id="locationVessel" class="form-select">
-                    <option value="">Select vessel</option>
+                    <option value="">Select bangka</option>
                   </select>
                 </div>
               </div>
@@ -107,7 +107,7 @@
               <hr>
               <h6 class="mb-2">ETA Notes</h6>
               <ul class="activity-list mb-0" id="etaNotes">
-                <li class="text-muted"><small>Select a vessel to view ETA</small></li>
+                <li class="text-muted"><small>Select a bangka to view ETA</small></li>
               </ul>
             </div>
           </div>
@@ -214,7 +214,7 @@
     function populateVesselSelects() {
       const vesselNames = Object.keys(vesselData).sort();
       const currentValue = locationVessel.value;
-      locationVessel.innerHTML = '<option value="">Select vessel</option>';
+      locationVessel.innerHTML = '<option value="">Select bangka</option>';
       vesselNames.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -227,7 +227,7 @@
     function updateRoutePills() {
       const activeVessels = Object.entries(vesselData).filter(([_, v]) => v.signal !== 'Lost');
       if (activeVessels.length === 0) {
-        routePills.innerHTML = '<span class="route-pill">No active vessels</span>';
+        routePills.innerHTML = '<span class="route-pill">No active bangka</span>';
         return;
       }
       routePills.innerHTML = activeVessels.map(([name, v]) => 
@@ -306,7 +306,7 @@
         
       } catch(e) {
         console.error('Error loading vessel data:', e);
-        routePills.innerHTML = '<span class="route-pill text-danger">Error loading vessels</span>';
+        routePills.innerHTML = '<span class="route-pill text-danger">Error loading bangka</span>';
       }
     }
 
@@ -353,7 +353,7 @@
         try {
           fleetMap = await window.bangkagoFleetMap.mount('fleetMap');
         } catch (err) {
-          console.error('Fleet map failed to load:', err); // page still works without it
+          console.error('Bangka map failed to load:', err); // page still works without it
         }
         loadVesselData();
       } catch (e) {

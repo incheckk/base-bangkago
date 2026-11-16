@@ -7,7 +7,6 @@ const PACKAGE_DETAIL_SELECT =
   '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at)';
 
 function mapRow(row: any): IslandPackageDoc {
-  const boat = Array.isArray(row.bangkas) ? row.bangkas[0] : row.bangkas;
   return {
     packageId: row.id,
     packageName: row.package_name,
@@ -16,13 +15,11 @@ function mapRow(row: any): IslandPackageDoc {
     maxCapacity: Number(row.max_capacity),
     durationHours: Number(row.duration_hours),
     stops: Array.isArray(row.stops) ? (row.stops as string[]) : [],
-    bangkaId: row.bangka_id ?? null,
-    bangkaName: boat?.bangka_name ?? null,
-    bangkaCapacity: boat?.capacity == null ? null : Number(boat.capacity),
     isActive: row.is_active !== false,
   };
 }
 
+<<<<<<< HEAD
 function isMissingPackageDeletedAtColumn(error: { code?: string; message?: string }): boolean {
   const message = (error.message ?? '').toLowerCase();
   if (error.code !== '42703' && error.code !== 'PGRST204') return false;
@@ -47,6 +44,18 @@ async function queryIslandPackages(includeDeletedAt: boolean) {
     .is('bangkas.deleted_at', null)
     .eq('bangkas.bangkeros.verification_stat', 'verified')
     .eq('bangkas.bangkeros.is_deleted', false)
+=======
+/**
+ * Packages are admin-managed catalog rows. They carry no boat: 084 allows
+ * `bangka_id = NULL`, and dispatch assigns a bangkero from the accepted trip
+ * (the boat also has to fit the seats, not just own the package).
+ */
+export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
+  const { data, error } = await supabase
+    .from('island_packages')
+    .select('*')
+    .eq('is_active', true)
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
     .order('price');
 }
 
@@ -61,6 +70,7 @@ export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
 }
 
 export async function getIslandPackage(packageId: string): Promise<IslandPackageDoc | null> {
+<<<<<<< HEAD
   const query = (includeDeletedAt: boolean) => {
     const base = supabase
       .from('island_packages')
@@ -72,33 +82,14 @@ export async function getIslandPackage(packageId: string): Promise<IslandPackage
   if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
     result = await query(false).maybeSingle();
   }
+=======
+  const { data, error } = await supabase
+    .from('island_packages')
+    .select('*')
+    .eq('id', packageId)
+    .maybeSingle();
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
 
   if (result.error) throw result.error;
   return result.data ? mapRow(result.data) : null;
-}
-
-export interface IslandPackageAvailability {
-  capacity: number;
-  reserved: number;
-  available: number;
-  bangkaName: string;
-}
-
-export async function getIslandPackageAvailability(
-  packageId: string,
-  sailingDate: string,
-): Promise<IslandPackageAvailability> {
-  const { data, error } = await supabase.rpc('island_package_availability', {
-    p_package_id: packageId,
-    p_sailing_date: sailingDate,
-  });
-  if (error) throw error;
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) throw new Error('This package has no active assigned Bangka.');
-  return {
-    capacity: Number(row.capacity),
-    reserved: Number(row.reserved),
-    available: Number(row.available),
-    bangkaName: row.bangka_name,
-  };
 }

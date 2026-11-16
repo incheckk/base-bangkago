@@ -25,12 +25,12 @@ import { colors, elevation, numeric, radii, spacing, touchTarget, typography } f
  * approve a bangkero landed somewhere else.
  */
 const MANAGE: { key: string; icon: IconName; label: string; route: string; group?: string }[] = [
-  { key: 'operators', icon: 'people', label: 'Operators', route: '/(admin)/operators', group: 'OPERATIONS' },
+  { key: 'operators', icon: 'people', label: 'Bangkeros', route: '/(admin)/operators', group: 'OPERATIONS' },
   { key: 'users', icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
   { key: 'trips', icon: 'bookings', label: 'Manage Bookings', route: '/(admin)/bookings' },
 
   // The drawer uses `anchor` for this same destination; one place, one glyph.
-  { key: 'fleet', icon: 'anchor', label: 'Fleet Overview', route: '/(admin)/fleet-overview', group: 'FLEET' },
+  { key: 'fleet', icon: 'anchor', label: 'Bangka', route: '/(admin)/fleet-overview', group: 'FLEET' },
   { key: 'ports', icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },
   { key: 'routes', icon: 'route', label: 'Manage Routes', route: '/(admin)/manage-routes' },
 

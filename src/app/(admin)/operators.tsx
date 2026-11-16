@@ -50,7 +50,7 @@ export default function OperatorsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <LoadingState label="Loading operators…" />
+        <LoadingState label="Loading bangkeros…" />
       </View>
     );
   }
@@ -67,8 +67,8 @@ export default function OperatorsScreen() {
     <ScreenContainer padded={false}>
       <AdminScreenHeader
         eyebrow="MANAGEMENT"
-        title="Operators"
-        subtitle={`${data.length} operator${data.length === 1 ? '' : 's'}`}
+        title="Bangkeros"
+        subtitle={`${data.length} bangkero${data.length === 1 ? '' : 's'}`}
       />
       <ScrollView contentContainerStyle={styles.scroll}>
 
@@ -77,8 +77,8 @@ export default function OperatorsScreen() {
       {data.length === 0 ? (
         <EmptyState
           icon="⛵"
-          title="No operators found"
-          message="No operators match the selected filter."
+          title="No bangkeros found"
+          message="No bangkeros match the selected filter."
         />
       ) : (
         <View style={styles.list}>

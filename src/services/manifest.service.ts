@@ -125,9 +125,13 @@ export async function getActiveManifest(
    */
   if (!includeCompleted) {
     const todayStart = new Date(manilaDayStartMs(manilaTodayIso())).toISOString();
+    // A departed manifest stays live across midnight, but not for another
+    // day. Without this floor an old test sailing that never got an arrival
+    // stamp won every later trip (wrong route, stale pax, stale GPS fix).
+    const sailingFloor = new Date(Date.now() - 18 * 3600_000).toISOString();
     q = q
       .is('actual_arrival_time', null)
-      .or(`actual_departure_time.not.is.null,generated_at.gte.${todayStart}`);
+      .or(`actual_departure_time.gte.${sailingFloor},generated_at.gte.${todayStart}`);
   }
 
   const { data, error } = await q

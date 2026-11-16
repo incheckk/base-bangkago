@@ -86,15 +86,15 @@
 
   const topbarMeta = {
     'index': { title: 'Dashboard', subtitle: 'LGU / Coast Guard monitoring overview' },
-    'monitor-fleet': { title: 'Monitor Fleet', subtitle: 'Live fleet movement, route watch, and position history' },
+    'monitor-fleet': { title: 'Monitor Bangka', subtitle: 'Live bangka movement, route watch, and position history' },
     'view-manifests': { title: 'View Manifests', subtitle: 'Read-only passenger/cargo manifests with quick export' },
     'view-weather': { title: 'View Weather', subtitle: 'Marine weather, sea conditions, and advisories' },
     'view-bangkeros': { title: 'View Bangkeros', subtitle: 'Read-only list of registered bangkero records' },
     'report-compliance': { title: 'Report Compliance Issue', subtitle: 'Submit compliance concerns for admin review' },
-    'alerts': { title: 'View Active Alerts', subtitle: 'Alert feed with vessel, severity, and response status' },
+    'alerts': { title: 'View Active Alerts', subtitle: 'Alert feed with bangka, severity, and response status' },
     'notifications': { title: 'Notifications', subtitle: 'Booking lifecycle updates and operational notices' },
-    'verify-departure': { title: 'Verify Departure', subtitle: 'Confirm vessel departure readiness' },
-    'search-vessel': { title: 'Search Vessel', subtitle: 'Lookup vessel records and compliance' },
+    'verify-departure': { title: 'Verify Departure', subtitle: 'Confirm bangka departure readiness' },
+    'search-vessel': { title: 'Search Bangka', subtitle: 'Lookup bangka records and compliance' },
     'port-history': { title: 'Port History', subtitle: 'Historical port activity and movements' },
     'export-manifest': { title: 'View Manifest', subtitle: 'Search manifests and view the passenger list' }
   };

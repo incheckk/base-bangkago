@@ -42,7 +42,7 @@ export default function OperatorDetailScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <LoadingState label="Loading operator…" />
+        <LoadingState label="Loading bangkero…" />
       </View>
     );
   }
@@ -59,7 +59,7 @@ export default function OperatorDetailScreen() {
   if (!operator) {
     return (
       <View style={styles.center}>
-        <EmptyState icon="👤" title="Not found" message="Operator not found." />
+        <EmptyState icon="👤" title="Not found" message="Bangkero not found." />
       </View>
     );
   }
@@ -77,7 +77,7 @@ export default function OperatorDetailScreen() {
 
   return (
     <ScreenContainer padded={false}>
-      <AdminScreenHeader title="Operator" />
+      <AdminScreenHeader title="Bangkero" />
       <ScrollView contentContainerStyle={styles.scroll}>
 
       <View style={styles.header}>
@@ -141,7 +141,7 @@ export default function OperatorDetailScreen() {
         <EmptyState
           icon="🚤"
           title="No trips yet"
-          message="This operator has no trip history."
+          message="This bangkero has no trip history."
         />
       ) : (
         <View style={styles.tripList}>

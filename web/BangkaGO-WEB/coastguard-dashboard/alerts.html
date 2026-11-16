@@ -50,7 +50,7 @@
               <div class="row g-2 mb-3 align-items-end filter-row">
                 <div class="col-12 col-sm-6 col-lg-4">
                   <label class="form-label visually-hidden" for="alertSearchInput">Search</label>
-                  <input id="alertSearchInput" class="form-control w-100" type="text" placeholder="Search alert, vessel, zone">
+                  <input id="alertSearchInput" class="form-control w-100" type="text" placeholder="Search alert, bangka, zone">
                 </div>
                 <div class="col-6 col-sm-6 col-lg-3">
                   <label class="form-label visually-hidden" for="severityFilter">Severity</label>
@@ -224,6 +224,7 @@
     }
 
     function getLocation(alert) {
+<<<<<<< HEAD
       const locations = [];
       if (alert.portName) locations.push('Port: ' + alert.portName);
       if (alert.bangkaName) locations.push('Vessel: ' + alert.bangkaName);
@@ -278,6 +279,11 @@
       setDetailsText('alertDetailsDate', formatDate(alert.createdAt));
       document.getElementById('alertDetailsMessage').textContent = report.details || 'No report details provided.';
       alertDetailsModal.show();
+=======
+      if (alert.bangkaName) return 'Bangka: ' + alert.bangkaName;
+      if (alert.portName) return 'Port: ' + alert.portName;
+      return 'System-wide';
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
     }
 
     function renderRows(data) {

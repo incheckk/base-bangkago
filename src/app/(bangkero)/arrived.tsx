@@ -264,8 +264,11 @@ export default function ArrivedScreen() {
               <View style={styles.cardRow}>
                 <Text style={styles.cardLabel}>Passengers</Text>
                 <Text style={styles.cardValue}>
-                  {passengers.length} {passengers.length === 1 ? 'party' : 'parties'} ·{' '}
-                  {manifest?.totalPassengersOnBoard ?? '?'} pax to disembark
+                  {/* Live rows, not the departure snapshot: a no-show or a
+                      disputed passenger must not keep counting aboard. */}
+                  {new Set(passengers.map((p) => p.bookingId)).size}{' '}
+                  {new Set(passengers.map((p) => p.bookingId)).size === 1 ? 'party' : 'parties'} ·{' '}
+                  {passengers.length} pax to disembark
                 </Text>
               </View>
               <View style={styles.divider} />
@@ -338,12 +341,6 @@ export default function ArrivedScreen() {
                 onPress={handleComplete}
                 loading={completing}
                 disabled={completing}
-              />
-              <View style={{ height: spacing.md }} />
-              <PrimaryButton
-                label="View Summary"
-                variant="secondary"
-                onPress={() => router.replace('/(bangkero)/trips')}
               />
             </View>
           </>

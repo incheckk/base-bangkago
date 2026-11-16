@@ -3,21 +3,14 @@ import {
   ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
-import { FilterChips } from './FilterChips';
 import { PrimaryButton } from './PrimaryButton';
 import { TextField } from './TextField';
+import { AddressPicker, AgePicker } from './PassengerInfoFields';
 import { Icon } from './Icon';
 import { deletePassengerDetail, updatePassengerDetail } from '@/services/passenger-detail.service';
 import { friendlyError } from '@/services/booking.service';
-import type { PassengerDetailDoc, PassengerType } from '@/types/models';
+import type { PassengerDetailDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-
-const PASSENGER_TYPES: { key: PassengerType; label: string }[] = [
-  { key: 'regular', label: 'Regular' },
-  { key: 'student', label: 'Student' },
-  { key: 'senior', label: 'Senior' },
-  { key: 'child', label: 'Child' },
-];
 
 interface Props {
   visible: boolean;
@@ -40,8 +33,6 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
   const [sex, setSex] = useState('');
   const [contact, setContact] = useState('');
   const [address, setAddress] = useState('');
-  const [weight, setWeight] = useState('');
-  const [passengerType, setPassengerType] = useState<PassengerType>('regular');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +45,6 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
     setSex(passenger.sex ?? '');
     setContact(passenger.contactNumber ?? '');
     setAddress(passenger.address ?? '');
-    setWeight(passenger.declaredWeightKg != null ? String(passenger.declaredWeightKg) : '');
-    setPassengerType(passenger.passengerType);
     setError(null);
   }, [passenger]);
 
@@ -73,14 +62,11 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
       setError('Age must be a number between 0 and 120.');
       return;
     }
-    const weightValue = weight.trim() ? Number(weight.trim()) : null;
-    if (weightValue != null && (!Number.isFinite(weightValue) || weightValue <= 0 || weightValue > 500)) {
-      setError('Weight must be a number between 1 and 500 kg.');
-      return;
-    }
 
     setSaving(true);
     try {
+      // Partial patch: weight and passenger type are not in this sheet and
+      // must stay exactly as the passenger entered them.
       await updatePassengerDetail(passenger.passengerId, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
@@ -88,8 +74,6 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
         sex: sex.trim() || null,
         contactNumber: contact.trim() || null,
         address: address.trim() || null,
-        passengerType,
-        declaredWeightKg: weightValue,
       });
       onChanged();
       onClose();
@@ -172,34 +156,19 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
             />
             <View style={styles.duo}>
               <View style={styles.duoItem}>
-                <TextField
-                  label="Age"
-                  value={age}
-                  onChangeText={setAge}
-                  placeholder="0"
-                  keyboardType="number-pad"
-                  maxLength={3}
-                />
+                <AgePicker value={age} onChange={setAge} />
               </View>
               <View style={styles.duoItem}>
                 <TextField
-                  label="Weight (kg)"
-                  value={weight}
-                  onChangeText={setWeight}
-                  placeholder="Optional"
-                  keyboardType="decimal-pad"
-                  maxLength={6}
+                  label="Sex"
+                  value={sex}
+                  onChangeText={setSex}
+                  placeholder="e.g. Female"
+                  autoCapitalize="words"
+                  maxLength={20}
                 />
               </View>
             </View>
-            <TextField
-              label="Sex"
-              value={sex}
-              onChangeText={setSex}
-              placeholder="e.g. Female"
-              autoCapitalize="words"
-              maxLength={20}
-            />
             <TextField
               label="Contact number"
               value={contact}
@@ -208,20 +177,10 @@ export function PassengerEditModal({ visible, passenger, onClose, onChanged }: P
               keyboardType="phone-pad"
               maxLength={20}
             />
-            <TextField
-              label="Address"
+            <AddressPicker
+              key={passenger?.passengerId ?? 'none'}
               value={address}
-              onChangeText={setAddress}
-              placeholder="Home address"
-              autoCapitalize="sentences"
-              maxLength={200}
-            />
-
-            <Text style={styles.label}>PASSENGER TYPE</Text>
-            <FilterChips
-              filters={PASSENGER_TYPES}
-              active={passengerType}
-              onChange={(key) => setPassengerType(key as PassengerType)}
+              onChange={setAddress}
             />
 
             {!!error && <Text style={styles.error}>{error}</Text>}
@@ -287,7 +246,6 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.huge },
   duo: { flexDirection: 'row', gap: spacing.md },
   duoItem: { flex: 1 },
-  label: { ...typography.label, marginBottom: spacing.sm },
   error: { color: colors.danger, fontSize: 13, lineHeight: 18, marginBottom: spacing.md },
   saveBtn: { marginTop: spacing.sm },
   deleteBtn: {

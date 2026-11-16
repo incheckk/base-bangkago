@@ -49,8 +49,8 @@ export default function CoastguardFleet() {
   if (ports.loading || tracking.loading) {
     return (
       <ScreenContainer>
-        <AdminScreenHeader role="coastguard" title="Fleet" showBack={false} />
-        <LoadingState label="Loading fleet…" />
+        <AdminScreenHeader role="coastguard" title="Bangka" showBack={false} />
+        <LoadingState label="Loading bangka…" />
       </ScreenContainer>
     );
   }
@@ -58,7 +58,7 @@ export default function CoastguardFleet() {
   if (tracking.error) {
     return (
       <ScreenContainer>
-        <AdminScreenHeader role="coastguard" title="Fleet" showBack={false} />
+        <AdminScreenHeader role="coastguard" title="Bangka" showBack={false} />
         <ErrorState message={tracking.error} />
       </ScreenContainer>
     );
@@ -68,7 +68,7 @@ export default function CoastguardFleet() {
     <ScreenContainer padded={false}>
       <AdminScreenHeader
         role="coastguard"
-        title="Fleet"
+        title="Bangka"
         subtitle={`${liveCount} reporting · ${rows.length} tracked`}
         showBack={false}
       />
@@ -90,7 +90,7 @@ export default function CoastguardFleet() {
           <View style={styles.emptyBox}>
             <EmptyState
               icon="boat"
-              title="No vessels tracked"
+              title="No bangka tracked"
               message="Boats appear here once a bangkero starts reporting position."
             />
           </View>

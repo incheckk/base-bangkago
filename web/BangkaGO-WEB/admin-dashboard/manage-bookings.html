@@ -380,7 +380,7 @@
         <div class="info-box mb-2"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${esc(mapStatusToDisplay(b.status))}</span></div>
         <div class="info-box mb-2"><strong>Passengers:</strong> ${b.passengerCount}</div>
         <div class="info-box mb-2"><strong>Total Cost:</strong> ${peso(b.totalPrice)}</div>
-        <div class="info-box mb-2"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div>
+        <div class="info-box mb-2"><strong>Bangkero:</strong> ${esc(b.operatorName || 'Unassigned')}</div>
         <div class="info-box mb-2"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'Unassigned')}</div>
         ${downpayment}
         <div class="info-box mb-2"><strong>Created:</strong> ${esc(formatDateTime(b.createdAt))}</div>
@@ -496,7 +496,7 @@
           <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${esc(b.fromPortName || '')} → ${esc(b.toPortName || '')}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${esc(tripDateText(b))}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Passengers:</strong> ${b.passengerCount} booked, ${companions.length} companion${companions.length === 1 ? '' : 's'} listed</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Operator:</strong> ${esc(b.operatorName || 'Unassigned')}</div></div>
+          <div class="col-md-6"><div class="info-box"><strong>Bangkero:</strong> ${esc(b.operatorName || 'Unassigned')}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Boat:</strong> ${esc(b.operatorBoatName || 'Unassigned')}</div></div>
         </div>
 
@@ -644,7 +644,7 @@
             ['Booker', (b.customerName || b.passengerName || 'Unknown') + (b.customerPhone || b.passengerPhone ? ' - ' + (b.customerPhone || b.passengerPhone) : '')],
             ['Route', (b.fromPortName || '-') + ' to ' + (b.toPortName || '-')],
             ['Trip date', tripDateText(b)],
-            ['Operator / boat', (b.operatorName || 'Unassigned') + ' / ' + (b.operatorBoatName || 'Unassigned')],
+            ['Bangkero / boat', (b.operatorName || 'Unassigned') + ' / ' + (b.operatorBoatName || 'Unassigned')],
             ['Passengers', (b.passengerCount || 0) + ' booked, ' + companions.length + ' companion(s) listed'],
             ['Fare', 'PHP ' + Number(b.totalPrice || 0).toFixed(2)],
           ],

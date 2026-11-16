@@ -130,7 +130,7 @@ export default function BookingManifestScreen() {
             <Info label="Booker" value={bookerName} />
             <Info label="Contact" value={formatPhone(b.passengerPhone || '') || '-'} />
             <Info label="Passengers" value={paxLabel(b)} />
-            <Info label="Operator" value={b.operatorName || 'Unassigned'} />
+            <Info label="Bangkero" value={b.operatorName || 'Unassigned'} />
           </View>
         </View>
 

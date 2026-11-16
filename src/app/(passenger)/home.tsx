@@ -107,7 +107,7 @@ const PASSENGER_COACH: CoachStep[] = [
   {
     target: 'p.status',
     title: 'Boats available now',
-    body: 'This bar shows how many operators are online and how many are waiting at the port nearest you. If it reads zero, nobody can accept yet.',
+    body: 'This bar shows how many bangkeros are online and how many are waiting at the port nearest you. If it reads zero, nobody can accept yet.',
   },
   {
     target: 'p.cta',

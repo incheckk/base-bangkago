@@ -360,7 +360,7 @@ export function OSMMap({
       vessels: vessels.map((v, i) => ({
         lat: v.latitude,
         lng: v.longitude,
-        label: v.bangkaId ? v.bangkaId.slice(0, 8) : `Vessel ${i + 1}`,
+        label: v.bangkaId ? v.bangkaId.slice(0, 8) : `Bangka ${i + 1}`,
         speed: v.speed != null ? `${v.speed.toFixed(1)} knots` : 'N/A',
       })),
     };

@@ -232,9 +232,6 @@ export interface IslandPackageDoc {
   durationHours: number;
   /** Ordered port IDs the hop visits; booking resolves stops[0] → stops[last]. */
   stops: string[];
-  bangkaId: string | null;
-  bangkaName: string | null;
-  bangkaCapacity: number | null;
   isActive: boolean;
 }
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BangkaGo Admin — Track Vessel</title>
+  <title>BangkaGo Admin — Monitor Bangka</title>
   <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
@@ -18,11 +18,11 @@
       <div id="topbarMount"></div>
 
       <section class="cg-content container-fluid">
-        <!-- merged Monitor Fleet + Track Vessel -->
+        <!-- merged Monitor Bangka + Track Bangka -->
         <div class="row g-3 mb-3">
           <div class="col-6 col-xl-3">
             <div class="cg-card kpi-card">
-              <p>Tracked Vessels</p>
+              <p>Tracked Bangka</p>
               <h3 id="kpiTracked">-</h3>
               <span class="kpi-up">Live updates</span>
               <div class="kpi-mini-chart chart-up"></div>
@@ -58,27 +58,27 @@
           <div class="col-xl-8">
             <div class="cg-card mb-3 map-box">
               <div class="panel-head">
-                <h6 class="mb-0">Live Fleet Map</h6>
+                <h6 class="mb-0">Live Bangka Map</h6>
                 <span class="muted-note">Merged monitor + track module</span>
               </div>
 
               <div id="fleetMap"></div>
 
               <div class="route-pill-wrap" id="routePills">
-                <span class="route-pill">Loading vessels...</span>
+                <span class="route-pill">Loading bangka...</span>
               </div>
             </div>
 
             <div class="cg-card">
               <div class="panel-head">
-                <h6 class="mb-0">Replay Vessel History</h6>
+                <h6 class="mb-0">Replay Bangka History</h6>
                 <span class="muted-note">For incident/backtrack review</span>
               </div>
 
               <div class="row g-2 mb-3">
                 <div class="col-md-4">
                   <select id="historyVessel" class="form-select">
-                    <option value="">Select vessel</option>
+                    <option value="">Select bangka</option>
                   </select>
                 </div>
                 <div class="col-md-3">
@@ -87,7 +87,7 @@
               </div>
 
               <ul class="activity-list" id="replayList">
-                <li class="text-muted"><small>Select a vessel and date to replay history</small></li>
+                <li class="text-muted"><small>Select a bangka and date to replay history</small></li>
               </ul>
             </div>
           </div>
@@ -95,12 +95,12 @@
           <div class="col-xl-4">
             <div class="cg-card mb-3">
               <div class="panel-head">
-                <h6 class="mb-0">Vessel Location</h6>
+                <h6 class="mb-0">Bangka Location</h6>
               </div>
 
               <div class="mb-2">
                 <select id="locationVessel" class="form-select">
-                  <option value="">Select vessel</option>
+                  <option value="">Select bangka</option>
                 </select>
               </div>
 
@@ -226,7 +226,7 @@
       const vesselNames = Object.keys(vesselData).sort();
       [locationVessel, historyVessel].forEach(select => {
         const currentValue = select.value;
-        select.innerHTML = '<option value="">Select vessel</option>';
+        select.innerHTML = '<option value="">Select bangka</option>';
         vesselNames.forEach(name => {
           const opt = document.createElement('option');
           opt.value = name;
@@ -240,7 +240,7 @@
     function updateRoutePills() {
       const activeVessels = Object.entries(vesselData).filter(([_, v]) => v.signal !== 'Lost');
       if (activeVessels.length === 0) {
-        routePills.innerHTML = '<span class="route-pill">No active vessels</span>';
+        routePills.innerHTML = '<span class="route-pill">No active bangka</span>';
         return;
       }
       routePills.innerHTML = activeVessels.map(([name, v]) => 
@@ -333,7 +333,7 @@
         
       } catch(e) {
         console.error('Error loading vessel data:', e);
-        routePills.innerHTML = '<span class="route-pill text-danger">Error loading vessels</span>';
+        routePills.innerHTML = '<span class="route-pill text-danger">Error loading bangka</span>';
       }
     }
 
@@ -362,7 +362,7 @@
       // For now, show mock data
       const v = vesselData[vesselName];
       if (!v) {
-        replayList.innerHTML = '<li class="text-muted"><small>No data for this vessel</small></li>';
+        replayList.innerHTML = '<li class="text-muted"><small>No data for this bangka</small></li>';
         return;
       }
       
@@ -404,7 +404,7 @@
         try {
           fleetMap = await window.bangkagoFleetMap.mount('fleetMap');
         } catch (err) {
-          console.error('Fleet map failed to load:', err); // page still works without it
+          console.error('Bangka map failed to load:', err); // page still works without it
         }
         loadVesselData();
       } catch (e) {

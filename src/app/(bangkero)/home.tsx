@@ -5,7 +5,6 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 're
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { BangkeroTripSheet } from '@/components/BangkeroTripSheet';
 import { DemandBadge } from '@/components/DemandBadge';
-import { EarningsCard } from '@/components/EarningsCard';
 import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -37,7 +36,8 @@ import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service
 import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggyback.service';
 import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { STRAIT_POINT } from '@/services/weather.service';
-import { manilaDayStartMs, manilaTodayIso } from '@/utils/date';
+import { manilaTodayIso } from '@/utils/date';
+import { summarizeEarnings } from '@/utils/earnings';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
@@ -776,24 +776,9 @@ export default function BangkeroHome() {
     router.push('/(bangkero)/departure');
   }
 
-  // Earnings count completed trips, bucketed by Manila day of completion.
-  // The fare is collected on board (cash), so completion is the earn event —
-  // waiting for a `payments` row marked completed read ₱0 forever whenever
-  // the bangkero never tapped "mark as paid" (the old behaviour).
-  const completedTrips = useMemo(
-    () => trips.data.filter((t) => t.status === 'completed' && t.completedAt),
-    [trips.data]
-  );
-  const homeTodayIso = manilaTodayIso();
-  const homeTodayStartMs = manilaDayStartMs(homeTodayIso);
-  const homeWeekStartMs = homeTodayStartMs - 6 * 86400000;
-  const completedMs = (t: BookingDoc) => new Date(t.completedAt as string).getTime();
-  const todayEarnings = completedTrips
-    .filter((t) => completedMs(t) >= homeTodayStartMs)
-    .reduce((sum, t) => sum + t.totalPrice, 0);
-  const weekEarnings = completedTrips
-    .filter((t) => completedMs(t) >= homeWeekStartMs)
-    .reduce((sum, t) => sum + t.totalPrice, 0);
+  // One shared rule with the Earnings screen: completed trip fares, Manila
+  // days. A released escrow payout is that same fare arriving later.
+  const earnings = useMemo(() => summarizeEarnings(trips.data), [trips.data]);
 
   // Two groups so an operator can tell tomorrow's commitments from
   // people standing at the pier right now. Batched stubs are represented
@@ -1325,13 +1310,13 @@ export default function BangkeroHome() {
         <View style={styles.earningsRow}>
           <View style={styles.earningsItem}>
             <Icon name="cash" size={16} color={colors.primary} />
-            <Text style={styles.earningsValue}>₱{todayEarnings}</Text>
+            <Text style={styles.earningsValue}>₱{earnings.today}</Text>
             <Text style={styles.earningsLabel}>TODAY</Text>
           </View>
           <View style={styles.earningsItem}>
             <Icon name="receipt" size={16} color={colors.textSecondary} />
             <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
-              ₱{weekEarnings}
+              ₱{earnings.week}
             </Text>
             <Text style={styles.earningsLabel}>THIS WEEK</Text>
           </View>

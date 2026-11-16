@@ -54,7 +54,7 @@ export default function SosAlertScreen() {
   function handleSos() {
     Alert.alert(
       'Emergency SOS',
-      'This will send an emergency alert to the coast guard and nearby vessels. Continue?',
+      'This will send an emergency alert to the coast guard and nearby bangka. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {

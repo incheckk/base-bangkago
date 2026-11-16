@@ -96,10 +96,9 @@
               <div class="panel-head">
                 <h6 class="mb-0">System Health</h6>
               </div>
-              <div class="health-item"><span>API Gateway</span><span class="badge text-bg-success">Healthy</span></div>
-              <div class="health-item"><span>Realtime Feed</span><span class="badge text-bg-success" id="realtimeStatus">Connecting...</span></div>
-              <div class="health-item"><span>Database</span><span class="badge text-bg-success">Normal</span></div>
-              <div class="health-item"><span>Queue Processor</span><span class="badge text-bg-warning" id="queueStatus">Checking...</span></div>
+              <div class="health-item"><span>API Gateway</span><span class="badge text-bg-secondary" id="apiStatus">Checking...</span></div>
+              <div class="health-item"><span>Database</span><span class="badge text-bg-secondary" id="dbStatus">Checking...</span></div>
+              <div class="health-item"><span>Queue Processor</span><span class="badge text-bg-secondary" id="queueStatus">Checking...</span></div>
             </div>
 
             <div class="cg-card">
@@ -107,7 +106,6 @@
                 <h6 class="mb-0">Quick Actions</h6>
               </div>
               <div class="d-grid gap-2">
-                <a href="manage-alerts.html" class="btn btn-outline-primary">Open Alerts Panel</a>
                 <a href="monitor-fleet.html" class="btn btn-outline-primary">Open Monitor Fleet</a>
                 <a href="view-reports.html" class="btn btn-outline-primary">View Reports</a>
                 <a href="report-compliance.html" class="btn btn-primary">File Compliance Case</a>
@@ -133,8 +131,9 @@
   <script>
     const opsBody = document.getElementById('opsSnapshotBody');
     const activityList = document.getElementById('recentActivity');
-    const realtimeStatus = document.getElementById('realtimeStatus');
     const queueStatus = document.getElementById('queueStatus');
+    const healthApi = document.getElementById('apiStatus');
+    const healthDb = document.getElementById('dbStatus');
 
     async function loadDashboardKPIs() {
       try {
@@ -142,12 +141,14 @@
         
         const [
           bookingStats,
+          activeBangkas,
           vesselPositions,
           alertCount,
           pendingBangkeros,
           pendingDownpayments
         ] = await Promise.all([
           window.bangkagoBookings.getStats(),
+          window.bangkagoVessels.getAllBangkas(),
           window.bangkagoVessels.getAllLatestPositions(),
           svc.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
           svc.from('bangkeros').select('*', { count: 'exact', head: true }).eq('verification_stat', 'pending').eq('is_deleted', false),
@@ -158,7 +159,7 @@
         const activeBookings = (bookingStats.open || 0) + (bookingStats.accepted || 0) + (bookingStats.pending || 0);
         document.getElementById('kpiActiveBookings').textContent = activeBookings;
         document.getElementById('kpiBookingsToday').textContent = `${bookingStats.completed || 0} completed today`;
-        document.getElementById('kpiActiveVessels').textContent = vesselPositions.length;
+        document.getElementById('kpiActiveVessels').textContent = activeBangkas.length;
         document.getElementById('kpiOpenAlerts').textContent = alertCount.count || 0;
         document.getElementById('kpiCompliance').textContent = (pendingBangkeros.count || 0) + (pendingDownpayments.count || 0);
 
@@ -195,7 +196,6 @@
           <li><span>${pendingBangkeros.count || 0} bangkero applications pending review</span><small>Just now</small></li>
           <li><span>${pendingDownpayments.count || 0} downpayments awaiting approval</span><small>Just now</small></li>
           <li><span>${bookingStats.completed || 0} trips completed today</span><small>${new Date().toLocaleTimeString()}</small></li>
-          <li><span>System health check passed</span><small>${new Date(Date.now() - 300000).toLocaleTimeString()}</small></li>
         `;
 
       } catch(e) {
@@ -203,11 +203,132 @@
       }
     }
 
+    // ---- System Health ---------------------------------------------------
+    // Every badge here is derived from a live probe, not hardcoded green.
+
+    function setBadge(el, text, cls) {
+      el.className = 'badge ' + cls;
+      el.textContent = text;
+    }
+
+    function fmtMs(ms) {
+      return ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(1) + ' s';
+    }
+
+    // Venue wifi hangs: a probe that never answers must not leave the badge
+    // on "Checking..." for the rest of the session. The timer is cleared as
+    // soon as either side settles, so a fast probe leaves nothing pending.
+    const HEALTH_TIMEOUT_MS = 8000;
+    function withTimeout(promise) {
+      let timer;
+      const timeout = new Promise(function(_, reject) {
+        timer = setTimeout(function() { reject(new Error('timed out')); }, HEALTH_TIMEOUT_MS);
+      });
+      return Promise.race([promise, timeout]).finally(function() { clearTimeout(timer); });
+    }
+
+    function isTimeout(e) { return !!e && e.message === 'timed out'; }
+
+    // API gateway = the auth round trip every screen of the app depends on.
+    async function checkApiGateway(c) {
+      const started = performance.now();
+      try {
+        const res = await withTimeout(c.auth.getUser());
+        const ms = Math.round(performance.now() - started);
+        if (res && res.error) {
+          // auth-js reports a rejected token as 401 and a missing session as
+          // 400 (AuthSessionMissingError); anything else means the call itself
+          // failed (offline, gateway down).
+          const status = res.error.status;
+          setBadge(healthApi,
+            status === 401 ? 'Session expired' : status === 400 ? 'No session' : 'Unreachable',
+            'text-bg-danger');
+        } else if (!(res && res.data && res.data.user)) {
+          setBadge(healthApi, 'No session', 'text-bg-danger');
+        } else {
+          setBadge(healthApi, (ms > 1500 ? 'Slow · ' : 'Healthy · ') + fmtMs(ms),
+            ms > 1500 ? 'text-bg-warning' : 'text-bg-success');
+        }
+      } catch (e) {
+        setBadge(healthApi, isTimeout(e) ? 'Timed out' : 'Unreachable', 'text-bg-danger');
+      }
+    }
+
+    // Database = a real row read off the app's main table (exercises RLS and
+    // the query path, not just the HTTP layer).
+    async function checkDatabase(c) {
+      const started = performance.now();
+      try {
+        const res = await withTimeout(
+          c.from('bookings').select('id, created_at').order('created_at', { ascending: false }).limit(1)
+        );
+        const ms = Math.round(performance.now() - started);
+        if (res && res.error) {
+          setBadge(healthDb, 'Read failed', 'text-bg-danger');
+        } else {
+          setBadge(healthDb, (ms > 1500 ? 'Slow · ' : 'Normal · ') + fmtMs(ms),
+            ms > 1500 ? 'text-bg-warning' : 'text-bg-success');
+        }
+      } catch (e) {
+        setBadge(healthDb, isTimeout(e) ? 'Timed out' : 'No response', 'text-bg-danger');
+      }
+    }
+
+    // Queue Processor = live dispatch backlog: requests still open for an
+    // accept versus boats waiting in the port queue (both readable to admins).
+    async function checkQueue(c) {
+      try {
+        const [openRes, boatRes] = await withTimeout(Promise.all([
+          c.from('bookings').select('id', { count: 'exact', head: true }).eq('trip_stat', 'open'),
+          c.from('port_queue').select('id', { count: 'exact', head: true }).is('left_at', null),
+        ]));
+        if (!openRes || openRes.error || !boatRes || boatRes.error) {
+          setBadge(queueStatus, 'Unavailable', 'text-bg-danger');
+          return;
+        }
+        const open = openRes.count || 0;
+        const boats = boatRes.count || 0;
+        if (open === 0) {
+          setBadge(queueStatus, 'Clear', 'text-bg-success');
+          return;
+        }
+        // Same > 20 threshold the Operations snapshot uses for this queue.
+        setBadge(queueStatus, open + ' open · ' + boats + ' at port',
+          open > 20 ? 'text-bg-warning' : 'text-bg-info');
+      } catch (e) {
+        setBadge(queueStatus, isTimeout(e) ? 'Timed out' : 'Unavailable', 'text-bg-danger');
+      }
+    }
+
+    async function checkSystemHealth() {
+      try {
+        const c = window.bangkagoServices.getClient();
+        if (!c) {
+          setBadge(healthApi, 'Waiting...', 'text-bg-secondary');
+          setBadge(healthDb, 'Waiting...', 'text-bg-secondary');
+          setBadge(queueStatus, 'Waiting...', 'text-bg-secondary');
+          return;
+        }
+        // Independent probes: one dead layer must not hide the other two.
+        await Promise.all([checkApiGateway(c), checkDatabase(c), checkQueue(c)]);
+      } catch (e) {
+        console.error('System health check failed:', e);
+      }
+    }
+
+    function runRefresh() {
+      loadDashboardKPIs();
+      checkSystemHealth();
+    }
+
     // Real-time updates
     window.bangkagoRealtime.subscribe('bookings', null, function() {
-      loadDashboardKPIs();
+      runRefresh();
     });
     window.bangkagoRealtime.subscribe('vessel_tracking', null, function() {
+      loadDashboardKPIs();
+    });
+    window.bangkagoRealtime.subscribe('bangkas', null, function() {
       loadDashboardKPIs();
     });
     window.bangkagoRealtime.subscribe('bangkeros', null, function() {
@@ -224,7 +345,7 @@
     (async function () {
       try {
         await window.bangkagoAuthReady;
-        loadDashboardKPIs();
+        runRefresh();
       } catch (e) {
         console.error('Auth guard failed:', e);
         // Page will redirect via guard
@@ -232,7 +353,7 @@
     })();
     
     // Refresh every 30 seconds
-    setInterval(loadDashboardKPIs, 30000);
+    setInterval(runRefresh, 30000);
   </script>
 </body>
 </html>

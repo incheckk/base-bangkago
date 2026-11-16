@@ -19,6 +19,7 @@ import { WeatherCard } from '@/components/WeatherCard';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnboarding } from '@/hooks/useOnboarding';
+import { useSailingAdvisory } from '@/hooks/useSailingAdvisory';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useActiveCargoDeliveries, useAvailableBangkeroCount, usePorts, usePortQueue, useRecentBookings,
@@ -148,6 +149,7 @@ export default function PassengerHome() {
   const bookings = useRecentBookings(user?.id ?? null, 10);
   const deliveries = useActiveCargoDeliveries(user?.id ?? null);
   const notifications = useNotifications(user?.id ?? null);
+  const { advisory } = useSailingAdvisory();
 
   // ---------- nearest port waiting line (Phase 2, 008) ----------
   // One soft foreground GPS ask on mount. Denied or no fix → the card
@@ -348,6 +350,8 @@ export default function PassengerHome() {
       await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address: addressInput });
       await refreshProfile();
       setDetailsOpen(false);
+      // Land on Home, never on a stale booking screen underneath.
+      router.replace('/(passenger)/home');
     } catch (e) {
       setDetailsError(e instanceof Error ? e.message : 'Could not save. Try again.');
     }
@@ -685,6 +689,19 @@ export default function PassengerHome() {
           </ScrollView>
           </View>
 
+          {advisory?.active && (
+            <View style={styles.advisoryBanner} accessibilityRole="alert">
+              <Icon name="warning" size={18} color={colors.danger} />
+              <View style={styles.advisoryBody}>
+                <Text style={styles.advisoryTitle}>Sailing is suspended</Text>
+                <Text style={styles.advisoryText}>
+                  {advisory.reason || 'The Coast Guard has paused trips across the strait.'} You
+                  can still book — your bangkero sails once the strait reopens.
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.weatherWrap}>
             <WeatherCard latitude={STRAIT_POINT.lat} longitude={STRAIT_POINT.lon} variant="bar" />
           </View>
@@ -813,7 +830,7 @@ export default function PassengerHome() {
             />
             {!!detailsError && <Text style={styles.detailsError}>{detailsError}</Text>}
             <PrimaryButton
-              label="Save and start booking"
+              label="Save details"
               onPress={() => void saveDetails()}
               loading={savingDetails}
               disabled={savingDetails || !ageInput.trim() || !addressInput.trim()}
@@ -1034,6 +1051,22 @@ const styles = StyleSheet.create({
   tileIcon: { marginBottom: spacing.xs },
   tileLabel: { ...typography.label, color: colors.text, letterSpacing: 0 },
   tileLabelDisabled: { color: colors.textMuted },
+
+  // ---------- sailing advisory ----------
+  advisoryBanner: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerTint,
+  },
+  advisoryBody: { flex: 1, minWidth: 0 },
+  advisoryTitle: { ...typography.bodyStrong, color: colors.danger },
+  advisoryText: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
 
   // ---------- recent trips ----------
   sectionHead: {

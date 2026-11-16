@@ -34,6 +34,34 @@ export function todayIso(): string {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+export interface DayOption {
+  iso: string;
+  dow: string;
+  day: string;
+  month: string;
+  isToday: boolean;
+}
+
+/**
+ * The shared 14-day strip. `fromTomorrow` is for charters, which are advance
+ * bookings unless the admin flips the 089 same-day demo switch.
+ */
+export function dayOptions(count = 14, fromTomorrow = false): DayOption[] {
+  const out: DayOption[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i + (fromTomorrow ? 1 : 0));
+    out.push({
+      iso: isoDay(d),
+      dow: WEEKDAYS[d.getDay()],
+      day: String(d.getDate()),
+      month: MONTHS[d.getMonth()],
+      isToday: !fromTomorrow && i === 0,
+    });
+  }
+  return out;
+}
+
 /** "Oct 9 · 7:00 AM" — notification/banner copy for a scheduled sail. */
 export function sailsLabel(date: string | null, time: string | null): string | null {
   if (!date) return null;
@@ -47,21 +75,19 @@ interface Props {
   time: string | null;
   onDate: (date: string) => void;
   onTime: (time: string | null) => void;
+  /** Start tomorrow — charters are advance unless 089's same-day switch is on. */
+  fromTomorrow?: boolean;
+  /** Whole-day bookings (charters) have no departure slot. */
+  hideSlots?: boolean;
+  /** YYYY-MM-DD days this boat is already committed to. */
+  blockedDays?: string[];
 }
 
-export function SchedulePicker({ date, time, onDate, onTime }: Props) {
-  const days: { iso: string; dow: string; day: string; month: string; isToday: boolean }[] = [];
-  const now = new Date();
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    days.push({
-      iso: isoDay(d),
-      dow: WEEKDAYS[d.getDay()],
-      day: String(d.getDate()),
-      month: MONTHS[d.getMonth()],
-      isToday: i === 0,
-    });
-  }
+export function SchedulePicker({
+  date, time, onDate, onTime, fromTomorrow = false, hideSlots = false, blockedDays,
+}: Props) {
+  const days = dayOptions(14, fromTomorrow);
+  const blocked = blockedDays ?? [];
 
   const advance = date > todayIso();
 
@@ -70,28 +96,36 @@ export function SchedulePicker({ date, time, onDate, onTime }: Props) {
       <ScrollHintBar contentContainerStyle={styles.strip}>
         {days.map((d) => {
           const active = d.iso === date;
+          const booked = blocked.includes(d.iso);
           return (
             <Pressable
               key={d.iso}
+              disabled={booked}
               onPress={() => {
                 onDate(d.iso);
                 // Slots belong to future sailings only — clear on same-day.
                 if (d.iso <= todayIso()) onTime(null);
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${d.dow} ${d.month} ${d.day}${d.isToday ? ', today' : ''}`}
-              style={({ pressed }) => [styles.day, active && styles.dayActive, pressed && !active && styles.pressed]}
+              accessibilityLabel={`${d.dow} ${d.month} ${d.day}${d.isToday ? ', today' : ''}${booked ? ', booked' : ''}`}
+              style={({ pressed }) => [
+                styles.day,
+                active && styles.dayActive,
+                booked && styles.dayOff,
+                pressed && !active && !booked && styles.pressed,
+              ]}
             >
               <Text style={[styles.dayDow, active && styles.dayTextActive]}>{d.dow}</Text>
               <Text style={[styles.dayNum, active && styles.dayTextActive]}>{d.day}</Text>
               <Text style={[styles.dayMonth, active && styles.dayTextActive]}>{d.month}</Text>
               {d.isToday && <Text style={[styles.dayToday, active && styles.dayTodayActive]}>Today</Text>}
+              {booked && <Text style={styles.dayBooked}>Booked</Text>}
             </Pressable>
           );
         })}
       </ScrollHintBar>
 
-      {advance && (
+      {!hideSlots && advance && (
         <View style={styles.slotsWrap}>
           <Text style={styles.slotLabel}>DEPARTURE TIME</Text>
           <View style={styles.slots}>
@@ -125,11 +159,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.borderSubtle,
   },
   dayActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  dayOff: { opacity: 0.45 },
   dayDow: { ...typography.caption, fontSize: 10, color: colors.textMuted, fontWeight: '600' },
   dayNum: { fontSize: 18, fontWeight: '700', color: colors.text, marginVertical: 1 },
   dayMonth: { fontSize: 10, color: colors.textMuted },
   dayToday: { fontSize: 9, fontWeight: '700', color: colors.primary, marginTop: 2 },
   dayTodayActive: { color: colors.primary },
+  dayBooked: { fontSize: 8, fontWeight: '700', color: colors.danger, marginTop: 2, textTransform: 'uppercase' },
   dayTextActive: { color: colors.primary },
 
   pressed: { opacity: 0.7 },

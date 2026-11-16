@@ -1,6 +1,10 @@
 import { supabase } from './supabase';
 import type { SafetyAlertDoc, AlertSeverity } from '../types/models';
 
+function isComplianceReport(message: string | null | undefined): boolean {
+  return message?.startsWith('[Compliance Report]') === true || message?.startsWith('Zone:') === true;
+}
+
 function mapRow(row: any): SafetyAlertDoc {
   return {
     alertId: row.id,
@@ -38,7 +42,11 @@ export async function getAlerts(
   portId?: string,
   includeResolved = true
 ): Promise<SafetyAlertDoc[]> {
-  let query = supabase.from('safety_alerts').select('*');
+  let query = supabase
+    .from('safety_alerts')
+    .select('*')
+    .not('message', 'like', '[Compliance Report]%')
+    .not('message', 'like', 'Zone:%');
 
   if (portId) {
     query = query.eq('port_id', portId);
@@ -64,7 +72,7 @@ export async function getAlerts(
 export async function getAlertFeed(): Promise<SafetyAlertDoc[]> {
   const { data, error } = await supabase.rpc('alert_feed');
   if (error) return getAlerts(undefined, true);
-  return (data ?? []).map(mapRow);
+  return (data ?? []).filter((row: any) => !isComplianceReport(row.message)).map(mapRow);
 }
 
 export async function resolveAlert(alertId: string): Promise<void> {

@@ -17,6 +17,43 @@
       background:#fff;
       box-shadow:0 2px 10px rgba(16,24,40,.04);
     }
+    .compliance-table{
+      width:100%;
+      min-width:900px;
+      table-layout:fixed;
+    }
+    .compliance-table th,
+    .compliance-table td{
+      overflow-wrap:anywhere;
+    }
+    .compliance-table .compliance-category{
+      display:grid;
+      justify-items:start;
+      gap:.35rem;
+    }
+    .compliance-table .compliance-evidence{
+      display:flex;
+      flex-wrap:wrap;
+      gap:.25rem;
+    }
+    .compliance-table .compliance-evidence .btn{
+      margin:0;
+      white-space:nowrap;
+    }
+    .compliance-table .compliance-date{
+      white-space:nowrap;
+    }
+    .report-actions{
+      display:flex;
+      flex-direction:column;
+      gap:.3rem;
+      width:100%;
+      max-width:8rem;
+    }
+    .report-actions .btn{
+      padding:.2rem .35rem;
+      white-space:nowrap;
+    }
     .feedback-message-preview{
       display:-webkit-box;
       max-width:28rem;
@@ -47,31 +84,41 @@
         <div class="cg-card p-3 mb-3">
           <div class="panel-head">
             <h6 class="mb-0">Compliance &amp; Feedback</h6>
-            <span class="muted-note">Read-only: review compliance reports and user feedback</span>
+            <span class="muted-note">Review reports, resolve them, or dismiss them from this list</span>
           </div>
 
           <div class="panel-card p-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
               <h5 class="mb-0">Compliance Reports</h5>
               <span class="badge text-bg-info">Admin • Coast Guard</span>
             </div>
             <div class="table-responsive">
-              <table class="table table-theme align-middle mb-0">
+              <table class="table table-theme align-middle mb-0 compliance-table">
+                <colgroup>
+                  <col style="width:10%">
+                  <col style="width:15%">
+                  <col style="width:16%">
+                  <col style="width:25%">
+                  <col style="width:10%">
+                  <col style="width:12%">
+                  <col style="width:12%">
+                </colgroup>
                 <thead>
                   <tr>
-                    <th>Report ID</th>
-                    <th>Filed By</th>
-                    <th>Category</th>
-                    <th>Subject</th>
-                    <th>Evidence</th>
-                    <th>Status</th>
-                    <th>Date</th>
+                    <th scope="col">Report ID</th>
+                    <th scope="col">Filed By</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Evidence</th>
+                    <th scope="col">Status / Actions</th>
+                    <th scope="col">Date</th>
                   </tr>
                 </thead>
                 <tbody id="complianceBody"></tbody>
               </table>
             </div>
             <div id="complianceState" class="small text-secondary mt-3">Loading compliance reports...</div>
+            <div id="reportActionFeedback" class="alert d-none mt-2 mb-0" role="status" aria-live="polite"></div>
           </div>
 
           <div class="panel-card p-3 mt-3">
@@ -156,6 +203,7 @@
     let reports = [];
     const tbody = document.getElementById('complianceBody');
     const complianceState = document.getElementById('complianceState');
+    const reportActionFeedback = document.getElementById('reportActionFeedback');
     const feedbackBody = document.getElementById('feedbackBody');
     const feedbackLoading = document.getElementById('feedbackLoading');
     const feedbackError = document.getElementById('feedbackError');
@@ -163,6 +211,7 @@
     const feedbackCount = document.getElementById('feedbackCount');
     const feedbackModal = new bootstrap.Modal(document.getElementById('feedbackDetailModal'));
     let feedbackMessages = [];
+    const busyReportIds = new Set();
 
     function escapeHtml(value) {
       return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -263,11 +312,12 @@
         const match = message.match(new RegExp('(?:^|\\n)' + label + ': ([^\\n]*)'));
         return match ? match[1].trim() : '';
       };
-      const isAdminReport = message.startsWith('[Compliance Report]');
+      const isAppReport = message.startsWith('[Compliance Report]');
+      const isLegacyCoastguardReport = message.startsWith('Zone:');
       const zone = value('Zone');
       return {
-        by: value('Filed By') || (isAdminReport ? 'Admin' : 'Coast Guard'),
-        category: value('Category') || (isAdminReport ? 'Compliance' : 'Safety'),
+        by: value('Filed By') || (isLegacyCoastguardReport ? 'Coast Guard' : isAppReport ? 'Admin' : 'Unknown'),
+        category: value('Category') || (isAppReport || isLegacyCoastguardReport ? 'Compliance' : 'Safety'),
         subject: value('Subject') || zone || message.split('\n').find(line => line && !line.startsWith('[')) || 'Compliance report',
         date: alert.createdAt ? new Date(alert.createdAt).toLocaleDateString('en-PH') : 'N/A'
       };
@@ -277,19 +327,34 @@
       tbody.innerHTML = reports.map(alert => {
         const report = reportFields(alert);
         const evidence = alert.evidencePaths.length
-          ? alert.evidencePaths.map((path, index) => `<button type="button" class="btn btn-sm btn-outline-primary me-1 mb-1" data-evidence-alert="${escapeHtml(alert.alertId)}" data-evidence-index="${index}">View ${index + 1}</button>`).join('')
+          ? `<div class="compliance-evidence">${alert.evidencePaths.map((path, index) => `<button type="button" class="btn btn-sm btn-outline-primary" data-evidence-alert="${escapeHtml(alert.alertId)}" data-evidence-index="${index}">View ${index + 1}</button>`).join('')}</div>`
           : '<span class="badge text-bg-secondary">None</span>';
         const severity = escapeHtml(alert.severity || 'low');
         const reportStatus = alert.isResolved ? 'Resolved' : 'Open';
+        const reportId = escapeHtml(alert.alertId);
+        const actions = alert.isResolved ? '' : `
+          <div class="report-actions">
+            <button type="button" class="btn btn-sm btn-outline-success" data-report-action="resolve" data-report-id="${reportId}" ${busyReportIds.has(alert.alertId) ? 'disabled' : ''}>
+              <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Resolve
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-report-action="dismiss" data-report-id="${reportId}" ${busyReportIds.has(alert.alertId) ? 'disabled' : ''}>
+              <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Dismiss
+            </button>
+          </div>`;
         return `
           <tr>
             <td>${escapeHtml(alert.alertId.slice(0, 8))}...</td>
             <td>${escapeHtml(report.by)}</td>
-            <td>${escapeHtml(report.category)} <span class="badge ${severity === 'critical' || severity === 'high' ? 'text-bg-danger' : severity === 'medium' ? 'text-bg-warning' : 'text-bg-info'}">${severity}</span></td>
+            <td><div class="compliance-category"><span>${escapeHtml(report.category)}</span><span class="badge ${severity === 'critical' || severity === 'high' ? 'text-bg-danger' : severity === 'medium' ? 'text-bg-warning' : 'text-bg-info'}">${severity}</span></div></td>
             <td title="${escapeHtml(alert.message)}">${escapeHtml(report.subject)}</td>
             <td>${evidence}</td>
-            <td><span class="badge ${alert.isResolved ? 'text-bg-success' : 'text-bg-warning'}">${reportStatus}</span></td>
-            <td>${escapeHtml(report.date)}</td>
+            <td>
+              <div class="d-flex flex-column align-items-start gap-2">
+                <span class="badge ${alert.isResolved ? 'text-bg-success' : 'text-bg-warning'}">${reportStatus}</span>
+                ${actions}
+              </div>
+            </td>
+            <td class="compliance-date">${escapeHtml(report.date)}</td>
           </tr>
         `;
       }).join('');
@@ -301,11 +366,52 @@
       complianceState.textContent = reports.length ? `${reports.length} compliance report(s)` : 'No compliance reports found.';
     }
 
+    tbody.addEventListener('click', async function(event) {
+      const button = event.target.closest('[data-report-action]');
+      if (!button) return;
+      const alertId = button.dataset.reportId;
+      const action = button.dataset.reportAction;
+      const report = reports.find(item => item.alertId === alertId);
+      if (!report || report.isResolved || busyReportIds.has(alertId)) return;
+      const label = action === 'resolve' ? 'resolve' : 'dismiss';
+      if (!window.confirm(`Are you sure you want to ${label} this report?`)) return;
+
+      busyReportIds.add(alertId);
+      reportActionFeedback.classList.add('d-none');
+      renderTable();
+      try {
+        if (action === 'dismiss') {
+          await window.bangkagoAlerts.dismissComplianceReport(alertId);
+          reports = reports.filter(item => item.alertId !== alertId);
+        } else {
+          await window.bangkagoAlerts.resolve(alertId);
+          const currentReport = reports.find(item => item.alertId === alertId);
+          if (currentReport) currentReport.isResolved = true;
+        }
+        reportActionFeedback.className = 'alert alert-success mt-2 mb-0';
+        reportActionFeedback.textContent = action === 'resolve'
+          ? 'Report resolved. It remains in the list for review.'
+          : 'Report dismissed and removed from this list. Its record is preserved.';
+      } catch (error) {
+        reportActionFeedback.className = 'alert alert-danger mt-2 mb-0';
+        reportActionFeedback.textContent = `Could not ${label} report: ${error.message || 'Please try again.'}`;
+      } finally {
+        busyReportIds.delete(alertId);
+        renderTable();
+      }
+    });
+
     async function loadReports() {
       complianceState.textContent = 'Loading compliance reports...';
       try {
-        const alerts = await window.bangkagoAlerts.listAll({ limit: 200 });
-        reports = alerts.filter(alert => alert.message?.startsWith('[Compliance Report]') || alert.message?.startsWith('Zone:'));
+        const [appReports, coastguardReports] = await Promise.all([
+          window.bangkagoAlerts.listAll({ messagePrefix: '[Compliance Report]', limit: 200 }),
+          window.bangkagoAlerts.listAll({ messagePrefix: 'Zone:', limit: 200 })
+        ]);
+        reports = [...appReports, ...coastguardReports]
+          .filter(alert => !alert.dismissedAt)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 200);
         renderTable();
       } catch (error) {
         console.error(error);

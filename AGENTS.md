@@ -41,72 +41,94 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
-- **2026-11-16 - Web manifest PDFs + Bangkero Manage Bookings (mobile PDF
-  abandoned).**
+- **2026-11-16 — Same-day rentals demo switch (migration 089 PENDING — USER
+  MUST RUN, after 088; gates: tsc clean, lint 0 errors / 142 known
+  warnings).**
+  - Charters stay advance-only unless Admin → Developer Options →
+    **Same-day rentals** is ON. It writes `dev_flags.rental_today` (089,
+    admin-only `set_rental_today()`), which `rental-form` reads through the
+    anon-safe `demo_rental_today_enabled()` and passes as
+    `fromTomorrow={!sameDay}`.
+  - Today joins the same 14-day strip and reads **Booked** when that boat's
+    operator already has an accepted trip today (027/079). Nothing else
+    changed: 50% GCash downpayment → admin escrow approval → bangkero
+    confirm → charter screen today.
+  - The switch hides itself until 089 runs. No rental, escrow or day-lock
+    rule was touched; the flag exists so the presentation can book a boat
+    for today without changing the production rule (tracker 19).
+  - **Next:** run `089_rental_today.sql` after `088`, flip the switch, then
+    book a boat for Today and walk it through escrow → confirm.
+
+- **2026-11-16 — Departure lock, demo ports, rental advance visibility,
+  suspension banner, idempotent booking, per-passenger no-show (migrations
+  **085 → 086 → 087 → 088 PENDING — USER MUST RUN, after 084**; gates:
+  tsc clean, lint 0 errors / 143 known warnings).**
+  - **Departure lock (085):** `set_booking_boarded` and `verify_boarding_qr`
+    refuse once `depart_time` is stamped. Departure shows a read-only "This
+    sailing is already under way → Open live trip" card; Booking Status
+    hides scan/no-show and turns Prepare Departure into **Open live trip**
+    after sailing; en-route lost its back arrow. Cargo was already closed
+    by 073/078. Advance bookings (depart_time NULL) are unaffected.
+  - **Demo ports (086 + Developer Options):** `demo-stb` (ST Building) and
+    `demo-home` (Home), both ~900 m geofence, plus one directed route each
+    way, inserted INACTIVE. Admin → Developer Options has a **Show demo
+    ports** switch (hidden until 086 is run) that flips
+    `ports.is_active` / `routes.is_active` for `id LIKE 'demo-%'`.
+    `demo-home` is labelled `island_group='olango'` on purpose so
+    book-ride's same-island filter still offers the pair.
+  - **Rentals:** `SchedulePicker` grew `dayOptions()`, `fromTomorrow`,
+    `hideSlots` and `blockedDays`, and `rental-form` now uses the same
+    14-day strip as every other module (was 7 bespoke chips). The bangkero
+    home banner also shows a **pending** charter request
+    ("CHARTER REQUEST · RESPOND" → Boat Rentals), not only confirmed ones.
+  - **Passenger suspension banner:** `(passenger)/home` shows a red
+    "Sailing is suspended" card above the weather, with the coastguard's
+    reason and a note that booking still works.
+  - **No duplicate bookings (087):** `bookings.client_ref` + a partial
+    unique index makes `createBooking` idempotent (same payment screen →
+    same booking on retry; 23505 returns the winner). Pre-087 inserts
+    retry without the column. Booking-confirmed without a ref/bookingId
+    redirects Home, and `batched-waiting` lost its swipe-back.
+  - **Tutorial save:** the age/address modal's button is **Save details**
+    and lands on Home (`router.replace`), never on a stale Booking
+    Requested screen.
+  - **Per-passenger no-show (088):** new `PartyNoShowSheet` lists the party;
+    only not-boarded passengers are selectable, last-minute unticked rows
+    are marked aboard, and ticking everyone cancels the booking as a
+    whole. Companions go through `set_passenger_boarded`; a companion left
+    behind while the booker sailed stamps the booker's `no_show_at`
+    (ban + notice) without cancelling the trip. Other accepted bookings on
+    the boat keep their seats, holds and manifest rows.
+  - **Deferred (tracker 16–18):** demo port rows must be deleted before
+    public launch; the companion-no-show-stamps-the-booker rule is a
+    product decision; the departure lock is UI + RPC only, the broad
+    `bookings` UPDATE policy (E1) still needs its trigger.
+  - **Next:** run `085` → `086` → `087` → `088` after 084, then smoke:
+    sail a trip and confirm Departure / Booking Status / en-route cannot
+    re-open boarding; flip Show demo ports and book ST Building → Home in
+    both directions; charter a boat tomorrow from the shared 14-day strip;
+    approve a rental escrow and see the pending banner on bangkero home;
+    suspend sailing and read the passenger banner; break wifi during a
+    payment and tap Pay again (one booking); finish the tutorial and land
+    on Home; mark one companion no-show and confirm the booker sailed +
+    the other trip on the boat still sails.
+
+- **2026-11-16 - Manifest PDF export restored + Bangkero Manage Bookings.**
   - **Web PDFs:** Admin `manage-bookings.html` and Coast Guard
-    `export-manifest.html` retain their lazy-loaded jsPDF/autoTable
-    **Export PDF** buttons. Admin exports the current booking manifest
-    (booker, companions, parcels/items); Coast Guard exports the current
-    `trip_manifest` snapshot with passengers and parcels.
+    `export-manifest.html` regain lazy-loaded jsPDF/autoTable **Export PDF**
+    buttons. Admin exports the current booking manifest (booker, companions,
+    parcels/items); Coast Guard exports the current `trip_manifest` snapshot
+    with passengers and parcels.
   - **Bangkero mobile:** new `(bangkero)/manage-bookings` list shows bookings
     individually by `BGO-XXXX` ref with booker, route, date, status and pax
     count. Each opens a manifest detail screen with the booker, companions,
-    and `PassengerEditModal` edit/remove actions. Profile menu entry added.
-  - **Smoke fix:** Manage Bookings was sorting by the random `BGO-XXXX` ref,
-    which pushed older completed rows above today's bookings. `useMyTrips`
-    now orders by `created_at DESC` in Postgres, and the list sorts by
-    `createdAt` newest-first. No status filter was added; all statuses were
-    already fetched.
-  - **Mobile PDF abandoned:** mobile PDF generation/sharing still failed on
-    the demo device, so all **Share Manifest PDF** buttons were removed from
-    Bangkero Manage Bookings, Bangkero sailing, and Admin booking detail.
-    `manifest-export.service.ts` was deleted; `expo-print` and
-    `expo-sharing` were uninstalled. `expo-file-system` is no longer a direct
-    dependency (it remains transitively under `expo`). The web jsPDF export
-    code is untouched and remains the working export path.
-  - **Admin mobile access:** the admin drawer/home row formerly labelled
-    "Trips" is now **Manage Bookings** (`/(admin)/bookings`). Admins use
-    their own guarded route instead of the bangkero-only screens.
-  - **Web notifications layout:** Admin and Coast Guard
-    `notifications.html` now use the shared `cg-shell` / `sidebarMount` /
-    `topbarMount` / `cg-content` / `cg-card` wrappers. Coast Guard uses
-    `coastguard-theme.css`; notification rows stay inside the standard card.
-    Inline scripts syntax-checked; not browser-smoke-tested yet.
-  - **Report Issue location:** the shared passenger/bangkero compliance form
-    now uses `PortSelect` fed by `usePorts` (the same source as Book a Ride)
-    instead of free text. Submitting writes the chosen `safety_alerts.port_id`
-    and includes the port name in the Zone line. `npx tsc --noEmit` and
-    targeted ESLint clean; not device-smoke-tested.
-  - **Bangkero demand forecast:** home now mirrors the Admin
-    `analyze-demand.html` aggregation. New `getRouteDemandSummary` sums
-    every `demand_predictions` row per route across all dates, ranks by
-    total predicted passengers, and Home shows only the top 3 under
-    TODAY'S PREDICTION as clean rows. Each row is the route name (one line,
-    ellipsis) plus a compact right-side pill: Low/Steady/High Demand and
-    `~N pax` from the route's average daily prediction (Low <50, Steady
-    50-100, High >100). Read-only. `npx tsc --noEmit` clean;
-    `npm run lint` 0 errors / 137 known warnings; not device-smoke-tested.
-  - **Admin view-weather is live:** `sea-weather.js` now exposes
-    `window.bangkagoSeaWeather.getLive(lat, lon)` and returns visibility
-    (km) and humidity as well as the existing wind/wave/condition. Admin
-    `view-weather.html` no longer renders mock rows: it shows a green
-    **LIVE WEATHER** badge, fills Wind/Wave/Visibility/Safety from the
-    Open-Meteo strait reading, loads real active routes (one per origin)
-    for the snapshot, and computes SAFE / CAUTION / WATCHLIST with the
-    trigger shown under each Advisory badge. Rules: CAUTION at wind
-    ≥ 25 km/h, waves ≥ 1.0 m, visibility < 5 km, or rain; WATCHLIST at
-    wind ≥ 40 km/h, waves ≥ 1.5 m, visibility < 2 km, or thunderstorm.
-    API failure shows **Data Unavailable** everywhere (no stale mock
-    numbers); a partial response missing wind, waves, or visibility also
-    refuses to claim SAFE. The safety modal evaluates the selected route
-    against the same live reading. Inline script and `sea-weather.js`
-    pass `node --check`; Open-Meteo endpoints returned live test data
-    from this machine; not browser-smoke-tested.
+    `PassengerEditModal` edit/remove actions, and **Share Manifest PDF**.
+    `sailing.tsx` also gains a per-booking PDF share button. Dependencies:
+    `expo-print`, `expo-sharing`. Profile menu entry added.
   - **Gates:** typed routes regenerated, new detail route uses no cast;
-    `npx tsc --noEmit` clean; `npm run lint` 0 errors / 137 known warnings;
-    `npx expo-doctor` 17/18 (the 9 known SDK-57 patch drifts, not
-    bulk-upgraded); inline scripts in both edited web pages pass
-    `node --check`. Not manually smoke-tested in Expo Go or a browser yet.
+    `npx tsc --noEmit` clean; `npm run lint` 0 errors / 138 known warnings;
+    inline scripts in both edited web pages pass `node --check`. Not
+    manually smoke-tested in Expo Go or a browser yet.
 
 - **2026-11-16 — RBAC matrix alignment, operations inboxes, passenger safety
   feed/report, passenger-list edit/delete (migration 083 PENDING — USER MUST

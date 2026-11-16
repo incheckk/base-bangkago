@@ -1,4 +1,4 @@
-import type { BangkeroDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
+import type { BangkeroDoc, PassengerDetailDoc, PortDoc, RouteDoc, UserDoc } from '../types/models';
 import { manilaTodayIso } from '../utils/date';
 import { friendlyAuthError } from './auth.service';
 import { getIslandPackage } from './island-package.service';
@@ -6,7 +6,6 @@ import { mapRouteRow } from './mappers';
 import { createNotification } from './notification.service';
 import { calculateParcelFare, type DeliveryType } from './parcel-pricing.service';
 import { validateParcelItems } from './parcel.service';
-import { getPassengerDetailsByBooking } from './passenger-detail.service';
 import { requirePersonalDetails } from './profile.service';
 import { supabase } from './supabase';
 
@@ -36,6 +35,8 @@ export interface CreateBookingResult {
   ref: string;
   /** Server-recomputed fare stored on the booking. */
   totalPrice: number;
+  /** True when this call returned an already-created booking (087 retry). */
+  reused?: boolean;
 }
 
 /**
@@ -170,6 +171,11 @@ interface CreateArgs {
    * pre-045 caller behaves unchanged.
    */
   isDispatchable?: boolean;
+  /**
+   * One id per payment screen (087). A retry after a lost response returns
+   * the booking that already exists instead of double-booking the passenger.
+   */
+  clientRef?: string;
 }
 
 /** Advance = sailing date after today (Manila). Needs the 50% escrow. */
@@ -233,6 +239,31 @@ async function computeBookingFare(args: {
 }
 
 /**
+ * The booking this intent already created (087), if any. A pre-087 schema
+ * has no client_ref column: the select errors and returns null, and the
+ * normal insert path runs unchanged.
+ */
+async function findByClientRef(
+  userId: string,
+  clientRef: string
+): Promise<CreateBookingResult | null> {
+  const { data } = await supabase
+    .from('bookings')
+    .select('id, ref, total_price')
+    .eq('user_id', userId)
+    .eq('client_ref', clientRef)
+    .maybeSingle();
+  return data
+    ? {
+        bookingId: data.id,
+        ref: data.ref,
+        totalPrice: Number(data.total_price),
+        reused: true,
+      }
+    : null;
+}
+
+/**
  * Creates a booking. id and ref are filled by the set_booking_ref trigger.
  * The fare is recomputed here from the route, package or parcel lines — the
  * screen's quote is advisory and is never trusted. A future sailing date
@@ -240,11 +271,18 @@ async function computeBookingFare(args: {
  */
 export async function createBooking({
   passenger, fromPort, toPort, passengerCount, serviceType = 'passenger', items, deliveryType,
-  packageId, scheduledDate, scheduledTime, isDispatchable,
+  packageId, scheduledDate, scheduledTime, isDispatchable, clientRef,
 }: CreateArgs): Promise<CreateBookingResult> {
   await requirePersonalDetails(passenger.uid);
   if (fromPort.portId === toPort.portId) {
     throw new Error('Pick two different ports.');
+  }
+
+  // A lost insert response must not make the retry look like a duplicate
+  // booking: the same intent returns the row it already created.
+  if (clientRef) {
+    const existing = await findByClientRef(passenger.uid, clientRef);
+    if (existing) return existing;
   }
 
   const route = await fetchRoute(fromPort.portId, toPort.portId);
@@ -303,9 +341,10 @@ export async function createBooking({
 
   // Option B (045): parcel-mode stubs insert is_dispatchable=false; every
   // other booking (incl. pre-045 callers) defaults to the real crossing.
+  const intent = clientRef ? { client_ref: clientRef } : {};
   let { data, error } = await supabase
     .from('bookings')
-    .insert({ ...bookingFields, is_dispatchable: isDispatchable ?? true })
+    .insert({ ...bookingFields, ...intent, is_dispatchable: isDispatchable ?? true })
     .select('id, ref')
     .single();
 
@@ -319,9 +358,25 @@ export async function createBooking({
     }
     ({ data, error } = await supabase
       .from('bookings')
-      .insert(bookingFields)
+      .insert({ ...bookingFields, ...intent })
       .select('id, ref')
       .single());
+  }
+
+  // Same for client_ref on a pre-087 schema.
+  if (error && (error.code === 'PGRST204' || /client_ref/i.test(error.message ?? ''))) {
+    ({ data, error } = await supabase
+      .from('bookings')
+      .insert({ ...bookingFields, is_dispatchable: isDispatchable ?? true })
+      .select('id, ref')
+      .single());
+  }
+
+  // Two fast taps can both pass the lookup above; the unique index keeps one
+  // row and the loser returns it instead of an error.
+  if (error?.code === '23505' && clientRef) {
+    const raced = await findByClientRef(passenger.uid, clientRef);
+    if (raced) return raced;
   }
 
   if (error) throw error;
@@ -688,36 +743,53 @@ export async function markBookerAbsent(bookingId: string): Promise<void> {
 }
 
 /**
- * Group no-show with per-passenger granularity (022):
- *  - NOBODY from the booking sailed → cancel it exactly as before
- *    (mark_no_show: cancelled + no_show_at + ban + notification);
- *  - SOMEONE sailed → keep the booking accepted, mark only the absent
- *    passengers (booker via mark_booker_absent, companions via
- *    set_passenger_boarded('not_boarded')) and tell the booker.
- * Returns which path ran so the call site can latch its UI.
+ * Per-passenger no-show (088). The bangkero ticks who missed the boat;
+ * everyone else in the party is marked aboard, because the boat is leaving
+ * with them.
+ *
+ *  - nobody aboard and every unboarded passenger ticked → the booking is
+ *    cancelled as a whole (mark_no_show: ban + passenger notification);
+ *  - otherwise only the ticked passengers are marked absent — the booker
+ *    via mark_booker_absent, companions via set_passenger_boarded — and the
+ *    trip continues with the rest of the party.
+ *
+ * Siblings are untouched: another accepted booking on the same boat keeps
+ * its seats, hold and manifest rows.
  */
-export async function resolveGroupNoShow(booking: {
-  bookingId: string;
-  ref: string;
-  userId: string;
-  fromPortName: string | null;
-  onboardedAt: string | null;
-}): Promise<'cancelled' | 'partial'> {
-  const companions = await getPassengerDetailsByBooking(booking.bookingId).catch(
-    () => []
-  );
-  const anyoneSailed = !!booking.onboardedAt || companions.some((c) => !!c.boardedAt);
+export const BOOKER_KEY = 'booker';
 
-  if (!anyoneSailed) {
+export async function markPartyNoShow(
+  booking: {
+    bookingId: string;
+    ref: string;
+    userId: string;
+    fromPortName: string | null;
+    onboardedAt: string | null;
+  },
+  companions: PassengerDetailDoc[],
+  missing: string[]
+): Promise<'cancelled' | 'partial'> {
+  const picked = new Set(missing);
+  const open = companions.filter((c) => !c.boardedAt && !c.noShowAt);
+  const bookerMissing = picked.has(BOOKER_KEY) && !booking.onboardedAt;
+  // The booker sails unless ticked; an unticked companion sails too.
+  const anyoneAboard =
+    !bookerMissing ||
+    companions.some((c) => !!c.boardedAt) ||
+    open.some((c) => !picked.has(c.passengerId));
+
+  if (!anyoneAboard) {
     await noShowPassenger(booking);
     return 'cancelled';
   }
 
-  if (!booking.onboardedAt) await markBookerAbsent(booking.bookingId);
-  for (const c of companions) {
-    if (!c.boardedAt && !c.noShowAt) {
-      await setPassengerBoarded(c.passengerId, 'not_boarded').catch(() => null);
-    }
+  if (bookerMissing) await markBookerAbsent(booking.bookingId);
+  else if (!booking.onboardedAt) await setOnboarded(booking.bookingId, true);
+
+  // Ticked → absent. Unticked → they are on the boat (088 refuses to
+  // board after departure, so this can only happen beforehand).
+  for (const c of open) {
+    await setPassengerBoarded(c.passengerId, picked.has(c.passengerId) ? 'not_boarded' : 'boarded');
   }
 
   const ban = await getBookingBan(booking.userId).catch(() => null);

@@ -147,7 +147,9 @@ export default function BangkeroHome() {
 
   // Upcoming charter (079): a confirmed rental keeps the whole day, so the
   // home screen has to be the way back into it — and the bangkero must see
-  // it BEFORE the day starts, not only once they open Boat Rentals.
+  // it BEFORE the day starts, not only once they open Boat Rentals. A
+  // pending request (admin approved the escrow) needs an answer, so it wins
+  // the banner over a confirmed one.
   const [todayCharter, setTodayCharter] = useState<BangkeroRentalRow | null>(null);
   const loadCharter = useCallback(async () => {
     if (!uid) return;
@@ -156,8 +158,12 @@ export default function BangkeroHome() {
       const rows = await getRentalsForBangkero(uid);
       setTodayCharter(
         rows
-          .filter((r) => r.status === 'confirmed' && r.rentalDate >= today)
-          .sort((a, b) => a.rentalDate.localeCompare(b.rentalDate))[0] ?? null
+          .filter((r) => (r.status === 'pending' || r.status === 'confirmed') && r.rentalDate >= today)
+          .sort((a, b) =>
+            a.status === b.status
+              ? a.rentalDate.localeCompare(b.rentalDate)
+              : a.status === 'pending' ? -1 : 1
+          )[0] ?? null
       );
     } catch {
       // no banner rather than a wrong one
@@ -1016,33 +1022,44 @@ export default function BangkeroHome() {
 
         {/* A confirmed charter owns the whole day (027/079) — it belongs on
             the home screen, not only inside the rentals list, and it shows
-            up as soon as it is confirmed so the day is never a surprise. */}
+            up as soon as it is confirmed so the day is never a surprise.
+            A pending one is a request the operator still has to answer. */}
         {todayCharter && (
           <Pressable
             onPress={() =>
-              router.push({
-                pathname: '/(bangkero)/charter/[id]',
-                params: { id: todayCharter.rentalId },
-              })
+              todayCharter.status === 'pending'
+                ? router.push('/(bangkero)/rentals')
+                : router.push({
+                    pathname: '/(bangkero)/charter/[id]',
+                    params: { id: todayCharter.rentalId },
+                  })
             }
             accessibilityRole="button"
-            accessibilityLabel="Open the confirmed charter"
+            accessibilityLabel={
+              todayCharter.status === 'pending'
+                ? 'Open the pending charter request'
+                : 'Open the confirmed charter'
+            }
             style={({ pressed }) => [styles.tripBanner, styles.charterBanner, pressed && styles.requestPressed]}
           >
             <View style={[styles.tripBannerDot, styles.charterBannerDot]} />
             <View style={styles.tripBannerText}>
               <Text style={[styles.tripBannerTitle, styles.charterBannerTitle]}>
-                {todayCharter.startedAt
-                  ? 'CHARTER · UNDER WAY'
-                  : todayCharter.rentalDate === manilaTodayIso()
-                    ? 'CHARTER TODAY'
-                    : `CHARTER · ${new Date(`${todayCharter.rentalDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }).toUpperCase()}`}
+                {todayCharter.status === 'pending'
+                  ? 'CHARTER REQUEST · RESPOND'
+                  : todayCharter.startedAt
+                    ? 'CHARTER · UNDER WAY'
+                    : todayCharter.rentalDate === manilaTodayIso()
+                      ? 'CHARTER TODAY'
+                      : `CHARTER · ${new Date(`${todayCharter.rentalDate}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }).toUpperCase()}`}
               </Text>
               <Text style={styles.tripBannerRoute} numberOfLines={1}>
                 {todayCharter.eventName || 'Boat charter'} · {todayCharter.boatName ?? 'your boat'}
               </Text>
             </View>
-            <Text style={styles.tripBannerAction}>Open ›</Text>
+            <Text style={styles.tripBannerAction}>
+              {todayCharter.status === 'pending' ? 'Respond ›' : 'Open ›'}
+            </Text>
           </Pressable>
         )}
 
@@ -1204,7 +1221,7 @@ export default function BangkeroHome() {
               // the card offers the boarding scan / the checklist, never
               // "Mark completed" — that used to complete unsailed trips.
               const advance = isAdvance(lead);
-              const departed = !!lead.departTime;
+              const departed = g.bookings.some((b) => !!b.departTime);
               const ridingAlong = g.bookings.flatMap(
                 (b) => piggybackByRideId.get(b.bookingId) ?? []
               );

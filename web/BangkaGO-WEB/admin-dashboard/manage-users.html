@@ -22,7 +22,12 @@
       <section class="cg-content container-fluid">
         <div class="cg-card p-3">
           <div class="panel-head">
-            <h6 class="mb-0">Manage Users</h6>
+            <div class="d-flex align-items-center gap-2">
+              <h6 class="mb-0">Manage Users</h6>
+              <span id="totalUserCount" class="badge rounded-pill text-bg-primary" aria-live="polite">
+                Total Users: —
+              </span>
+            </div>
             <span class="muted-note">User directory and account controls</span>
           </div>
 
@@ -163,6 +168,7 @@
     const statusFilter = document.getElementById('statusFilter');
     const loadingState = document.getElementById('loadingState');
     const errorState = document.getElementById('errorState');
+    const totalUserCount = document.getElementById('totalUserCount');
 
     const statusModal = new bootstrap.Modal(document.getElementById("statusModal"));
     const roleModal = new bootstrap.Modal(document.getElementById("roleModal"));
@@ -238,6 +244,11 @@
         bangkeroDeleted: u.bangkeroDeleted === true,
         createdAt: u.createdAt
       };
+    }
+
+    function updateTotalUserCount() {
+      const count = users.filter(u => !u.isSuspended).length;
+      totalUserCount.textContent = `Total Users: ${count}`;
     }
 
     function showLoading(show) {
@@ -341,6 +352,7 @@
       try {
         await window.bangkagoUsers.setSuspended(u.uid, newStatusVal === 'suspended');
         u.isSuspended = (newStatusVal === 'suspended');
+        updateTotalUserCount();
         runFilter();
         statusModal.hide();
         alert("User status updated.");
@@ -384,6 +396,7 @@
         users = await window.bangkagoUsers.listAll();
         // Map for display
         users = users.map(mapUserForDisplay);
+        updateTotalUserCount();
         renderTable(users);
         showLoading(false);
       } catch(e) {

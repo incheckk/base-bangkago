@@ -13,10 +13,14 @@ Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
 Updated 2026-11-13 (migration 079: escrow release to operators, charter
 sailing day, notification kinds, route/module lock split, booker details,
 passenger SOS).
+<<<<<<< Updated upstream
 Updated 2026-11-16 (migration 083: RBAC matrix alignment, operations
 inboxes, passenger safety feed/report, passenger-list edit/delete; 082:
 semantic user activity audit trail; 081: one live boat per bangkero,
 date-scoped capacity, island hop priced per person, charter ticks).
+=======
+Updated 2026-11-16 (migration 080: semantic user activity audit trail).
+>>>>>>> Stashed changes
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -57,6 +61,7 @@ date-scoped capacity, island hop priced per person, charter ticks).
    editable per boat in (bangkero)/rentals and web Manage Bangka.
    Confirm real per-boat whole-day pricing with operators before launch.
 
+<<<<<<< Updated upstream
 6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 082)
    Migration 082 records authenticated app/web business changes with
    semantic activity names, actor and record snapshots, and safe
@@ -67,6 +72,20 @@ date-scoped capacity, island hop priced per person, charter ticks).
    through authenticated app/web actions if they must be audited. Existing
    038 entries are relabelled from their stored changes, but cannot recover
    intent that was never captured. Audit access remains admin-only.
+=======
+6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 080)
+   Migration 080 records successful authenticated changes to business
+   records from the app and web console as human-readable activities,
+   including actor name/role snapshots and redacted-safe before/after
+   values. Generated notifications, GPS/weather telemetry, and other
+   non-user activity are excluded; a user's notification read-state
+   change is included. Writes made directly in the Supabase SQL editor or
+   with the service-role key have no user JWT and are not attributable;
+   route administrative changes through authenticated app/web actions if
+   they must be audited. Existing 038 entries are re-labelled from their
+   recorded row changes, but cannot recover intent that was never captured.
+   Audit access remains admin-only.
+>>>>>>> Stashed changes
 
 7. FLEET MAP ETA/DIRECTION TEXT IS AN ESTIMATE (web batch 2026-10-16)
    The Leaflet/OSM fleet maps (fleet-map.js on admin + coastguard
@@ -160,6 +179,40 @@ date-scoped capacity, island hop priced per person, charter ticks).
     bangkero. A real operator may own a fleet; lifting that needs the
     app's single-boat reads (profile, departure, getMyBangkaCapacity) to
     become a boat picker first, and the index to be dropped.
+
+16. DEMO PORTS LIVE IN THE PRODUCTION TABLES (2026-11-16)
+    Migration 086 inserts two presentation-only ports (demo-stb "ST
+    Building", demo-home "Home") and their two directed routes, all
+    INACTIVE. Admin -> Developer Options flips ports.is_active /
+    routes.is_active for id LIKE 'demo-%'. They are normal rows, so a
+    passenger could book one if an admin ever leaves the switch on.
+    Delete the id LIKE 'demo-%' rows before public launch (and remove
+    the Developer Options switch with them).
+
+17. COMPANION NO-SHOW LANDS ON THE BOOKER'S BAN (2026-11-16)
+    Migration 088 stamps bookings.no_show_at when a companion is marked
+    not_boarded while the booker already sailed, so the BOOKER carries
+    the 30/60-minute booking ban and notification even though they rode.
+    That was the product decision (the booking is the accountable unit)
+    but it is worth revisiting if a booker complains about a companion
+    who missed the boat on their own.
+
+18. DEPARTURE LOCK IS UI + RPC, NOT A TABLE TRIGGER (2026-11-16)
+    085 refuses boarding/QR writes once depart_time is stamped, and
+    088 refuses companion boarding after departure. The screens also
+    close themselves (Departure / Booking Status go read-only, en-route
+    absorbs back). The raw bookings UPDATE policy (E1) is still broad:
+    a crafted client could stamp onboarded_at or un-cancel a sailed
+    trip. That narrowing belongs with E1.
+
+19. SAME-DAY RENTALS ARE A DEMO SWITCH (2026-11-16)
+    Migration 089 adds dev_flags.rental_today + demo_rental_today_enabled()
+    + admin-only set_rental_today(). OFF is the production rule (the
+    rental strip starts tomorrow). ON offers Today so a charter can be
+    booked for the presentation day; the 50% downpayment, admin escrow
+    approval and the 027/079 day locks are unchanged. Decide the
+    commercial rule for same-day charters before launch, or delete the
+    switch and the flag with it.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
@@ -373,6 +426,11 @@ E1. bookings UPDATE STATE-MACHINE BYPASS
     depart_time is stamped, so the RPC path can no longer cancel a
     boat that has sailed. That is ONE path — the broad client UPDATE
     policy itself is untouched and still open here.
+    Narrowing 2026-11-16 (085/088): boarding and QR writes are refused
+    once depart_time is set, and a companion cannot be un-boarded after
+    a scan. That closes the RPCs the app calls, not the raw policy.
+    Migration 087's bookings.client_ref adds idempotent creates only —
+    a passenger can still UPDATE any column of their own row.
 
 E2. CLIENT-WRITABLE WALLET
     wallets / wallet top-ups are written from the client (RLS allows

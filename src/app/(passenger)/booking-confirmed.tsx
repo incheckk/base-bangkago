@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -58,6 +58,10 @@ export default function BookingConfirmed() {
       }),
     ]).start();
   }, []);
+
+  // Opened with no booking (stale link, replay): never render a blank
+  // "Booking Requested" screen.
+  if (!params.ref && !params.bookingId) return <Redirect href="/(passenger)/home" />;
 
   const paxCount = parseInt(params.count ?? '1', 10);
   const fare = parseInt(params.fare ?? '0', 10);

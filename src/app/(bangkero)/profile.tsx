@@ -39,6 +39,7 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
   { key: 'documents', label: 'Documents', icon: 'document' },
   { key: 'qr', label: 'GCash QR', icon: 'qr' },
   { key: 'guide', label: 'Quick Guide', icon: 'guide' },
+  { key: 'report-issue', label: 'Report Issue', icon: 'warning' },
   // The header burger is gone (3D) — SOS still has to be one tap away, and
   // it is the one row here that should not look like the others.
   { key: 'sos', label: 'SOS Alert', icon: 'sos', danger: true },
@@ -52,6 +53,7 @@ const ROUTE_MAP: Record<string, string> = {
   documents: '/(bangkero)/verify-boat',
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
+  'report-issue': '/(bangkero)/report-issue',
   sos: '/(bangkero)/sos-alert',
 };
 

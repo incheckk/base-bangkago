@@ -1,10 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ScrollView, StyleSheet, Text, TextInput, View,
+  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -58,6 +59,7 @@ export default function SailingScreen() {
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
   const [details, setDetails] = useState<Record<string, PassengerDetailDoc[]>>({});
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   // 079: the booker's age/address on the manifest, mirroring companions.
   const [bookers, setBookers] = useState<Record<string, BookerDetails>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -254,8 +256,15 @@ export default function SailingScreen() {
               {companions.length > 0 && (
                 <View style={styles.companions}>
                   <Text style={styles.companionsLabel}>COMPANIONS</Text>
+                  <Text style={styles.companionHint}>Tap a companion to edit or remove.</Text>
                   {companions.map((c) => (
-                    <View key={c.passengerId}>
+                    <Pressable
+                      key={c.passengerId}
+                      onPress={() => setEditing(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                      style={({ pressed }) => [styles.companionRow, pressed && styles.pressed]}
+                    >
                       <Text style={styles.companion} numberOfLines={1}>
                         {c.firstName} {c.lastName}
                         {c.age != null ? ` · ${c.age}` : ''}
@@ -266,7 +275,7 @@ export default function SailingScreen() {
                           📍 {c.address}
                         </Text>
                       )}
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               )}
@@ -351,6 +360,13 @@ export default function SailingScreen() {
           )}
         </View>
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void loadDetails()}
+      />
     </ScreenContainer>
   );
 }
@@ -439,8 +455,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   companionsLabel: { ...typography.label, marginBottom: spacing.xs },
+  companionHint: { color: colors.textMuted, fontSize: 11, marginBottom: spacing.xs },
+  companionRow: { paddingVertical: 2, borderRadius: radii.sm },
   companion: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
   companionAddress: { flexShrink: 1, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  pressed: { opacity: 0.65 },
 
   parcelCard: {
     backgroundColor: colors.surface,

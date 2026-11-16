@@ -82,11 +82,47 @@ export async function getPassengerDetailsByRentals(
   return (data ?? []).map(mapRow);
 }
 
-export async function deletePassengerDetail(id: string): Promise<void> {
+export type PassengerDetailUpdate = {
+  firstName: string;
+  lastName: string;
+  age?: number | null;
+  sex?: string | null;
+  contactNumber?: string | null;
+  address?: string | null;
+  passengerType: PassengerType;
+  declaredWeightKg?: number | null;
+};
+
+export async function updatePassengerDetail(
+  id: string,
+  detail: PassengerDetailUpdate
+): Promise<void> {
   const { error } = await supabase
     .from('passenger_details')
-    .delete()
+    .update({
+      first_name: detail.firstName,
+      last_name: detail.lastName,
+      age: detail.age ?? null,
+      sex: detail.sex ?? null,
+      contact_number: detail.contactNumber ?? null,
+      address: detail.address ?? null,
+      passenger_type: detail.passengerType,
+      declared_weight_kg: detail.declaredWeightKg ?? null,
+    })
     .eq('id', id);
+
+  if (error) throw error;
+}
+
+/**
+ * Removing a companion is an atomic RPC: the row, the booking pax count,
+ * and the fare move together, and boarded/paid lists are refused. Raw DELETE
+ * has no policy on purpose.
+ */
+export async function deletePassengerDetail(id: string): Promise<void> {
+  const { error } = await supabase.rpc('remove_passenger_detail', {
+    p_passenger_id: id,
+  });
 
   if (error) throw error;
 }

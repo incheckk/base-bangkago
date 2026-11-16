@@ -1,9 +1,11 @@
-(async function () {
   // Route guard: real Supabase session + users.user_role must be 'admin'.
   // Loads config + client on demand (same dynamic-script pattern as the
   // theme loader below); anything but an admin bounces to the access portal.
-  async function guard(roles) {
-    function load(src) {
+  // Exposes window.bangkagoAuthReady so page scripts can wait for the guard
+  // and the restored session before their first RLS-backed read.
+  window.bangkagoAuthReady = (async function () {
+    async function guard(roles) {
+      function load(src) {
       return new Promise(function (resolve) {
         var s = document.createElement('script');
         s.src = src;
@@ -89,14 +91,15 @@
     'manage-alerts': { title: 'Manage Alerts', subtitle: 'Create and monitor operational alert rules' },
     'view-reports': { title: 'View Reports', subtitle: 'Operations, compliance, and system reports' },
     'analyze-demand': { title: 'Analyze Demand', subtitle: 'Demand trends, peak windows, and forecast insights' },
-    'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests, view passenger list, and export' },
-    'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests, view passenger list, and export' },
+    'view-manifest': { title: 'View Manifest', subtitle: 'Search manifests and view the passenger list' },
+    'view-manifests': { title: 'View Manifests', subtitle: 'Search manifests and view the passenger list' },
     'view-weather': { title: 'View Weather', subtitle: 'Weather data and route safety status' },
-    'report-compliance': { title: 'Report Compliance Issue', subtitle: 'File compliance incidents and review contact feedback' },
+    'report-compliance': { title: 'Compliance & Feedback', subtitle: 'Review compliance reports and contact feedback (read-only)' },
     'suspend-user': { title: 'Suspend User', subtitle: 'Confirm user suspension' },
     'document-review': { title: 'Document Review', subtitle: 'Review bangkero verification documents' },
     'boat-rentals': { title: 'Boat Rentals', subtitle: 'View all boat charter bookings' },
     'system-alerts': { title: 'System Alerts', subtitle: 'System-wide alerts and notifications' },
+    'notifications': { title: 'Notifications', subtitle: 'Booking lifecycle updates and operational notices' },
     'profile': { title: 'Profile', subtitle: 'Admin account settings' }
   };
 

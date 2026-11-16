@@ -41,6 +41,44 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-16 — RBAC matrix alignment, operations inboxes, passenger safety
+  feed/report, passenger-list edit/delete (migration 083 PENDING — USER MUST
+  RUN after 082).**
+  - **083** closes the RBAC audit gaps: demand forecasts are Admin/Bangkero/
+    Coast Guard only; `passenger_details` gains owner/operator/admin UPDATE
+    policies plus a guard trigger; `remove_passenger_detail()` atomically
+    removes a rider and adjusts pax count + fare; booking lifecycle events
+    fan out notifications to Admin and Coast Guard.
+  - **Passenger lists are editable after booking:** one shared
+    `PassengerEditModal` is wired into Admin booking detail, Admin Boat
+    Rentals, Bangkero sailing, Bangkero charter sailing, Passenger booking
+    detail, and Passenger My Rentals. Boarding/no-show, ownership, QR token,
+    post-departure edits, filed downpayments, and completed/refunded fares
+    stay locked; raw DELETE remains unavailable.
+  - **Operations inboxes:** Admin and Coast Guard now have web notification
+    pages, topbar/sidebar entries, and mobile inboxes. The web service uses
+    the real `notifications` columns (`id`, `category`).
+  - **Admin compliance is read-only:** Admin submit was removed from
+    `report-compliance.html`; Admin `safety_alerts` INSERT remains because
+    `manage-alerts.html` legitimately needs it. Admin and Coast Guard
+    manifest PDF export was removed; manifests stay view-only.
+  - **Admin web auth wait fixed:** `admin-dashboard/assets/js/layout-loader.js`
+    now exposes `window.bangkagoAuthReady` like the Coast Guard loader. Every
+    Admin page already awaited it, but `await undefined` resolved immediately,
+    so first reads could race the restored session and return empty RLS sets.
+  - **Passenger safety:** new read-only Safety Alerts screen uses the
+    scrubbed `alert_feed()` RPC. Passenger and Bangkero get a Report Issue
+    form that files a `[Compliance Report]` row in `safety_alerts` (no new
+    table); residents' SOS flows are unchanged.
+  - **Gates:** `npx tsc --noEmit` clean after regenerating typed routes;
+    `npm run lint` 0 errors / 137 known warnings; `npx expo-doctor` 17/18
+    (the 9 known SDK-57 patch-version drifts, not bulk-upgraded). `083` has
+    not been executed against Postgres.
+  - **Next:** run `083` after `082`; smoke passenger-list edit/delete on all
+    six surfaces, an Admin + Coast Guard booking lifecycle notification, the
+    passenger Safety Alerts feed, and a Report Issue row appearing in Admin
+    Compliance & Feedback.
+
 - **2026-11-16 — Semantic user activity audit (migration 082 PENDING —
   USER MUST RUN after 081).**
   - The audit log now records authenticated business changes from the app
@@ -98,8 +136,8 @@ gracefully. Don't mass-refactor hooks to silence warnings.
     two that pre-picked the verdict.
   - **Charter sailing day:** `(bangkero)/charter/[id]` shows the boat's
     live position on the map and a party list you can tick ("✓ aboard" /
-    "Tick", `n aboard`) — passenger_details has no UPDATE policy, so this
-    goes through 081's owner-checked `set_rental_rider_boarded`.
+    "Tick", `n aboard`) — boarding still goes through 081's owner-checked
+    `set_rental_rider_boarded`; 083 adds the separate detail edit/remove path.
   - **Bangkero home:** the active-trip card is a state machine — advance →
     **View booking**, moored → **Scan Boarding QR** / **Ready to depart**,
     sailed → **Mark completed** (never before `depart_time`). Earnings
@@ -1049,8 +1087,9 @@ sync when something is deferred).
   `search_path`, and REVOKE from PUBLIC/anon (`append_rejected_by` and
   the 002–007-era functions are known suspects).
 - E6 — sign-up can leave orphan auth users when the profile insert fails.
-- E7 — `passenger_details` has no UPDATE/DELETE policy; companions can
-  never be corrected.
+- E7 — CLOSED by migration 083: `passenger_details` has owner/operator/admin
+  UPDATE policies plus a guard trigger, and removal goes through the atomic
+  `remove_passenger_detail()` RPC (no raw DELETE policy).
 - E8 — `bookings_one_active_per_passenger` unique index still commented
   out (migrations/007:332); verify legacy rows first.
 

@@ -4,6 +4,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { MapContainer } from '@/components/MapContainer';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -39,6 +40,7 @@ export default function CharterSailingScreen() {
 
   const [row, setRow] = useState<BangkeroRentalRow | null>(null);
   const [riders, setRiders] = useState<PassengerDetailDoc[]>([]);
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -246,8 +248,8 @@ export default function CharterSailingScreen() {
               {riders.map((c) => {
                 const aboard = !!c.boardedAt;
                 return (
+                  <View key={c.passengerId}>
                   <Pressable
-                    key={c.passengerId}
                     // Before the charter starts nobody is aboard; the tick is
                     // the boarding check the QR used to be for rides.
                     disabled={tickBusy === c.passengerId || row.completedAt != null}
@@ -274,6 +276,17 @@ export default function CharterSailingScreen() {
                       {tickBusy === c.passengerId ? '…' : aboard ? '✓ aboard' : 'Tick'}
                     </Text>
                   </Pressable>
+                  {!row.completedAt && (
+                    <Pressable
+                      onPress={() => setEditing(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                      style={({ pressed }) => [styles.editRider, pressed && styles.pressed]}
+                    >
+                      <Text style={styles.editRiderText}>Edit details</Text>
+                    </Pressable>
+                  )}
+                  </View>
                 );
               })}
             </>
@@ -323,6 +336,13 @@ export default function CharterSailingScreen() {
           />
         </View>
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void load()}
+      />
     </ScreenContainer>
   );
 }
@@ -397,6 +417,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tickOn: { color: colors.primary, borderColor: colors.primaryBorder },
+  editRider: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: spacing.xs },
+  editRiderText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  pressed: { opacity: 0.65 },
 
   actions: { marginTop: spacing.xl, gap: spacing.sm },
   hint: { ...typography.caption, color: colors.textMuted },

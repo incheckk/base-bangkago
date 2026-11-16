@@ -1,10 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ScrollView, StyleSheet, Text, TextInput, View,
+  Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -15,6 +16,7 @@ import { useMyTrips } from '@/hooks/useSupabase';
 import { friendlyError } from '@/services/booking.service';
 import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
 import { getDownpaymentsForBookings } from '@/services/downpayment.service';
+import { shareManifestPdf } from '@/services/manifest-export.service';
 import {
   getPassengerDetailsByBooking,
 } from '@/services/passenger-detail.service';
@@ -58,6 +60,7 @@ export default function SailingScreen() {
   const [payments, setPayments] = useState<Record<string, PaymentDoc>>({});
   const [downs, setDowns] = useState<Record<string, DownpaymentDoc>>({});
   const [details, setDetails] = useState<Record<string, PassengerDetailDoc[]>>({});
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   // 079: the booker's age/address on the manifest, mirroring companions.
   const [bookers, setBookers] = useState<Record<string, BookerDetails>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -65,6 +68,7 @@ export default function SailingScreen() {
   // across rows when several bookings were unpaid at once.
   const [references, setReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
+  const [sharingId, setSharingId] = useState<string | null>(null);
 
   const sailing: Sailing | null = useMemo(() => {
     const key = `${day}|${from}|${to}`;
@@ -152,6 +156,26 @@ export default function SailingScreen() {
       setPayError(friendlyError(e));
     }
     setPayingId(null);
+  }
+
+  async function shareBookingManifest(bookingId: string, bookerId: string) {
+    const b = sailing?.bookings.find((row) => row.bookingId === bookingId);
+    if (!b || sharingId) return;
+    setSharingId(bookingId);
+    try {
+      await shareManifestPdf([{
+        booking: b,
+        companions: details[bookingId] ?? [],
+        booker: bookers[bookerId] ?? null,
+      }]);
+    } catch (e) {
+      Alert.alert(
+        'Could not share manifest',
+        e instanceof Error ? e.message : 'Please try again.'
+      );
+    } finally {
+      setSharingId(null);
+    }
   }
 
   if (trips.loading) {
@@ -254,8 +278,15 @@ export default function SailingScreen() {
               {companions.length > 0 && (
                 <View style={styles.companions}>
                   <Text style={styles.companionsLabel}>COMPANIONS</Text>
+                  <Text style={styles.companionHint}>Tap a companion to edit or remove.</Text>
                   {companions.map((c) => (
-                    <View key={c.passengerId}>
+                    <Pressable
+                      key={c.passengerId}
+                      onPress={() => setEditing(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                      style={({ pressed }) => [styles.companionRow, pressed && styles.pressed]}
+                    >
                       <Text style={styles.companion} numberOfLines={1}>
                         {c.firstName} {c.lastName}
                         {c.age != null ? ` · ${c.age}` : ''}
@@ -266,10 +297,19 @@ export default function SailingScreen() {
                           📍 {c.address}
                         </Text>
                       )}
-                    </View>
+                    </Pressable>
                   ))}
                 </View>
               )}
+
+              <PrimaryButton
+                label="Share Manifest PDF"
+                variant="secondary"
+                onPress={() => void shareBookingManifest(b.bookingId, b.userId)}
+                loading={sharingId === b.bookingId}
+                disabled={sharingId !== null}
+                style={styles.shareBtn}
+              />
             </View>
           );
         })}
@@ -351,6 +391,13 @@ export default function SailingScreen() {
           )}
         </View>
       </ScrollView>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => void loadDetails()}
+      />
     </ScreenContainer>
   );
 }
@@ -439,8 +486,11 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   companionsLabel: { ...typography.label, marginBottom: spacing.xs },
+  companionHint: { color: colors.textMuted, fontSize: 11, marginBottom: spacing.xs },
+  companionRow: { paddingVertical: 2, borderRadius: radii.sm },
   companion: { flexShrink: 1, color: colors.textSecondary, fontSize: 13, lineHeight: 20 },
   companionAddress: { flexShrink: 1, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  pressed: { opacity: 0.65 },
 
   parcelCard: {
     backgroundColor: colors.surface,
@@ -475,6 +525,7 @@ const styles = StyleSheet.create({
   payDone: { ...typography.label, color: colors.success, letterSpacing: 0 },
   payPending: { ...typography.label, color: colors.warning, letterSpacing: 0 },
   payBtn: { flexBasis: '100%', minHeight: 40 },
+  shareBtn: { marginTop: spacing.md, minHeight: 44 },
   refInput: {
     marginTop: spacing.sm,
     backgroundColor: colors.bgElevated,

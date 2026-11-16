@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
+import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { StatusPill } from '@/components/StatusPill';
@@ -29,6 +30,8 @@ export default function AdminBookingDetail() {
   const [manifestError, setManifestError] = useState<string | null>(null);
   // 079 booker details — admins already read every users row.
   const [booker, setBooker] = useState<BookerDetails | null>(null);
+  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!booking?.userId) return;
@@ -81,7 +84,7 @@ export default function AdminBookingDetail() {
       }
     })();
     return () => { alive = false; };
-  }, [id]);
+  }, [id, reloadToken]);
 
   // The list this screen looks the booking up in starts empty, so gate on the
   // fetch — otherwise every open flashes "Booking not found" first.
@@ -221,12 +224,22 @@ export default function AdminBookingDetail() {
               )}
               {companions.map((c) => (
                 <View key={c.passengerId} style={styles.manifestBlock}>
-                  <Text style={styles.value} numberOfLines={1}>
-                    {c.firstName} {c.lastName}
-                    {c.age ? ` · ${c.age}` : ''}
-                    {c.sex ? ` · ${c.sex}` : ''}
-                    {c.noShowAt ? ' · NO-SHOW' : c.boardedAt ? ' · boarded' : ''}
-                  </Text>
+                  <View style={styles.companionHead}>
+                    <Text style={[styles.value, styles.companionName]} numberOfLines={1}>
+                      {c.firstName} {c.lastName}
+                      {c.age ? ` / ${c.age}` : ''}
+                      {c.sex ? ` / ${c.sex}` : ''}
+                      {c.noShowAt ? ' / NO-SHOW' : c.boardedAt ? ' / boarded' : ''}
+                    </Text>
+                    <Pressable
+                      onPress={() => setEditing(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
+                      style={({ pressed }) => [styles.editBtn, pressed && styles.editPressed]}
+                    >
+                      <Text style={styles.editText}>Edit</Text>
+                    </Pressable>
+                  </View>
                   {!!c.contactNumber && (
                     <Text style={styles.sub} numberOfLines={1}>{formatPhone(c.contactNumber)}</Text>
                   )}
@@ -284,6 +297,13 @@ export default function AdminBookingDetail() {
           )}
         </View>
       </View>
+
+      <PassengerEditModal
+        visible={!!editing}
+        passenger={editing}
+        onClose={() => setEditing(null)}
+        onChanged={() => setReloadToken((t) => t + 1)}
+      />
     </ScreenContainer>
   );
 }
@@ -328,6 +348,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
   },
+  companionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  companionName: { flex: 1, minWidth: 0 },
+  editBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryTint,
+  },
+  editPressed: { opacity: 0.7 },
+  editText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
 
   center: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   emptyTitle: { ...typography.h2, marginTop: spacing.xxl, textAlign: 'center' },

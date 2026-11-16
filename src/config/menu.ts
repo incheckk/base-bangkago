@@ -41,6 +41,9 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'home', label: 'Home', route: '/(passenger)/home' },
     { icon: 'bookings', label: 'My Bookings', route: '/(passenger)/bookings' },
     { icon: 'rental', label: 'My Rentals', route: '/(passenger)/my-rentals' },
+    { icon: 'bell', label: 'Notifications', route: '/(passenger)/notifications' },
+    { icon: 'sos', label: 'Safety Alerts', route: '/(passenger)/safety-alerts' },
+    { icon: 'warning', label: 'Report Issue', route: '/(passenger)/report-issue' },
   ],
   bangkero: [
     { icon: 'home', label: 'Home', route: '/(bangkero)/home' },
@@ -48,6 +51,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'rental', label: 'Boat Rentals', route: '/(bangkero)/rentals' },
     { icon: 'star', label: 'My Ratings', route: '/(bangkero)/ratings' },
     { icon: 'cash', label: 'Earnings', route: '/(bangkero)/earnings' },
+    { icon: 'warning', label: 'Report Issue', route: '/(bangkero)/report-issue' },
     { icon: 'sos', label: 'SOS Alert', route: '/(bangkero)/sos-alert', danger: true },
   ],
   /**
@@ -75,7 +79,8 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     // reading safety_alerts), so one label was always lying.
     { icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', section: 'SAFETY' },
 
-    { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options', section: 'SYSTEM' },
+    { icon: 'bell', label: 'Notifications', route: '/(admin)/notifications', section: 'SYSTEM' },
+    { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options' },
   ],
   // B12 monitoring tier: the six tabs the web dashboard has, plus the
   // advisory controls on Overview. Nothing here writes money.
@@ -86,6 +91,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'route', label: 'Departures', route: '/(coastguard)/departures' },
     { icon: 'port', label: 'Routes & Fares', route: '/(coastguard)/routes' },
     { icon: 'sos', label: 'Alerts', route: '/(coastguard)/alerts' },
+    { icon: 'bell', label: 'Notifications', route: '/(coastguard)/notifications' },
   ],
 };
 

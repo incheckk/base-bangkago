@@ -13,12 +13,10 @@ Updated 2026-11-09 (per-parcel cargo boarding, migration 073).
 Updated 2026-11-13 (migration 079: escrow release to operators, charter
 sailing day, notification kinds, route/module lock split, booker details,
 passenger SOS).
-<<<<<<< Updated upstream
-Updated 2026-11-16 (migration 081: one live boat per bangkero, date-scoped
-capacity, island hop priced per person, charter boarding ticks).
-=======
-Updated 2026-11-16 (migration 080: semantic user activity audit trail).
->>>>>>> Stashed changes
+Updated 2026-11-16 (migration 083: RBAC matrix alignment, operations
+inboxes, passenger safety feed/report, passenger-list edit/delete; 082:
+semantic user activity audit trail; 081: one live boat per bangkero,
+date-scoped capacity, island hop priced per person, charter ticks).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -45,11 +43,13 @@ Updated 2026-11-16 (migration 080: semantic user activity audit trail).
    SHIPPED in the M1-M6 build: book-package and rental-form capture
    companions through the shared CompanionForm; rows land in
    passenger_details (booking_id for rides, boat_rental_id for rentals,
-   migration 026) and render for passenger AND bangkero. Row ✕ was
-   replaced by an edit pencil (2026-10): the modal opens prefilled
-   with Save changes / Remove passenger. Still open: that edit works
-   on the LOCAL list before filing — companions remain INSERT-only in
-   the DB (E7), so they cannot be corrected AFTER the booking exists.
+   migration 026) and render for passenger AND bangkero. The edit pencil
+   (2026-10) opens prefilled with Save changes / Remove passenger. Migration
+   083 (2026-11-16) makes this work AFTER the booking exists: owner,
+   assigned operator, and Admin can update details, while removal is the
+   atomic remove_passenger_detail() RPC so pax count and fare move together.
+   Edits lock after boarding/departure; removal also refuses filed
+   downpayments and completed/refunded fares. Raw DELETE stays unavailable.
 
 5. BOAT RENTAL PRICE TIER DEFAULT (Phase 4C, updated 2026-10-22)
    A boat with no saved bangkas.standard_price (migration 068) quotes
@@ -57,7 +57,6 @@ Updated 2026-11-16 (migration 080: semantic user activity audit trail).
    editable per boat in (bangkero)/rentals and web Manage Bangka.
    Confirm real per-boat whole-day pricing with operators before launch.
 
-<<<<<<< Updated upstream
 6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 082)
    Migration 082 records authenticated app/web business changes with
    semantic activity names, actor and record snapshots, and safe
@@ -68,20 +67,6 @@ Updated 2026-11-16 (migration 080: semantic user activity audit trail).
    through authenticated app/web actions if they must be audited. Existing
    038 entries are relabelled from their stored changes, but cannot recover
    intent that was never captured. Audit access remains admin-only.
-=======
-6. AUDIT TRAIL DOES NOT ATTRIBUTE SQL-EDITOR WRITES (migration 080)
-   Migration 080 records successful authenticated changes to business
-   records from the app and web console as human-readable activities,
-   including actor name/role snapshots and redacted-safe before/after
-   values. Generated notifications, GPS/weather telemetry, and other
-   non-user activity are excluded; a user's notification read-state
-   change is included. Writes made directly in the Supabase SQL editor or
-   with the service-role key have no user JWT and are not attributable;
-   route administrative changes through authenticated app/web actions if
-   they must be audited. Existing 038 entries are re-labelled from their
-   recorded row changes, but cannot recover intent that was never captured.
-   Audit access remains admin-only.
->>>>>>> Stashed changes
 
 7. FLEET MAP ETA/DIRECTION TEXT IS AN ESTIMATE (web batch 2026-10-16)
    The Leaflet/OSM fleet maps (fleet-map.js on admin + coastguard
@@ -439,11 +424,10 @@ E6. SIGN-UP ORPHANS (email-confirm + profile failures)
     email-confirmation settings, and clean up / roll back orphaned auth
     users on partial failure.
 
-E7. passenger_details HAS NO DELETE (or UPDATE) POLICY
-    Companion rows are INSERT-only from the passenger's side — a
-    booking's OR rental's companion list can never be corrected or
-    removed (026 added boat_rental_id, same gap). Add
-    passenger-owned UPDATE/DELETE (or an RPC) before launch.
+E7. RESOLVED BY 083 — passenger_details now has owner/operator/admin UPDATE
+    policies plus guard_passenger_detail_update(), and removal is the
+    atomic remove_passenger_detail() RPC. Raw DELETE remains unavailable,
+    which is intentional.
 
 E8. RESOLVED BY 062 — see C3. The one-active-booking-per-passenger
     index is gone by design; 062's trigger enforces the real rule

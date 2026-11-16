@@ -33,12 +33,14 @@ import { nameError } from '@/utils/validation';
  */
 const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[] = [
   { key: 'earnings', label: 'Earnings', icon: 'cash' },
+  { key: 'manage-bookings', label: 'Manage Bookings', icon: 'bookings' },
   { key: 'trips', label: 'Trip History', icon: 'history' },
   { key: 'rentals', label: 'Boat Rentals', icon: 'rental' },
   { key: 'ratings', label: 'My Ratings', icon: 'star' },
   { key: 'documents', label: 'Documents', icon: 'document' },
   { key: 'qr', label: 'GCash QR', icon: 'qr' },
   { key: 'guide', label: 'Quick Guide', icon: 'guide' },
+  { key: 'report-issue', label: 'Report Issue', icon: 'warning' },
   // The header burger is gone (3D) — SOS still has to be one tap away, and
   // it is the one row here that should not look like the others.
   { key: 'sos', label: 'SOS Alert', icon: 'sos', danger: true },
@@ -46,12 +48,14 @@ const MENU_ITEMS: { key: string; label: string; icon: IconName; danger?: true }[
 
 const ROUTE_MAP: Record<string, string> = {
   earnings: '/(bangkero)/earnings',
+  'manage-bookings': '/(bangkero)/manage-bookings',
   trips: '/(bangkero)/trips',
   rentals: '/(bangkero)/rentals',
   ratings: '/(bangkero)/ratings',
   documents: '/(bangkero)/verify-boat',
   qr: '/(bangkero)/qr-code',
   guide: '/(bangkero)/quick-guide',
+  'report-issue': '/(bangkero)/report-issue',
   sos: '/(bangkero)/sos-alert',
 };
 

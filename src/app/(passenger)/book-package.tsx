@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CompanionForm, type Companion } from '@/components/CompanionForm';
@@ -10,8 +10,13 @@ import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { usePorts } from '@/hooks/useSupabase';
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError, getActiveBooking, getBookingBan } from '@/services/booking.service';
-import { getIslandPackage } from '@/services/island-package.service';
+import {
+  getIslandPackage,
+  getIslandPackageAvailability,
+  type IslandPackageAvailability,
+} from '@/services/island-package.service';
 import type { IslandPackageDoc } from '@/types/models';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -31,12 +36,17 @@ export default function BookPackage() {
   const [pkg, setPkg] = useState<IslandPackageDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<IslandPackageAvailability | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const availabilityRequest = useRef(0);
   const [companions, setCompanions] = useState<Companion[]>([]);
   const pax = 1 + companions.length;
   const [scheduledDate, setScheduledDate] = useState(todayIso());
   const [scheduledTime, setScheduledTime] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const packageId = pkg?.packageId;
 
   useEffect(() => {
     let alive = true;
@@ -61,6 +71,39 @@ export default function BookPackage() {
     };
   }, [params.packageId]);
 
+  const refreshAvailability = useCallback(async () => {
+    if (!packageId) return;
+    const requestId = ++availabilityRequest.current;
+    setAvailability(null);
+    setAvailabilityError(null);
+    setAvailabilityLoading(true);
+    try {
+      const result = await getIslandPackageAvailability(packageId, scheduledDate);
+      if (requestId === availabilityRequest.current) setAvailability(result);
+    } catch (e) {
+      if (requestId === availabilityRequest.current) setAvailabilityError(friendlyError(e));
+    } finally {
+      if (requestId === availabilityRequest.current) setAvailabilityLoading(false);
+    }
+  }, [packageId, scheduledDate]);
+
+  useEffect(() => {
+    void refreshAvailability();
+    return () => {
+      availabilityRequest.current += 1;
+    };
+  }, [refreshAvailability]);
+  useRealtimeQuery(
+    refreshAvailability,
+    pkg
+      ? [
+          { table: 'bookings', filter: `package_id=eq.${pkg.packageId}` },
+          { table: 'island_packages', filter: `id=eq.${pkg.packageId}` },
+          ...(pkg.bangkaId ? [{ table: 'bangkas', filter: `id=eq.${pkg.bangkaId}` }] : []),
+        ]
+      : [],
+  );
+
   const portName = (id: string) =>
     ports.data.find((p) => p.portId === id)?.portName ?? id;
 
@@ -73,6 +116,14 @@ export default function BookPackage() {
 
   async function proceed() {
     if (!pkg || checking) return;
+    if (availabilityLoading || !availability) {
+      setNotice(availabilityError ?? 'Checking Bangka availability. Please wait.');
+      return;
+    }
+    if (availability.available < pax) {
+      setNotice(`Only ${availability.available} seat${availability.available === 1 ? '' : 's'} remain on ${availability.bangkaName} for this sailing date.`);
+      return;
+    }
     const first = pkg.stops[0];
     const last = pkg.stops[pkg.stops.length - 1];
     if (pkg.stops.length < 2 || !first || !last || first === last) {
@@ -167,7 +218,9 @@ export default function BookPackage() {
           {!!pkg.description && <Text style={styles.pkgDesc}>{pkg.description}</Text>}
           <View style={styles.metaRow}>
             <Text style={styles.meta}>⏱ {pkg.durationHours} hrs</Text>
-            <Text style={styles.meta}>👥 up to {pkg.maxCapacity} pax</Text>
+            <Text style={styles.meta}>
+              👥 up to {Math.min(pkg.maxCapacity, pkg.bangkaCapacity ?? pkg.maxCapacity)} pax
+            </Text>
           </View>
         </View>
 
@@ -187,6 +240,15 @@ export default function BookPackage() {
         </View>
 
         <Text style={styles.sectionLabel}>SAILING DATE</Text>
+        <View style={styles.availabilityNote}>
+          <Text style={styles.availabilityText}>
+            {availabilityLoading
+              ? 'Checking assigned Bangka capacity…'
+              : availability
+                ? `${availability.bangkaName} · ${availability.available} of ${availability.capacity} seats available on this date`
+                : availabilityError ?? 'Bangka availability is unavailable.'}
+          </Text>
+        </View>
         <SchedulePicker
           date={scheduledDate}
           time={scheduledTime}
@@ -198,9 +260,9 @@ export default function BookPackage() {
         <CompanionForm
           companions={companions}
           onChange={setCompanions}
-          maxCount={pkg.maxCapacity}
+          maxCount={availability?.available ?? 0}
           bookerName={bookerName}
-          hint={`Up to ${pkg.maxCapacity} seats — name everyone riding, tickets are checked at the pier.`}
+          hint={`Up to ${availability?.available ?? 0} seats remain on the assigned Bangka for this date.`}
         />
 
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>
@@ -245,7 +307,7 @@ export default function BookPackage() {
             label={advance ? 'Proceed to Downpayment' : 'Proceed to Payment'}
             onPress={proceed}
             loading={checking}
-            disabled={checking || !profile || (advance && !scheduledTime)}
+            disabled={checking || availabilityLoading || !availability || availability.available < pax || !profile || (advance && !scheduledTime)}
           />
         </View>
       </ScrollView>
@@ -303,6 +365,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.md, padding: spacing.md, marginTop: spacing.lg,
   },
   noticeText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  availabilityNote: {
+    borderRadius: radii.md,
+    backgroundColor: colors.primaryTint,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  availabilityText: { ...typography.caption, color: colors.primary, fontWeight: '600' },
 
   footer: { marginTop: spacing.xl },
 });

@@ -93,7 +93,7 @@ export default function IslandPackages() {
 
                 <View style={styles.metaRow}>
                   <Text style={styles.meta}>⏱ {pkg.durationHours} hrs</Text>
-                  <Text style={styles.meta}>👥 up to {pkg.maxCapacity} pax</Text>
+                  <Text style={styles.meta}>👥 up to {Math.min(pkg.maxCapacity, pkg.bangkaCapacity ?? pkg.maxCapacity)} pax</Text>
                 </View>
               </Pressable>
             ))}

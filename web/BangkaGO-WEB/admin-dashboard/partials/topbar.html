@@ -13,22 +13,11 @@
   </div>
 
   <div class="topbar-actions d-flex align-items-center gap-2">
-    <a class="btn btn-sm btn-outline-secondary" href="notifications.html" title="Notifications" aria-label="Notifications">
+    <button class="btn btn-sm btn-outline-secondary" type="button" title="Notifications">
       <i class="bi bi-bell"></i>
-    </a>
-    <button class="btn btn-sm btn-outline-secondary" type="button" title="Settings">
-      <i class="bi bi-gear"></i>
     </button>
-    <div class="dropdown">
-      <button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-        Admin
-      </button>
-      <ul class="dropdown-menu dropdown-menu-end">
-        <li><a class="dropdown-item" href="#">Profile</a></li>
-        <li><a class="dropdown-item" href="#">Preferences</a></li>
-        <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="../../bangkaGo-access.html" onclick="event.preventDefault();try{sessionStorage.clear();}catch(e){}var p=window.bangkago?window.bangkago.signOut():null;Promise.resolve(p).finally(function(){location.href='../../bangkaGo-access.html';})">Logout</a></li>
-      </ul>
-    </div>
+    <a class="btn btn-sm btn-outline-danger" href="../../bangkaGo-access.html" aria-label="Logout" onclick="event.preventDefault();try{sessionStorage.clear();}catch(e){}var p=window.bangkago?window.bangkago.signOut():null;Promise.resolve(p).finally(function(){location.href='../../bangkaGo-access.html';})">
+      <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>Logout
+    </a>
   </div>
 </header>

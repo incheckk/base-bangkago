@@ -1,6 +1,11 @@
 import { supabase } from './supabase';
 import type { IslandPackageDoc } from '../types/models';
 
+const PACKAGE_SELECT =
+  '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at,bangkeros!inner(verification_stat,is_deleted))';
+const PACKAGE_DETAIL_SELECT =
+  '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at)';
+
 function mapRow(row: any): IslandPackageDoc {
   return {
     packageId: row.id,
@@ -14,6 +19,32 @@ function mapRow(row: any): IslandPackageDoc {
   };
 }
 
+<<<<<<< HEAD
+function isMissingPackageDeletedAtColumn(error: { code?: string; message?: string }): boolean {
+  const message = (error.message ?? '').toLowerCase();
+  if (error.code !== '42703' && error.code !== 'PGRST204') return false;
+  return message.includes('deleted_at') && (
+    message.includes('island_packages') ||
+    (error.code === '42703' && !message.includes('bangkas'))
+  );
+}
+
+async function queryIslandPackages(includeDeletedAt: boolean) {
+  const base = supabase
+    .from('island_packages')
+    .select(PACKAGE_SELECT)
+    .eq('is_active', true);
+  const packageFilter = includeDeletedAt
+    ? base.is('deleted_at', null)
+    : base;
+
+  return packageFilter
+    .eq('bangkas.is_active', true)
+    .eq('bangkas.is_deleted', false)
+    .is('bangkas.deleted_at', null)
+    .eq('bangkas.bangkeros.verification_stat', 'verified')
+    .eq('bangkas.bangkeros.is_deleted', false)
+=======
 /**
  * Packages are admin-managed catalog rows. They carry no boat: 084 allows
  * `bangka_id = NULL`, and dispatch assigns a bangkero from the accepted trip
@@ -24,19 +55,41 @@ export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
     .from('island_packages')
     .select('*')
     .eq('is_active', true)
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
     .order('price');
+}
 
-  if (error) throw error;
-  return (data ?? []).map(mapRow);
+export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
+  let result = await queryIslandPackages(true);
+  if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
+    result = await queryIslandPackages(false);
+  }
+
+  if (result.error) throw result.error;
+  return (result.data ?? []).map(mapRow);
 }
 
 export async function getIslandPackage(packageId: string): Promise<IslandPackageDoc | null> {
+<<<<<<< HEAD
+  const query = (includeDeletedAt: boolean) => {
+    const base = supabase
+      .from('island_packages')
+      .select(PACKAGE_DETAIL_SELECT)
+      .eq('id', packageId);
+    return includeDeletedAt ? base.is('deleted_at', null) : base;
+  };
+  let result = await query(true).maybeSingle();
+  if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
+    result = await query(false).maybeSingle();
+  }
+=======
   const { data, error } = await supabase
     .from('island_packages')
     .select('*')
     .eq('id', packageId)
     .maybeSingle();
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
 
-  if (error) throw error;
-  return data ? mapRow(data) : null;
+  if (result.error) throw result.error;
+  return result.data ? mapRow(result.data) : null;
 }

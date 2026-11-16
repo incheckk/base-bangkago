@@ -6,10 +6,21 @@
   'use strict';
   var svc = window.bangkagoServices;
   var PACKAGE_SELECT =
-    '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at)';
+    '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,bangkero_id,is_active,is_deleted,deleted_at,bangkeros(display_name,verification_stat,is_deleted,deleted_at))';
 
   function mapPackage(row) {
-    var boat = row.bangkas || null;
+    var boat = Array.isArray(row.bangkas) ? row.bangkas[0] : row.bangkas || null;
+    var bangkero = boat && Array.isArray(boat.bangkeros) ? boat.bangkeros[0] : boat && boat.bangkeros;
+    var assignmentEligible = !!(
+      boat &&
+      boat.is_active &&
+      !boat.is_deleted &&
+      !boat.deleted_at &&
+      bangkero &&
+      bangkero.verification_stat === 'verified' &&
+      !bangkero.is_deleted &&
+      !bangkero.deleted_at
+    );
     return {
       packageId: row.id,
       packageName: row.package_name,
@@ -21,6 +32,9 @@
       bangkaId: row.bangka_id,
       bangkaName: boat ? boat.bangka_name : null,
       bangkaCapacity: boat ? Number(boat.capacity) : null,
+      bangkeroName: bangkero ? bangkero.display_name : null,
+      assignmentEligible: assignmentEligible,
+      deletedAt: row.deleted_at || null,
       isActive: row.is_active !== false
     };
   }
@@ -48,7 +62,18 @@
 
   async function listPackages() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('island_packages').select(PACKAGE_SELECT).order('package_name');
+    var r = await c.from('island_packages').select(PACKAGE_SELECT)
+      .is('deleted_at', null)
+      .order('package_name');
+    if (r.error) throw r.error;
+    return (r.data || []).map(mapPackage);
+  }
+
+  async function listDeletedPackages() {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.from('island_packages').select(PACKAGE_SELECT)
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
     if (r.error) throw r.error;
     return (r.data || []).map(mapPackage);
   }
@@ -70,11 +95,13 @@
   async function listBangkas() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var r = await c.from('bangkas')
-      .select('id,bangka_name,capacity,bangkero_id,bangkeros!inner(display_name,verification_stat,is_deleted)')
+      .select('id,bangka_name,capacity,bangkero_id,bangkeros!inner(display_name,verification_stat,is_deleted,deleted_at)')
       .eq('is_active', true)
       .eq('is_deleted', false)
+      .is('deleted_at', null)
       .eq('bangkeros.verification_stat', 'verified')
       .eq('bangkeros.is_deleted', false)
+      .is('bangkeros.deleted_at', null)
       .order('bangka_name');
     if (r.error) throw r.error;
     return r.data || [];
@@ -91,20 +118,29 @@
 
     if (name.length < 2 || name.length > 100) throw new Error('Package name must be 2–100 characters.');
     if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be greater than zero.');
-    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 200) {
-      throw new Error('Passenger capacity must be a whole number between 1 and 200.');
-    }
     if (!Number.isFinite(duration) || duration <= 0 || duration > 24) {
       throw new Error('Duration must be greater than zero and no more than 24 hours.');
+    }
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 200) {
+      throw new Error('Passenger capacity must be a whole number between 1 and 200.');
     }
     if (stops.length < 2 || new Set(stops).size !== stops.length) {
       throw new Error('Choose at least two unique destinations in itinerary order.');
     }
-    if (input.isActive && !input.bangkaId) {
-      throw new Error('Assign an active Bangka before making this package available.');
-    }
+    if (!input.bangkaId) throw new Error('Assign an active Bangka to this package.');
 
-    var [ports, routes] = await Promise.all([listPorts(), listRoutes()]);
+    var [ports, routes, eligibleBangkas] = await Promise.all([listPorts(), listRoutes(), listBangkas()]);
+    var assignedBangka = eligibleBangkas.find(function(b) { return b.id === input.bangkaId; });
+    if (!assignedBangka) {
+      throw new Error('The selected Bangka is no longer active or its Bangkero is not verified. Refresh and choose an eligible Bangka.');
+    }
+    var capacity = Number(assignedBangka.capacity);
+    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 200) {
+      throw new Error('The selected Bangka must have a valid capacity between 1 and 200 passengers.');
+    }
+    if (Number(input.maxCapacity) > capacity) {
+      throw new Error('Package passenger capacity cannot exceed the assigned Bangka capacity.');
+    }
     var activePorts = new Set(ports.filter(function(p) { return p.is_active; }).map(function(p) { return p.id; }));
     if (stops.some(function(id) { return !activePorts.has(id); })) {
       throw new Error('Every destination must be an active port.');
@@ -118,10 +154,10 @@
       package_name: name,
       description: description || null,
       price: price,
-      max_capacity: capacity,
+      max_capacity: Number(input.maxCapacity),
       duration_hours: duration,
       stops: stops,
-      bangka_id: input.bangkaId || null,
+      bangka_id: assignedBangka.id,
       is_active: input.isActive === true
     };
     var result = id
@@ -133,14 +169,14 @@
 
   async function deletePackage(id) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
-    var linked = await c.from('bookings').select('id', { count: 'exact', head: true }).eq('package_id', id);
-    if (linked.error) throw linked.error;
-    if ((linked.count || 0) > 0) {
-      throw new Error('This package has booking history. Deactivate it instead so records are preserved.');
-    }
-    var r = await c.from('island_packages').delete().eq('id', id).select('id').maybeSingle();
+    var r = await c.rpc('admin_delete_island_package', { p_package_id: id });
     if (r.error) throw r.error;
-    if (!r.data) throw new Error('Package was not deleted. It may have already been removed.');
+  }
+
+  async function restorePackage(id) {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.rpc('admin_restore_island_package', { p_package_id: id });
+    if (r.error) throw r.error;
   }
 
   async function listBookings() {
@@ -173,11 +209,13 @@
 
   window.bangkagoIslandPackages = {
     listPackages: listPackages,
+    listDeletedPackages: listDeletedPackages,
     listPorts: listPorts,
     listRoutes: listRoutes,
     listBangkas: listBangkas,
     savePackage: savePackage,
     deletePackage: deletePackage,
+    restorePackage: restorePackage,
     listBookings: listBookings,
     rescheduleBooking: rescheduleBooking,
     cancelBooking: cancelBooking

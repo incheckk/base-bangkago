@@ -10,6 +10,25 @@
   <link href="../../assets/vendor/bootstrap-icons/css/bootstrap-icons.min.css" rel="stylesheet"/>
   <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
+  <style>
+    .alert-message-preview{
+      display:-webkit-box;
+      max-width:32rem;
+      overflow:hidden;
+      overflow-wrap:anywhere;
+      white-space:normal;
+      -webkit-box-orient:vertical;
+      -webkit-line-clamp:2;
+    }
+    #alertDetailsMessage{
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      background:#f8fafc;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      padding:1rem;
+    }
+  </style>
 </head>
 <body data-page="alerts">
   <div class="cg-shell">
@@ -68,6 +87,7 @@
                       <th>Time</th>
                       <th>Severity</th>
                       <th>Status</th>
+                      <th><span class="visually-hidden">Actions</span></th>
                     </tr>
                   </thead>
                   <tbody id="alertsTableBody"></tbody>
@@ -120,6 +140,36 @@
     </main>
   </div>
 
+  <div class="modal fade" id="alertDetailsModal" tabindex="-1" aria-labelledby="alertDetailsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title" id="alertDetailsTitle">Alert details</h5>
+            <div class="small text-secondary" id="alertDetailsId"></div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <dl class="row mb-3">
+            <dt class="col-sm-3">Filed by</dt><dd class="col-sm-9" id="alertDetailsFiledBy"></dd>
+            <dt class="col-sm-3">Category</dt><dd class="col-sm-9" id="alertDetailsCategory"></dd>
+            <dt class="col-sm-3">Severity</dt><dd class="col-sm-9" id="alertDetailsSeverity"></dd>
+            <dt class="col-sm-3">Status</dt><dd class="col-sm-9" id="alertDetailsStatus"></dd>
+            <dt class="col-sm-3">Vessel</dt><dd class="col-sm-9" id="alertDetailsVessel"></dd>
+            <dt class="col-sm-3">Port / location</dt><dd class="col-sm-9" id="alertDetailsLocation"></dd>
+            <dt class="col-sm-3">Reported</dt><dd class="col-sm-9" id="alertDetailsDate"></dd>
+          </dl>
+          <h6>Report</h6>
+          <div id="alertDetailsMessage"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
   <script src="../assets/js/admin-theme.js"></script>
   <script src="../assets/js/layout-loader.js"></script>
@@ -140,6 +190,7 @@
     const resetBtn = document.getElementById("resetBtn");
     const countEl = document.getElementById("alertResultCount");
     const emptyEl = document.getElementById("alertEmptyState");
+    const alertDetailsModal = new bootstrap.Modal(document.getElementById('alertDetailsModal'));
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
@@ -173,9 +224,66 @@
     }
 
     function getLocation(alert) {
+<<<<<<< HEAD
+      const locations = [];
+      if (alert.portName) locations.push('Port: ' + alert.portName);
+      if (alert.bangkaName) locations.push('Vessel: ' + alert.bangkaName);
+      return locations.join(' · ') || 'System-wide';
+    }
+
+    function parseAlertMessage(alert) {
+      const message = String(alert.message || '');
+      const fields = {};
+      const isComplianceReport = message.startsWith('[Compliance Report]') || message.startsWith('Zone:');
+      if (!isComplianceReport) return { by: '', category: 'Safety alert', location: '', details: message };
+
+      const details = [];
+      message.split(/\r?\n/).forEach(line => {
+        if (line.trim() === '[Compliance Report]') return;
+        const field = line.match(/^(Filed By|Category|Zone|Location|Subject):\s*(.*)$/i);
+        if (field) {
+          fields[field[1].toLowerCase()] = field[2].trim();
+          return;
+        }
+        details.push(line);
+      });
+
+      return {
+        by: fields['filed by'] || (message.startsWith('Zone:') ? 'Coast Guard' : '—'),
+        category: fields.category || 'Compliance',
+        location: fields.location || fields.zone || fields.subject || '',
+        details: details.join('\n').trim()
+      };
+    }
+
+    function textCell(value) {
+      const td = document.createElement('td');
+      td.textContent = value == null ? '' : String(value);
+      return td;
+    }
+
+    function setDetailsText(id, value) {
+      document.getElementById(id).textContent = value || '—';
+    }
+
+    function showAlertDetails(alert) {
+      const report = parseAlertMessage(alert);
+      const id = String(alert.alertId || '');
+      document.getElementById('alertDetailsId').textContent = id ? 'Alert ID: ' + id : '';
+      setDetailsText('alertDetailsFiledBy', report.by);
+      setDetailsText('alertDetailsCategory', report.category);
+      setDetailsText('alertDetailsSeverity', sevLabel(alert.severity || 'low'));
+      setDetailsText('alertDetailsStatus', statusText(alert.isResolved));
+      setDetailsText('alertDetailsVessel', alert.bangkaName);
+      setDetailsText('alertDetailsLocation', report.location || alert.portName || 'System-wide');
+      setDetailsText('alertDetailsDate', formatDate(alert.createdAt));
+      document.getElementById('alertDetailsMessage').textContent = report.details || 'No report details provided.';
+      alertDetailsModal.show();
+=======
       if (alert.bangkaName) return 'Bangka: ' + alert.bangkaName;
       if (alert.portName) return 'Port: ' + alert.portName;
       return 'System-wide';
+>>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
     }
 
     function renderRows(data) {
@@ -185,15 +293,44 @@
       else emptyEl.classList.add("d-none");
 
       data.forEach(a => {
+        const report = parseAlertMessage(a);
         const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${a.alertId.slice(0, 8)}...</td>
-          <td>${a.message}</td>
-          <td>${getLocation(a)}</td>
-          <td>${formatDate(a.createdAt)}</td>
-          <td><span class="badge ${sevBadge(a.severity)}">${sevLabel(a.severity)}</span></td>
-          <td><span class="badge ${statusBadge(a.isResolved)}">${statusText(a.isResolved)}</span></td>
-        `;
+        tr.appendChild(textCell(String(a.alertId || '').slice(0, 8) + '...'));
+
+        const messageCell = document.createElement('td');
+        const messagePreview = document.createElement('span');
+        messagePreview.className = 'alert-message-preview';
+        messagePreview.textContent = report.details || 'No message provided.';
+        messagePreview.title = messagePreview.textContent;
+        messageCell.appendChild(messagePreview);
+        tr.appendChild(messageCell);
+
+        tr.appendChild(textCell(getLocation(a)));
+        tr.appendChild(textCell(formatDate(a.createdAt)));
+
+        const severityCell = document.createElement('td');
+        const severityBadge = document.createElement('span');
+        severityBadge.className = 'badge ' + sevBadge(a.severity);
+        severityBadge.textContent = sevLabel(a.severity);
+        severityCell.appendChild(severityBadge);
+        tr.appendChild(severityCell);
+
+        const statusCell = document.createElement('td');
+        const statusBadgeEl = document.createElement('span');
+        statusBadgeEl.className = 'badge ' + statusBadge(a.isResolved);
+        statusBadgeEl.textContent = statusText(a.isResolved);
+        statusCell.appendChild(statusBadgeEl);
+        tr.appendChild(statusCell);
+
+        const actionCell = document.createElement('td');
+        const viewButton = document.createElement('button');
+        viewButton.type = 'button';
+        viewButton.className = 'btn btn-sm btn-outline-primary text-nowrap';
+        viewButton.dataset.alertId = String(a.alertId || '');
+        viewButton.setAttribute('aria-label', 'View alert details');
+        viewButton.innerHTML = '<i class="bi bi-eye me-1" aria-hidden="true"></i>View';
+        actionCell.appendChild(viewButton);
+        tr.appendChild(actionCell);
         tbody.appendChild(tr);
       });
 
@@ -234,6 +371,12 @@
     searchInput.addEventListener('input', runFilter);
     severityFilter.addEventListener('change', runFilter);
     statusFilter.addEventListener('change', runFilter);
+    tbody.addEventListener('click', event => {
+      const button = event.target.closest('[data-alert-id]');
+      if (!button) return;
+      const alert = alerts.find(item => String(item.alertId) === button.dataset.alertId);
+      if (alert) showAlertDetails(alert);
+    });
 
     resetBtn.addEventListener('click', () => {
       searchInput.value = "";

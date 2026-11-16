@@ -206,21 +206,25 @@ BangkeroScreenHeader, AuthErrorScreen
   migration 080 after 079, then smoke-test a passenger booking/cancel, a
   bangkero accept/complete, and an admin route or user edit; confirm each
   entry has the right actor, activity, before/after values and PHT time.
-<<<<<<< Updated upstream
 - **Manage Island Hopping (2026-11-16):** the admin dashboard module uses
   existing `island_packages`, `bookings`, `ports`, `routes`, and `bangkas`
   rows; it adds no tables. Packages have one assigned active Bangka, ordered
   port stops, per-passenger price, package limit, and active state. Effective
   seats are capped by both package and boat limits; live availability and
   database booking guards account for all same-day load on that Bangka.
-  Admins can view packages and bookings, edit/deactivate or delete only
-  packages without booking history, reschedule pending/open sailings, and
-  cancel through the guarded admin cancellation RPC. Sailing dates/times live
-  on booking records, not a separate schedule table. **Migration 084 is
-  pending after 083:** run 080 → 081 → 082 → 083 → 084 after 079, then smoke
-  package CRUD, assignment validation, assigned-boat capacity and concurrent
-  booking refusal, schedule edits, booking cancellation, and passenger-side
-  live seats.
+  Admins can view packages and bookings, edit/deactivate, reversibly
+  soft-delete (including packages with active bookings), restore, reschedule
+  pending/open sailings, and cancel through the guarded admin cancellation
+  RPC. Deleted packages retain their booking records. If a restored package's
+  Bangka is inactive/deleted or its Bangkero is unverified/deleted, the admin
+  list marks it as needing an eligible assignment; passenger listing and
+  availability guards keep it unavailable until corrected. Sailing dates and
+  times live on booking records, not a separate schedule table. **Migrations
+  091–094 are pending after 090:** run them in numeric order after 090
+  (migration 084 remains required after 083), then smoke package restore with
+  both eligible and stale assignments, package CRUD, assigned-boat capacity,
+  concurrent booking refusal, booking rescheduling/cancellation, and
+  passenger-side live seats.
 - **Compliance report dismissal + alert audiences (2026-11-16):** Safety Alerts
   can notify Passenger, Bangkero, Admin, Coastguard, or All; creating an alert
   still notifies everyone. Compliance & Feedback keeps Resolve visible as a

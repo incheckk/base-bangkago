@@ -15,7 +15,31 @@
 
   <div class="topbar-right">
     <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
-    <a class="btn icon-btn" href="notifications.html" title="Notifications" aria-label="Notifications"><i class="bi bi-bell-fill"></i></a>
+    <div class="cg-topbar-notifications" id="topbarNotifications">
+      <button class="btn topbar-btn cg-topbar-notifications-toggle" id="notificationsToggle" type="button"
+        aria-label="Notifications" aria-expanded="false" aria-controls="notificationsPanel">
+        <i class="bi bi-bell" aria-hidden="true"></i>
+        <span class="cg-topbar-notifications-badge" id="notificationsBadge" hidden></span>
+      </button>
+      <section class="cg-topbar-notifications-panel" id="notificationsPanel" aria-label="Notifications" hidden>
+        <header class="cg-topbar-notifications-header">
+          <div>
+            <strong>Notifications</strong>
+            <span class="cg-topbar-notifications-summary" id="notificationsSummary">Loading...</span>
+          </div>
+          <button class="cg-topbar-notifications-icon" id="notificationsRefresh" type="button" aria-label="Refresh notifications" title="Refresh">
+            <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+          </button>
+        </header>
+        <div class="cg-topbar-notifications-list" id="notificationsList" aria-live="polite">
+          <div class="topbar-notifications-state">Loading notifications...</div>
+        </div>
+        <footer class="cg-topbar-notifications-footer">
+          <button class="cg-topbar-notifications-action" id="notificationsMarkAll" type="button">Mark all read</button>
+          <button class="cg-topbar-notifications-action" id="notificationsClearOld" type="button">Clear old</button>
+        </footer>
+      </section>
+    </div>
     <a class="btn btn-outline-secondary" href="../../bangkaGo-access.html" onclick="event.preventDefault();try{sessionStorage.clear();}catch(e){}var p=window.bangkago?window.bangkago.signOut():null;Promise.resolve(p).finally(function(){location.href='../../bangkaGo-access.html';})" title="Logout" aria-label="Logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
   </div>
 </header>

@@ -165,11 +165,11 @@
     if (!ready()) throw new Error('Script loaded without initializing its service: ' + src);
   }
 
-  async function initAdminNotifications() {
+  async function initTopbarNotifications() {
     const root = document.getElementById('topbarNotifications');
-    if (!root || location.pathname.indexOf('/coastguard-dashboard/') !== -1) return;
+    if (!root) return;
     const role = await window.bangkagoAuthReady;
-    if (role !== 'admin') throw new Error('Admin session is not available.');
+    if (role !== 'admin' && role !== 'coastguard') return;
     await loadScript('../../assets/js/services/supabase.js', function () {
       return !!window.bangkagoServices;
     });
@@ -180,12 +180,12 @@
       return !!window.bangkagoNotifications;
     });
     await loadScript('../../assets/js/admin-notifications.js', function () {
-      return !!window.AdminNotifications;
+      return !!window.BangkagoTopbarNotifications;
     });
-    window.AdminNotifications.init();
+    window.BangkagoTopbarNotifications.init();
   }
 
-  initAdminNotifications().catch(function (error) {
+  initTopbarNotifications().catch(function (error) {
     console.error('Notification panel initialization failed:', error);
     const list = document.getElementById('notificationsList');
     const summary = document.getElementById('notificationsSummary');

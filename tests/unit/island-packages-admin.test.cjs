@@ -9,11 +9,27 @@ const source = fs.readFileSync(
   'utf8',
 );
 
-function loadService(routes = [{ id: 'mactan__olango', is_active: true }]) {
+function loadService(routes = [{ id: 'mactan__olango', is_active: true }], packages = []) {
   const calls = [];
   const datasets = {
     ports: [{ id: 'mactan', is_active: true }, { id: 'olango', is_active: true }],
     routes,
+    island_packages: packages,
+    bangkas: [{
+      id: 'boat-1',
+      bangka_name: 'Demo Bangka',
+      capacity: 8,
+      bangkero_id: 'operator-1',
+      is_active: true,
+      is_deleted: false,
+      deleted_at: null,
+      bangkeros: {
+        display_name: 'Demo Bangkero',
+        verification_stat: 'verified',
+        is_deleted: false,
+        deleted_at: null,
+      },
+    }],
   };
   function query(table) {
     const result = { data: datasets[table] || [], error: null };
@@ -21,6 +37,7 @@ function loadService(routes = [{ id: 'mactan__olango', is_active: true }]) {
       select: () => builder,
       order: () => builder,
       eq: () => builder,
+      is: () => builder,
       not: () => builder,
       limit: () => builder,
       insert: (value) => {
@@ -109,4 +126,49 @@ test('rescheduling delegates to the database guard with the selected schedule', 
       p_scheduled_time: '10:00',
     },
   });
+});
+
+test('deleting a package uses the reversible admin RPC', async () => {
+  const { service, calls } = loadService();
+  await service.deletePackage('package-1');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), {
+    operation: 'rpc',
+    name: 'admin_delete_island_package',
+    args: { p_package_id: 'package-1' },
+  });
+});
+
+test('restoring a package does not require the former Bangka to remain eligible', async () => {
+  const { service, calls } = loadService();
+  await service.restorePackage('package-1');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), {
+    operation: 'rpc',
+    name: 'admin_restore_island_package',
+    args: { p_package_id: 'package-1' },
+  });
+});
+
+test('package listing distinguishes unavailable assignments from active packages', async () => {
+  const boat = {
+    id: 'boat-1',
+    bangka_name: 'Demo Bangka',
+    capacity: 8,
+    is_active: true,
+    is_deleted: false,
+    deleted_at: null,
+    bangkeros: {
+      display_name: 'Demo Bangkero',
+      verification_stat: 'verified',
+      is_deleted: false,
+      deleted_at: null,
+    },
+  };
+  const { service } = loadService(undefined, [
+    { id: 'available', package_name: 'Available', price: 500, max_capacity: 8, duration_hours: 4, stops: [], is_active: true, bangka_id: 'boat-1', bangkas: boat },
+    { id: 'unavailable', package_name: 'Unavailable', price: 500, max_capacity: 8, duration_hours: 4, stops: [], is_active: true, bangka_id: 'boat-1', bangkas: { ...boat, is_active: false } },
+  ]);
+  const packages = await service.listPackages();
+  assert.equal(packages[0].assignmentEligible, true);
+  assert.equal(packages[1].isActive, true);
+  assert.equal(packages[1].assignmentEligible, false);
 });

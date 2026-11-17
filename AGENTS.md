@@ -41,6 +41,124 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-17 — Dispatch rotation, Analyze Demand, Coast Guard alerts,
+  dashboard polish, offer countdown, GPS heartbeat, batched padala
+  (migration **100 PENDING — USER MUST RUN, after 099**; gates: tsc clean,
+  lint 0 errors / 136 known warnings, unit tests 61/61 (+4 batch-window),
+  edited inline web scripts pass `node --check`; expo-doctor not re-run —
+  nothing dependency-related).**
+  - **100 — the "Pedro and Mang Lito see no bookings" bug.** An EXPIRED
+    3-minute offer was appended to `rejected_by`, the same list an explicit
+    Decline writes to. `useOpenRequests` hides any booking in
+    `rejected_by`, and `accept_booking_hold` refuses those boats, so a boat
+    that let an offer lapse silently lost the request forever — and FCFS
+    then skipped queue positions 1 and 2 and handed the offer to the first
+    boat that had never been offered it (why the last boat got it). 100 adds
+    `bookings.last_held_by`: expiry clears the hold and records the previous
+    holder, `rejected_by` is declines only, and both holder picks sort
+    `last_held_by` LAST (not out), so the queue round-robins and a lone boat
+    is re-offered its own request. The migration also clears the polluted
+    `rejected_by` on open requests (an expired entry cannot be told from a
+    real decline afterwards — a bangkero may see a request they declined
+    before 100 ran). `refresh_holds` needed no change (it delegates).
+  - **The docked-boat GPS bug is separate:** iOS fires the position watcher
+    on distance, not time, so an idle boat at the pier stopped producing
+    fixes, aged past the 3-minute freshness gate (008 `dispatch_eligible`,
+    081 accept) and dropped out of dispatch while the app still said
+    "GPS · live fix". `useLocationTracking` now re-reports the last fix
+    every 45 s while tracking is running and the app is foreground;
+    `report_boat_position` stamps `now()` server-side, so phone-clock skew
+    cannot defeat it. B1 (background) is unchanged. The bangkero home GPS
+    row now says the real age ("fix is 6 min old") and warns in the queue
+    strip instead of calling every old row live.
+  - **Analyze Demand** (`analyze-demand.html`): one shared
+    `selectedDate` drives "Demand by Route" AND the View Predictions modal
+    (the picker also sits on the page, with an All-days reset), and the KPIs
+    are two honest numbers — "Daily network total" (`total / days`) and
+    "Average per route / day" (`total / (routes × days)`) — instead of one
+    "Daily Average" that read like the second. Table header names the date,
+    numbers are right-aligned/tabular, recommendations and Generate Insights
+    follow the same scope.
+  - **Coast Guard Safety Alerts** (`coastguard-dashboard/alerts.html`)
+    rebuilt: 4-tile stat strip, status + severity chips with live counts,
+    search, severity-sorted card feed with a colored rail, relative +
+    absolute time, view modal, real loading/error/empty states. Compliance
+    reports stay excluded.
+  - **Dashboard polish without 32 rewrites:** one ~5 KB layer appended to
+    `web/assets/css/admin-theme.css` and `coastguard-theme.css` —
+    `.page-head`, `.stat-strip`/`.stat-tile`, `.seg-chips`/`.seg-chip`,
+    `.alert-feed`/`.alert-card`, `.data-empty`, tabular table numbers, panel
+    header divider, responsive rules. Every page already links one of the
+    two files, so panels/tables/filters get the calmer look automatically.
+  - **Offer countdown:** a request card held by another boat now reads
+    "Offered to another boat · 2:41 left" instead of just "offered", using
+    the holder's public `hold_expires_at`.
+  - **Arrived → Call the receiver:** each parcel card shows the receiver's
+    number as a one-tap `tel:` action (hidden once delivered/returned).
+  - **Batched padala — the 0:00 screen.** `assignToBatch` returned null when
+    no `crossing_times` row matched, so the 1-hour window never started and
+    the waiting screen showed 0:00 with a solo/upgrade prompt. The window is
+    now always one hour, and the grouping key is route + day only
+    (`src/utils/parcel-batch.ts`) — the old key embedded a crossing time,
+    which is why two senders in the same hour landed in different groups.
+    The crossing is display-only (ETA). `batched-waiting` repairs a parcel
+    that has no deadline/key (payment retries it with fromId/toId), says
+    "your 1-hour window did not start — Retry", and only offers
+    wait/solo for a window that really expired. The umbrella itself was
+    already right (071/077 promote one stub, demote — never cancel — the
+    other senders' bookings, bangkero sees one card with every ref,
+    071's home card lists the refs).
+  - **Deferred:** tracker item 3 now records the heartbeat and that
+    background/asleep still drops. Nothing else new deferred.
+  - **Next:** run **100** after 099, then smoke: park two boats at one port,
+    let an offer lapse, confirm the lapsed boat still sees the request and
+    the offers alternate instead of stacking on one; leave a docked boat's
+    app open 5+ min and confirm its GPS row stays live and Accept does not
+    raise "no recent GPS position". Then book two batched padala parcels on
+    the same route ~30 min apart, confirm one umbrella booking on the
+    bangkero card with both refs, and no sender booking cancelled. Also open
+    Analyze Demand on today and on All days (KPIs add up), and Coast Guard →
+    Safety Alerts.
+
+- **2026-11-17 — Demo-bug batch: rejected-receipt resubmit, padala
+  eligibility, notification back buttons, calm payment fallback
+  (migration **099 PENDING — USER MUST RUN, after 097**; gates: tsc clean,
+  lint 0 errors / 136 known warnings, unit tests 57/57).**
+  - **099 — a rejected receipt can be sent again.** 019 allows one
+    `downpayments` row per booking/rental, but the retry inserted a
+    second one, so `downpayments_one_per_rental` raised 23505 and no new
+    receipt ever reached the admin. `attach_downpayment_proof` now
+    reopens a `rejected` row in place — same row back to `pending`, new
+    proof, `reject_reason`/`reviewed_at` cleared — and
+    `createDownpayment` looks the row up first: rejected → resubmit,
+    pending with no proof → attach (097 gateway fallback), approved/
+    refunded → an honest message instead of an insert. This also fixes
+    the booking-side **Pay ₱x downpayment** retry
+    (`downpayments_one_per_booking`).
+  - **Padala "Send with a passenger" finds accepted trips again.**
+    `findEligiblePiggybackBooking` dropped the `bangkeros.piggyback_opt_in`
+    filter — the column defaults false and no screen ever writes it, so
+    no trip could ever match; the bangkero's per-request Accept/Decline
+    is the consent. Same-day bookings (`scheduled_date` NULL) now
+    qualify next to advance trips, using Manila today, ordered
+    `nullsFirst` so today wins. The empty state names the missing step:
+    "a bangkero must accept a passenger booking first".
+  - **Admin + Coast Guard Notifications have a back button** — the
+    screens no longer pass `showBack={false}`; the header's 44pt back
+    returns Home (bell push), drawer burger stays on the right.
+  - **Gateway failure never shows the edge-function text.**
+    `payment.tsx` still switches to the GCash QR + receipt rail and
+    reuses the filed row, but the banner now reads "Online checkout is
+    unavailable right now — scan the GCash QR and attach your receipt
+    below." Leave Developer Options → Manual payments **ON** for the
+    defense; the edge function is never called.
+  - **Next:** run `099_resubmit_rejected_downpayment.sql` after 097, then
+    reject a rental receipt → My Rentals **Send a new receipt** →
+    **Retry downpayment** → one row back in Admin → Downpayments
+    **Pending** with the new screenshot → approve. Smoke the same on an
+    advance booking, an accepted same-day ride in Book Delivery, and the
+    admin bell → Notifications → back.
+
 - **2026-11-17 — Downpayment reject + retry, one commission rule, boatless
   island hop, demo polish (migrations **097 → 098 PENDING — USER MUST RUN,
   after 096; 095 + 096 are also still pending**; gates: tsc clean, lint

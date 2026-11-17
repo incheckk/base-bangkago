@@ -16,6 +16,16 @@ interface LocationState {
   timestamp: number;
 }
 
+/**
+ * Dispatch freshness gate is 3 minutes (008 dispatch_eligible, 081 accept).
+ * A docked boat barely moves, and the watcher's 50 m distance filter means
+ * an idle phone can stop producing fixes entirely — the boat then looks
+ * offline to dispatch while the screen still says "GPS · live fix".
+ * Re-sending the last fix every 45 s keeps that row fresh; the server
+ * stamps now(), so a skewed phone clock cannot defeat it either.
+ */
+const HEARTBEAT_MS = 45_000;
+
 export function useLocationTracking(bangkaId: string | null) {
   const [location, setLocation] = useState<LocationState | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -30,6 +40,10 @@ export function useLocationTracking(bangkaId: string | null) {
   useEffect(() => {
     bangkaRef.current = bangkaId;
   }, [bangkaId]);
+
+  // Newest fix the heartbeat re-sends. A ref, not state: the interval is
+  // created once and must read the current fix without re-arming.
+  const lastFixRef = useRef<LocationState | null>(null);
 
   /**
    * Try to drain the outbox. Offline at sea is the normal case: the
@@ -80,6 +94,7 @@ export function useLocationTracking(bangkaId: string | null) {
             timestamp: pos.timestamp,
           };
           setLocation(state);
+          lastFixRef.current = state;
 
           // Local write FIRST — the fix survives a dead connection and a
           // killed app. Then try to sync the whole backlog (056).
@@ -112,6 +127,23 @@ export function useLocationTracking(bangkaId: string | null) {
     return () => {
       watchRef.current?.remove();
     };
+  }, []);
+
+  // Heartbeat: re-report the last fix so the 3-minute dispatch freshness
+  // gate stays satisfied while the boat sits at the pier. Skipped when the
+  // app is backgrounded (timers are throttled there anyway — B1).
+  // shortcut: this re-sends the last fix, so a phone asleep while the boat
+  // drives off would keep the old port queue row; the 50 m watcher covers
+  // the app-open case. Upgrade when background tracking (B1) lands.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const boat = bangkaRef.current;
+      const fix = lastFixRef.current;
+      if (!boat || !fix || !watchRef.current) return;
+      if (AppState.currentState !== 'active') return;
+      void reportPosition(boat, fix.latitude, fix.longitude, fix.speed ?? undefined).catch(() => {});
+    }, HEARTBEAT_MS);
+    return () => clearInterval(id);
   }, []);
 
   // Coming back to the foreground with no watcher running covers the

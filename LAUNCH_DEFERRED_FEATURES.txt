@@ -45,6 +45,11 @@ package passenger limit).
    Listed-but-offline boats appear on port lists but never receive holds.
    Phone asleep / app killed = boat drops from dispatch after 3 min (no
    GPS fix). Only correct once background tracking ships (item B1).
+   2026-11-17: the bangkero app now re-reports its last fix every 45 s
+   while the tracker is running in the foreground, so a docked boat no
+   longer ages out of dispatch on a stationary phone (iOS fires the
+   watcher on distance, not time). Background/asleep still drops - JS
+   timers do not run there.
 
 4. ISLAND-HOP / RENTAL COMPANION LIST (Phase 4B/4C)
    SHIPPED in the M1-M6 build: book-package and rental-form capture

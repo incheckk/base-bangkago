@@ -10,41 +10,26 @@
  */
 import { supabase } from './supabase';
 import { routeIdFor } from './booking.service';
+import {
+  BATCH_MAX_CYCLES,
+  BATCH_THRESHOLD,
+  BATCH_WINDOW_MINUTES,
+  batchWindowFor,
+  computeBatchingRouteKey,
+} from '../utils/parcel-batch';
 import type { ParcelDoc } from '../types/models';
 
-export const BATCH_WINDOW_MINUTES = 60;
-export const BATCH_MAX_CYCLES = 3;
-export const BATCH_THRESHOLD = 2;
-
-/**
- * Local YYYYMMDD key for the crossing day. Batching route keys are
- * day-scoped so stale queues from a previous day can never be counted.
- */
-function ymd(date: Date): string {
-  return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-}
-
-/**
- * Compute a route key for batching. Format: {from}__{to}-HHMM-YYYYMMDD
- * where HHMM is the target crossing time and YYYYMMDD its sailing day.
- */
-export function computeBatchingRouteKey(params: {
-  fromPortId: string;
-  toPortId: string;
-  crossingHour: number;
-  crossingMinute: number;
-  date?: string;
-}): string {
-  const hh = String(params.crossingHour).padStart(2, '0');
-  const mm = String(params.crossingMinute).padStart(2, '0');
-  return `${params.fromPortId}__${params.toPortId}-${hh}${mm}-${params.date ?? ymd(new Date())}`;
-}
+export { BATCH_MAX_CYCLES, BATCH_THRESHOLD, BATCH_WINDOW_MINUTES, computeBatchingRouteKey };
 
 /**
  * Compute the next crossing time (as Date) for a route.
  * Crossings: 08:00, 12:00, 16:00 (from migration 041).
  * A parcel must be booked >= 1 hour before to make a crossing.
+ *
+ * Display only: the batch resolves at its own 1-hour deadline, so a route
+ * with no crossing rows still batches (it just shows no ETA).
  */
+
 export async function computeNextCrossing(
   fromPortId: string,
   toPortId: string,
@@ -80,8 +65,11 @@ export async function computeNextCrossing(
 }
 
 /**
- * Put a parcel into the batching queue.
- * Sets batching_status='pending_batch', starts window, computes key.
+ * Put a parcel into the batching queue: start the 1-hour window, set the
+ * grouping key. Returns null only when the parcel row itself could not be
+ * written — a missing crossing time is NOT a failure (it only costs the
+ * ETA line). Returning null there used to send the passenger to a screen
+ * that showed 0:00 and a solo button instead of a running window.
  */
 export async function assignToBatch(params: {
   parcelId: string;
@@ -89,19 +77,15 @@ export async function assignToBatch(params: {
   toPortId: string;
 }): Promise<{ routeKey: string; deadlineAt: string; scheduledDepartureAt: string } | null> {
   const now = new Date();
-  const crossing = await computeNextCrossing(params.fromPortId, params.toPortId, now);
-  if (!crossing) return null;
+  const { routeKey, deadlineAt } = batchWindowFor(params.fromPortId, params.toPortId, now);
 
-  const deadlineAt = new Date(now.getTime() + BATCH_WINDOW_MINUTES * 60_000);
+  // Best-effort display data only. The batch sails when its window closes,
+  // not at this crossing.
+  const crossing = await computeNextCrossing(params.fromPortId, params.toPortId, now)
+    .catch(() => null);
   const ETA_MINUTES = 30; // matches routes.estimated_minutes baseline
-  const eta = new Date(crossing.getTime() + ETA_MINUTES * 60_000);
-  const routeKey = computeBatchingRouteKey({
-    fromPortId: params.fromPortId,
-    toPortId: params.toPortId,
-    crossingHour: crossing.getHours(),
-    crossingMinute: crossing.getMinutes(),
-    date: ymd(crossing),
-  });
+  const sailAt = crossing ?? deadlineAt;
+  const eta = new Date(sailAt.getTime() + ETA_MINUTES * 60_000);
 
   const { error } = await supabase
     .from('parcels')
@@ -111,7 +95,7 @@ export async function assignToBatch(params: {
       batching_deadline_at: deadlineAt.toISOString(),
       batching_route_key: routeKey,
       batching_cycle_count: 0,
-      scheduled_departure_at: crossing.toISOString(),
+      scheduled_departure_at: sailAt.toISOString(),
       estimated_arrival_at: eta.toISOString(),
     })
     .eq('id', params.parcelId);
@@ -139,7 +123,7 @@ export async function assignToBatch(params: {
   return {
     routeKey,
     deadlineAt: deadlineAt.toISOString(),
-    scheduledDepartureAt: crossing.toISOString(),
+    scheduledDepartureAt: sailAt.toISOString(),
   };
 }
 

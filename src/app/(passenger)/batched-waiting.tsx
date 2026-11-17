@@ -8,6 +8,7 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import {
   BATCH_THRESHOLD,
+  assignToBatch,
   bumpBatchCycle,
   upgradeToSolo,
 } from '@/services/parcel-batching.service';
@@ -16,17 +17,22 @@ import { supabase } from '@/services/supabase';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export default function BatchedWaiting() {
-  const params = useLocalSearchParams<{ parcelId?: string }>();
+  const params = useLocalSearchParams<{ parcelId?: string; fromId?: string; toId?: string }>();
   const parcelId = params.parcelId ?? null;
+  const fromId = params.fromId ?? null;
+  const toId = params.toId ?? null;
 
   const [parcel, setParcel] = useState<any>(null);
   const [partners, setPartners] = useState(0);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState(false);
+  const [windowBroken, setWindowBroken] = useState(false);
   const [now, setNow] = useState(Date.now());
   // Guards the one-shot deadline resolve against re-entry from the poll,
   // the realtime subscription and the 1s tick firing load() together.
   const resolveTriggeredRef = useRef(false);
+  // Same guard for the "the window never started" repair.
+  const repairTriggeredRef = useRef(false);
 
   // Tick every second for countdown
   useEffect(() => {
@@ -58,7 +64,31 @@ export default function BatchedWaiting() {
         }
       }
       setParcel(data);
+      // A waiting parcel must ALWAYS have a running window: no deadline and
+      // no batch means payment could not start one (offline, RLS). Repair it
+      // here instead of rendering 0:00 with a solo button — the passenger
+      // never got their hour. One attempt per mount; Retry below re-arms it.
+      if (
+        data.batching_status === 'pending_batch' &&
+        (!data.batching_deadline_at || !data.batching_route_key) &&
+        fromId && toId && !repairTriggeredRef.current
+      ) {
+        repairTriggeredRef.current = true;
+        const fixed = await assignToBatch({
+          parcelId,
+          fromPortId: fromId,
+          toPortId: toId,
+        });
+        if (fixed) {
+          data.batching_deadline_at = fixed.deadlineAt;
+          data.batching_route_key = fixed.routeKey;
+          setWindowBroken(false);
+        } else {
+          setWindowBroken(true);
+        }
+      }
       if (data.batching_route_key) {
+        if (data.batching_deadline_at) setWindowBroken(false);
         const { data: partnerCount } = await supabase.rpc('get_batch_partner_count', {
           p_route_key: data.batching_route_key,
           p_exclude_parcel_id: parcelId,
@@ -115,7 +145,7 @@ export default function BatchedWaiting() {
       }
     }
     setLoading(false);
-  }, [parcelId]);
+  }, [parcelId, fromId, toId]);
 
   useEffect(() => { void load(); }, [load]);
   // Polling fallback: RLS also filters Realtime events for other senders'
@@ -178,6 +208,24 @@ export default function BatchedWaiting() {
               </Text>
             )}
           </>
+        ) : windowBroken || !deadline ? (
+          <View>
+            <Text style={styles.warning}>Your 1-hour window did not start</Text>
+            <Text style={styles.subtitle}>
+              The parcel is saved. Check your connection, then tap Retry to start the window.
+            </Text>
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={() => {
+                repairTriggeredRef.current = false;
+                resolveTriggeredRef.current = false;
+                setWindowBroken(false);
+                void load();
+              }}
+            >
+              <Text style={styles.primaryBtnText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : (
           <View>
             <Text style={styles.warning}>No other parcels joined</Text>

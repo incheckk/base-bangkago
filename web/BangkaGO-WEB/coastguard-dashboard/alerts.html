@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BangkaGo LGU/Coast Guard — View Active Alerts</title>
+  <title>BangkaGo LGU/Coast Guard — Safety Alerts</title>
   <link rel="icon" type="image/png" href="../../images/favicon.png" />
 
   <link href="../../assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet"/>
@@ -11,15 +11,6 @@
   <link href="../../assets/vendor/fonts/fonts.css" rel="stylesheet">
   <link rel="stylesheet" href="../../../assets/css/coastguard-theme.css"/>
   <style>
-    .alert-message-preview{
-      display:-webkit-box;
-      max-width:32rem;
-      overflow:hidden;
-      overflow-wrap:anywhere;
-      white-space:normal;
-      -webkit-box-orient:vertical;
-      -webkit-line-clamp:2;
-    }
     #alertDetailsMessage{
       white-space:pre-wrap;
       overflow-wrap:anywhere;
@@ -37,103 +28,63 @@
       <div id="topbarMount"></div>
 
       <section class="cg-content container-fluid">
-        <div class="row g-3">
-          <!-- Main alerts table -->
-          <div class="col-xl-9">
-            <div class="cg-card">
-              <div class="panel-head">
-                <h6 class="mb-0">View Active Alerts (Read-Only)</h6>
-                <span class="readonly-pill"><i class="bi bi-eye-fill"></i> Read Only</span>
-              </div>
+        <div class="page-head">
+          <div>
+            <h4 class="page-head__title">Safety Alerts</h4>
+            <p class="page-head__sub">Live distress calls and safety reports from the strait. Read-only — the Coast Guard resolves alerts from the operations console.</p>
+          </div>
+          <span class="readonly-pill"><i class="bi bi-eye-fill" aria-hidden="true"></i> Read Only</span>
+        </div>
 
-              <!-- Filters -->
-              <div class="row g-2 mb-3 align-items-end filter-row">
-                <div class="col-12 col-sm-6 col-lg-4">
-                  <label class="form-label visually-hidden" for="alertSearchInput">Search</label>
-                  <input id="alertSearchInput" class="form-control w-100" type="text" placeholder="Search alert, bangka, zone">
-                </div>
-                <div class="col-6 col-sm-6 col-lg-3">
-                  <label class="form-label visually-hidden" for="severityFilter">Severity</label>
-                  <select id="severityFilter" class="form-select w-100">
-                    <option value="">All Severity</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                  </select>
-                </div>
-                <div class="col-6 col-sm-6 col-lg-3">
-                  <label class="form-label visually-hidden" for="statusFilter">Status</label>
-                  <select id="statusFilter" class="form-select w-100">
-                    <option value="">All Status</option>
-                    <option value="false">Open</option>
-                    <option value="true">Resolved</option>
-                  </select>
-                </div>
-                <div class="col-12 col-sm-6 col-lg-2 d-grid">
-                  <button id="resetBtn" class="btn btn-outline-secondary w-100" type="button"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
-                </div>
-              </div>
+        <div class="stat-strip" id="alertStats" aria-live="polite">
+          <div class="stat-tile"><span class="stat-tile__label">Unresolved</span><span class="stat-tile__value" id="statOpen">—</span><span class="stat-tile__hint">still open</span></div>
+          <div class="stat-tile stat-tile--danger"><span class="stat-tile__label">Critical + High</span><span class="stat-tile__value" id="statUrgent">—</span><span class="stat-tile__hint">need attention</span></div>
+          <div class="stat-tile stat-tile--ok"><span class="stat-tile__label">Resolved</span><span class="stat-tile__value" id="statResolved">—</span><span class="stat-tile__hint">closed out</span></div>
+          <div class="stat-tile"><span class="stat-tile__label">Loaded</span><span class="stat-tile__value" id="statTotal">—</span><span class="stat-tile__hint">newest 100</span></div>
+        </div>
 
-              <div id="alertResultCount" class="small text-secondary mb-2"></div>
+        <div class="cg-card">
+          <div class="panel-head">
+            <h6 class="mb-0">Alert feed</h6>
+            <span class="muted-note" id="alertResultCount">Loading…</span>
+          </div>
 
-              <div class="table-responsive">
-                <table class="table table-theme align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th>Alert ID</th>
-                      <th>Message</th>
-                      <th>Location</th>
-                      <th>Time</th>
-                      <th>Severity</th>
-                      <th>Status</th>
-                      <th><span class="visually-hidden">Actions</span></th>
-                    </tr>
-                  </thead>
-                  <tbody id="alertsTableBody"></tbody>
-                </table>
-              </div>
-
-              <p id="alertEmptyState" class="cg-empty d-none">
-                No alerts matched your filters.
-              </p>
+          <div class="toolbar-stack mb-3">
+            <div class="seg-chips" id="statusChips" role="group" aria-label="Filter by status">
+              <button type="button" class="seg-chip is-active" data-status="open" aria-pressed="true">Unresolved <span class="seg-chip__count" id="openCount">0</span></button>
+              <button type="button" class="seg-chip" data-status="resolved" aria-pressed="false">Resolved <span class="seg-chip__count" id="resolvedCount">0</span></button>
+              <button type="button" class="seg-chip" data-status="all" aria-pressed="false">All <span class="seg-chip__count" id="allCount">0</span></button>
+            </div>
+            <div class="seg-chips" id="severityChips" role="group" aria-label="Filter by severity">
+              <button type="button" class="seg-chip is-active" data-severity="" aria-pressed="true">Any severity</button>
+              <button type="button" class="seg-chip seg-chip--critical" data-severity="critical" aria-pressed="false">Critical <span class="seg-chip__count" id="sevCritical">0</span></button>
+              <button type="button" class="seg-chip seg-chip--high" data-severity="high" aria-pressed="false">High <span class="seg-chip__count" id="sevHigh">0</span></button>
+              <button type="button" class="seg-chip" data-severity="medium" aria-pressed="false">Medium <span class="seg-chip__count" id="sevMedium">0</span></button>
+              <button type="button" class="seg-chip" data-severity="low" aria-pressed="false">Low <span class="seg-chip__count" id="sevLow">0</span></button>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <label class="alert-search flex-grow-1 mb-0">
+                <span class="visually-hidden">Search safety alerts</span>
+                <input id="alertSearchInput" class="form-control form-control-sm" type="search" placeholder="Search message, bangka or port">
+              </label>
+              <button id="resetBtn" class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Reset filters</button>
             </div>
           </div>
 
-          <!-- Side severity legend -->
-          <div class="col-xl-3">
-            <div class="cg-card h-100">
-              <div class="panel-head">
-                <h6 class="mb-0">Severity Legend</h6>
-              </div>
+          <div id="loadingState" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading alerts…</span></div>
+            <p class="mt-2 text-secondary mb-0">Loading alerts…</p>
+          </div>
 
-              <div class="d-flex flex-column gap-2">
-                <div class="d-flex align-items-center justify-content-between cg-legend-item">
-                  <span><i class="bi bi-exclamation-octagon-fill text-danger me-2"></i>Critical</span>
-                  <span class="badge text-bg-danger">Immediate Action</span>
-                </div>
+          <div id="errorState" class="alert alert-danger d-none" role="alert"></div>
 
-                <div class="d-flex align-items-center justify-content-between cg-legend-item">
-                  <span><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>High</span>
-                  <span class="badge text-bg-warning">Priority Watch</span>
-                </div>
+          <div id="alertsFeed" class="alert-feed d-none" role="list"></div>
 
-                <div class="d-flex align-items-center justify-content-between cg-legend-item">
-                  <span><i class="bi bi-info-circle-fill text-info me-2"></i>Medium</span>
-                  <span class="badge text-bg-info">Monitor</span>
-                </div>
-
-                <div class="d-flex align-items-center justify-content-between cg-legend-item">
-                  <span><i class="bi bi-circle-fill text-secondary me-2"></i>Low</span>
-                  <span class="badge text-bg-secondary">Info</span>
-                </div>
-              </div>
-
-              <hr>
-              <h6 class="mb-2">Status Meaning</h6>
-              <div class="small text-secondary mb-2"><span class="badge text-bg-danger me-2">Open</span> Not yet resolved</div>
-              <div class="small text-secondary mb-2"><span class="badge text-bg-success me-2">Resolved</span> Issue addressed</div>
-            </div>
+          <div id="emptyState" class="data-empty d-none">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            <h6 id="emptyTitle">No alerts match these filters</h6>
+            <p id="emptyBody" class="mb-0">Try a different severity or clear the search.</p>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-3" id="emptyResetBtn">Clear filters</button>
           </div>
         </div>
       </section>
@@ -182,45 +133,62 @@
 
   <script>
     let alerts = [];
+    let statusFilter = 'open';
+    let severityFilter = '';
 
-    const tbody = document.getElementById("alertsTableBody");
-    const searchInput = document.getElementById("alertSearchInput");
-    const severityFilter = document.getElementById("severityFilter");
-    const statusFilter = document.getElementById("statusFilter");
-    const resetBtn = document.getElementById("resetBtn");
-    const countEl = document.getElementById("alertResultCount");
-    const emptyEl = document.getElementById("alertEmptyState");
+    const feed = document.getElementById('alertsFeed');
+    const searchInput = document.getElementById('alertSearchInput');
+    const statusChips = document.getElementById('statusChips');
+    const severityChips = document.getElementById('severityChips');
+    const countEl = document.getElementById('alertResultCount');
+    const loadingEl = document.getElementById('loadingState');
+    const errorEl = document.getElementById('errorState');
+    const emptyEl = document.getElementById('emptyState');
     const alertDetailsModal = new bootstrap.Modal(document.getElementById('alertDetailsModal'));
+
+    const SEVERITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 };
+    const SEVERITY_CLASS = {
+      critical: 'text-bg-danger',
+      high: 'text-bg-warning',
+      medium: 'text-bg-info',
+      low: 'text-bg-secondary'
+    };
+    const SEVERITY_ICON = {
+      critical: 'bi-exclamation-octagon-fill',
+      high: 'bi-exclamation-triangle-fill',
+      medium: 'bi-info-circle-fill',
+      low: 'bi-circle-fill'
+    };
 
     function formatDate(dateStr) {
       if (!dateStr) return 'N/A';
       try {
         return new Date(dateStr).toLocaleString('en-PH', {
-          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+          timeZone: 'Asia/Manila'
         });
       } catch {
         return dateStr;
       }
     }
 
-    function sevBadge(sev) {
-      if (sev === 'critical') return "text-bg-danger";
-      if (sev === 'high') return "text-bg-danger";
-      if (sev === 'medium') return "text-bg-warning";
-      return "text-bg-info";
+    function relativeTime(dateStr) {
+      if (!dateStr) return '';
+      const diff = Date.now() - new Date(dateStr).getTime();
+      if (!Number.isFinite(diff)) return '';
+      const mins = Math.round(diff / 60000);
+      if (mins < 1) return 'just now';
+      if (mins < 60) return mins + ' min ago';
+      const hours = Math.round(mins / 60);
+      if (hours < 24) return hours + ' hr ago';
+      const days = Math.round(hours / 24);
+      return days + ' d ago';
     }
 
     function sevLabel(sev) {
       if (sev === 'low') return 'Info';
+      if (!sev) return 'Info';
       return sev.charAt(0).toUpperCase() + sev.slice(1);
-    }
-
-    function statusBadge(resolved) {
-      return resolved ? "text-bg-success" : "text-bg-danger";
-    }
-
-    function statusText(resolved) {
-      return resolved ? 'Resolved' : 'Open';
     }
 
     function getLocation(alert) {
@@ -255,12 +223,6 @@
       };
     }
 
-    function textCell(value) {
-      const td = document.createElement('td');
-      td.textContent = value == null ? '' : String(value);
-      return td;
-    }
-
     function setDetailsText(id, value) {
       document.getElementById(id).textContent = value || '—';
     }
@@ -272,7 +234,7 @@
       setDetailsText('alertDetailsFiledBy', report.by);
       setDetailsText('alertDetailsCategory', report.category);
       setDetailsText('alertDetailsSeverity', sevLabel(alert.severity || 'low'));
-      setDetailsText('alertDetailsStatus', statusText(alert.isResolved));
+      setDetailsText('alertDetailsStatus', alert.isResolved ? 'Resolved' : 'Open');
       setDetailsText('alertDetailsVessel', alert.bangkaName);
       setDetailsText('alertDetailsLocation', report.location || alert.portName || 'System-wide');
       setDetailsText('alertDetailsDate', formatDate(alert.createdAt));
@@ -280,103 +242,198 @@
       alertDetailsModal.show();
     }
 
-    function renderRows(data) {
-      tbody.innerHTML = "";
+    function updateCounts() {
+      const open = alerts.filter(a => !a.isResolved);
+      document.getElementById('statOpen').textContent = open.length;
+      document.getElementById('statUrgent').textContent = open.filter(a => a.severity === 'critical' || a.severity === 'high').length;
+      document.getElementById('statResolved').textContent = alerts.filter(a => a.isResolved).length;
+      document.getElementById('statTotal').textContent = alerts.length;
 
-      if (data.length === 0) emptyEl.classList.remove("d-none");
-      else emptyEl.classList.add("d-none");
-
-      data.forEach(a => {
-        const report = parseAlertMessage(a);
-        const tr = document.createElement("tr");
-        tr.appendChild(textCell(String(a.alertId || '').slice(0, 8) + '...'));
-
-        const messageCell = document.createElement('td');
-        const messagePreview = document.createElement('span');
-        messagePreview.className = 'alert-message-preview';
-        messagePreview.textContent = report.details || 'No message provided.';
-        messagePreview.title = messagePreview.textContent;
-        messageCell.appendChild(messagePreview);
-        tr.appendChild(messageCell);
-
-        tr.appendChild(textCell(getLocation(a)));
-        tr.appendChild(textCell(formatDate(a.createdAt)));
-
-        const severityCell = document.createElement('td');
-        const severityBadge = document.createElement('span');
-        severityBadge.className = 'badge ' + sevBadge(a.severity);
-        severityBadge.textContent = sevLabel(a.severity);
-        severityCell.appendChild(severityBadge);
-        tr.appendChild(severityCell);
-
-        const statusCell = document.createElement('td');
-        const statusBadgeEl = document.createElement('span');
-        statusBadgeEl.className = 'badge ' + statusBadge(a.isResolved);
-        statusBadgeEl.textContent = statusText(a.isResolved);
-        statusCell.appendChild(statusBadgeEl);
-        tr.appendChild(statusCell);
-
-        const actionCell = document.createElement('td');
-        const viewButton = document.createElement('button');
-        viewButton.type = 'button';
-        viewButton.className = 'btn btn-sm btn-outline-primary text-nowrap';
-        viewButton.dataset.alertId = String(a.alertId || '');
-        viewButton.setAttribute('aria-label', 'View alert details');
-        viewButton.innerHTML = '<i class="bi bi-eye me-1" aria-hidden="true"></i>View';
-        actionCell.appendChild(viewButton);
-        tr.appendChild(actionCell);
-        tbody.appendChild(tr);
+      document.getElementById('openCount').textContent = open.length;
+      document.getElementById('resolvedCount').textContent = alerts.filter(a => a.isResolved).length;
+      document.getElementById('allCount').textContent = alerts.length;
+      ['critical', 'high', 'medium', 'low'].forEach(sev => {
+        const id = 'sev' + sev.charAt(0).toUpperCase() + sev.slice(1);
+        document.getElementById(id).textContent = alerts.filter(a => a.severity === sev).length;
       });
+    }
 
-      countEl.textContent = `Showing ${data.length} alert(s)`;
+    function buildMeta(alert, report) {
+      const meta = document.createElement('div');
+      meta.className = 'alert-card__meta';
+
+      const time = document.createElement('span');
+      time.textContent = relativeTime(alert.createdAt) || formatDate(alert.createdAt);
+      time.title = formatDate(alert.createdAt);
+      meta.appendChild(time);
+
+      const place = document.createElement('span');
+      place.textContent = report.location || getLocation(alert);
+      meta.appendChild(place);
+
+      const id = document.createElement('span');
+      id.className = 'mono';
+      id.textContent = '#' + String(alert.alertId || '').slice(0, 8);
+      meta.appendChild(id);
+
+      return meta;
+    }
+
+    function buildAlertCard(alert) {
+      const report = parseAlertMessage(alert);
+      const severity = alert.severity || 'low';
+      const card = document.createElement('article');
+      card.className = 'alert-card';
+      card.dataset.severity = severity;
+      card.setAttribute('role', 'listitem');
+
+      const rail = document.createElement('div');
+      rail.className = 'alert-card__rail';
+      const icon = document.createElement('i');
+      icon.className = 'bi ' + (SEVERITY_ICON[severity] || SEVERITY_ICON.low);
+      icon.setAttribute('aria-hidden', 'true');
+      rail.appendChild(icon);
+      card.appendChild(rail);
+
+      const body = document.createElement('div');
+      body.className = 'alert-card__body';
+
+      const top = document.createElement('div');
+      top.className = 'alert-card__top';
+      const title = document.createElement('h3');
+      title.className = 'alert-card__title';
+      title.textContent = report.category || 'Safety alert';
+      top.appendChild(title);
+
+      const badges = document.createElement('div');
+      badges.className = 'd-flex flex-wrap gap-1';
+      const sevBadge = document.createElement('span');
+      sevBadge.className = 'badge ' + (SEVERITY_CLASS[severity] || SEVERITY_CLASS.low);
+      sevBadge.textContent = sevLabel(severity);
+      badges.appendChild(sevBadge);
+      const stateBadge = document.createElement('span');
+      stateBadge.className = 'badge ' + (alert.isResolved ? 'text-bg-success' : 'text-bg-danger');
+      stateBadge.textContent = alert.isResolved ? 'Resolved' : 'Open';
+      badges.appendChild(stateBadge);
+      top.appendChild(badges);
+      body.appendChild(top);
+
+      body.appendChild(buildMeta(alert, report));
+
+      const message = document.createElement('p');
+      message.className = 'alert-card__msg';
+      message.textContent = report.details || 'No message provided.';
+      body.appendChild(message);
+
+      const foot = document.createElement('div');
+      foot.className = 'alert-card__foot';
+      const filedBy = document.createElement('span');
+      filedBy.className = 'text-secondary small';
+      filedBy.textContent = report.by ? 'Filed by ' + report.by : 'System alert';
+      foot.appendChild(filedBy);
+
+      const viewButton = document.createElement('button');
+      viewButton.type = 'button';
+      viewButton.className = 'btn btn-sm btn-outline-primary';
+      viewButton.dataset.alertId = String(alert.alertId || '');
+      viewButton.setAttribute('aria-label', 'View details for alert ' + String(alert.alertId || ''));
+      viewButton.innerHTML = '<i class="bi bi-eye me-1" aria-hidden="true"></i>View details';
+      foot.appendChild(viewButton);
+      body.appendChild(foot);
+
+      card.appendChild(body);
+      return card;
     }
 
     function runFilter() {
       const q = searchInput.value.trim().toLowerCase();
-      const severity = severityFilter.value;
-      const status = statusFilter.value;
+      const filtered = alerts
+        .filter(a => {
+          const textMatch = !q
+            || String(a.alertId || '').toLowerCase().includes(q)
+            || String(a.message || '').toLowerCase().includes(q)
+            || String(a.bangkaName || '').toLowerCase().includes(q)
+            || String(a.portName || '').toLowerCase().includes(q);
+          const statusMatch = statusFilter === 'all'
+            || (statusFilter === 'open' && !a.isResolved)
+            || (statusFilter === 'resolved' && a.isResolved);
+          const sevMatch = !severityFilter || a.severity === severityFilter;
+          return textMatch && statusMatch && sevMatch;
+        })
+        .sort((a, b) => {
+          const rank = (SEVERITY_RANK[a.severity] ?? 9) - (SEVERITY_RANK[b.severity] ?? 9);
+          if (rank !== 0) return rank;
+          return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+        });
 
-      const filtered = alerts.filter(a => {
-        const textMatch =
-          a.alertId.toLowerCase().includes(q) ||
-          a.message.toLowerCase().includes(q) ||
-          (a.bangkaName || '').toLowerCase().includes(q) ||
-          (a.portName || '').toLowerCase().includes(q);
+      feed.innerHTML = '';
+      filtered.forEach(a => feed.appendChild(buildAlertCard(a)));
+      feed.classList.toggle('d-none', filtered.length === 0);
+      emptyEl.classList.toggle('d-none', filtered.length > 0);
+      countEl.textContent = filtered.length
+        ? `Showing ${filtered.length} of ${alerts.length} alert${alerts.length === 1 ? '' : 's'} · critical and high first`
+        : 'No alerts match the current filters';
+    }
 
-        const sevMatch = severity ? a.severity === severity : true;
-        const statusMatch = status ? String(a.isResolved) === status : true;
-        return textMatch && sevMatch && statusMatch;
+    function setStatusFilter(value) {
+      statusFilter = value;
+      statusChips.querySelectorAll('[data-status]').forEach(btn => {
+        const active = btn.dataset.status === value;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
+      runFilter();
+    }
 
-      renderRows(filtered);
+    function setSeverityFilter(value) {
+      severityFilter = value;
+      severityChips.querySelectorAll('[data-severity]').forEach(btn => {
+        const active = btn.dataset.severity === value;
+        btn.classList.toggle('is-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+      runFilter();
+    }
+
+    function resetFilters() {
+      searchInput.value = '';
+      setStatusFilter('open');
+      setSeverityFilter('');
     }
 
     async function loadAlerts() {
+      loadingEl.classList.remove('d-none');
+      errorEl.classList.add('d-none');
       try {
         alerts = await window.bangkagoAlerts.listAll({ limit: 100, excludeComplianceReports: true });
-        renderRows(alerts);
+        updateCounts();
+        runFilter();
       } catch (e) {
         console.error(e);
-        emptyEl.textContent = 'Error loading alerts: ' + e.message;
-        emptyEl.classList.remove("d-none");
+        errorEl.textContent = 'Error loading alerts: ' + e.message;
+        errorEl.classList.remove('d-none');
+      } finally {
+        loadingEl.classList.add('d-none');
       }
     }
 
     searchInput.addEventListener('input', runFilter);
-    severityFilter.addEventListener('change', runFilter);
-    statusFilter.addEventListener('change', runFilter);
-    tbody.addEventListener('click', event => {
+    statusChips.addEventListener('click', event => {
+      const button = event.target.closest('[data-status]');
+      if (button) setStatusFilter(button.dataset.status);
+    });
+    severityChips.addEventListener('click', event => {
+      const button = event.target.closest('[data-severity]');
+      if (button) setSeverityFilter(button.dataset.severity);
+    });
+    document.getElementById('resetBtn').addEventListener('click', resetFilters);
+    document.getElementById('emptyResetBtn').addEventListener('click', resetFilters);
+
+    feed.addEventListener('click', event => {
       const button = event.target.closest('[data-alert-id]');
       if (!button) return;
       const alert = alerts.find(item => String(item.alertId) === button.dataset.alertId);
       if (alert) showAlertDetails(alert);
-    });
-
-    resetBtn.addEventListener('click', () => {
-      searchInput.value = "";
-      severityFilter.value = "";
-      statusFilter.value = "";
-      renderRows(alerts);
     });
 
     window.bangkagoAuthReady.then(function(role) {
@@ -386,10 +443,10 @@
       loadAlerts();
     }).catch(function(e) {
       console.error('Failed to initialize Coast Guard alerts:', e);
-      emptyEl.textContent = 'Failed to initialize alerts: ' + e.message;
-      emptyEl.classList.remove('d-none');
+      loadingEl.classList.add('d-none');
+      errorEl.textContent = 'Failed to initialize alerts: ' + e.message;
+      errorEl.classList.remove('d-none');
     });
   </script>
 </body>
 </html>
-

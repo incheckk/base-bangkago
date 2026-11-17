@@ -77,6 +77,43 @@ export async function createDownpayment(args: CreateDownpaymentArgs): Promise<Do
     throw new Error('A downpayment needs a booking or a rental.');
   }
 
+  // 019 allows ONE escrow row per booking/rental, so a retry must finish
+  // that row instead of inserting a second one (23505
+  // downpayments_one_per_*). Rejected receipts reopen the same row (099).
+  const target = args.bookingId
+    ? { column: 'booking_id', id: args.bookingId }
+    : { column: 'boat_rental_id', id: args.boatRentalId as string };
+  const { data: existing, error: lookupError } = await supabase
+    .from('downpayments')
+    .select('id, status, proof_url')
+    .eq(target.column, target.id)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+
+  if (existing) {
+    if (existing.status === 'approved') {
+      throw new Error('This downpayment is already approved.');
+    }
+    if (existing.status === 'refunded') {
+      throw new Error('This downpayment was refunded — please book again.');
+    }
+    if (existing.status === 'rejected') {
+      if (!args.proofUrl) throw new Error('Attach your GCash receipt first.');
+      await attachDownpaymentProof(existing.id, args.referenceNum, args.proofUrl);
+    } else if (!existing.proof_url && args.proofUrl) {
+      // 097: a gateway checkout died before any receipt existed.
+      await attachDownpaymentProof(existing.id, args.referenceNum, args.proofUrl);
+    }
+
+    const { data, error } = await supabase
+      .from('downpayments')
+      .select()
+      .eq('id', existing.id)
+      .single();
+    if (error) throw error;
+    return mapRow(data);
+  }
+
   const { data, error } = await supabase
     .from('downpayments')
     .insert({

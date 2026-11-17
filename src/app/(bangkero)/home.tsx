@@ -357,7 +357,7 @@ export default function BangkeroHome() {
   const gatesBypass = devFlags.data.gatesBypass;
   const { advisory, active: advisoryActive } = useSailingAdvisory();
   const [now, setNow] = useState(() => Date.now());
-  const [myFix, setMyFix] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [myFix, setMyFix] = useState<{ latitude: number; longitude: number; recordedAt: string } | null>(null);
   const lastFixFetchRef = useRef(0);
   useEffect(() => {
     const id = setInterval(() => {
@@ -365,12 +365,22 @@ export default function BangkeroHome() {
       if (uid && Date.now() - lastFixFetchRef.current > 15_000) {
         lastFixFetchRef.current = Date.now();
         getMyLastFix(uid)
-          .then((f) => setMyFix(f ? { latitude: f.latitude, longitude: f.longitude } : null))
+          .then((f) => setMyFix(f ? { latitude: f.latitude, longitude: f.longitude, recordedAt: f.recordedAt } : null))
           .catch(() => {});
       }
     }, 1000);
     return () => clearInterval(id);
   }, [uid]);
+  // The server gate is 3 minutes (008/081). Say the real age instead of
+  // calling any old row a "live fix" - that mismatch is what made a blocked
+  // Accept look like a bug.
+  const fixAgeMs = myFix ? now - new Date(myFix.recordedAt).getTime() : null;
+  const myFixLive = fixAgeMs !== null && fixAgeMs < 3 * 60_000;
+  const fixAgeLabel = fixAgeMs === null
+    ? 'no fix yet'
+    : !myFixLive
+      ? `fix is ${Math.max(1, Math.round(fixAgeMs / 60_000))} min old`
+      : 'live fix';
 
   // Client-side fit-check chip: this boat's capacity vs. everything
   // already accepted (mirrors fits_booking in 008). `boatChecked`
@@ -562,7 +572,10 @@ export default function BangkeroHome() {
       return { text: 'Offer expired — waiting for the next boat', tone: 'wait', canAccept: false, distance };
     }
     if (b.heldBy) {
-      return { text: 'Offered to another boat', tone: 'wait', canAccept: false, distance };
+      // The holder's 3-minute window is public to the queue: the bangkero
+      // needs to know when the offer frees up, not just that it is elsewhere.
+      const wait = holdLeft !== null && holdLeft > 0 ? ` · ${clock(holdLeft)} left` : '';
+      return { text: `Offered to another boat${wait}`, tone: 'wait', canAccept: false, distance };
     }
     // No holder: first tap on Accept runs the server cascade, which may
     // hand this very boat the offer — the button is genuinely live, so
@@ -967,9 +980,11 @@ export default function BangkeroHome() {
             <Text style={[styles.queueText, (qEntry || bypass) && styles.queueTextOn]} numberOfLines={2}>
               {myQueue.loading && !bypass ? 'Checking the port queue…' : queueLabel}
             </Text>
-            {!myFix && !myQueue.loading && !bypass && (
+            {!myFixLive && !myQueue.loading && !bypass && (
               <Text style={styles.queueGps}>
-                No GPS fix yet — keep location on so your boat can join a port queue.
+                {myFix
+                  ? `Last GPS fix is ${Math.max(1, Math.round((fixAgeMs ?? 0) / 60_000))} min old — dispatch cannot offer you trips until the app reports a fresh one.`
+                  : 'No GPS fix yet — keep location on so your boat can join a port queue.'}
               </Text>
             )}
           </View>
@@ -1012,7 +1027,7 @@ export default function BangkeroHome() {
               label="Boat"
               detail={!boatChecked ? '…' : myCapacity !== null ? `${myCapacity} pax` : 'missing'}
             />
-            <GateRow ok={!!myFix} label="GPS" detail={myFix ? 'live fix' : 'no fix yet'} />
+            <GateRow ok={!!myFixLive} label="GPS" detail={fixAgeLabel} />
             {gatesBypass && (
               <Text style={styles.gateNote}>
                 Demo mode: verification and rating gates are lifted.

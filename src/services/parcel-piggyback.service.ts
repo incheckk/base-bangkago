@@ -12,6 +12,7 @@
  *   4. If rejected/timed out → sender falls back to batched/solo
  */
 import type { ParcelDoc, PiggybackCandidate } from '../types/models';
+import { manilaTodayIso } from '../utils/date';
 import { routeIdFor } from './booking.service';
 import { createNotification } from './notification.service';
 import { mapRow } from './parcel.service';
@@ -20,42 +21,30 @@ import { supabase } from './supabase';
 export async function findEligiblePiggybackBooking(params: {
   fromPortId: string;
   toPortId: string;
-  scheduledDate?: string;
 }): Promise<PiggybackCandidate | null> {
   const routeId = routeIdFor(params.fromPortId, params.toPortId);
-  const today = new Date().toISOString().slice(0, 10);
-  const minDate = params.scheduledDate ?? today;
+  const today = manilaTodayIso();
 
-  // Query 1: find candidate passenger bookings (no join)
+  // One query: an accepted passenger trip on this route. `operator_id`
+  // is set only when a bangkero accepted, and that accept is the
+  // consent — `bangkeros.piggyback_opt_in` defaults false and no screen
+  // ever writes it. `scheduled_date` is NULL for today's rides, so it
+  // must qualify alongside today-and-later advance trips.
   const { data: candidates, error } = await supabase
     .from('bookings')
     .select('id, operator_id, route_id, scheduled_date, scheduled_time, trip_stat')
     .eq('route_id', routeId)
     .eq('service_type', 'passenger')
     .in('trip_stat', ['open', 'accepted'])
-    .gte('scheduled_date', minDate)
+    .or(`scheduled_date.is.null,scheduled_date.gte.${today}`)
     .not('operator_id', 'is', null)
-    .order('scheduled_date', { ascending: true })
+    .order('scheduled_date', { ascending: true, nullsFirst: true })
     .order('scheduled_time', { ascending: true })
     .limit(10);
 
   if (error || !candidates || candidates.length === 0) return null;
 
-  // Query 2: filter to bangkeros with piggyback_opt_in = true
-  const operatorIds = [...new Set(candidates.map((c) => c.operator_id))];
-
-  const { data: optedInBangkeros } = await supabase
-    .from('bangkeros')
-    .select('id')
-    .in('id', operatorIds)
-    .eq('piggyback_opt_in', true)
-    .eq('is_deleted', false);
-
-  const optedInIds = new Set((optedInBangkeros ?? []).map((b) => b.id));
-
-  // Return the first candidate whose bangkero has opted in
-  const match = candidates.find((c) => optedInIds.has(c.operator_id));
-  if (!match) return null;
+  const match = candidates[0];
 
   return {
     bookingId: match.id,

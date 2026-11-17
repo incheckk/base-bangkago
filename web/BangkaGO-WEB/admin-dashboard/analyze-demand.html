@@ -65,15 +65,25 @@
         <div class="row g-3">
           <div class="col-lg-8">
             <div class="panel-card p-3">
-              <h4 class="mb-3">Demand by Route</h4>
+              <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                <div>
+                  <h4 class="mb-1">Demand by Route</h4>
+                  <div class="small text-secondary" id="routeScopeNote">Loading…</div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                  <label class="small text-secondary mb-0" for="pageDateSelect">Prediction date</label>
+                  <select id="pageDateSelect" class="form-select form-select-sm" style="min-width:200px"></select>
+                  <button id="btnAllDays" type="button" class="btn btn-sm btn-outline-secondary">All days</button>
+                </div>
+              </div>
               <div class="table-responsive">
                 <table class="table table-theme align-middle mb-0">
                   <thead>
                     <tr>
                       <th>Route</th>
-                      <th>Avg Daily Predicted</th>
-                      <th>Total Predicted</th>
-                      <th>Days with Data</th>
+                      <th class="text-end" id="routeScopeHeader">Total Predicted</th>
+                      <th class="text-end">Avg / day</th>
+                      <th class="text-end">Days on file</th>
                     </tr>
                   </thead>
                   <tbody id="routeDemandBody"></tbody>
@@ -110,7 +120,8 @@
         </div>
         <div class="modal-body">
           <label class="form-label fw-semibold" for="predictionDateSelect">Prediction Date</label>
-          <select id="predictionDateSelect" class="form-select mb-3"></select>
+          <select id="predictionDateSelect" class="form-select mb-2"></select>
+          <p class="small text-secondary">Demand by Route on this page follows the date you pick here.</p>
           <div id="predictionsBody"></div>
         </div>
       </div>
@@ -172,18 +183,24 @@
   <script src="../../assets/js/services/bookings.js"></script>
   <script src="../../assets/js/services/realtime.js"></script>
 
-  <script>
+    <script>
     const kpiCards = document.getElementById('kpiCards');
     const routeDemandBody = document.getElementById('routeDemandBody');
     const recommendationsList = document.getElementById('recommendationsList');
     const loadingState = document.getElementById('loadingState');
     const errorState = document.getElementById('errorState');
+    const pageDateSelect = document.getElementById('pageDateSelect');
+    const btnAllDays = document.getElementById('btnAllDays');
+    const routeScopeNote = document.getElementById('routeScopeNote');
 
     const predictionsModal = new bootstrap.Modal(document.getElementById('predictionsModal'));
     const trendsModal = new bootstrap.Modal(document.getElementById('trendsModal'));
     const insightsModal = new bootstrap.Modal(document.getElementById('insightsModal'));
 
-    document.getElementById('btnPredictions').addEventListener('click', () => { loadPredictions(); predictionsModal.show(); });
+    document.getElementById('btnPredictions').addEventListener('click', () => {
+      openPredictionsModal();
+      predictionsModal.show();
+    });
     document.getElementById('btnTrends').addEventListener('click', () => { loadTrends(); trendsModal.show(); });
     document.getElementById('btnInsights').addEventListener('click', () => { loadInsightRoutes(); insightsModal.show(); });
 
@@ -202,120 +219,222 @@
       errorState.classList.remove('d-none');
     }
 
-    async function loadDemandData() {
-      showLoading(true);
-      try {
-        const [summary, dateCount, stats] = await Promise.all([
-          window.bangkagoDemand.getRouteDemandSummary(),
-          window.bangkagoDemand.getPredictionDateCount(),
-          window.bangkagoStats.getAdminStats()
-        ]);
+    // ---- One source of truth: the prediction rows, filtered by date. ----
+    // Previously the page table read an all-days aggregate while the modal
+    // filtered its own copy, so the date picked in View Predictions never
+    // reached Demand by Route. Both now read this state.
+    let predictionRows = [];
+    let routeSummary = [];
+    let latestStats = null;
+    // '' = every day on file. Default pins to today (Manila) or the newest
+    // published day, matching what View Predictions opens on.
+    let selectedDate = '';
 
-        renderKPIs(summary, dateCount, stats);
-        renderRouteTable(summary);
-        renderRecommendations(summary);
-        showLoading(false);
-      } catch (e) {
-        console.error(e);
-        showError('Failed to load demand data: ' + e.message);
-      }
+    function todayManila() {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
     }
 
-    function renderKPIs(summary, dateCount, stats) {
-      const totalPredicted = summary.reduce((sum, r) => sum + r.totalPredicted, 0);
-      const topRoute = summary[0] || { routeName: '—', totalPredicted: 0 };
-      const dailyAverage = dateCount > 0 ? Math.round(totalPredicted / dateCount) : 0;
-      const hasData = summary.length > 0;
-      const tripsToday = stats.tripsToday || 0;
-      const completedToday = stats.completedTripsToday || 0;
-      const activeToday = stats.activeTripsToday || 0;
+    function uniqueDates(rows) {
+      return [...new Set(rows.map(function(p) { return p.predictionDate; }).filter(Boolean))].sort();
+    }
+
+    function routeNameOf(routeId) {
+      const hit = routeSummary.find(function(r) { return r.routeId === routeId; });
+      return hit ? hit.routeName : routeId;
+    }
+
+    function routeMeta(routeId) {
+      return routeSummary.find(function(r) { return r.routeId === routeId; }) || null;
+    }
+
+    function scopeRows() {
+      if (!selectedDate) return predictionRows;
+      return predictionRows.filter(function(p) { return p.predictionDate === selectedDate; });
+    }
+
+    function aggregateByRoute(rows) {
+      const map = new Map();
+      rows.forEach(function(p) {
+        const id = p.routeId || 'unknown';
+        let r = map.get(id);
+        if (!r) {
+          r = { routeId: id, routeName: routeNameOf(id), totalPredicted: 0, dates: new Set() };
+          map.set(id, r);
+        }
+        r.totalPredicted += p.predictedPassengers || 0;
+        if (p.predictionDate) r.dates.add(p.predictionDate);
+      });
+      return [...map.values()].map(function(r) {
+        const meta = routeMeta(r.routeId);
+        return {
+          routeId: r.routeId,
+          routeName: r.routeName,
+          totalPredicted: r.totalPredicted,
+          avgDailyPredicted: meta ? meta.avgDailyPredicted : Math.round(r.totalPredicted / r.dates.size),
+          daysWithData: meta ? meta.daysWithData : r.dates.size
+        };
+      }).sort(function(a, b) { return b.totalPredicted - a.totalPredicted; });
+    }
+
+    function renderAll(stats) {
+      if (stats) latestStats = stats;
+      const rows = scopeRows();
+      renderKPIs(rows, latestStats || {});
+      renderRouteTable(rows);
+      renderRecommendations(rows);
+    }
+
+    function syncDateControls() {
+      const dates = uniqueDates(predictionRows);
+      pageDateSelect.innerHTML =
+        '<option value="">All days on file (' + dates.length + ')</option>' +
+        dates.map(function(d) {
+          return '<option value="' + d + '">' + formatPredictionDate(d) + '</option>';
+        }).join('');
+      pageDateSelect.value = selectedDate;
+      pageDateSelect.disabled = dates.length === 0;
+
+      const modalSelect = document.getElementById('predictionDateSelect');
+      modalSelect.innerHTML = dates.map(function(d) {
+        return '<option value="' + d + '">' + formatPredictionDate(d) + '</option>';
+      }).join('');
+      modalSelect.disabled = dates.length === 0;
+      modalSelect.value = selectedDate || (dates[dates.length - 1] || '');
+    }
+
+    function loadDemandData() {
+      showLoading(true);
+      return Promise.all([
+        window.bangkagoDemand.getPredictions(),
+        window.bangkagoDemand.getRouteDemandSummary(),
+        window.bangkagoStats.getAdminStats()
+      ]).then(function(results) {
+        predictionRows = results[0];
+        routeSummary = results[1];
+        latestStats = results[2];
+        const dates = uniqueDates(predictionRows);
+        // Keep the operator's date across realtime refreshes; on first load
+        // take the same default View Predictions uses.
+        if (!selectedDate || dates.indexOf(selectedDate) === -1) {
+          const today = todayManila();
+          selectedDate = dates.indexOf(today) >= 0 ? today : (dates[dates.length - 1] || '');
+        }
+        syncDateControls();
+        renderAll(latestStats);
+        showLoading(false);
+      }).catch(function(e) {
+        console.error(e);
+        showError('Failed to load demand data: ' + e.message);
+      });
+    }
+
+    function renderKPIs(rows, stats) {
+      const routes = aggregateByRoute(rows);
+      const dayCount = new Set(rows.map(function(p) { return p.predictionDate; }).filter(Boolean)).size;
+      const routeCount = routes.length;
+      const totalPredicted = rows.reduce(function(sum, p) { return sum + (p.predictedPassengers || 0); }, 0);
+      // Two honest numbers: how many passengers a day carries across the
+      // network, and the true average per route per day. They used to be
+      // one figure labelled "Daily Average", which read like the second.
+      const networkDaily = dayCount > 0 ? totalPredicted / dayCount : 0;
+      const perRouteDay = routeCount > 0 && dayCount > 0 ? totalPredicted / (routeCount * dayCount) : 0;
+      const hasData = rows.length > 0;
+      const dayWord = 'day' + (dayCount === 1 ? '' : 's');
 
       kpiCards.innerHTML = `
-        <div class="col-lg-3 col-md-6">
+        <div class="col-xl-3 col-lg-6">
           <div class="kpi-card">
-            <div class="text-muted">Total Predicted · all days on file</div>
+            <div class="text-muted">${selectedDate ? 'Predicted on ' + formatPredictionDate(selectedDate) : 'Total predicted · all days'}</div>
             <div class="kpi-value">${formatNumber(totalPredicted)}</div>
-            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `Across ${summary.length} routes · ${dateCount} day${dateCount === 1 ? '' : 's'}` : 'No predictions yet'}</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `${routeCount} routes · ${dayCount} ${dayWord}` : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-xl-3 col-lg-6">
           <div class="kpi-card">
-            <div class="text-muted">Daily Average</div>
-            <div class="kpi-value">${hasData ? '~' + formatNumber(dailyAverage) : '0'}</div>
-            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? 'per day' : 'No predictions yet'}</div>
+            <div class="text-muted">Daily network total</div>
+            <div class="kpi-value">${hasData ? '~' + formatNumber(Math.round(networkDaily)) : '0'}</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? (dayCount === 1 ? 'This day’s total' : `Average per day across ${dayCount} days`) : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-xl-3 col-lg-6">
           <div class="kpi-card">
-            <div class="text-muted">Top Route</div>
-            <div class="kpi-value">${topRoute.routeName}</div>
-            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? formatNumber(topRoute.totalPredicted) + ' predicted' : 'No predictions yet'}</div>
+            <div class="text-muted">Average per route / day</div>
+            <div class="kpi-value">${hasData ? '~' + formatNumber(Math.round(perRouteDay)) : '0'}</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `${formatNumber(totalPredicted)} ÷ (${routeCount} routes × ${dayCount} ${dayWord})` : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-xl-3 col-lg-6">
           <div class="kpi-card">
             <div class="text-muted">Trips Today</div>
-            <div class="kpi-value">${formatNumber(tripsToday)} Trips</div>
-            <div class="kpi-sub ${tripsToday ? 'text-success' : 'text-muted'}">${formatNumber(completedToday)} completed / ${formatNumber(activeToday)} active</div>
+            <div class="kpi-value">${formatNumber(stats.tripsToday || 0)} Trips</div>
+            <div class="kpi-sub ${stats.tripsToday ? 'text-success' : 'text-muted'}">${formatNumber(stats.completedTripsToday || 0)} completed / ${formatNumber(stats.activeTripsToday || 0)} active</div>
           </div>
         </div>
       `;
     }
 
-    function renderRouteTable(summary) {
-      routeDemandBody.innerHTML = summary.map(function(r) {
+    function renderRouteTable(rows) {
+      const routes = aggregateByRoute(rows);
+      document.getElementById('routeScopeHeader').textContent = selectedDate
+        ? 'Predicted · ' + formatPredictionDate(selectedDate)
+        : 'Total predicted';
+
+      routeDemandBody.innerHTML = routes.map(function(r) {
         return `
           <tr>
             <td>${r.routeName}</td>
-            <td>${formatNumber(r.avgDailyPredicted)}</td>
-            <td>${formatNumber(r.totalPredicted)}</td>
-            <td>${formatNumber(r.daysWithData)}</td>
+            <td class="text-end">${formatNumber(r.totalPredicted)}</td>
+            <td class="text-end">${formatNumber(r.avgDailyPredicted)}</td>
+            <td class="text-end">${formatNumber(r.daysWithData)}</td>
           </tr>
         `;
-      }).join('') || '<tr><td colspan="4" class="text-center text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</td></tr>';
+      }).join('') || '<tr><td colspan="4" class="text-center text-muted py-4">No predictions for this date. Pick another date or show all days.</td></tr>';
+
+      const top = routes[0];
+      routeScopeNote.textContent = rows.length === 0
+        ? 'No predictions yet. Data will appear after the ML model publishes predictions.'
+        : `Showing ${routes.length} routes for ${selectedDate ? formatPredictionDate(selectedDate) : 'every day on file'}` +
+          (top ? ` · Top: ${top.routeName} (${formatNumber(top.totalPredicted)})` : '');
     }
 
-    function renderRecommendations(summary) {
-      if (summary.length === 0) {
-        recommendationsList.innerHTML = '<p class="text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
+    function renderRecommendations(rows) {
+      const routes = aggregateByRoute(rows);
+      if (routes.length === 0) {
+        recommendationsList.innerHTML = '<p class="text-muted">No predictions for this date.</p>';
         return;
       }
 
-      const topRoute = summary[0];
-      const lowRoute = summary[summary.length - 1];
+      const topRoute = routes[0];
+      const lowRoute = routes[routes.length - 1];
+      const scopeWord = selectedDate ? 'on ' + formatPredictionDate(selectedDate) : 'across all days';
 
-      var html = '';
-      if (topRoute) {
+      var html = `
+        <div class="d-flex justify-content-between border-bottom py-2 gap-2">
+          <span>Add capacity on <strong>${topRoute.routeName}</strong> — ${formatNumber(topRoute.totalPredicted)} predicted ${scopeWord}</span>
+          <span class="text-muted">high</span>
+        </div>
+      `;
+      if (routes.length > 1) {
         html += `
-          <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Add capacity on <strong>${topRoute.routeName}</strong> (highest total predicted demand)</span>
-            <span class="text-muted">priority high</span>
-          </div>
-        `;
-      }
-      if (summary.length > 1) {
-        html += `
-          <div class="d-flex justify-content-between border-bottom py-2">
-            <span>Maintain current bangka on <strong>${summary[1]?.routeName || 'other routes'}</strong></span>
-            <span class="text-muted">priority normal</span>
+          <div class="d-flex justify-content-between border-bottom py-2 gap-2">
+            <span>Keep the current bangka on <strong>${routes[1].routeName}</strong> (${formatNumber(routes[1].totalPredicted)} predicted)</span>
+            <span class="text-muted">normal</span>
           </div>
         `;
       }
       if (lowRoute && lowRoute !== topRoute) {
         html += `
-          <div class="d-flex justify-content-between py-2">
-            <span>Monitor <strong>${lowRoute.routeName}</strong> — low predicted demand (${formatNumber(lowRoute.avgDailyPredicted)}/day)</span>
-            <span class="text-muted">priority low</span>
+          <div class="d-flex justify-content-between py-2 gap-2">
+            <span>Monitor <strong>${lowRoute.routeName}</strong> — ${formatNumber(lowRoute.totalPredicted)} predicted ${scopeWord} (${formatNumber(lowRoute.avgDailyPredicted)}/day on average)</span>
+            <span class="text-muted">low</span>
           </div>
         `;
       }
       recommendationsList.innerHTML = html;
     }
-
-    let predictionRows = [];
 
     function formatPredictionDate(dateStr) {
       if (!dateStr) return 'Unknown date';
@@ -335,120 +454,112 @@
       });
 
       if (rows.length === 0) {
-        predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
+        predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions for this date.</p>';
         return;
       }
 
+      const total = rows.reduce(function(sum, p) { return sum + (p.predictedPassengers || 0); }, 0);
       predictionsBody.innerHTML = `
         <div class="table-responsive">
           <table class="table table-theme align-middle mb-0">
             <thead>
               <tr>
                 <th>Route</th>
-                <th>Predicted Passengers</th>
+                <th class="text-end">Predicted Passengers</th>
               </tr>
             </thead>
             <tbody>
               ${rows.map(function(p) {
                 return `
                   <tr>
-                    <td>${p.routeId}</td>
-                    <td>${formatNumber(p.predictedPassengers)}</td>
+                    <td>${routeNameOf(p.routeId)}</td>
+                    <td class="text-end">${formatNumber(p.predictedPassengers)}</td>
                   </tr>
                 `;
               }).join('')}
             </tbody>
+            <tfoot>
+              <tr>
+                <th>Network total</th>
+                <th class="text-end">${formatNumber(total)}</th>
+              </tr>
+            </tfoot>
           </table>
         </div>
       `;
     }
 
-    // Predictions Modal
-    async function loadPredictions() {
+    // View Predictions: same date state as the page table.
+    function openPredictionsModal() {
       const select = document.getElementById('predictionDateSelect');
       const predictionsBody = document.getElementById('predictionsBody');
-      try {
-        predictionRows = await window.bangkagoDemand.getPredictions();
-        const dates = [...new Set(predictionRows.map(function(p) {
-          return p.predictionDate;
-        }).filter(Boolean))].sort();
-
-        if (dates.length === 0) {
-          select.innerHTML = '';
-          select.disabled = true;
-          predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
-          return;
-        }
-
-        select.disabled = false;
-        select.innerHTML = dates.map(function(date) {
-          return '<option value="' + date + '">' + formatPredictionDate(date) + '</option>';
-        }).join('');
-        // Today (Manila) when the model published for it, else the newest
-        // day on file. `dates` is sorted ascending; picking dates[0] showed
-        // the oldest batch (Nov 13) as if it were today's demand.
-        var today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
-        select.value = dates.indexOf(today) >= 0 ? today : dates[dates.length - 1];
-        renderPredictionRows(select.value);
-      } catch (e) {
-        select.disabled = true;
+      const dates = uniqueDates(predictionRows);
+      if (dates.length === 0) {
         select.innerHTML = '';
-        predictionsBody.innerHTML = '<p class="text-center text-danger mb-0">Failed to load predictions.</p>';
-        console.error(e);
+        select.disabled = true;
+        predictionsBody.innerHTML = '<p class="text-center text-muted mb-0">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
+        return;
       }
+      syncDateControls();
+      select.value = selectedDate || dates[dates.length - 1];
+      renderPredictionRows(select.value);
     }
 
+    pageDateSelect.addEventListener('change', function() {
+      selectedDate = this.value;
+      syncDateControls();
+      renderAll();
+    });
+
+    btnAllDays.addEventListener('click', function() {
+      selectedDate = '';
+      syncDateControls();
+      renderAll();
+    });
+
     document.getElementById('predictionDateSelect').addEventListener('change', function() {
+      // The modal date drives the page table too.
+      selectedDate = this.value;
+      syncDateControls();
+      renderAll();
       renderPredictionRows(this.value);
     });
 
-    // Trends Modal
-    async function loadTrends() {
-      try {
-        const summary = await window.bangkagoDemand.getRouteDemandSummary();
-        const trendsContent = document.getElementById('trendsContent');
-        var html = '';
-        summary.forEach(function(r) {
-          html += `
-            <div class="col-md-6">
-              <div class="panel-card p-3">
-                <h6 class="mb-2">${r.routeName}</h6>
-                <p class="mb-1"><strong>Avg Daily:</strong> ${formatNumber(r.avgDailyPredicted)} passengers</p>
-                <p class="mb-1"><strong>Total:</strong> ${formatNumber(r.totalPredicted)} passengers</p>
-                <p class="mb-0"><strong>Days with Data:</strong> ${formatNumber(r.daysWithData)}</p>
-              </div>
+    // Trends Modal — every prediction day on file, not the selected date.
+    function loadTrends() {
+      const trendsContent = document.getElementById('trendsContent');
+      var html = '';
+      routeSummary.forEach(function(r) {
+        html += `
+          <div class="col-md-6">
+            <div class="panel-card p-3">
+              <h6 class="mb-2">${r.routeName}</h6>
+              <p class="mb-1"><strong>Avg / day:</strong> ${formatNumber(r.avgDailyPredicted)} passengers</p>
+              <p class="mb-1"><strong>Total:</strong> ${formatNumber(r.totalPredicted)} passengers</p>
+              <p class="mb-0"><strong>Days on file:</strong> ${formatNumber(r.daysWithData)}</p>
             </div>
-          `;
-        });
-        trendsContent.innerHTML = html || '<p class="text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
-      } catch (e) {
-        console.error(e);
-      }
+          </div>
+        `;
+      });
+      trendsContent.innerHTML = html || '<p class="text-muted">No predictions yet. Data will appear after the ML model publishes predictions.</p>';
     }
 
     // Insights Modal
-    async function loadInsightRoutes() {
-      try {
-        const summary = await window.bangkagoDemand.getRouteDemandSummary();
-        const select = document.getElementById('insightRoute');
-        const output = document.getElementById('insightOutput');
-        select.innerHTML = '<option value="">Select a route...</option>' +
-          summary.map(function(r) {
-            return '<option value="' + r.routeId + '">' + r.routeName + '</option>';
-          }).join('');
-        if (summary.length === 0) {
-          output.className = 'alert alert-info mb-0';
-          output.textContent = 'No predictions yet. Data will appear after the ML model publishes predictions.';
-        } else {
-          output.className = 'alert alert-info mb-0';
-          output.textContent = 'Select a route and click Generate to produce recommendation.';
-        }
-      } catch (e) {
-        console.error(e);
-      }
+    function loadInsightRoutes() {
+      const routes = aggregateByRoute(scopeRows());
+      const select = document.getElementById('insightRoute');
+      const output = document.getElementById('insightOutput');
+      select.innerHTML = '<option value="">Select a route...</option>' +
+        routes.map(function(r) {
+          return '<option value="' + r.routeId + '">' + r.routeName + '</option>';
+        }).join('');
+      output.className = 'alert alert-info mb-0';
+      output.textContent = routes.length === 0
+        ? 'No predictions for this date. Pick another date or show all days.'
+        : 'Select a route and click Generate to produce a recommendation for the current date scope.';
     }
 
-    document.getElementById('insightForm').addEventListener('submit', async function(e) {
+    document.getElementById('insightForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const routeId = document.getElementById('insightRoute').value;
       const output = document.getElementById('insightOutput');
@@ -459,32 +570,26 @@
         return;
       }
 
-      try {
-        const summary = await window.bangkagoDemand.getRouteDemandSummary();
-        const route = summary.find(r => r.routeId === routeId);
-
-        let message = '';
-        if (route) {
-          if (route.totalPredicted > 100) {
-            message = `High demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
-              `Add extra trips and prioritize larger bangka.`;
-          } else if (route.totalPredicted > 50) {
-            message = `Moderate demand on ${route.routeName}. Maintain current schedule; ` +
-              `consider a standby bangka during high-demand days.`;
-          } else {
-            message = `Low demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted). ` +
-              `Monitor weather and consider reducing frequency to optimize costs.`;
-          }
-        } else {
-          message = 'No predictions yet. Data will appear after the ML model publishes predictions.';
-        }
-
-        output.className = 'alert alert-success mb-0';
-        output.textContent = message;
-      } catch (e) {
-        output.className = 'alert alert-danger mb-0';
-        output.textContent = 'Error generating insight: ' + e.message;
+      const route = aggregateByRoute(scopeRows()).find(function(r) { return r.routeId === routeId; });
+      if (!route) {
+        output.className = 'alert alert-warning mb-0';
+        output.textContent = 'That route has no prediction in the current date scope.';
+        return;
       }
+
+      const scopeWord = selectedDate ? 'on ' + formatPredictionDate(selectedDate) : 'across all days';
+      const daily = route.avgDailyPredicted;
+      let message = '';
+      if (daily >= 40) {
+        message = `High demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted ${scopeWord}, ~${formatNumber(daily)}/day). Add extra trips and prioritize a larger bangka.`;
+      } else if (daily >= 15) {
+        message = `Moderate demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted ${scopeWord}, ~${formatNumber(daily)}/day). Keep the current schedule; consider a standby bangka on peak days.`;
+      } else {
+        message = `Low demand on ${route.routeName} (${formatNumber(route.totalPredicted)} predicted ${scopeWord}, ~${formatNumber(daily)}/day). Monitor weather and consider reducing frequency to keep costs down.`;
+      }
+
+      output.className = 'alert alert-success mb-0';
+      output.textContent = message;
     });
 
     window.bangkagoAuthReady.then(function(role) {
@@ -497,7 +602,6 @@
         loadDemandData();
       });
       loadDemandData();
-      loadPredictions();
     }).catch(function(e) {
       console.error('Failed to initialize demand page:', e);
       showError('Failed to initialize demand data: ' + e.message);

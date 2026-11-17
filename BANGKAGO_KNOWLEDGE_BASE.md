@@ -1417,7 +1417,10 @@ export const typography = {
 | `operator_id` | UUID (nullable) | Set on accept |
 | `operator_name` | text (nullable) | Denormalized on accept |
 | `operator_boat_name` | text (nullable) | Denormalized on accept |
-| `rejected_by` | UUID[] | Array of operator UIDs who declined |
+| `rejected_by` | UUID[] | Array of operator UIDs who **declined** (008: `decline_booking_hold`). An expired 3-min offer is NOT a decline — see `last_held_by`. |
+| `held_by` | UUID (nullable) | Current 3-min FCFS offer holder (008, migration 100) |
+| `hold_expires_at` | timestamp (nullable) | When the offer cascades to the next boat |
+| `last_held_by` | UUID (nullable) | Migration **100**: previous offer holder. The next pick sorts them LAST (never excludes them), so the queue round-robins and a lone boat is re-offered its own request. |
 | `created_at` | timestamp | |
 | `accepted_at` | timestamp (nullable) | |
 | `completed_at` | timestamp (nullable) | |

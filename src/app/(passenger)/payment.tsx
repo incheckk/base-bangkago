@@ -239,9 +239,9 @@ export default function PaymentScreen() {
       if (!url) return 'approved'; // already settled
       await WebBrowser.openBrowserAsync(url);
       return (await waitForApproval(bookingId)) ? 'approved' : 'pending';
-    } catch (e) {
+    } catch {
       setManual(true);
-      setError(`${friendlyError(e)} You can still pay by GCash and send the receipt here.`);
+      setError('Online checkout is unavailable right now — scan the GCash QR and attach your receipt below.');
       return 'blocked';
     }
   }
@@ -459,7 +459,9 @@ export default function PaymentScreen() {
       if (deliveryMode === 'batched' && parcelId) {
         router.replace({
           pathname: '/(passenger)/batched-waiting',
-          params: { parcelId },
+          // fromId/toId let the waiting screen restart the 1-hour window if
+          // the batching write failed here (it never leaves a 0:00 screen).
+          params: { parcelId, fromId: params.fromId, toId: params.toId },
         });
         return;
       }

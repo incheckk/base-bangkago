@@ -270,8 +270,8 @@ export default function BookDelivery() {
               {piggybackLoading
                 ? 'Finding an eligible trip…'
                 : piggybackCandidate
-                  ? `Trip found · ${piggybackCandidate.scheduledDate ?? ''} ${piggybackCandidate.scheduledTime ?? ''}`
-                  : 'No eligible passenger trip right now'}
+                  ? `Trip found · ${piggybackCandidate.scheduledDate ?? 'today'} ${piggybackCandidate.scheduledTime ?? ''}`
+                  : 'No accepted trip on this route yet — a bangkero must accept a passenger booking first'}
             </Text>
           </View>
         )}

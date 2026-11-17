@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert, ScrollView, StyleSheet, Text, View,
+  Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -20,6 +21,7 @@ import { createNotification } from '@/services/notification.service';
 import { requestPayout } from '@/services/downpayment.service';
 import { supabase } from '@/services/supabase';
 import { manilaTodayIso } from '@/utils/date';
+import { formatPhone } from '@/utils/phone';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 import type { ParcelDoc } from '@/types/models';
 
@@ -115,6 +117,17 @@ export default function ArrivedScreen() {
   const durationMin = departureTime
     ? Math.round((endTime.getTime() - departureTime.getTime()) / 60000)
     : null;
+
+  /** The receiver is waiting at the pier — keep their number one tap away. */
+  function callReceiver(parcel: ParcelDoc) {
+    const phone = parcel.receiverContact;
+    if (!phone) return;
+    const dialable = phone.replace(/[^+\d]/g, '');
+    if (!dialable) return;
+    Linking.openURL(`tel:${dialable}`).catch(() =>
+      setParcelError(`Could not open the dialer — call ${phone} manually.`)
+    );
+  }
 
   async function markAllDelivered() {
     if (deliveringAll || deliverableParcels.length === 0) return;
@@ -333,6 +346,17 @@ export default function ArrivedScreen() {
                       </Text>
                     </View>
                     <Text style={styles.parcelMeta}>₱{p.totalPrice} · {parcelMode(p)}</Text>
+                    {p.receiverContact && p.status !== 'delivered' && p.status !== 'returned' && (
+                      <Pressable
+                        onPress={() => callReceiver(p)}
+                        style={styles.callRow}
+                        accessibilityRole="link"
+                        accessibilityLabel={`Call receiver ${p.receiverName} at ${formatPhone(p.receiverContact)}`}
+                      >
+                        <Ionicons name="call" size={14} color={colors.primary} />
+                        <Text style={styles.callText}>Call {formatPhone(p.receiverContact)}</Text>
+                      </Pressable>
+                    )}
                   </View>
                 ))}
               </>
@@ -455,6 +479,15 @@ const styles = StyleSheet.create({
   parcelStatusOk: { color: colors.primary },
   parcelStatusBad: { color: colors.danger },
   parcelMeta: { flexShrink: 1, ...typography.caption, color: colors.textMuted },
+  callRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    paddingVertical: 4,
+  },
+  callText: { ...typography.caption, color: colors.primary, fontWeight: '700' },
   markAllBtn: { marginBottom: spacing.sm },
   deliveryHint: {
     ...typography.caption,

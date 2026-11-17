@@ -5,35 +5,18 @@
 (function() {
   'use strict';
   var svc = window.bangkagoServices;
-  var PACKAGE_SELECT =
-    '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,bangkero_id,is_active,is_deleted,deleted_at,bangkeros(display_name,verification_stat,is_deleted,deleted_at))';
+  // 098: packages carry no boat and no passenger limit — any eligible
+  // bangkero can accept one, and the boat's own capacity rules at accept.
+  var PACKAGE_SELECT = '*';
 
   function mapPackage(row) {
-    var boat = Array.isArray(row.bangkas) ? row.bangkas[0] : row.bangkas || null;
-    var bangkero = boat && Array.isArray(boat.bangkeros) ? boat.bangkeros[0] : boat && boat.bangkeros;
-    var assignmentEligible = !!(
-      boat &&
-      boat.is_active &&
-      !boat.is_deleted &&
-      !boat.deleted_at &&
-      bangkero &&
-      bangkero.verification_stat === 'verified' &&
-      !bangkero.is_deleted &&
-      !bangkero.deleted_at
-    );
     return {
       packageId: row.id,
       packageName: row.package_name,
       description: row.description,
       price: Number(row.price),
-      maxCapacity: Number(row.max_capacity),
       durationHours: Number(row.duration_hours),
       stops: Array.isArray(row.stops) ? row.stops : [],
-      bangkaId: row.bangka_id,
-      bangkaName: boat ? boat.bangka_name : null,
-      bangkaCapacity: boat ? Number(boat.capacity) : null,
-      bangkeroName: bangkero ? bangkero.display_name : null,
-      assignmentEligible: assignmentEligible,
       deletedAt: row.deleted_at || null,
       isActive: row.is_active !== false
     };
@@ -92,28 +75,12 @@
     return r.data || [];
   }
 
-  async function listBangkas() {
-    var c = svc.getClient(); if (!c) throw new Error('No client');
-    var r = await c.from('bangkas')
-      .select('id,bangka_name,capacity,bangkero_id,bangkeros!inner(display_name,verification_stat,is_deleted,deleted_at)')
-      .eq('is_active', true)
-      .eq('is_deleted', false)
-      .is('deleted_at', null)
-      .eq('bangkeros.verification_stat', 'verified')
-      .eq('bangkeros.is_deleted', false)
-      .is('bangkeros.deleted_at', null)
-      .order('bangka_name');
-    if (r.error) throw r.error;
-    return r.data || [];
-  }
-
   async function savePackage(id, input) {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     var name = String(input.packageName || '').trim();
     var description = String(input.description || '').trim();
     var stops = Array.isArray(input.stops) ? input.stops : [];
     var price = Number(input.price);
-    var capacity = Number(input.maxCapacity);
     var duration = Number(input.durationHours);
 
     if (name.length < 2 || name.length > 100) throw new Error('Package name must be 2–100 characters.');
@@ -121,26 +88,11 @@
     if (!Number.isFinite(duration) || duration <= 0 || duration > 24) {
       throw new Error('Duration must be greater than zero and no more than 24 hours.');
     }
-    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 200) {
-      throw new Error('Passenger capacity must be a whole number between 1 and 200.');
-    }
     if (stops.length < 2 || new Set(stops).size !== stops.length) {
       throw new Error('Choose at least two unique destinations in itinerary order.');
     }
-    if (!input.bangkaId) throw new Error('Assign an active Bangka to this package.');
 
-    var [ports, routes, eligibleBangkas] = await Promise.all([listPorts(), listRoutes(), listBangkas()]);
-    var assignedBangka = eligibleBangkas.find(function(b) { return b.id === input.bangkaId; });
-    if (!assignedBangka) {
-      throw new Error('The selected Bangka is no longer active or its Bangkero is not verified. Refresh and choose an eligible Bangka.');
-    }
-    var capacity = Number(assignedBangka.capacity);
-    if (!Number.isInteger(capacity) || capacity < 1 || capacity > 200) {
-      throw new Error('The selected Bangka must have a valid capacity between 1 and 200 passengers.');
-    }
-    if (Number(input.maxCapacity) > capacity) {
-      throw new Error('Package passenger capacity cannot exceed the assigned Bangka capacity.');
-    }
+    var [ports, routes] = await Promise.all([listPorts(), listRoutes()]);
     var activePorts = new Set(ports.filter(function(p) { return p.is_active; }).map(function(p) { return p.id; }));
     if (stops.some(function(id) { return !activePorts.has(id); })) {
       throw new Error('Every destination must be an active port.');
@@ -154,10 +106,8 @@
       package_name: name,
       description: description || null,
       price: price,
-      max_capacity: Number(input.maxCapacity),
       duration_hours: duration,
       stops: stops,
-      bangka_id: assignedBangka.id,
       is_active: input.isActive === true
     };
     var result = id
@@ -212,7 +162,6 @@
     listDeletedPackages: listDeletedPackages,
     listPorts: listPorts,
     listRoutes: listRoutes,
-    listBangkas: listBangkas,
     savePackage: savePackage,
     deletePackage: deletePackage,
     restorePackage: restorePackage,

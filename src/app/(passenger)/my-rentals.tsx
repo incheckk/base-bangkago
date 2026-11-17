@@ -28,6 +28,7 @@ const DOWN_TEXT: Record<string, string> = {
   pending: 'awaiting BangkaGo confirmation',
   approved: 'confirmed by BangkaGo',
   refunded: 'refunded',
+  rejected: 'rejected — send a new receipt',
 };
 
 /**
@@ -215,11 +216,35 @@ export default function MyRentalsScreen() {
                   </View>
                 )}
 
-                {row.status === 'awaiting_payment' && !down && (
-                  <Text style={styles.missingEscrow}>
-                    This downpayment never reached us, so the operator cannot see this
-                    request. Cancel it and book again, or contact BangkaGo to check.
-                  </Text>
+                {row.status === 'awaiting_payment' && (!down || down.status === 'rejected') && (
+                  <>
+                    <Text style={styles.missingEscrow}>
+                      {down?.status === 'rejected'
+                        ? `Your receipt was not accepted${down.rejectReason ? `: ${down.rejectReason}` : '.'} The operator cannot see this request until a good receipt is filed — send a new one.`
+                        : 'This downpayment never reached us, so the operator cannot see this request. Send a new receipt, or cancel it and book again.'}
+                    </Text>
+                    <PrimaryButton
+                      label="Send a new receipt"
+                      variant="secondary"
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(passenger)/rental-payment',
+                          params: {
+                            bangkaId: row.bangkaId,
+                            boatName: row.boatName ?? '',
+                            operatorName: row.operatorName ?? '',
+                            rate: String(row.totalPrice),
+                            capacity: '',
+                            date: row.rentalDate,
+                            eventName: row.eventName ?? '',
+                            companionsJson: '[]',
+                            rentalId: row.rentalId,
+                          },
+                        })
+                      }
+                      style={styles.retry}
+                    />
+                  </>
                 )}
 
                 {(row.status === 'pending' || row.status === 'awaiting_payment') && (
@@ -328,6 +353,7 @@ const styles = StyleSheet.create({
     color: colors.warning,
     marginTop: spacing.sm,
   },
+  retry: { marginTop: spacing.sm },
 
   cancelBtn: { marginTop: spacing.md },
   backBtn: { marginTop: spacing.md },

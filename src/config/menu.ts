@@ -41,8 +41,8 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'home', label: 'Home', route: '/(passenger)/home' },
     { icon: 'bookings', label: 'My Bookings', route: '/(passenger)/bookings' },
     { icon: 'rental', label: 'My Rentals', route: '/(passenger)/my-rentals' },
-    { icon: 'bell', label: 'Notifications', route: '/(passenger)/notifications' },
-    { icon: 'sos', label: 'Safety Alerts', route: '/(passenger)/safety-alerts' },
+    // Notifications live on the home header; Safety Alerts are not a
+    // passenger destination (the trip's SOS is).
     { icon: 'warning', label: 'Report Issue', route: '/(passenger)/report-issue' },
   ],
   bangkero: [
@@ -80,8 +80,7 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     // reading safety_alerts), so one label was always lying.
     { icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', section: 'SAFETY' },
 
-    { icon: 'bell', label: 'Notifications', route: '/(admin)/notifications', section: 'SYSTEM' },
-    { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options' },
+    { icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options', section: 'SYSTEM' },
   ],
   // B12 monitoring tier: the six tabs the web dashboard has, plus the
   // advisory controls on Overview. Nothing here writes money.
@@ -95,6 +94,14 @@ const ROLE_ITEMS: Record<UserRole | 'admin', Entry[]> = {
     { icon: 'bell', label: 'Notifications', route: '/(coastguard)/notifications' },
   ],
 };
+
+/**
+ * Admin home quick actions ARE the drawer, minus Home. Generating the rows
+ * from one list is what stops the console and the menu drifting apart.
+ */
+export const ADMIN_HOME_ENTRIES: Entry[] = ROLE_ITEMS.admin.filter(
+  (e) => e.route !== '/(admin)/home',
+);
 
 const PROFILE_ROUTE: Record<UserRole | 'admin', string> = {
   passenger: '/(passenger)/profile',

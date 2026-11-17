@@ -126,6 +126,10 @@
           <button class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Every prediction day on file, not a rolling 7-day window. "Days with Data"
+            counts the days the model published for that route.
+          </p>
           <div class="row g-3" id="trendsContent">
             <!-- Loaded dynamically -->
           </div>
@@ -229,9 +233,9 @@
       kpiCards.innerHTML = `
         <div class="col-lg-3 col-md-6">
           <div class="kpi-card">
-            <div class="text-muted">7-Day Total Predicted</div>
+            <div class="text-muted">Total Predicted · all days on file</div>
             <div class="kpi-value">${formatNumber(totalPredicted)}</div>
-            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `Across ${summary.length} routes` : 'No predictions yet'}</div>
+            <div class="kpi-sub ${hasData ? 'text-success' : 'text-muted'}">${hasData ? `Across ${summary.length} routes · ${dateCount} day${dateCount === 1 ? '' : 's'}` : 'No predictions yet'}</div>
             <div class="soft-bar mt-3"></div>
           </div>
         </div>
@@ -380,7 +384,11 @@
         select.innerHTML = dates.map(function(date) {
           return '<option value="' + date + '">' + formatPredictionDate(date) + '</option>';
         }).join('');
-        select.value = dates[0];
+        // Today (Manila) when the model published for it, else the newest
+        // day on file. `dates` is sorted ascending; picking dates[0] showed
+        // the oldest batch (Nov 13) as if it were today's demand.
+        var today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+        select.value = dates.indexOf(today) >= 0 ? today : dates[dates.length - 1];
         renderPredictionRows(select.value);
       } catch (e) {
         select.disabled = true;

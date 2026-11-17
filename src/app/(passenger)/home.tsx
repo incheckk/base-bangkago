@@ -12,9 +12,9 @@ import { Icon, type IconName } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { AgePicker, AddressPicker } from '@/components/PassengerInfoFields';
 import { SideDrawer } from '@/components/SideDrawer';
 import { EmptyState, LoadingState } from '@/components/States';
-import { TextField } from '@/components/TextField';
 import { WeatherCard } from '@/components/WeatherCard';
 import { MENU_TITLE, menuFor } from '@/config/menu';
 import { useAuth } from '@/hooks/useAuth';
@@ -339,7 +339,7 @@ export default function PassengerHome() {
     const parsedAge = Number(ageInput.trim());
     const invalid = Number.isInteger(parsedAge) && parsedAge >= 1 && parsedAge <= 120
       ? addressError(addressInput)
-      : 'Enter an age between 1 and 120.';
+      : 'Pick your age.';
     if (invalid) {
       setDetailsError(invalid);
       return;
@@ -814,20 +814,8 @@ export default function PassengerHome() {
               Your bangkero&apos;s manifest needs your age and home address. You only
               enter these once.
             </Text>
-            <TextField
-              label="Age"
-              value={ageInput}
-              onChangeText={setAgeInput}
-              keyboardType="number-pad"
-              maxLength={3}
-              placeholder="e.g. 24"
-            />
-            <TextField
-              label="Home Address"
-              value={addressInput}
-              onChangeText={setAddressInput}
-              placeholder="House, street, barangay, city"
-            />
+            <AgePicker value={ageInput} onChange={setAgeInput} />
+            <AddressPicker value={addressInput} onChange={setAddressInput} error={detailsError} />
             {!!detailsError && <Text style={styles.detailsError}>{detailsError}</Text>}
             <PrimaryButton
               label="Save details"

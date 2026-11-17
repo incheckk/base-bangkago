@@ -231,14 +231,13 @@ export interface IslandPackageDoc {
   packageName: string;
   description: string | null;
   price: number;
-  maxCapacity: number;
   durationHours: number;
   /** Ordered port IDs the hop visits; booking resolves stops[0] → stops[last]. */
   stops: string[];
   isActive: boolean;
 }
 
-export type DownpaymentStatus = 'pending' | 'approved' | 'refunded';
+export type DownpaymentStatus = 'pending' | 'approved' | 'refunded' | 'rejected';
 
 export interface DownpaymentDoc {
   downpaymentId: string;
@@ -247,6 +246,8 @@ export interface DownpaymentDoc {
   /** Storage path in the `docs` bucket — render with docPublicUrl(). */
   proofUrl: string;
   status: DownpaymentStatus;
+  /** 097: why an admin rejected the receipt (the booking stays payable). */
+  rejectReason: string | null;
   bookingId: string | null;
   boatRentalId: string | null;
   createdAt: string;

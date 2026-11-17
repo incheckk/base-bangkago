@@ -7,7 +7,6 @@ function mapRow(row: any): IslandPackageDoc {
     packageName: row.package_name,
     description: row.description,
     price: Number(row.price),
-    maxCapacity: Number(row.max_capacity),
     durationHours: Number(row.duration_hours),
     stops: Array.isArray(row.stops) ? (row.stops as string[]) : [],
     isActive: row.is_active !== false,

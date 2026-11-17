@@ -19,7 +19,11 @@ semantic user activity audit trail; 081: one live boat per bangkero,
 date-scoped capacity, island hop priced per person, charter ticks).
 Updated 2026-11-17 (migrations 095 + 096: bangkero payout accounts, the
 gateway rail — hosted checkout, automatic downpayment confirmation,
-automatic commission-inclusive payouts — still sandbox-only; see B15).
+automatic commission-inclusive payouts — still sandbox-only; see B15.
+097: downside of a bad receipt is now "reject" (booking stays payable)
+and the manual release deducts the same commission. 098: island-hop
+packages are open to every eligible bangkero, no assigned boat and no
+package passenger limit).
 ================================================================================
 
 [A] PRODUCT RULES TO REVISIT AT LAUNCH
@@ -142,10 +146,13 @@ automatic commission-inclusive payouts — still sandbox-only; see B15).
 13. ESCROW PAYOUT IS A MANUAL ADMIN LEDGER ENTRY (2026-11-13)
     migration 079 adds released_at / released_to / payout_method /
     payout_ref to downpayments and release_downpayment, which pays the
-    whole held 50% to the operator's own GCash QR (or records cash).
+    held 50% to the operator's own GCash QR (or records cash).
     Nothing moves money: the admin sends GCash by hand and types the
-    reference, and there is no commission model. A released row cannot
-    be refunded. Real payout rails + commission belong with B9.
+    reference. Since 097 the release deducts the same commission the
+    gateway rail deducts (app_settings.commission_rate, a share of the
+    WHOLE fare), so the admin sends the net and Earnings' GROSS /
+    RELEASED copy stays true. A released row cannot be refunded. Real
+    payout rails belong with B9.
 
 14. ISLAND-HOP PRICE IS PER PERSON AGAIN (2026-11-16)
     Migration 068 had re-read island_packages.price as a WHOLE-BOAT
@@ -197,6 +204,39 @@ automatic commission-inclusive payouts — still sandbox-only; see B15).
     approval and the 027/079 day locks are unchanged. Decide the
     commercial rule for same-day charters before launch, or delete the
     switch and the flag with it.
+
+20. ISLAND HOP IS OPEN TO ALL BANGKEROS (2026-11-17)
+    Migration 098 drops the 084 rule that bound each package to one
+    Bangka. island_packages.max_capacity becomes nullable and the app no
+    longer reads it; a package needs only a name, itinerary, duration
+    and per-person price, and dispatch offers the booking to every
+    eligible bangkero (boat capacity rules at accept through 081's
+    fits_booking, and 079's one-service-per-boat-day lock still holds).
+    Admin web Manage Island Hopping lost the Bangkero/Bangka assign and
+    passenger-limit fields, and the Customer Bookings list shows the
+    boat only after a bangkero accepts. If real operations ever need a
+    dedicated boat per package, that is a new assignment model, not the
+    084 guard.
+
+21. A REJECTED RECEIPT DOES NOT CANCEL THE BOOKING (2026-11-17)
+    Migration 097 adds downpayments.status 'rejected' + reject_reason
+    and reject_downpayment(), and both consoles now offer "Reject
+    receipt" beside Approve. Rejecting stores the admin's reason,
+    notifies the passenger and leaves the booking pending so the
+    passenger can file a new receipt (newest row wins). "Refund" stays
+    for money that actually arrived and must go back; it is the action
+    that cancels the booking through review_advance_escrow. Rental
+    "Send a new receipt" reuses the same boat_rentals row via the
+    rental-payment rentalId param, so no duplicate request is created.
+
+22. PASSENGER "I'M NOT ON BOARD" WAS REMOVED BY REQUEST (2026-11-17)
+    The 088/2026-11-16 honesty feature (dispute_boarding: trip still
+    completes, bangkero notified, Coast Guard safety_alerts row, no
+    ban) no longer has a passenger-facing button — removed at the user's
+    explicit request for this defense build. The DB RPC, the
+    bangkero-side disputedAt handling and the Coast Guard alert reading
+    all remain, so re-surfacing it later is a screen change, not a
+    migration. Decide whether to restore it before public launch.
 
 [B] ROADMAP FEATURES NOT YET BUILT (phases after Phase 2)
 --------------------------------------------------------------------------------
@@ -270,8 +310,10 @@ B9. REAL GCASH PAYMENT INTEGRATION
     and notifies the operator. No commission is withheld, and a
     released row cannot be refunded. This closes the "escrow money has
     no way back to the boat" gap, not the gateway gap above.
-    (2026-11-17: B15's gateway rail DOES withhold commission; this
-    manual release path still withholds none.)
+    (2026-11-17: B15's gateway rail withholds commission, and since 097
+    release_downpayment — the manual button — deducts the SAME commission
+    before the admin sends the net. The transfer is still done by hand
+    outside the app; the ledger and notification are the app's proof.)
     B9a. RECEIPT OCR — deferred by decision (2026-10), researched:
          auto-reading the Ref No. off the uploaded receipt instead of
          the admin doing it by eye. Chosen candidate when revived:
@@ -341,6 +383,10 @@ B15. PAYMENT GATEWAY — SANDBOX ONLY (095 + 096, 2026-11-17)
      dev_flags.manual_payments ships TRUE, so the receipt-upload + admin
      release flow above stays the default; Admin → Developer Options
      flips it OFF for the gateway demo and back ON if the API breaks.
+     Since 097 that manual rail is honest about failure: a bad receipt is
+     REJECTED (reason stored + passenger notified, booking stays payable
+     and can be paid again), not "refunded", and the release box shows
+     the exact net (held amount − commission) before the admin sends it.
      Money still lives in our ledger: copy says "held by BangkaGo", never
      "held by the provider". Payouts batch — every completed, unpaid
      downpayment a bangkero is owed goes out as ONE transfer with one

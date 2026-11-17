@@ -14,7 +14,7 @@ import { StatusPill } from '@/components/StatusPill';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useAuth } from '@/hooks/useAuth';
 import { useBooking, usePortQueue, usePorts } from '@/hooks/useSupabase';
-import { cancelBooking, disputeBoarding, friendlyError, isAdvanceDate } from '@/services/booking.service';
+import { cancelBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import { getDownpaymentByBooking } from '@/services/downpayment.service';
 import { getIslandPackage } from '@/services/island-package.service';
 import { createNotification } from '@/services/notification.service';
@@ -23,7 +23,7 @@ import { getParcelByBooking, mapRow as mapParcelRow } from '@/services/parcel.se
 import { getPassengerDetailsByBooking } from '@/services/passenger-detail.service';
 import { startPortOf } from '@/services/queue.service';
 import {
-  PENALTY_FALSE_ONBOARD, PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
+  PENALTY_MISSED_PICKUP, applyRatingPenalty, getRatingsByBooking,
 } from '@/services/rating.service';
 import { createAlert } from '@/services/safety-alert.service';
 import { supabase } from '@/services/supabase';
@@ -377,50 +377,6 @@ export default function BookingDetail() {
     setBusy(false);
   }
 
-  async function dispute() {
-    if (!booking || acted || busy) return;
-    setBusy(true);
-    setActionError(null);
-    // The reporter is marked NOT aboard (022) whether solo or group: the
-    // trip belongs to the boat, which already sailed, so it continues.
-    // No ban, no cancel — complete_trip accepts disputed_at.
-    const wasOnboarded = !!booking.onboardedAt;
-    try {
-      await disputeBoarding(booking.bookingId);
-    } catch (e) {
-      setActionError(friendlyError(e));
-      setBusy(false);
-      return;
-    }
-    setActed(true);
-    if (booking.operatorId) {
-      // False-onboard only when the crew had claimed this person was aboard.
-      // A passenger who simply missed the boat gets no operator penalty.
-      if (wasOnboarded) {
-        applyRatingPenalty(booking.operatorId, PENALTY_FALSE_ONBOARD).catch(() => {});
-      }
-      createNotification(
-        booking.operatorId,
-        'Passenger disputes departure',
-        `A passenger reports they were NOT on board for ${booking.ref}. They are marked not aboard — the trip continues and will complete normally.`
-      ).catch(() => {});
-      // Boat's last known position, so whoever investigates has a starting point.
-      getLatestPositionForBangkero(booking.operatorId)
-        .then((found) => createAlert({
-          message:
-            `Passenger disputes departure for ${booking.ref} (${booking.fromPortName} → ${booking.toPortName}). ` +
-            'Passenger marked not aboard — trip continues. ' +
-            (found
-              ? `Boat last seen at ${found.position.latitude.toFixed(5)}, ${found.position.longitude.toFixed(5)} at ${new Date(found.position.recordedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}.`
-              : 'No GPS fix on record.'),
-          severity: 'critical',
-          bangkaId: found?.bangkaId,
-        }))
-        .catch(() => {});
-    }
-    setBusy(false);
-  }
-
   function confirmEscape() {
     const held = downpayment && (downpayment.status === 'pending' || downpayment.status === 'approved');
     Alert.alert(
@@ -431,17 +387,6 @@ export default function BookingDetail() {
       [
         { text: 'Keep booking', style: 'cancel' },
         { text: 'Cancel my trip', style: 'destructive', onPress: () => void escape() },
-      ]
-    );
-  }
-
-  function confirmDispute() {
-    Alert.alert(
-      "I'm NOT on board",
-      'Use this only if the boat has already left without you. You are marked as not aboard — the trip continues for the boat, and the bangkero and Coast Guard are notified. You are not banned from booking again.',
-      [
-        { text: 'Go back', style: 'cancel' },
-        { text: 'Report it', style: 'destructive', onPress: () => void dispute() },
       ]
     );
   }
@@ -525,6 +470,14 @@ export default function BookingDetail() {
     booking.serviceType === 'cargo' &&
     !!parcel &&
     (parcel.status === 'delivered' || parcel.status === 'returned');
+
+  // A pending advance booking whose downpayment was never filed (or was
+  // rejected/refunded by the admin) must be able to pay again: 097 keeps
+  // the booking pending instead of cancelling it on a rejection.
+  const needsDownpayment = isAdvanceBooking
+    && booking.status === 'pending'
+    && (!downpayment || downpayment.status === 'rejected' || downpayment.status === 'refunded');
+  const downAmount = Math.round(booking.totalPrice / 2);
 
   return (
     <ScreenContainer padded={false}>
@@ -662,9 +615,11 @@ export default function BookingDetail() {
               value={`₱${downpayment.amount} · ${
                 downpayment.status === 'approved'
                   ? 'confirmed by BangkaGo'
-                  : downpayment.status === 'refunded'
-                    ? 'refunded'
-                    : 'awaiting BangkaGo confirmation'
+                  : downpayment.status === 'rejected'
+                    ? 'rejected — pay again'
+                    : downpayment.status === 'refunded'
+                      ? 'refunded'
+                      : 'awaiting BangkaGo confirmation'
               }`}
             />
           ) : (
@@ -673,7 +628,7 @@ export default function BookingDetail() {
             isAdvanceDate(booking.scheduledDate) && (
               <Row
                 label="Downpayment (50%)"
-                value="Not recorded — contact support."
+                value={needsDownpayment ? 'Not paid yet' : 'Not recorded'}
               />
             )
           )}
@@ -712,9 +667,31 @@ export default function BookingDetail() {
         <View style={styles.actions}>
           {booking.status === 'pending' && !parcelDone && (
             <>
-              <Text style={styles.waiting}>
-                Waiting for BangkaGo to confirm your downpayment. This updates on its own.
-              </Text>
+              {needsDownpayment ? (
+                <PrimaryButton
+                  label={`Pay ₱${downAmount} downpayment`}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(passenger)/payment',
+                      params: {
+                        bookingId: booking.bookingId,
+                        serviceType: booking.serviceType,
+                        fare: String(booking.totalPrice),
+                        downAmount: String(downAmount),
+                        ...(booking.packageId ? { packageId: booking.packageId } : {}),
+                        ...(booking.scheduledDate ? { scheduledDate: booking.scheduledDate } : {}),
+                        ...(booking.scheduledTime ? { scheduledTime: booking.scheduledTime } : {}),
+                      },
+                    })
+                  }
+                  loading={busy}
+                  disabled={acted}
+                />
+              ) : (
+                <Text style={styles.waiting}>
+                  Waiting for BangkaGo to confirm your downpayment. This updates on its own.
+                </Text>
+              )}
               <PrimaryButton
                 label="Cancel booking"
                 variant="danger"
@@ -811,21 +788,6 @@ export default function BookingDetail() {
                   </Text>
                 ))}
 
-              {/* After departure (or a confirmed boarding) the passenger can
-                  report the boat left without them. Available even when the
-                  crew never scanned them. */}
-              {booking.serviceType !== 'cargo' &&
-                (booking.onboardedAt || booking.departTime) &&
-                !booking.disputedAt && (
-                <PrimaryButton
-                  label="I'm NOT on board"
-                  variant="danger"
-                  onPress={confirmDispute}
-                  loading={busy}
-                  disabled={acted}
-                  style={styles.secondaryAction}
-                />
-              )}
             </>
           )}
 

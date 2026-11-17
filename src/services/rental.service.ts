@@ -325,7 +325,7 @@ export async function confirmRental(ctx: RentalNotifyContext): Promise<void> {
     await createNotification(
       ctx.notifyUserId,
       'Boat rental confirmed',
-      `Your rental of ${rentalWhat(ctx)} is confirmed. Pay the 50% downpayment if you have not yet — the rest is collected in person.`,
+      `Your rental of ${rentalWhat(ctx)} is confirmed. The rest is collected in person.`,
       'booking'
     ).catch(() => {});
   }

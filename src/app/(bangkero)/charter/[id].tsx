@@ -1,10 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { MapContainer } from '@/components/MapContainer';
-import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
@@ -40,12 +39,13 @@ export default function CharterSailingScreen() {
 
   const [row, setRow] = useState<BangkeroRentalRow | null>(null);
   const [riders, setRiders] = useState<PassengerDetailDoc[]>([]);
-  const [editing, setEditing] = useState<PassengerDetailDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tickBusy, setTickBusy] = useState<string | null>(null);
+  // The under-way clock: a charter has no ETA, so show how long it has run.
+  const [now, setNow] = useState(() => Date.now());
 
   // The tracker runs app-wide (bangkero layout), so the boat's own fixes
   // already exist — the charter just renders the newest one.
@@ -69,6 +69,12 @@ export default function CharterSailingScreen() {
 
   useEffect(() => { void load(); }, [load]);
   useRealtimeQuery(load, [{ table: 'boat_rentals', filter: `id=eq.${id}` }]);
+
+  useEffect(() => {
+    if (!row?.startedAt || row.completedAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [row?.startedAt, row?.completedAt]);
 
   const today = manilaTodayIso();
   const canStart = !!row
@@ -150,6 +156,19 @@ export default function CharterSailingScreen() {
     );
   }
 
+  function contactBooker() {
+    const phone = row?.renterPhone;
+    if (!phone) return;
+    const dialable = phone.replace(/[^+\d]/g, '');
+    if (!dialable) {
+      setActionError('That phone number is not dialable. Ask the booker at the port.');
+      return;
+    }
+    void Linking.openURL(`tel:${dialable}`).catch(() =>
+      setActionError(`Could not open the dialer — call ${phone} manually.`)
+    );
+  }
+
   if (loading) {
     return (
       <ScreenContainer padded={false}>
@@ -208,6 +227,11 @@ export default function CharterSailingScreen() {
             {row.startedAt ? `Started ${timeLabel(row.startedAt)}` : 'Not started yet'}
             {row.completedAt ? ` · Finished ${timeLabel(row.completedAt)}` : ''}
           </Text>
+          {row.startedAt && !row.completedAt && (
+            <Text style={styles.live}>
+              UNDER WAY · {elapsedLabel(now - new Date(row.startedAt).getTime())}
+            </Text>
+          )}
         </View>
 
         {row.status !== 'cancelled' && (
@@ -239,6 +263,16 @@ export default function CharterSailingScreen() {
           {!!row.renterAddress && (
             <Text style={styles.address} numberOfLines={2}>📍 {row.renterAddress}</Text>
           )}
+          {!!row.renterPhone && (
+            <Pressable
+              onPress={contactBooker}
+              accessibilityRole="button"
+              accessibilityLabel={`Call the booker at ${row.renterPhone}`}
+              style={({ pressed }) => [styles.contactBooker, pressed && styles.pressed]}
+            >
+              <Text style={styles.contactBookerText}>Contact booker · {row.renterPhone}</Text>
+            </Pressable>
+          )}
 
           {riders.length > 0 ? (
             <>
@@ -248,8 +282,8 @@ export default function CharterSailingScreen() {
               {riders.map((c) => {
                 const aboard = !!c.boardedAt;
                 return (
-                  <View key={c.passengerId}>
                   <Pressable
+                    key={c.passengerId}
                     // Before the charter starts nobody is aboard; the tick is
                     // the boarding check the QR used to be for rides.
                     disabled={tickBusy === c.passengerId || row.completedAt != null}
@@ -276,17 +310,6 @@ export default function CharterSailingScreen() {
                       {tickBusy === c.passengerId ? '…' : aboard ? '✓ aboard' : 'Tick'}
                     </Text>
                   </Pressable>
-                  {!row.completedAt && (
-                    <Pressable
-                      onPress={() => setEditing(c)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Edit ${c.firstName} ${c.lastName}`}
-                      style={({ pressed }) => [styles.editRider, pressed && styles.pressed]}
-                    >
-                      <Text style={styles.editRiderText}>Edit details</Text>
-                    </Pressable>
-                  )}
-                  </View>
                 );
               })}
             </>
@@ -336,13 +359,6 @@ export default function CharterSailingScreen() {
           />
         </View>
       </ScrollView>
-
-      <PassengerEditModal
-        visible={!!editing}
-        passenger={editing}
-        onClose={() => setEditing(null)}
-        onChanged={() => void load()}
-      />
     </ScreenContainer>
   );
 }
@@ -357,6 +373,13 @@ function timeLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function elapsedLabel(ms: number): string {
+  const mins = Math.max(0, Math.floor(ms / 60_000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
 const styles = StyleSheet.create({
@@ -374,6 +397,7 @@ const styles = StyleSheet.create({
   chip: { paddingHorizontal: spacing.md, paddingVertical: 3, borderRadius: radii.pill },
   chipText: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
   meta: { ...typography.caption, color: colors.textMuted, marginTop: spacing.xs },
+  live: { ...typography.label, color: colors.primary, marginTop: spacing.sm },
 
   banner: {
     backgroundColor: colors.dangerTint,
@@ -417,8 +441,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   tickOn: { color: colors.primary, borderColor: colors.primaryBorder },
-  editRider: { alignSelf: 'flex-end', paddingVertical: 4, paddingHorizontal: spacing.xs },
-  editRiderText: { color: colors.primary, fontSize: 11, fontWeight: '700' },
+  contactBooker: { alignSelf: 'flex-start', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  contactBookerText: { color: colors.primary, fontSize: 12, fontWeight: '700' },
   pressed: { opacity: 0.65 },
 
   actions: { marginTop: spacing.xl, gap: spacing.sm },

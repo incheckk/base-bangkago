@@ -19,6 +19,7 @@ import {
   approveDownpayment,
   listDownpayments,
   refundDownpayment,
+  rejectDownpayment,
   releaseDownpayment,
   requestPayout,
 } from '@/services/downpayment.service';
@@ -28,6 +29,7 @@ const FILTERS = [
   { key: 'pending', label: 'Pending' },
   { key: 'release', label: 'To release' },
   { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
   { key: 'refunded', label: 'Refunded' },
   { key: 'all', label: 'All' },
 ];
@@ -44,9 +46,12 @@ function createdLabel(iso: string): string {
 }
 
 /** The row's real state: 'approved' is the escrow state, release is its own. */
-function rowState(row: AdminDownpaymentRow): 'pending' | 'due' | 'waiting' | 'released' | 'refunded' {
+function rowState(
+  row: AdminDownpaymentRow
+): 'pending' | 'due' | 'waiting' | 'released' | 'refunded' | 'rejected' {
   if (row.releasedAt) return 'released';
   if (row.status === 'refunded') return 'refunded';
+  if (row.status === 'rejected') return 'rejected';
   if (row.status !== 'approved') return 'pending';
   return row.targetCompleted ? 'due' : 'waiting';
 }
@@ -57,6 +62,7 @@ const STATE_LABEL: Record<ReturnType<typeof rowState>, string> = {
   due: 'To release',
   released: 'Released',
   refunded: 'Refunded',
+  rejected: 'Rejected · new receipt needed',
 };
 
 /** The gateway's payout leg (096), shown beside the escrow state. */
@@ -82,7 +88,7 @@ const STEPS = [
   'Open your GCash app → Transaction History.',
   'Read the Ref No. on the attached receipt (e.g. 0045749610827) and search it — or match the amount and date/time.',
   'Confirm the money landed in YOUR GCash number (the one on Admin → GCash QR) and the sender matches this passenger.',
-  'Money found with the right amount → tap Approve. Not found, wrong amount, or a reused screenshot → tap Mark as refunded.',
+  'Money found with the right amount → tap Approve. Not found, wrong amount or a reused screenshot → Reject receipt (the booking stays payable). Money arrived but must go back → Mark as refunded.',
 ];
 export default function AdminDownpaymentsScreen() {
   const [rows, setRows] = useState<AdminDownpaymentRow[]>([]);
@@ -92,6 +98,10 @@ export default function AdminDownpaymentsScreen() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminDownpaymentRow | null>(null);
+  // 097: rejecting keeps the booking payable, so it needs a reason the
+  // passenger can act on.
+  const [rejectMode, setRejectMode] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [payoutMethod, setPayoutMethod] = useState<'gcash' | 'cash'>('gcash');
   const [payoutRef, setPayoutRef] = useState('');
   // 096: commission rate, edited here and snapshotted onto each payout.
@@ -164,9 +174,11 @@ export default function AdminDownpaymentsScreen() {
         ? `${visible.length} to release`
         : filter === 'approved'
           ? `${visible.length} approved`
-          : filter === 'refunded'
-            ? `${visible.length} refunded`
-            : `${visible.length} total`;
+          : filter === 'rejected'
+            ? `${visible.length} rejected · passenger must pay again`
+            : filter === 'refunded'
+              ? `${visible.length} refunded`
+              : `${visible.length} total`;
 
   async function doApprove(row: AdminDownpaymentRow) {
     if (busyId) return;
@@ -196,14 +208,51 @@ export default function AdminDownpaymentsScreen() {
     setBusyId(null);
   }
 
+  /**
+   * 097: the money never arrived or the receipt is wrong. The booking stays
+   * pending and payable — that is the whole difference from a refund — so a
+   * reason is required and the passenger is notified by the RPC.
+   */
+  async function doReject(row: AdminDownpaymentRow) {
+    if (busyId) return;
+    if (!rejectReason.trim()) {
+      setActionError('Say why the receipt was rejected so the passenger can fix it.');
+      return;
+    }
+    setBusyId(row.downpaymentId);
+    setActionError(null);
+    try {
+      await rejectDownpayment(row, rejectReason);
+      setDetail(null);
+      await load();
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setBusyId(null);
+  }
+
+  /**
+   * 097: the same rule release_downpayment applies — commission is a share
+   * of the WHOLE fare and comes out of the downpayment. The admin must see
+   * the exact amount to send BEFORE sending it.
+   */
+  function netFor(row: AdminDownpaymentRow): { commission: number | null; net: number } {
+    const commission = row.commissionAmount
+      ?? (row.fare == null ? null : Math.round(row.fare * rate * 100) / 100);
+    return { commission, net: Math.max(0, row.amount - (commission ?? 0)) };
+  }
+
   function doRelease(row: AdminDownpaymentRow) {
     if (busyId) return;
+    const { commission, net } = netFor(row);
     const via = payoutMethod === 'gcash'
       ? `GCash${payoutRef.trim() ? ` (ref ${payoutRef.trim()})` : ''}`
       : 'cash at the port';
     Alert.alert(
       'Release this downpayment?',
-      `₱${row.amount} goes to ${row.operatorName ?? 'the bangkero'} via ${via}. This cannot be undone — only confirm after the money has actually been sent.`,
+      `₱${net} goes to ${row.operatorName ?? 'the bangkero'} via ${via}` +
+        (commission != null ? ` — ₱${commission} of the ₱${row.amount} held is BangkaGo commission.` : '.') +
+        ' This cannot be undone — only confirm after the money has actually been sent.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -229,6 +278,7 @@ export default function AdminDownpaymentsScreen() {
 
   const proofUrl = detail ? docPublicUrl(detail.proofUrl) : null;
   const operatorQrUrl = detail ? docPublicUrl(detail.operatorQrUrl) : null;
+  const due = detail ? netFor(detail) : { commission: null, net: 0 };
   // A dead storage path renders a blank white box without this — swap to
   // the dashed "unavailable" state instead of a silent failure.
   const [proofFailed, setProofFailed] = useState(false);
@@ -237,6 +287,8 @@ export default function AdminDownpaymentsScreen() {
     setProofFailed(false);
     setQrFailed(false);
     setPayoutRef('');
+    setRejectMode(false);
+    setRejectReason('');
     setPayoutMethod(detail?.operatorQrUrl ? 'gcash' : 'cash');
   }, [detail?.downpaymentId, detail?.operatorQrUrl]);
 
@@ -350,6 +402,7 @@ export default function AdminDownpaymentsScreen() {
                     rowState(row) === 'waiting' && styles.statusApproved,
                     rowState(row) === 'released' && styles.statusApproved,
                     rowState(row) === 'refunded' && styles.statusRefunded,
+                    rowState(row) === 'rejected' && styles.statusRejected,
                   ]}
                 >
                   <Text
@@ -360,6 +413,7 @@ export default function AdminDownpaymentsScreen() {
                       rowState(row) === 'waiting' && styles.statusTextApproved,
                       rowState(row) === 'released' && styles.statusTextApproved,
                       rowState(row) === 'refunded' && styles.statusTextRefunded,
+                      rowState(row) === 'rejected' && styles.statusTextRejected,
                     ]}
                   >
                     {STATE_LABEL[rowState(row)]}
@@ -427,8 +481,7 @@ export default function AdminDownpaymentsScreen() {
               <>
                 <Text style={styles.modalSteps}>
                   Check the Ref No. on this receipt in your GCash → Transaction History
-                  first: money in, right amount, right date — then Approve. Not found →
-                  Refund.
+                  first: money in, right amount, right date — then Approve.
                 </Text>
                 <PrimaryButton
                   label="Approve downpayment"
@@ -437,6 +490,47 @@ export default function AdminDownpaymentsScreen() {
                   disabled={busyId !== null}
                   style={styles.modalBtn}
                 />
+                {rejectMode ? (
+                  <View style={styles.rejectBox}>
+                    <Text style={styles.releaseTitle}>WHY IS THE RECEIPT WRONG?</Text>
+                    <Text style={styles.releaseWho}>
+                      The booking stays open and payable — the passenger reads this and sends
+                      a new receipt.
+                    </Text>
+                    <TextInput
+                      value={rejectReason}
+                      onChangeText={setRejectReason}
+                      placeholder="e.g. Ref No. not found in GCash"
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      style={[styles.refInput, styles.rejectInput]}
+                      accessibilityLabel="Rejection reason"
+                    />
+                    <PrimaryButton
+                      label="Send rejection"
+                      variant="danger"
+                      onPress={() => void doReject(detail)}
+                      loading={busyId === detail.downpaymentId}
+                      disabled={busyId !== null || !rejectReason.trim()}
+                      style={styles.modalBtn}
+                    />
+                    <PrimaryButton
+                      label="Never mind"
+                      variant="secondary"
+                      onPress={() => setRejectMode(false)}
+                      disabled={busyId !== null}
+                      style={styles.modalBtn}
+                    />
+                  </View>
+                ) : (
+                  <PrimaryButton
+                    label="Reject receipt · not found"
+                    variant="secondary"
+                    onPress={() => setRejectMode(true)}
+                    disabled={busyId !== null}
+                    style={styles.modalBtn}
+                  />
+                )}
                 <PrimaryButton
                   label="Mark as refunded"
                   variant="secondary"
@@ -450,8 +544,9 @@ export default function AdminDownpaymentsScreen() {
               <View style={styles.releaseBox}>
                 <Text style={styles.releaseTitle}>RELEASE THE HELD 50%</Text>
                 <Text style={styles.releaseWho}>
-                  {detail.operatorName ?? 'The bangkero'} completed this trip. Pay ₱{detail.amount},
-                  then record it here — the app does not move money.
+                  {detail.operatorName ?? 'The bangkero'} completed this trip. Send ₱{due.net}
+                  {due.commission != null ? ` (₱${detail.amount} held − ₱${due.commission} commission)` : ''}{' '}
+                  and record it here — the app does not move money.
                 </Text>
 
                 <View style={styles.methodRow}>
@@ -491,7 +586,7 @@ export default function AdminDownpaymentsScreen() {
                         resizeMode="contain"
                         onError={() => setQrFailed(true)}
                       />
-                      <Text style={styles.qrHint}>Scan this in GCash and send ₱{detail.amount}.</Text>
+                      <Text style={styles.qrHint}>Scan this in GCash and send ₱{due.net}.</Text>
                     </View>
                   ) : (
                     <Text style={styles.releaseWarn}>
@@ -501,7 +596,7 @@ export default function AdminDownpaymentsScreen() {
                   )
                 ) : (
                   <Text style={styles.qrHint}>
-                    Hand ₱{detail.amount} to {detail.operatorName ?? 'the bangkero'} at the port.
+                    Hand ₱{due.net} to {detail.operatorName ?? 'the bangkero'} at the port.
                   </Text>
                 )}
 
@@ -546,6 +641,16 @@ export default function AdminDownpaymentsScreen() {
                 via {detail.payoutMethod === 'cash' ? 'cash' : 'GCash'}
                 {detail.payoutRef ? ` · ref ${detail.payoutRef}` : ''}. The bangkero was notified.
               </Text>
+            ) : detail && rowState(detail) === 'rejected' ? (
+              <>
+                <Text style={styles.modalDone}>
+                  Rejected {detail.reviewedAt ? createdLabel(detail.reviewedAt) : ''} — no money
+                  was accepted and the booking is still payable.
+                </Text>
+                {!!detail.rejectReason && (
+                  <Text style={styles.releaseWarn}>Reason sent: {detail.rejectReason}</Text>
+                )}
+              </>
             ) : (
               <Text style={styles.modalDone}>
                 Reviewed {detail?.reviewedAt ? createdLabel(detail.reviewedAt) : ''} — the
@@ -644,11 +749,23 @@ const styles = StyleSheet.create({
   statusDue: { backgroundColor: colors.accentTintSoft },
   statusApproved: { backgroundColor: colors.primaryTint },
   statusRefunded: { backgroundColor: colors.neutralTint },
+  statusRejected: { backgroundColor: colors.dangerTint },
   statusText: { fontSize: 10, fontWeight: '700', color: colors.warning, textTransform: 'uppercase' },
   statusTextPending: { color: colors.warning },
   statusTextDue: { color: colors.accent },
   statusTextApproved: { color: colors.primary },
   statusTextRefunded: { color: colors.textSecondary },
+  statusTextRejected: { color: colors.danger },
+
+  rejectBox: {
+    marginTop: spacing.md,
+    backgroundColor: colors.dangerTint,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    padding: spacing.md,
+  },
+  rejectInput: { minHeight: 64, textAlignVertical: 'top' },
 
   releaseBox: {
     marginTop: spacing.lg,

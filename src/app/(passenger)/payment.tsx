@@ -12,7 +12,8 @@ import { useDevFlags } from '@/hooks/useSupabase';
 import { getAdminGcashQr } from '@/services/app-settings.service';
 import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import {
-  createDownpayment, getDownpaymentByBooking, startGatewayCheckout, uploadDownpaymentProof,
+  attachDownpaymentProof, createDownpayment, getDownpaymentByBooking, startGatewayCheckout,
+  uploadDownpaymentProof,
 } from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
 import { createParcel, validateParcelItems } from '@/services/parcel.service';
@@ -55,7 +56,7 @@ async function waitForApproval(bookingId: string): Promise<boolean> {
   for (let i = 0; i < 8; i += 1) {
     const row = await getDownpaymentByBooking(bookingId).catch(() => null);
     if (row?.status === 'approved') return true;
-    if (row?.status === 'refunded') return false;
+    if (row?.status === 'refunded' || row?.status === 'rejected') return false;
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
   return false;
@@ -85,6 +86,8 @@ export default function PaymentScreen() {
     remainder?: string;
     scheduledDate?: string;
     scheduledTime?: string;
+    /** 097: retry from the booking screen — the booking already exists. */
+    bookingId?: string;
   }>();
 
   const [method, setMethod] = useState<PaymentMethod>('cash');
@@ -142,10 +145,19 @@ export default function PaymentScreen() {
   const onboardRemainder = isPackage
     ? parseInt(params.remainder ?? params.fare ?? '0', 10) || 0
     : Math.max(0, fare - downAmount);
+  const existingBookingId =
+    typeof params.bookingId === 'string' && params.bookingId.length > 0 ? params.bookingId : null;
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoaded, setQrLoaded] = useState(false);
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [proofUploading, setProofUploading] = useState(false);
+  // 097: the passenger can always fall back to GCash + receipt, and a
+  // gateway checkout that died reuses the row it already filed.
+  const [manual, setManual] = useState(false);
+  const [fallbackRowId, setFallbackRowId] = useState<string | null>(null);
+  // The receipt rail: manual mode (Developer Options) or "Pay by GCash
+  // instead" chosen on the gateway rail.
+  const manualRail = !gateway || manual;
 
   useEffect(() => {
     if (!isEscrow) return;
@@ -175,35 +187,104 @@ export default function PaymentScreen() {
     }
   }
 
+  /**
+   * 097: file (or finish) the escrow row, then walk the gateway rail when
+   * it is the chosen one. A checkout that dies after the row exists is not
+   * lost — the row id is kept and the screen switches to GCash + receipt.
+   */
+  async function fileDownpayment(
+    bookingId: string,
+    amount: number
+  ): Promise<'approved' | 'pending' | 'blocked' | 'failed'> {
+    let proofPath: string | null = null;
+    if (manualRail) {
+      if (!proofUri) return 'failed';
+      try {
+        setProofUploading(true);
+        proofPath = await uploadDownpaymentProof(proofUri);
+      } catch {
+        return 'failed';
+      } finally {
+        setProofUploading(false);
+      }
+    }
+
+    let rowId = fallbackRowId;
+    try {
+      if (!rowId) {
+        const row = await createDownpayment({
+          amount,
+          // No manual ref input (prof's rule): the admin reads the Ref No.
+          // off the attached receipt while verifying in GCash. The gateway
+          // path leaves reference_num to the provider.
+          referenceNum: '',
+          proofUrl: proofPath ?? '',
+          bookingId,
+        });
+        rowId = row.downpaymentId;
+        setFallbackRowId(rowId);
+      } else if (proofPath) {
+        // The checkout failed after the row was filed — this receipt is
+        // the payment now.
+        await attachDownpaymentProof(rowId, '', proofPath);
+      }
+    } catch {
+      return 'failed';
+    }
+
+    if (manualRail) return 'pending';
+
+    try {
+      const url = await startGatewayCheckout(rowId);
+      if (!url) return 'approved'; // already settled
+      await WebBrowser.openBrowserAsync(url);
+      return (await waitForApproval(bookingId)) ? 'approved' : 'pending';
+    } catch (e) {
+      setManual(true);
+      setError(`${friendlyError(e)} You can still pay by GCash and send the receipt here.`);
+      return 'blocked';
+    }
+  }
+
   async function confirm() {
     if (busy || !profile || profileLoading) return;
-    if (!params.fromId || !params.toId || !params.fromName || !params.toName) {
+    if (
+      !existingBookingId &&
+      (!params.fromId || !params.toId || !params.fromName || !params.toName)
+    ) {
       setError('Missing trip details. Go back and pick your ports again.');
       return;
     }
-    // Accompanied Padala hides the receiver fields; the parcel still needs
-    // a receiver_name, so the sender is the receiver.
-    const resolvedReceiverName =
-      params.receiverName?.trim() ||
-      `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() ||
-      'Sender';
-    const resolvedReceiverContact = params.receiverContact || profile.phone || undefined;
     setBusy(true);
     setError(null);
     try {
-      // Escrow mode files the proof FIRST — a booking must never exist
-      // without the screenshot that documents its downpayment. In gateway
-      // mode there is no screenshot: the provider's confirmation replaces it.
-      let proofPath: string | null = null;
-      if (isEscrow && !gateway) {
-        if (!proofUri) throw new Error('Attach your GCash receipt screenshot.');
-        setProofUploading(true);
-        try {
-          proofPath = await uploadDownpaymentProof(proofUri);
-        } finally {
-          setProofUploading(false);
+      // 097: opened from the booking screen — the booking already exists,
+      // so only the escrow row is left to file.
+      if (existingBookingId) {
+        const downStatus = await fileDownpayment(existingBookingId, downAmount);
+        if (downStatus === 'blocked') {
+          setBusy(false);
+          return;
         }
+        if (downStatus === 'failed') {
+          setError('We could not save that payment. Try again.');
+          setBusy(false);
+          return;
+        }
+        router.replace({
+          pathname: '/(passenger)/booking/[id]',
+          params: { id: existingBookingId },
+        });
+        return;
       }
+
+      // Accompanied Padala hides the receiver fields; the parcel still needs
+      // a receiver_name, so the sender is the receiver.
+      const resolvedReceiverName =
+        params.receiverName?.trim() ||
+        `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() ||
+        'Sender';
+      const resolvedReceiverContact = params.receiverContact || profile.phone || undefined;
 
       // Cargo lines are parsed and validated BEFORE the booking exists: the
       // fare is recomputed from them, and a bad line must not leave a booking
@@ -255,8 +336,11 @@ export default function PaymentScreen() {
       // the confirmation screen — the booking itself already exists — but it
       // MUST be reported: the fare is per passenger, so silently losing a
       // companion means paying for someone who has no boarding pass.
+      // 097: after a failed checkout the booking and its rows already
+      // exist — repeating them would double-write (a second payments row
+      // breaks the singular lookups).
       let companionWarning = false;
-      if (serviceType === 'passenger' && params.companionsJson) {
+      if (!fallbackRowId && serviceType === 'passenger' && params.companionsJson) {
         try {
           const companions = JSON.parse(params.companionsJson) as {
             firstName: string; lastName: string; age?: number; sex?: string; contact?: string;
@@ -290,15 +374,13 @@ export default function PaymentScreen() {
       // exists, and mark_paid upserts a missing row when the bangkero
       // collects fare.
       let payWarning = false;
-      if (isEscrow) {
+      if (!fallbackRowId) {
         try {
-          await createPayment(bookingId, actualRemainder, 'cash');
-        } catch {
-          payWarning = true;
-        }
-      } else {
-        try {
-          await createPayment(bookingId, actualFare, method);
+          await createPayment(
+            bookingId,
+            isEscrow ? actualRemainder : actualFare,
+            isEscrow ? 'cash' : method
+          );
         } catch {
           payWarning = true;
         }
@@ -306,7 +388,7 @@ export default function PaymentScreen() {
 
       let parcelId: string | undefined;
       let parcelWarning = false;
-      if (serviceType === 'cargo') {
+      if (!fallbackRowId && serviceType === 'cargo') {
         try {
           const parcel = await createParcel({
             receiverName: resolvedReceiverName,
@@ -361,41 +443,14 @@ export default function PaymentScreen() {
         }
       }
 
-      // Escrow row — the booking already exists, so a failed insert must
-      // never block the confirmation screen: flag it and move on.
-      let downWarning = false;
-      let downpaymentId: string | null = null;
-      if (isEscrow && (proofPath || gateway)) {
-        try {
-          const row = await createDownpayment({
-            amount: actualDownAmount,
-            // No manual ref input (prof's rule): the admin reads the
-            // Ref No. off the attached receipt while verifying in GCash.
-            // The gateway path leaves reference_num to the provider.
-            referenceNum: '',
-            proofUrl: proofPath ?? '',
-            bookingId,
-          });
-          downpaymentId = row.downpaymentId;
-        } catch {
-          downWarning = true;
-        }
-      }
-
-      // 096: hand the passenger to the provider's hosted page. The webhook
-      // flips the row while they are on it, so the happy path needs no admin.
-      let downStatus: 'approved' | 'pending' = 'pending';
-      if (isEscrow && gateway && downpaymentId) {
-        try {
-          const url = await startGatewayCheckout(downpaymentId);
-          if (url) {
-            await WebBrowser.openBrowserAsync(url);
-            if (await waitForApproval(bookingId)) downStatus = 'approved';
-          }
-        } catch {
-          // The booking (and its row) already exist — land on the
-          // confirmation screen and let them retry from the booking.
-          downWarning = true;
+      // 097: file the escrow row — or reuse the row a failed checkout left
+      // behind — and, on the gateway rail, walk through the hosted page.
+      let downStatus: 'approved' | 'pending' | 'blocked' | 'failed' = 'pending';
+      if (isEscrow) {
+        downStatus = await fileDownpayment(bookingId, actualDownAmount);
+        if (downStatus === 'blocked') {
+          setBusy(false);
+          return;
         }
       }
 
@@ -426,10 +481,10 @@ export default function PaymentScreen() {
           ...(companionWarning ? { companionWarning: '1' } : {}),
           ...(isEscrow
             ? {
-                downStatus,
+                downStatus: downStatus === 'approved' ? 'approved' : 'pending',
                 downAmount: String(actualDownAmount),
                 remainder: String(actualRemainder),
-                ...(downWarning ? { downWarning: '1' } : {}),
+                ...(downStatus === 'failed' ? { downWarning: '1' } : {}),
               }
             : {}),
         },
@@ -497,7 +552,7 @@ export default function PaymentScreen() {
           {isEscrow ? (
             <View>
               <Text style={[styles.sectionLabel, styles.mtLg]}>
-                {gateway ? 'DOWNPAYMENT' : 'GCASH DOWNPAYMENT (50%)'}
+              {manualRail ? 'GCASH DOWNPAYMENT (50%)' : 'DOWNPAYMENT'}
               </Text>
               <View style={styles.escrowCard}>
                 <View style={styles.escrowAmountRow}>
@@ -511,7 +566,7 @@ export default function PaymentScreen() {
                 </View>
               </View>
 
-              {gateway ? (
+              {!manualRail ? (
                 <Text style={styles.escrowHint}>
                   You&apos;ll pay ₱{downAmount} on BangkaGo&apos;s secure checkout page. The
                   downpayment is held by BangkaGo until your trip, then released to your
@@ -564,6 +619,15 @@ export default function PaymentScreen() {
                   </Text>
                 </>
               )}
+              {gateway && (
+                <Pressable onPress={() => setManual((v) => !v)} disabled={busy}>
+                  <Text style={styles.railToggle}>
+                    {manual
+                      ? 'Use the secure checkout page instead'
+                      : 'Pay by GCash instead — upload a receipt'}
+                  </Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <View>
@@ -613,9 +677,11 @@ export default function PaymentScreen() {
               label={
                 !isEscrow
                   ? 'Confirm Booking'
-                  : gateway
+                  : !manualRail
                     ? 'Pay downpayment'
-                    : `Pay ₱${downAmount} & Book`
+                    : existingBookingId
+                      ? 'Send receipt'
+                      : `Pay ₱${downAmount} & Book`
               }
               onPress={confirm}
               loading={busy || proofUploading}
@@ -624,10 +690,10 @@ export default function PaymentScreen() {
                 proofUploading ||
                 profileLoading ||
                 !profile ||
-                (isEscrow && !gateway && !proofUri)
+                (isEscrow && manualRail && !proofUri)
               }
             />
-            {isEscrow && gateway && (
+            {isEscrow && !manualRail && (
               <Text style={styles.paySubline}>
                 50% of your fare · held for your bangkero until the trip
               </Text>
@@ -740,6 +806,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: spacing.md,
+  },
+  railToggle: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
   },
   methodCard: {
     flexDirection: 'row',

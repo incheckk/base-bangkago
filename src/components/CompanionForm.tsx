@@ -32,7 +32,7 @@ interface Props {
   companions: Companion[];
   onChange: (next: Companion[]) => void;
   /** Total seats including the booker — the add button locks at the cap. */
-  maxCount: number;
+  maxCount?: number;
   bookerName: string;
   /** Caption under the booker's row. */
   bookerMeta?: string;
@@ -68,7 +68,7 @@ export function CompanionForm({
   const [draftAddress, setDraftAddress] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const atCap = 1 + companions.length >= maxCount;
+  const atCap = maxCount != null && 1 + companions.length >= maxCount;
 
   // Presence gates the Add button; format errors surface on press.
   const allPresent = !!(

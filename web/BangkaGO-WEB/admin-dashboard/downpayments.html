@@ -32,8 +32,8 @@
               <li>Open the passenger&apos;s receipt image below and read the GCash <strong>Ref No.</strong></li>
               <li>In your GCash app open <strong>Transactions</strong> and search that Ref No. (or match the amount + date).</li>
               <li>Confirm the money landed in <strong>your</strong> GCash number (Admin &rarr; GCash QR) and the amount matches the row.</li>
-              <li>Money found &rarr; <strong>Approve</strong>. Not found / wrong amount &rarr; <strong>Refund</strong>.</li>
-              <li>An already-approved row can still be refunded if the trip was cancelled or the money must be returned.</li>
+              <li>Money found &rarr; <strong>Approve</strong>. Not found / wrong amount / reused screenshot &rarr; <strong>Reject receipt</strong> &mdash; the trip stays payable and the passenger is told why.</li>
+              <li>Money arrived but must go back (cancelled trip) &rarr; <strong>Refund</strong>.</li>
             </ol>
           </div>
 
@@ -42,6 +42,7 @@
               <select id="dpStatusFilter" class="form-select">
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
                 <option value="refunded">Refunded</option>
                 <option value="">All Status</option>
               </select>
@@ -102,18 +103,30 @@
 
           <div class="alert alert-warning mt-3 mb-0 d-none" id="mWarning"></div>
 
+          <div class="mt-3 d-none" id="mRejectBox">
+            <label class="form-label fw-semibold" for="mRejectReason">Why is the receipt wrong?</label>
+            <textarea id="mRejectReason" class="form-control" rows="2"
+              placeholder="e.g. Ref No. not found in GCash"></textarea>
+            <div class="form-text">
+              The booking stays open and payable — the passenger reads this and sends a new receipt.
+            </div>
+          </div>
+
           <div class="alert alert-primary mt-3 mb-0">
             <ol class="mb-0 ps-3">
               <li>Read the <strong>Ref No.</strong> off the receipt.</li>
               <li>Search it in your GCash &rarr; Transactions.</li>
-              <li>Money in with the right amount &rarr; Approve; otherwise &rarr; Refund.</li>
+              <li>Money in with the right amount &rarr; Approve; not found &rarr; Reject receipt.</li>
             </ol>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-outline-danger" id="mRefundBtn">
+          <button type="button" class="btn btn-outline-secondary" id="mRefundBtn">
             <i class="bi bi-arrow-counterclockwise me-1"></i>Refund
+          </button>
+          <button type="button" class="btn btn-outline-danger" id="mRejectBtn">
+            <i class="bi bi-x-circle me-1"></i>Reject receipt
           </button>
           <button type="button" class="btn btn-bangkago" id="mApproveBtn">
             <i class="bi bi-check2-circle me-1"></i>Approve
@@ -165,6 +178,9 @@
     const receiptPhotoModal = new bootstrap.Modal(document.getElementById('receiptPhotoModal'));
     const mApproveBtn = document.getElementById('mApproveBtn');
     const mRefundBtn = document.getElementById('mRefundBtn');
+    const mRejectBtn = document.getElementById('mRejectBtn');
+    const mRejectBox = document.getElementById('mRejectBox');
+    const mRejectReason = document.getElementById('mRejectReason');
     let photoRequestId = 0;
 
     function peso(n){ return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`; }
@@ -172,11 +188,13 @@
     function dpBadge(status){
       if(status === 'approved') return 'text-bg-success';
       if(status === 'refunded') return 'text-bg-secondary';
+      if(status === 'rejected') return 'text-bg-danger';
       return 'text-bg-warning';
     }
     function dpStatusLabel(status){
       return status === 'approved' ? 'Approved'
         : status === 'refunded' ? 'Refunded'
+        : status === 'rejected' ? 'Rejected · pay again'
         : 'Awaiting review';
     }
 
@@ -258,6 +276,10 @@
     // An approved or pending escrow row on a cancelled trip is money the
     // admin still owes back. Surface it before it is lost in the list.
     function targetWarning(d){
+      if (d.status === 'rejected') {
+        return 'Receipt rejected' + (d.rejectReason ? ': ' + d.rejectReason : '') +
+          ' — no money accepted, passenger must pay again.';
+      }
       if (d.targetStatus === 'cancelled' && (d.status === 'pending' || d.status === 'approved')) {
         return (d.boatRentalId ? 'Rental' : 'Trip') + ' cancelled — refund due';
       }
@@ -375,6 +397,7 @@
       const refundable = d.status === 'pending' || d.status === 'approved';
       mApproveBtn.disabled = !pending || d.targetStatus === 'cancelled';
       mRefundBtn.disabled = !refundable;
+      mRejectBtn.disabled = !pending;
     }
 
     window.openReview = function(downpaymentId){
@@ -401,6 +424,9 @@
       warningBox.classList.toggle('d-none', !warning);
 
       applyReviewState(d);
+      // 097: the reject reason box starts closed and empty for every row.
+      mRejectBox.classList.add('d-none');
+      mRejectReason.value = '';
       dpModal.show();
     };
 
@@ -411,13 +437,23 @@
         alert('This downpayment is no longer loaded. Refresh the page.');
         return;
       }
-      const verb = action === 'approve' ? 'Approve' : 'Refund';
+      const reason = action === 'reject' ? mRejectReason.value.trim() : '';
+      if (action === 'reject' && !reason) {
+        alert('Say why the receipt was rejected so the passenger can fix it.');
+        mRejectReason.focus();
+        return;
+      }
+      const verb = action === 'approve' ? 'Approve'
+        : action === 'reject' ? 'Reject the receipt for'
+        : 'Refund';
       if (!confirm(`${verb} this ${peso(d.amount)} downpayment for ${d.label}?`)) return;
 
       mApproveBtn.disabled = true;
       mRefundBtn.disabled = true;
+      mRejectBtn.disabled = true;
       try {
         if (action === 'approve') await window.bangkagoPayments.approveDownpayment(d);
+        else if (action === 'reject') await window.bangkagoPayments.rejectDownpayment(d, reason);
         else await window.bangkagoPayments.refundDownpayment(d);
         dpModal.hide();
         await loadDownpayments();
@@ -431,6 +467,14 @@
 
     mApproveBtn.addEventListener('click', () => decide('approve'));
     mRefundBtn.addEventListener('click', () => decide('refund'));
+    mRejectBtn.addEventListener('click', () => {
+      if (mRejectBox.classList.contains('d-none')) {
+        mRejectBox.classList.remove('d-none');
+        mRejectReason.focus();
+        return;
+      }
+      decide('reject');
+    });
 
     dpSearch.addEventListener('input', runFilter);
     dpStatusFilter.addEventListener('change', runFilter);

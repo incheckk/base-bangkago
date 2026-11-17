@@ -9,7 +9,6 @@ import { ErrorState, LoadingState } from '@/components/States';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { friendlyError } from '@/services/booking.service';
-import { getPassengerDetailsByRentals } from '@/services/passenger-detail.service';
 import {
   type BangkeroRentalRow,
   type OwnBangka,
@@ -23,7 +22,7 @@ import {
   tierStandardPrice,
 } from '@/services/rental.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
-import type { PassengerDetailDoc, RentalStatus } from '@/types/models';
+import type { RentalStatus } from '@/types/models';
 
 const STATUS_STYLES: Record<RentalStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: 'Pending', fg: colors.warning, bg: colors.warningTint },
@@ -45,7 +44,6 @@ export default function BangkeroRentalsScreen() {
 
   const [rows, setRows] = useState<BangkeroRentalRow[]>([]);
   const [boats, setBoats] = useState<OwnBangka[]>([]);
-  const [riders, setRiders] = useState<Record<string, PassengerDetailDoc[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -58,17 +56,9 @@ export default function BangkeroRentalsScreen() {
     if (!uid) return;
     try {
       const rentals = await getRentalsForBangkero(uid);
-      const [own, detailRows] = await Promise.all([
-        getOwnBangkas(uid),
-        getPassengerDetailsByRentals(rentals.map((r) => r.rentalId)).catch(() => []),
-      ]);
+      const own = await getOwnBangkas(uid);
       setRows(rentals);
       setBoats(own);
-      const byRental: Record<string, PassengerDetailDoc[]> = {};
-      for (const d of detailRows) {
-        if (d.boatRentalId) (byRental[d.boatRentalId] ??= []).push(d);
-      }
-      setRiders(byRental);
       setRateDraft((prev) => {
         const next = { ...prev };
         for (const b of own) {
@@ -270,7 +260,6 @@ export default function BangkeroRentalsScreen() {
               <RentalCard
                 key={row.rentalId}
                 row={row}
-                riders={riders[row.rentalId] ?? []}
                 busy={busyId === row.rentalId}
               />
             ))}
@@ -285,7 +274,6 @@ export default function BangkeroRentalsScreen() {
             <RentalCard
               key={row.rentalId}
               row={row}
-              riders={riders[row.rentalId] ?? []}
               busy={busyId === row.rentalId}
               actions={
                 <>
@@ -317,7 +305,6 @@ export default function BangkeroRentalsScreen() {
             <RentalCard
               key={row.rentalId}
               row={row}
-              riders={riders[row.rentalId] ?? []}
               busy={busyId === row.rentalId}
               onOpen={() => openCharter(row)}
             />
@@ -328,7 +315,7 @@ export default function BangkeroRentalsScreen() {
           <>
             <Text style={styles.sectionLabel}>HISTORY</Text>
             {history.map((row) => (
-              <RentalCard key={row.rentalId} row={row} riders={riders[row.rentalId] ?? []} busy={false} />
+              <RentalCard key={row.rentalId} row={row} busy={false} />
             ))}
           </>
         )}
@@ -339,13 +326,11 @@ export default function BangkeroRentalsScreen() {
 
 function RentalCard({
   row,
-  riders,
   busy,
   actions,
   onOpen,
 }: {
   row: BangkeroRentalRow;
-  riders: PassengerDetailDoc[];
   busy: boolean;
   actions?: React.ReactNode;
   /** Confirmed charters open their sailing-day screen. */
@@ -372,11 +357,6 @@ function RentalCard({
           {row.completedAt
             ? ` · finished ${new Date(row.completedAt).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
             : ''}
-        </Text>
-      )}
-      {riders.length > 0 && (
-        <Text style={styles.cardMeta} numberOfLines={2}>
-          Riders: {riders.map((c) => `${c.firstName} ${c.lastName}`).join(', ')}
         </Text>
       )}
       {!!actions && <View style={styles.actions}>{actions}</View>}

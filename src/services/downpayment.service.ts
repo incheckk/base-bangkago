@@ -21,6 +21,7 @@ function mapRow(row: any): DownpaymentDoc {
     referenceNum: row.reference_num ?? '',
     proofUrl: row.proof_url ?? '',
     status: row.status,
+    rejectReason: row.reject_reason ?? null,
     bookingId: row.booking_id,
     boatRentalId: row.boat_rental_id,
     createdAt: row.created_at,
@@ -91,6 +92,24 @@ export async function createDownpayment(args: CreateDownpaymentArgs): Promise<Do
 
   if (error) throw error;
   return mapRow(data);
+}
+
+/**
+ * 097: finish a gateway row by hand. The switch to GCash is chosen before
+ * any row exists, but a checkout that dies after the insert would otherwise
+ * leave a pending row with no receipt and no way to pay it.
+ */
+export async function attachDownpaymentProof(
+  downpaymentId: string,
+  referenceNum: string,
+  proofUrl: string
+): Promise<void> {
+  const { error } = await supabase.rpc('attach_downpayment_proof', {
+    p_downpayment_id: downpaymentId,
+    p_ref: referenceNum,
+    p_proof: proofUrl,
+  });
+  if (error) throw error;
 }
 
 /** Newest escrow row for a booking — the passenger's booking screen. */
@@ -232,6 +251,8 @@ export interface AdminDownpaymentRow extends DownpaymentDoc {
   operatorQrUrl: string | null;
   /** True when the booking/rental already reached 'completed'. */
   targetCompleted: boolean;
+  /** 097: whole fare, so the release box can show the exact net payout. */
+  fare: number | null;
 }
 
 function humanDate(iso: string): string {
@@ -251,7 +272,7 @@ export async function listDownpayments(
     .from('downpayments')
     .select(`
       *,
-      booking:bookings(id, ref, passenger_name, user_id, from_port_name, to_port_name, service_type, num_of_passenger, operator_id, trip_stat),
+      booking:bookings(id, ref, passenger_name, user_id, from_port_name, to_port_name, service_type, num_of_passenger, operator_id, trip_stat, total_price),
       rental:boat_rentals(id, event_name, rental_date, hours, total_price, user_id, status, bangka_id,
         bangkas(bangka_name, bangkero_id))
     `)
@@ -327,6 +348,11 @@ export async function listDownpayments(
         : rental
           ? rental.status === 'completed'
           : false,
+      fare: booking?.total_price != null
+        ? Number(booking.total_price)
+        : rental?.total_price != null
+          ? Number(rental.total_price)
+          : null,
     };
   });
 }
@@ -460,4 +486,20 @@ export async function refundDownpayment(row: AdminDownpaymentRow): Promise<void>
       'payment'
     ).catch(() => {});
   }
+}
+
+/**
+ * 097: the receipt is wrong and no money arrived. Unlike a refund this
+ * leaves the booking pending and payable, and the passenger is told why
+ * (the RPC writes the notification) so they can send a good receipt.
+ */
+export async function rejectDownpayment(
+  row: AdminDownpaymentRow,
+  reason: string
+): Promise<void> {
+  const { error } = await supabase.rpc('reject_downpayment', {
+    p_downpayment_id: row.downpaymentId,
+    p_reason: reason.trim(),
+  });
+  if (error) throw error;
 }

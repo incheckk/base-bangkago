@@ -167,9 +167,6 @@ export default function BookPackage() {
           {!!pkg.description && <Text style={styles.pkgDesc}>{pkg.description}</Text>}
           <View style={styles.metaRow}>
             <Text style={styles.meta}>⏱ {pkg.durationHours} hrs</Text>
-            <Text style={styles.meta}>
-              👥 up to {pkg.maxCapacity} pax
-            </Text>
           </View>
         </View>
 
@@ -205,9 +202,8 @@ export default function BookPackage() {
         <CompanionForm
           companions={companions}
           onChange={setCompanions}
-          maxCount={pkg.maxCapacity}
           bookerName={bookerName}
-          hint={`Up to ${pkg.maxCapacity} passengers on this hop.`}
+          hint="Add everyone sailing with you — the boat is assigned when a bangkero accepts."
         />
 
         <Text style={styles.sectionLabel}>PAYMENT SUMMARY</Text>

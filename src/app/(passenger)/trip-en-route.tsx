@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '@/components/Icon';
 import { MapContainer } from '@/components/MapContainer';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -389,7 +389,14 @@ export default function TripEnRoute() {
                   );
                   return;
                 }
-                void router.push(`tel:${operatorPhone.replace('+', '')}`);
+                const dialable = operatorPhone.replace(/[^+\d]/g, '');
+                if (!dialable) {
+                  Alert.alert('Contact bangkero', 'That number is not dialable. Ask the crew on board.');
+                  return;
+                }
+                void Linking.openURL(`tel:${dialable}`).catch(() =>
+                  Alert.alert('Contact bangkero', `Could not open the dialer — call ${operatorPhone} manually.`)
+                );
               }}
             >
               <Icon name="bell" size={18} color={colors.primaryText} />

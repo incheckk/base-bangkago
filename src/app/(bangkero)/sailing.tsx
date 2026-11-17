@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
@@ -63,9 +63,6 @@ export default function SailingScreen() {
   // 079: the booker's age/address on the manifest, mirroring companions.
   const [bookers, setBookers] = useState<Record<string, BookerDetails>>({});
   const [payingId, setPayingId] = useState<string | null>(null);
-  // Reference drafts keyed by booking — one shared input mixed refs
-  // across rows when several bookings were unpaid at once.
-  const [references, setReferences] = useState<Record<string, string>>({});
   const [payError, setPayError] = useState<string | null>(null);
 
   const sailing: Sailing | null = useMemo(() => {
@@ -148,7 +145,7 @@ export default function SailingScreen() {
     setPayingId(bookingId);
     setPayError(null);
     try {
-      await markBookingPaid(bookingId, references[bookingId]?.trim() || undefined);
+      await markBookingPaid(bookingId);
       await loadPayments();
     } catch (e) {
       setPayError(friendlyError(e));
@@ -322,25 +319,13 @@ export default function SailingScreen() {
                   {paid ? '✓ Paid' : 'Pending'}
                 </Text>
                 {canMark && (
-                  <>
-                    <TextInput
-                      style={styles.refInput}
-                      placeholder="GCash / receipt reference (optional)"
-                      placeholderTextColor={colors.textMuted}
-                      value={references[b.bookingId] ?? ''}
-                      onChangeText={(v) =>
-                        setReferences((prev) => ({ ...prev, [b.bookingId]: v }))
-                      }
-                      autoCapitalize="characters"
-                    />
-                    <PrimaryButton
-                      label="Mark as paid"
-                      onPress={() => void markPaid(b.bookingId)}
-                      loading={payingId === b.bookingId}
-                      disabled={payingId !== null}
-                      style={styles.payBtn}
-                    />
-                  </>
+                  <PrimaryButton
+                    label="Mark as paid"
+                    onPress={() => void markPaid(b.bookingId)}
+                    loading={payingId === b.bookingId}
+                    disabled={payingId !== null}
+                    style={styles.payBtn}
+                  />
                 )}
               </View>
             );
@@ -495,17 +480,6 @@ const styles = StyleSheet.create({
   payDone: { ...typography.label, color: colors.success, letterSpacing: 0 },
   payPending: { ...typography.label, color: colors.warning, letterSpacing: 0 },
   payBtn: { flexBasis: '100%', minHeight: 40 },
-  refInput: {
-    marginTop: spacing.sm,
-    backgroundColor: colors.bgElevated,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    color: colors.text,
-    fontSize: 14,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
   payHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 18 },
   payHintOk: { ...typography.caption, color: colors.success, marginTop: spacing.sm, fontWeight: '700' },
   payError: {

@@ -68,7 +68,9 @@
       commissionRate: row.commission_rate == null ? null : Number(row.commission_rate),
       payoutStatus: row.payout_status ?? null,
       payoutRef: row.gateway_payout_ref ?? row.payout_ref ?? null,
-      payoutError: row.payout_error ?? null
+      payoutError: row.payout_error ?? null,
+      // 097: why a receipt was refused (the booking stays payable).
+      rejectReason: row.reject_reason ?? null
     };
   }
 
@@ -186,5 +188,25 @@
       `Your GCash downpayment of ₱${row.amount} for ${row.label} has been refunded.`);
   }
 
-  window.bangkagoPayments = { listPayments, listDownpayments, approveDownpayment, refundDownpayment };
+  /**
+   * 097: the receipt is wrong and no money arrived. Unlike a refund this
+   * leaves the booking pending and payable — the RPC marks the row
+   * 'rejected', stores the reason and notifies the passenger, who can file
+   * a new receipt from the booking.
+   */
+  async function rejectDownpayment(row, reason) {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var text = String(reason || '').trim();
+    if (!text) throw new Error('Give the passenger a reason.');
+    if (row.status !== 'pending') {
+      throw new Error('Only a pending downpayment can be rejected.');
+    }
+    var r = await c.rpc('reject_downpayment', {
+      p_downpayment_id: row.downpaymentId,
+      p_reason: text
+    });
+    if (r.error) throw r.error;
+  }
+
+  window.bangkagoPayments = { listPayments, listDownpayments, approveDownpayment, refundDownpayment, rejectDownpayment };
 })();

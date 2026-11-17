@@ -39,7 +39,6 @@ import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggy
 import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { manilaTodayIso } from '@/utils/date';
-import { summarizeEarnings } from '@/utils/earnings';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import type { BookingDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
@@ -817,10 +816,6 @@ export default function BangkeroHome() {
     router.push('/(bangkero)/departure');
   }
 
-  // One shared rule with the Earnings screen: completed trip fares, Manila
-  // days. A released escrow payout is that same fare arriving later.
-  const earnings = useMemo(() => summarizeEarnings(trips.data), [trips.data]);
-
   // Two groups so an operator can tell tomorrow's commitments from
   // people standing at the pier right now. Batched stubs are represented
   // by their promoted master (071 demotes superseded members instead of
@@ -1360,22 +1355,6 @@ export default function BangkeroHome() {
             </View>
           </>
         )}
-
-        <Text style={styles.sectionLabel}>EARNINGS</Text>
-        <View style={styles.earningsRow}>
-          <View style={styles.earningsItem}>
-            <Icon name="cash" size={16} color={colors.primary} />
-            <Text style={styles.earningsValue}>₱{earnings.today}</Text>
-            <Text style={styles.earningsLabel}>TODAY</Text>
-          </View>
-          <View style={styles.earningsItem}>
-            <Icon name="receipt" size={16} color={colors.textSecondary} />
-            <Text style={[styles.earningsValue, styles.earningsValueMuted]}>
-              ₱{earnings.week}
-            </Text>
-            <Text style={styles.earningsLabel}>THIS WEEK</Text>
-          </View>
-        </View>
       </ScrollView>
 
       <BangkeroTripSheet
@@ -1719,21 +1698,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   demandRoute: { ...typography.body, flex: 1, color: colors.text },
-
-  // ---------- earnings ----------
-  earningsRow: { flexDirection: 'row', gap: spacing.md },
-  earningsItem: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: 1, borderColor: colors.borderSubtle,
-    paddingVertical: spacing.lg, paddingHorizontal: spacing.md,
-    alignItems: 'center', gap: spacing.xs,
-    ...elevation.e1,
-  },
-  earningsValue: { flexShrink: 1, ...typography.display, fontSize: 24, color: colors.primary },
-  earningsValueMuted: { color: colors.textSecondary },
-  earningsLabel: { ...typography.label },
 
   // ---------- offline ----------
   offlineBox: {

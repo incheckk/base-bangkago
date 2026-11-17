@@ -2,51 +2,29 @@ import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AdminScreenHeader } from '@/components/AdminScreenHeader';
-import { Icon, type IconName } from '@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { ErrorState, LoadingState } from '@/components/States';
 import { SailingAdvisoryCard } from '@/components/SailingAdvisoryCard';
 import { WeatherCard } from '@/components/WeatherCard';
 import { useAdminStats } from '@/hooks/useAdminStats';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/hooks/useNotifications';
+import { ADMIN_HOME_ENTRIES } from '@/config/menu';
 import { STRAIT_POINT } from '@/services/weather.service';
 import { colors, elevation, numeric, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 
 /**
- * A list, not a grid of tiles.
- *
- * Eight tiles meant eight bordered, shadowed surfaces competing for the same
- * glance, each carrying an icon chip. Rows inside one card read top-to-bottom
- * the way a menu is actually used, fit twice as many entries in the same
- * height, and leave the screen with two surfaces instead of fifteen.
- *
- * Destinations were also wrong: "Manage Operators" opened /all-users, a
- * different screen titled "All Users", so the row an admin reaches for to
- * approve a bangkero landed somewhere else.
+ * The home rows ARE the drawer, minus Home (ADMIN_HOME_ENTRIES) — one list,
+ * so a new admin screen can never land in the menu and be missing from the
+ * console.
  */
-const MANAGE: { key: string; icon: IconName; label: string; route: string; group?: string }[] = [
-  { key: 'operators', icon: 'people', label: 'Bangkeros', route: '/(admin)/operators', group: 'OPERATIONS' },
-  { key: 'users', icon: 'profile', label: 'All Users', route: '/(admin)/all-users' },
-  { key: 'trips', icon: 'bookings', label: 'Manage Bookings', route: '/(admin)/bookings' },
-
-  // The drawer uses `anchor` for this same destination; one place, one glyph.
-  { key: 'fleet', icon: 'anchor', label: 'Bangka', route: '/(admin)/fleet-overview', group: 'FLEET' },
-  { key: 'ports', icon: 'port', label: 'Manage Ports', route: '/(admin)/manage-ports' },
-  { key: 'routes', icon: 'route', label: 'Manage Routes', route: '/(admin)/manage-routes' },
-
-  { key: 'downpayments', icon: 'cash', label: 'Downpayments', route: '/(admin)/downpayments', group: 'FINANCE' },
-  { key: 'reports', icon: 'receipt', label: 'Reports', route: '/(admin)/reports' },
-  { key: 'parcel-rates', icon: 'parcel', label: 'Parcel Rates', route: '/(admin)/manage-parcel-rates' },
-
-  { key: 'safety', icon: 'sos', label: 'Safety Alerts', route: '/(admin)/system-alerts', group: 'SYSTEM' },
-  { key: 'dev', icon: 'settings', label: 'Developer Options', route: '/(admin)/developer-options' },
-];
-
 const peso = (n: number) => `₱${n.toLocaleString('en-PH')}`;
 
 export default function AdminHome() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const stats = useAdminStats();
+  const notifications = useNotifications(user?.id ?? null);
 
   const greetingTime = (() => {
     const h = new Date().getHours();
@@ -93,14 +71,35 @@ export default function AdminHome() {
         title={`${greetingTime}, ${profile?.firstName ?? 'Admin'}`}
         showBack={false}
         right={
-          <Pressable
-            onPress={() => router.push('/(admin)/profile')}
-            accessibilityRole="button"
-            accessibilityLabel="Profile"
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-          >
-            <Icon name="profile" size={20} color={colors.text} />
-          </Pressable>
+          <View style={styles.headerRight}>
+            <Pressable
+              onPress={() => router.push('/(admin)/notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={
+                notifications.unreadCount > 0
+                  ? `Notifications, ${notifications.unreadCount} unread`
+                  : 'Notifications'
+              }
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="bell" size={20} color={colors.text} />
+              {notifications.unreadCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/(admin)/profile')}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
+            >
+              <Icon name="profile" size={20} color={colors.text} />
+            </Pressable>
+          </View>
         }
       />
 
@@ -159,14 +158,14 @@ export default function AdminHome() {
             </View>
 
             <View style={styles.section}>
-              {MANAGE.map((item, i) => {
+              {ADMIN_HOME_ENTRIES.map((item, i) => {
                 const first = i === 0;
-                const startsGroup = !!item.group;
+                const startsGroup = !!item.section;
                 return (
-                  <View key={item.key}>
+                  <View key={item.route}>
                     {startsGroup && (
                       <Text style={[styles.groupLabel, !first && styles.groupLabelGap]}>
-                        {item.group}
+                        {item.section}
                       </Text>
                     )}
                     <Pressable
@@ -177,7 +176,8 @@ export default function AdminHome() {
                         styles.row,
                         startsGroup && styles.rowFirst,
                         // The last row of a group, or of the list, closes the card.
-                        (MANAGE[i + 1]?.group || i === MANAGE.length - 1) && styles.rowLast,
+                        (ADMIN_HOME_ENTRIES[i + 1]?.section || i === ADMIN_HOME_ENTRIES.length - 1) &&
+                          styles.rowLast,
                         !startsGroup && styles.rowBorder,
                         pressed && styles.rowPressed,
                       ]}
@@ -209,6 +209,20 @@ const styles = StyleSheet.create({
     ...elevation.e1,
   },
   iconBtnPressed: { backgroundColor: colors.surfaceAlt },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  notifBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifBadgeText: { color: colors.primaryText, fontSize: 9, fontWeight: '700' },
 
   section: { paddingHorizontal: spacing.xl, marginBottom: spacing.xl },
   weatherWrap: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },

@@ -77,9 +77,7 @@ test('package saving validates the first-to-last route before inserting', async 
     service.savePackage(null, {
       packageName: 'Island Loop',
       price: 500,
-      maxCapacity: 8,
       durationHours: 4,
-      bangkaId: 'boat-1',
       stops: ['mactan', 'olango'],
       isActive: true,
     }),
@@ -88,15 +86,13 @@ test('package saving validates the first-to-last route before inserting', async 
   assert.equal(calls.some((call) => call.operation === 'insert'), false);
 });
 
-test('package saving persists validated assignment, itinerary, capacity and price', async () => {
+test('package saving persists itinerary and price without assigning a boat', async () => {
   const { service, calls } = loadService();
   await service.savePackage(null, {
     packageName: 'Island Loop',
     description: 'A real route',
     price: 500,
-    maxCapacity: 8,
     durationHours: 4,
-    bangkaId: 'boat-1',
     stops: ['mactan', 'olango'],
     isActive: true,
   });
@@ -106,10 +102,8 @@ test('package saving persists validated assignment, itinerary, capacity and pric
     package_name: 'Island Loop',
     description: 'A real route',
     price: 500,
-    max_capacity: 8,
     duration_hours: 4,
     stops: ['mactan', 'olango'],
-    bangka_id: 'boat-1',
     is_active: true,
   });
 });
@@ -148,27 +142,13 @@ test('restoring a package does not require the former Bangka to remain eligible'
   });
 });
 
-test('package listing distinguishes unavailable assignments from active packages', async () => {
-  const boat = {
-    id: 'boat-1',
-    bangka_name: 'Demo Bangka',
-    capacity: 8,
-    is_active: true,
-    is_deleted: false,
-    deleted_at: null,
-    bangkeros: {
-      display_name: 'Demo Bangkero',
-      verification_stat: 'verified',
-      is_deleted: false,
-      deleted_at: null,
-    },
-  };
+test('package listing is boat-agnostic — a package with no boat is still available', async () => {
   const { service } = loadService(undefined, [
-    { id: 'available', package_name: 'Available', price: 500, max_capacity: 8, duration_hours: 4, stops: [], is_active: true, bangka_id: 'boat-1', bangkas: boat },
-    { id: 'unavailable', package_name: 'Unavailable', price: 500, max_capacity: 8, duration_hours: 4, stops: [], is_active: true, bangka_id: 'boat-1', bangkas: { ...boat, is_active: false } },
+    { id: 'boatless', package_name: 'Boatless Loop', price: 500, duration_hours: 4, stops: [], is_active: true },
+    { id: 'inactive', package_name: 'Inactive Loop', price: 500, duration_hours: 4, stops: [], is_active: false },
   ]);
   const packages = await service.listPackages();
-  assert.equal(packages[0].assignmentEligible, true);
-  assert.equal(packages[1].isActive, true);
-  assert.equal(packages[1].assignmentEligible, false);
+  assert.equal(packages[0].isActive, true);
+  assert.equal(packages[0].assignmentEligible, undefined);
+  assert.equal(packages[1].isActive, false);
 });

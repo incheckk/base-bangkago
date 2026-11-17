@@ -43,6 +43,8 @@ export default function RentalPaymentScreen() {
     date: string;
     eventName: string;
     companionsJson: string;
+    /** 097: retry from My Rentals — the request already exists. */
+    rentalId?: string;
   }>();
 
   const rate = Number(params.rate) || tierStandardPrice(Number(params.capacity) || 0);
@@ -65,9 +67,9 @@ export default function RentalPaymentScreen() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set once createRental succeeds. A retry must reuse it, never post a
-  // second charter request.
-  const [rentalId, setRentalId] = useState<string | null>(null);
+  // Set once createRental succeeds (or straight from a My Rentals retry).
+  // A retry must reuse it, never post a second charter request.
+  const [rentalId, setRentalId] = useState<string | null>(params.rentalId ?? null);
 
   useEffect(() => {
     let alive = true;

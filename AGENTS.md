@@ -41,6 +41,66 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-17 — Downpayment reject + retry, one commission rule, boatless
+  island hop, demo polish (migrations **097 → 098 PENDING — USER MUST RUN,
+  after 096; 095 + 096 are also still pending**; gates: tsc clean, lint
+  0 errors / 136 known warnings, unit tests 53/53, edited web inline
+  scripts and services parse; expo-doctor not re-run — nothing
+  dependency-related).**
+  - **097 — the money fixes.** `downpayments.status` gains `rejected` and
+    `reject_reason`; `reject_downpayment()` stores a required reason,
+    notifies the passenger and **leaves the booking pending**, so a bad
+    receipt no longer lies about a refund or cancels the trip.
+    `attach_downpayment_proof()` lets the owner finish a gateway row by
+    hand and clears `gateway_checkout_ref`, and `release_downpayment`
+    now deducts the **same commission as the gateway rail** (share of the
+    whole fare, out of the downpayment) before the admin sends the net.
+    Admin mobile + web Downpayments both got the reject flow; the release
+    box and confirm dialog show `held − commission` before money moves.
+    The passenger sees `rejected — pay again` + **Pay ₱x downpayment**,
+    and My Rentals' **Send a new receipt** reuses the same
+    `boat_rentals` row (`rental-payment?rentalId=…`).
+  - **`payment.tsx` never leaves a passenger stuck:** the gateway rail
+    always offers **Pay by GCash instead** (QR + receipt), and a checkout
+    that dies after the row was filed reuses that row id instead of
+    creating a second downpayment.
+  - **098 — island hop needs no boat.** `island_packages.max_capacity` is
+    nullable and the app/both web consoles no longer read or write it;
+    084's boat-binding guard and boat filters in `assign_next_hold` are
+    replaced, so a package carries only name, itinerary, duration and
+    per-person price. Dispatch offers it to every eligible bangkero; the
+    boat's own capacity rules at accept (081) and the one-service-per-day
+    lock (079) still hold. Admin web lost the Bangkero/Bangka assign and
+    passenger-limit fields and shows `Assigned by dispatch` until accept.
+  - **Admin web:** Analyze Demand opens on **today** (Manila), or the
+    newest day on file when the model has none, and its KPIs/View Trends
+    now say they cover every day on file instead of implying 7 days.
+  - **Admin mobile:** Home rows are generated from `ADMIN_HOME_ENTRIES`
+    (the menu is the source of truth) and Notifications is a bell with an
+    unread count beside Profile. Passenger home menu entries for
+    Notifications/Safety Alerts were removed — those live on Home now.
+  - **Bangkero polish:** **Mark as paid** no longer asks for a GCash
+    reference on `sailing`/`departure`; the duplicate earnings block left
+    `home.tsx` (Earnings stays the one source via `utils/earnings.ts`);
+    `rentals.tsx` stopped showing a riders list it never loaded; charter
+    day has **Contact booker** and a live elapsed clock.
+  - **Passenger:** **Contact bangkero** on `trip-en-route` dials the saved
+    number again (dialable check + dialer-failure message). **I'm NOT on
+    board was removed by request** — the DB RPC `dispute_boarding` and the
+    bangkero/Coast Guard handling remain (tracker [A]22).
+  - **Deferred (tracker B15):** the live provider branch is still untested,
+    rentals still have no gateway rail (always receipt + admin approval),
+    and a failed payout batch marks every row failed instead of partially
+    paying.
+  - **Next:** run **095 → 096 → 097 → 098** in order, deploy `gateway`
+    (JWT verification OFF, `GATEWAY_SECRET` set), then smoke the proof
+    chain: approve a downpayment → complete the trip → Admin →
+    Downpayments **To release** shows the net → release via GCash/ref →
+    bangkero Earnings `RELEASED TO YOU` + notification → the row carries
+    `commission_amount`, `released_at`, `payout_ref`. Then reject a
+    receipt (booking still payable, passenger can pay again), book an
+    island hop with no boat assigned, and open Analyze Demand.
+
 - **2026-11-17 — Payout accounts + automatic money loop (migrations **095 →
   096 PENDING — USER MUST RUN, after 094**; edge function `gateway` must be
   deployed by hand; gates: tsc clean, lint 0 errors / 135 known warnings,

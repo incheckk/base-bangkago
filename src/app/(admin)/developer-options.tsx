@@ -11,7 +11,7 @@ import { setSailingAdvisory } from '@/services/advisory.service';
 import { friendlyError } from '@/services/booking.service';
 import {
   getDemoPorts, getRentalToday, setArrivalBypass, setDemoPorts, setDispatchBypass,
-  setGatesBypass, setRentalToday, setRouteLockBypass, setShowQuickLogin,
+  setGatesBypass, setManualPayments, setRentalToday, setRouteLockBypass, setShowQuickLogin,
 } from '@/services/dev.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -59,10 +59,11 @@ export default function DeveloperOptions() {
   const gatesOn = flags.data.gatesBypass;
   const arrivalOn = flags.data.arrivalBypass;
   const quickLoginOn = flags.data.showQuickLogin;
+  const manualOn = flags.data.manualPayments;
   const on = dispatchOn || routeLockOn || gatesOn || arrivalOn;
 
   async function toggle(
-    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin' | 'demoports' | 'rentaltoday',
+    which: 'dispatch' | 'routelock' | 'gates' | 'arrival' | 'quicklogin' | 'demoports' | 'rentaltoday' | 'manual',
     next: boolean
   ) {
     setBusy(which);
@@ -80,6 +81,7 @@ export default function DeveloperOptions() {
         await setRentalToday(next);
         setRentalTodayOn(next);
       }
+      else if (which === 'manual') await setManualPayments(next);
       else await setArrivalBypass(next);
       flags.refresh();
     } catch (e) {
@@ -311,6 +313,33 @@ export default function DeveloperOptions() {
                 </Text>
               </>
             )}
+
+            <View style={styles.divider} />
+            <View style={styles.row}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>Manual payments</Text>
+                <Text style={styles.rowHint}>
+                  ON keeps the GCash receipt upload and the admin&apos;s release step. OFF sends
+                  passengers to the gateway&apos;s checkout page, confirms the downpayment by
+                  itself, and pays the bangkero&apos;s share automatically when the trip is
+                  completed. Flip this back ON if the gateway is down during the demo.
+                </Text>
+              </View>
+              <Switch
+                value={manualOn}
+                onValueChange={(next) => void toggle('manual', next)}
+                disabled={busy !== null}
+                trackColor={{ false: colors.border, true: colors.warningTint }}
+                thumbColor={manualOn ? colors.warning : colors.surface}
+              />
+            </View>
+            <Text style={[styles.rowStatus, { color: manualOn ? colors.danger : colors.textMuted }]}>
+              {busy === 'manual'
+                ? 'Saving…'
+                : manualOn
+                  ? 'ON — receipt + admin release'
+                  : 'OFF — gateway checkout + automatic payout'}
+            </Text>
           </View>
         )}
 

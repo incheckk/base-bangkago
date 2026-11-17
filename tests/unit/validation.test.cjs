@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nameError, addressError, textError } = require('../.build/utils/validation.js');
+
+const {
+  nameError, addressError, textError, normalizePayoutNumber, payoutNumberError,
+} = require('./load-ts.cjs')('src/utils/validation.ts');
 
 test('nameError accepts real passenger names', () => {
   assert.equal(nameError('Maria Jose'), null);
@@ -48,4 +51,20 @@ test('textError accepts parcel item names and rejects junk', () => {
   assert.equal(textError('A'), 'At least 2 characters');
   assert.equal(textError('TV 50%'), null);
   assert.equal(textError('Item; DROP'), 'Letters, numbers and basic punctuation only');
+});
+
+test('payoutNumberError accepts PH GCash numbers and normalises them', () => {
+  assert.equal(payoutNumberError('09171234567'), null);
+  assert.equal(payoutNumberError('0917 123 4567'), null);
+  assert.equal(payoutNumberError('+63 917 123 4567'), null);
+  assert.equal(normalizePayoutNumber('+63 917 123 4567'), '09171234567');
+  assert.equal(normalizePayoutNumber('0917-123-4567'), '09171234567');
+});
+
+test('payoutNumberError rejects landlines, short numbers and junk', () => {
+  assert.equal(payoutNumberError(''), 'Enter a GCash number: 09XX XXX XXXX');
+  assert.equal(payoutNumberError('9171234567'), 'Enter a GCash number: 09XX XXX XXXX');
+  assert.equal(payoutNumberError('0321234567'), 'Enter a GCash number: 09XX XXX XXXX');
+  assert.equal(payoutNumberError('091712345'), 'Enter a GCash number: 09XX XXX XXXX');
+  assert.equal(payoutNumberError('091712345678'), 'Enter a GCash number: 09XX XXX XXXX');
 });

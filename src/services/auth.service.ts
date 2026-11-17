@@ -76,6 +76,8 @@ export async function signUp({
       isAvailable: false,
       ratingPenalty: 0,
       gcashQrUrl: null,
+      payoutAccountName: null,
+      payoutAccountNumber: null,
       updatedAt: new Date().toISOString(),
     };
 

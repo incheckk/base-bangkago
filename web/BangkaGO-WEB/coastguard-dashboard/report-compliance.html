@@ -164,22 +164,12 @@
         window.bangkagoPortsRoutes.listPorts(true)
       ]);
 
-<<<<<<< HEAD
       bangkas.forEach(b => {
         const opt = document.createElement('option');
         opt.value = b.bangkaId;
         opt.textContent = b.bangkaName + (b.bangkeroName ? ' (' + b.bangkeroName + ')' : '');
         vesselSelect.appendChild(opt);
       });
-=======
-        // Bangka dropdown
-        bangkas.forEach(b => {
-          const opt = document.createElement('option');
-          opt.value = b.bangkaId;
-          opt.textContent = b.bangkaName + (b.bangkeroName ? ' (' + b.bangkeroName + ')' : '');
-          vesselSelect.appendChild(opt);
-        });
->>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
 
       ports.forEach(p => {
         const opt = document.createElement('option');

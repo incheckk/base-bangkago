@@ -42,11 +42,23 @@ function loadService(responses) {
   return { service: module.exports, calls, getQueryCount: () => queryIndex };
 }
 
-test('package catalog retries without the new filter when migration 091 is not installed', async () => {
-  const response = { data: [{ id: 'package-1', bangkas: null }], error: null };
+test('package catalog hides packages soft-deleted by migration 091', async () => {
+  const { service, calls, getQueryCount } = loadService([
+    { data: [{ id: 'package-1' }], error: null },
+  ]);
+
+  const packages = await service.getIslandPackages();
+
+  assert.equal(packages.length, 1);
+  assert.equal(getQueryCount(), 1);
+  assert.equal(calls.filter((call) => call.method === 'is' && call.column === 'deleted_at').length, 1);
+  assert.equal(calls.some((call) => call.column.startsWith('bangkas.')), false);
+});
+
+test('package catalog retries without the filter when migration 091 is not installed', async () => {
   const { service, calls, getQueryCount } = loadService([
     { data: null, error: { code: '42703', message: 'column island_packages.deleted_at does not exist' } },
-    response,
+    { data: [{ id: 'package-1' }], error: null },
   ]);
 
   const packages = await service.getIslandPackages();
@@ -54,19 +66,18 @@ test('package catalog retries without the new filter when migration 091 is not i
   assert.equal(packages.length, 1);
   assert.equal(getQueryCount(), 2);
   assert.equal(calls.filter((call) => call.method === 'is' && call.column === 'deleted_at').length, 1);
-  assert.equal(calls.filter((call) => call.method === 'is' && call.column === 'bangkas.deleted_at').length, 2);
 });
 
-test('package detail retries only for the missing island_packages.deleted_at column', async () => {
-  const { service, getQueryCount } = loadService([
-    { data: null, error: { code: 'PGRST204', message: "Could not find the 'deleted_at' column of 'island_packages' in the schema cache" } },
-    { data: { id: 'package-1', bangkas: null }, error: null },
+test('package detail still reads a soft-deleted row for booking history', async () => {
+  const { service, calls, getQueryCount } = loadService([
+    { data: { id: 'package-1', is_active: true }, error: null },
   ]);
 
   const pkg = await service.getIslandPackage('package-1');
 
   assert.equal(pkg.packageId, 'package-1');
-  assert.equal(getQueryCount(), 2);
+  assert.equal(getQueryCount(), 1);
+  assert.equal(calls.some((call) => call.method === 'is'), false);
 });
 
 test('package catalog still surfaces unrelated query errors', async () => {

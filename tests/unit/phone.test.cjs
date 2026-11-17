@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizePhone, phoneToAuthEmail, formatPhone } = require('../.build/utils/phone.js');
+const { normalizePhone, phoneToAuthEmail, formatPhone } = require('./load-ts.cjs')('src/utils/phone.ts');
 
 test('normalizePhone converts every accepted PH mobile format to E.164', () => {
   const expected = '+639171234567';

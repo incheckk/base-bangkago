@@ -1,11 +1,6 @@
 import { supabase } from './supabase';
 import type { IslandPackageDoc } from '../types/models';
 
-const PACKAGE_SELECT =
-  '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at,bangkeros!inner(verification_stat,is_deleted))';
-const PACKAGE_DETAIL_SELECT =
-  '*, bangkas!island_packages_bangka_id_fkey(id,bangka_name,capacity,is_active,is_deleted,deleted_at)';
-
 function mapRow(row: any): IslandPackageDoc {
   return {
     packageId: row.id,
@@ -19,6 +14,7 @@ function mapRow(row: any): IslandPackageDoc {
   };
 }
 
+<<<<<<< HEAD
 function isMissingPackageDeletedAtColumn(error: { code?: string; message?: string }): boolean {
   const message = (error.message ?? '').toLowerCase();
   if (error.code !== '42703' && error.code !== 'PGRST204') return false;
@@ -26,13 +22,20 @@ function isMissingPackageDeletedAtColumn(error: { code?: string; message?: strin
     message.includes('island_packages') ||
     (error.code === '42703' && !message.includes('bangkas'))
   );
+=======
+// 091 soft-deletes packages by stamping deleted_at; a DB that has not run it lacks the column.
+function isMissingDeletedAtColumn(error: { code?: string; message?: string }): boolean {
+  return (error.code === '42703' || error.code === 'PGRST204')
+    && /deleted_at/i.test(error.message ?? '');
+>>>>>>> 983725ce103a5bc73cecb15bf03de4a217eafe83
 }
 
-async function queryIslandPackages(includeDeletedAt: boolean) {
+async function queryCatalog(filterDeleted: boolean) {
   const base = supabase
     .from('island_packages')
-    .select(PACKAGE_SELECT)
+    .select('*')
     .eq('is_active', true);
+<<<<<<< HEAD
   const packageFilter = includeDeletedAt ? base.is('deleted_at', null) : base;
 
   return packageFilter
@@ -48,13 +51,29 @@ export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
   let result = await queryIslandPackages(true);
   if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
     result = await queryIslandPackages(false);
+=======
+  return (filterDeleted ? base.is('deleted_at', null) : base).order('price');
+}
+
+/**
+ * Packages are admin-managed catalog rows. They carry no boat: 084 allows
+ * `bangka_id = NULL`, and dispatch assigns a bangkero from the accepted trip
+ * (the boat also has to fit the seats, not just own the package).
+ */
+export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
+  let result = await queryCatalog(true);
+  if (result.error && isMissingDeletedAtColumn(result.error)) {
+    result = await queryCatalog(false);
+>>>>>>> 983725ce103a5bc73cecb15bf03de4a217eafe83
   }
 
   if (result.error) throw result.error;
   return (result.data ?? []).map(mapRow);
 }
 
+// Soft-deleted packages stay readable here so booking and trip history still render.
 export async function getIslandPackage(packageId: string): Promise<IslandPackageDoc | null> {
+<<<<<<< HEAD
   const query = (includeDeletedAt: boolean) => {
     const base = supabase
       .from('island_packages')
@@ -67,7 +86,14 @@ export async function getIslandPackage(packageId: string): Promise<IslandPackage
   if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
     result = await query(false).maybeSingle();
   }
+=======
+  const { data, error } = await supabase
+    .from('island_packages')
+    .select('*')
+    .eq('id', packageId)
+    .maybeSingle();
+>>>>>>> 983725ce103a5bc73cecb15bf03de4a217eafe83
 
-  if (result.error) throw result.error;
-  return result.data ? mapRow(result.data) : null;
+  if (error) throw error;
+  return data ? mapRow(data) : null;
 }

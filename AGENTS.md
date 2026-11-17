@@ -41,6 +41,88 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-17 — Payout accounts + automatic money loop (migrations **095 →
+  096 PENDING — USER MUST RUN, after 094**; edge function `gateway` must be
+  deployed by hand; gates: tsc clean, lint 0 errors / 135 known warnings,
+  unit tests 53/53; expo-doctor not re-run — nothing dependency-related).**
+  - **095** adds `bangkeros.payout_account_name` / `payout_account_number`
+    (CHECK `^09[0-9]{9}$`) / `payout_channel` (`gcash`). The bangkero app
+    asks for it after the tour and from a Home/Earnings banner, and
+    `(bangkero)/qr-code` is now **Payout & GCash QR**. No gate: a bangkero
+    without an account still sails; the money just has nowhere to land.
+  - **096** is the ledger: `commission_rate` in `app_settings` (default
+    `0.0700`, admin-only `set_commission_rate` 5–9%), `gateway_events`
+    (idempotency), gateway/payout columns on `downpayments`
+    (`gateway_checkout_ref`, `gateway_payout_ref`, `commission_rate`,
+    `commission_amount`, `payout_status`, `payout_error`,
+    `payout_claimed_at`), `dev_flags.manual_payments` (**ships TRUE**),
+    `confirm_gateway_downpayment` (service-role; re-runs 020's two effects
+    because `review_advance_escrow` demands `auth.uid()` + `is_admin()`),
+    payout-queue triggers on `bookings`/`boat_rentals`, and
+    `claim_gateway_payouts` / `record_gateway_payout` (service-role; a
+    `processing` row is re-claimed after 10 minutes so a crash between the
+    provider call and the write-back cannot strand it).
+  - **One edge function, four actions** (`supabase/functions/gateway`):
+    `create-checkout`, signed `webhook`, `payout`, and the signed
+    **sandbox** checkout page. PayMongo sign-ups are paused, so the
+    "provider" is that page: real redirect → Authorize → `webhook` →
+    downpayment approved, zero pesos moved. Going live is
+    `GATEWAY_MODE=live` + `GATEWAY_BASE_URL` + `GATEWAY_KEY`, not a
+    rewrite — but that branch is **untested** against a real account.
+    Deploy with **"Enforce JWT verification" OFF** (the page and webhook are
+    unauthenticated; each action authenticates itself). Secret
+    `GATEWAY_SECRET` is required. `tsconfig.json` + `eslint.config.js`
+    ignore the folder (Deno, not RN).
+  - **Happy path has no admin in it:** Pay downpayment → hosted page →
+    webhook approves → booking opens (`assign_next_hold`) → trip completes
+    → queue trigger → the bangkero's app calls `payout` on close-out →
+    batched transfer of every completed unpaid downpayment, one provider
+    ref per batch, rows stamped. `requestPayout` never runs while
+    `manual_payments` is ON, so the two rails cannot both pay a row.
+    Admin → Downpayments keeps the commission editor (5–9%), a payout
+    label per row, the commission/payout lines in the modal and a
+    **Retry payout** button. Admin web `downpayments.html` gained a Payout
+    column and a commission line.
+  - **Money honesty:** commission is a share of the WHOLE FARE deducted from
+    the downpayment (₱1,000 fare, ₱500 down, 7% → ₱70 → ₱430), snapshotted
+    per row at claim time, shown to admins only. Bangkero Earnings shows
+    `GROSS ₱500 · RELEASED ₱430` summed plus per-trip rows. Copy says "held
+    by BangkaGo" — the sandbox asserts nothing about the provider holding
+    funds.
+  - **payment.tsx** hides the QR + receipt upload in gateway mode, says
+    `Pay downpayment` with "50% of your fare · held for your bangkero until
+    the trip", and polls ~12 s after the browser closes for the webhook.
+  - **Deferred (tracker B15):** the live provider branch, and a failed batch
+    marks every row failed instead of partially paying.
+  - **Next:** run **095** then **096** after 094; deploy `gateway` (JWT
+    verification OFF, `GATEWAY_SECRET` set); then smoke — flip Developer
+    Options → Manual payments **OFF**, book an advance trip, pay on the
+    sandbox page, confirm the booking opens with no admin click, complete
+    the trip, and confirm the payout lands with GROSS/RELEASED in Earnings
+    and the payout ref on Admin → Downpayments.
+
+- **2026-11-17 — Merge-conflict recovery: bundle unblocked, island-hop
+  catalog hides 091 soft deletes (no migration; gates: tsc clean, lint
+  0 errors / 136 known warnings, schema-compat tests 4/4; expo-doctor not
+  re-run, nothing dependency-related changed).**
+  - PR #49's merge (`26d820f`) committed conflict markers in four files;
+    `island-package.service.ts` failed the iOS bundle with
+    `Unexpected token (22:0)` and the two Coast Guard pages would have run
+    half a script.
+  - The island-hop service is plain `select('*')` again (packages carry no
+    Bangka, 084) plus one rule: the catalog hides rows soft-deleted by
+    **091** via `.is('deleted_at', null)`, retrying without that filter
+    when 091 has not been run. `getIslandPackage(id)` stays unfiltered so
+    booking and trip history still render. `getIslandPackageAvailability`
+    and the boat-join selects stay gone.
+  - Coast Guard `alerts.html` kept the alert-details refactor (the other
+    half called `parseAlertMessage` / `showAlertDetails` without defining
+    them); `report-compliance.html` kept its equivalent half;
+    `LAUNCH_DEFERRED_FEATURES.txt` kept the newer 083/082/081 text.
+  - **Next:** reload with `npx expo start -c`, then smoke an island hop
+    before and after 091–094 and open Coast Guard Alerts + Report an
+    Issue.
+
 - **2026-11-16 — Honest en-route/arrived, passenger info pickers, boatless
   island hop, real earnings, Port Queues, Bangka/Bangkero naming (no
   migration; gates: tsc clean, lint 0 errors / 136 known warnings,

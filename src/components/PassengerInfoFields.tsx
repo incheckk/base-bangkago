@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { TextField } from './TextField';
 import { REGION7_CITIES } from '../data/region7';
+import { addressCity, cityOptionLabel, composeAddress, parseAddress } from '../utils/address';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
 
 /**
@@ -15,38 +16,8 @@ import { colors, elevation, radii, spacing, touchTarget, typography } from '../t
  *
  * The address stays ONE string in `passenger_details.address` (028) — no
  * migration — composed from house/street + barangay + city + Region VII.
+ * The pure helpers (and the duplicate-city-name rule) live in utils/address.
  */
-
-/** "City of Lapu-Lapu" reads like a database row; people say "Lapu-Lapu City". */
-export function cityLabel(name: string): string {
-  return name.startsWith('City of ') ? `${name.slice(8)} City` : name;
-}
-
-export function composeAddress(street: string, barangay: string, city: string): string {
-  return [street.trim(), barangay, city, 'Region VII']
-    .filter(Boolean)
-    .join(', ');
-}
-
-/** Pull a previously saved address back into the three picker states. */
-export function parseAddress(value: string): { street: string; city: string; barangay: string } {
-  const match = REGION7_CITIES.find((c) => value.includes(cityLabel(c.name)));
-  if (!match) return { street: value.trim(), city: '', barangay: '' };
-  const label = cityLabel(match.name);
-  const barangay =
-    [...match.barangays]
-      .sort((a, b) => b.length - a.length)
-      .find((b) => value.includes(b)) ?? '';
-  let street = value;
-  for (const part of [barangay, match.name, label, 'Region VII', 'Central Visayas']) {
-    if (part) street = street.split(part).join(' ');
-  }
-  street = street
-    .replace(/\s*,\s*/g, ', ')
-    .replace(/^[,\s]+|[,\s]+$/g, '')
-    .trim();
-  return { street, city: label, barangay };
-}
 
 const AGE_OPTIONS = Array.from({ length: 120 }, (_, i) => String(i + 1));
 
@@ -199,8 +170,8 @@ export function AddressPicker({
   const [barangay, setBarangay] = useState(initial.barangay);
   const [streetError, setStreetError] = useState<string | null>(null);
 
-  const cityRow = REGION7_CITIES.find((c) => cityLabel(c.name) === city);
-  const cityOptions = useMemo(() => REGION7_CITIES.map((c) => cityLabel(c.name)), []);
+  const cityRow = addressCity(city);
+  const cityOptions = useMemo(() => REGION7_CITIES.map(cityOptionLabel), []);
 
   function emit(nextStreet: string, nextBarangay: string, nextCity: string) {
     onChange(composeAddress(nextStreet, nextBarangay, nextCity));

@@ -61,7 +61,14 @@
       notifyUserId: booking?.user_id ?? rental?.user_id ?? null,
       rentalBangkeroId: rental?.bangka?.bangkero_id ?? null,
       rentalBoatName: rental?.bangka?.bangka_name ?? null,
-      targetStatus: booking?.trip_stat ?? rental?.status ?? null
+      targetStatus: booking?.trip_stat ?? rental?.status ?? null,
+      // 096 — the gateway rail. Read-only here; the retry button lives on
+      // Admin → Downpayments in the app.
+      commissionAmount: row.commission_amount == null ? null : Number(row.commission_amount),
+      commissionRate: row.commission_rate == null ? null : Number(row.commission_rate),
+      payoutStatus: row.payout_status ?? null,
+      payoutRef: row.gateway_payout_ref ?? row.payout_ref ?? null,
+      payoutError: row.payout_error ?? null
     };
   }
 

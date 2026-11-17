@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { LoadingState, ErrorState, EmptyState } from '@/components/States';
+import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
-import { useMyTrips } from '@/hooks/useSupabase';
+import { useBangkero, useMyTrips } from '@/hooks/useSupabase';
 import { type PayoutRow, getReleasedPayouts } from '@/services/downpayment.service';
 import { completedTrips, summarizeEarnings } from '@/utils/earnings';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -21,6 +23,10 @@ export default function BangkeroEarnings() {
   const { user } = useAuth();
   const uid = user?.id ?? null;
   const trips = useMyTrips(uid);
+  const bangkero = useBangkero(uid);
+  const missingPayout =
+    !!bangkero.data &&
+    (!bangkero.data.payoutAccountName || !bangkero.data.payoutAccountNumber);
 
   const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const loadPayouts = useCallback(async () => {
@@ -70,6 +76,20 @@ export default function BangkeroEarnings() {
     <ScreenContainer padded={false}>
       <BangkeroScreenHeader title="Earnings" />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {missingPayout && (
+          <View style={styles.banner}>
+            <Text style={styles.bannerText}>
+              Add your payout account so BangkaGo can send your share.
+            </Text>
+            <PrimaryButton
+              label="Add payout account"
+              variant="secondary"
+              onPress={() => router.push('/(bangkero)/qr-code')}
+              style={styles.bannerBtn}
+            />
+          </View>
+        )}
+
         <Text style={styles.hint}>
           Completed trips. The fare is collected on board, so a trip counts when you close it out.
         </Text>
@@ -87,14 +107,25 @@ export default function BangkeroEarnings() {
           <>
             <Text style={styles.sectionLabel}>RELEASED TO YOU</Text>
             <Text style={styles.payoutHint}>
-              The 50% escrow BangkaGo paid out after each completed trip. Already counted above.
+              The downpayment BangkaGo released to you after each completed trip.
             </Text>
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsText}>
+                GROSS ₱{payouts.reduce((sum, p) => sum + p.amount, 0).toFixed(2)}
+              </Text>
+              <Text style={[styles.totalsText, { color: colors.primary }]}>
+                RELEASED ₱{payouts.reduce((sum, p) => sum + p.released, 0).toFixed(2)}
+              </Text>
+            </View>
             {payouts.map((p) => (
               <View key={p.downpaymentId} style={styles.txRow}>
                 <View style={styles.txLeft}>
                   <View style={[styles.txDot, { backgroundColor: colors.primary }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.txLabel} numberOfLines={1}>{p.label}</Text>
+                    <Text style={styles.txRef} numberOfLines={1}>
+                      GROSS ₱{p.amount.toFixed(2)} · RELEASED ₱{p.released.toFixed(2)}
+                    </Text>
                     <Text style={styles.txRef} numberOfLines={1}>
                       {new Date(p.releasedAt).toLocaleDateString('en-PH', {
                         month: 'short', day: 'numeric',
@@ -106,7 +137,7 @@ export default function BangkeroEarnings() {
                   </View>
                 </View>
                 <Text style={[styles.txAmount, { color: colors.primary }]} numberOfLines={1}>
-                  +₱{p.amount.toFixed(2)}
+                  ₱{p.released.toFixed(2)}
                 </Text>
               </View>
             ))}
@@ -154,6 +185,19 @@ const styles = StyleSheet.create({
 
   hint: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.lg },
 
+  banner: {
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  bannerText: {
+    flexShrink: 1, ...typography.caption, color: colors.textSecondary, lineHeight: 18,
+  },
+  bannerBtn: { marginTop: spacing.md, alignSelf: 'flex-start' },
+
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -174,6 +218,14 @@ const styles = StyleSheet.create({
 
   sectionLabel: { ...typography.label, marginTop: spacing.xl, marginBottom: spacing.md },
   payoutHint: { ...typography.caption, color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md },
+  totalsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  totalsText: { ...typography.label, color: colors.textSecondary },
 
   txRow: {
     flexDirection: 'row',

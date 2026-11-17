@@ -9,6 +9,9 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
+import {
+  DEFAULT_COMMISSION_RATE, getCommissionRate, setCommissionRate,
+} from '@/services/app-settings.service';
 import { friendlyError } from '@/services/booking.service';
 import { docPublicUrl } from '@/services/documents.service';
 import {
@@ -17,6 +20,7 @@ import {
   listDownpayments,
   refundDownpayment,
   releaseDownpayment,
+  requestPayout,
 } from '@/services/downpayment.service';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
 
@@ -55,6 +59,15 @@ const STATE_LABEL: Record<ReturnType<typeof rowState>, string> = {
   refunded: 'Refunded',
 };
 
+/** The gateway's payout leg (096), shown beside the escrow state. */
+function payoutLabel(row: AdminDownpaymentRow): string | null {
+  if (row.releasedAt || row.payoutStatus === 'paid') return null;
+  if (row.payoutStatus === 'processing') return 'Payout sending…';
+  if (row.payoutStatus === 'failed') return `Payout failed — ${row.payoutError ?? 'retry it below'}`;
+  if (row.payoutStatus === 'queued') return 'Payout queued';
+  return null;
+}
+
 /**
  * Escrow review (migration 015/020): passengers file a GCash RECEIPT
  * screenshot when they book an island hop or boat rental (no manual
@@ -81,6 +94,39 @@ export default function AdminDownpaymentsScreen() {
   const [detail, setDetail] = useState<AdminDownpaymentRow | null>(null);
   const [payoutMethod, setPayoutMethod] = useState<'gcash' | 'cash'>('gcash');
   const [payoutRef, setPayoutRef] = useState('');
+  // 096: commission rate, edited here and snapshotted onto each payout.
+  const [rate, setRate] = useState(DEFAULT_COMMISSION_RATE);
+  const [rateBusy, setRateBusy] = useState(false);
+
+  useEffect(() => {
+    getCommissionRate().then(setRate).catch(() => {});
+  }, []);
+
+  async function saveRate(next: number) {
+    if (rateBusy) return;
+    setRateBusy(true);
+    setActionError(null);
+    try {
+      await setCommissionRate(next);
+      setRate(next);
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setRateBusy(false);
+  }
+
+  async function retryPayout(row: AdminDownpaymentRow) {
+    if (busyId || !row.operatorId) return;
+    setBusyId(row.downpaymentId);
+    setActionError(null);
+    try {
+      await requestPayout(row.operatorId);
+      await load();
+    } catch (e) {
+      setActionError(friendlyError(e));
+    }
+    setBusyId(null);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -215,6 +261,38 @@ export default function AdminDownpaymentsScreen() {
           ))}
         </View>
 
+        {/* 096 — commission is a share of the WHOLE FARE, taken out of the
+            downpayment, so the bangkero is paid downpayment − commission. */}
+        <View style={styles.commissionCard}>
+          <View style={styles.commissionHead}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.stepsTitle}>COMMISSION · WHOLE FARE</Text>
+              <Text style={styles.stepsText}>
+                {Math.round(rate * 100)}% of the fare, deducted from the downpayment. A ₱1,000
+                fare at {Math.round(rate * 100)}% pays the bangkero ₱{500 - Math.round(1000 * rate)} of
+                the ₱500 downpayment.
+              </Text>
+            </View>
+            <Text style={styles.commissionValue}>{Math.round(rate * 100)}%</Text>
+          </View>
+          <View style={styles.commissionRow}>
+            {[5, 6, 7, 8, 9].map((pct) => (
+              <Pressable
+                key={pct}
+                onPress={() => void saveRate(pct / 100)}
+                disabled={rateBusy}
+                style={[styles.rateChip, Math.round(rate * 100) === pct && styles.rateChipOn]}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: Math.round(rate * 100) === pct }}
+              >
+                <Text style={[styles.rateText, Math.round(rate * 100) === pct && styles.rateTextOn]}>
+                  {pct}%
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         {!!actionError && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>{actionError}</Text>
@@ -255,6 +333,11 @@ export default function AdminDownpaymentsScreen() {
               <Text style={styles.cardMeta} numberOfLines={1}>
                 {row.serviceLabel} · {createdLabel(row.createdAt)}
               </Text>
+              {!!payoutLabel(row) && (
+                <Text style={styles.cardPayout} numberOfLines={2}>
+                  {payoutLabel(row)}
+                </Text>
+              )}
               <View style={styles.cardBottom}>
                 <Text style={styles.cardRef} numberOfLines={1}>
                   {row.proofUrl ? 'GCash receipt attached — open to verify' : 'No receipt attached'}
@@ -316,6 +399,16 @@ export default function AdminDownpaymentsScreen() {
               {detail?.referenceNum ? `GCash ref: ${detail.referenceNum} · ` : ''}
               filed {detail ? createdLabel(detail.createdAt) : ''}
             </Text>
+            {detail?.commissionAmount != null && (
+              <Text style={styles.modalSub}>
+                Commission ₱{detail.commissionAmount.toFixed(2)} of the ₱
+                {detail.amount + detail.commissionAmount} fare ·{' '}
+                {(detail.amount - detail.commissionAmount).toFixed(2)} to the bangkero
+              </Text>
+            )}
+            {detail?.gatewayPayoutRef && (
+              <Text style={styles.modalSub}>Payout ref: {detail.gatewayPayoutRef}</Text>
+            )}
 
             {proofUrl && !proofFailed ? (
               <Image
@@ -421,6 +514,19 @@ export default function AdminDownpaymentsScreen() {
                   style={styles.refInput}
                   accessibilityLabel="Payout reference number"
                 />
+                {!!payoutLabel(detail) && (
+                  <>
+                    <Text style={styles.releaseWarn}>{payoutLabel(detail)}</Text>
+                    <PrimaryButton
+                      label="Retry payout"
+                      variant="secondary"
+                      onPress={() => void retryPayout(detail)}
+                      loading={busyId === detail.downpaymentId}
+                      disabled={busyId !== null || !detail.operatorId}
+                      style={styles.modalBtn}
+                    />
+                  </>
+                )}
                 <PrimaryButton
                   label="Record release"
                   onPress={() => doRelease(detail)}
@@ -477,6 +583,29 @@ const styles = StyleSheet.create({
   stepsTitle: { ...typography.label, color: colors.primary, marginBottom: spacing.sm },
   stepsText: { color: colors.text, fontSize: 13, lineHeight: 20, marginBottom: 2 },
 
+  commissionCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderSubtle,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  commissionHead: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  commissionValue: { color: colors.primary, fontSize: 22, fontWeight: '700' },
+  commissionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  rateChip: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  rateChipOn: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  rateText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  rateTextOn: { color: colors.primary },
+
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.md,
@@ -495,6 +624,7 @@ const styles = StyleSheet.create({
   cardWho: { flex: 1, flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '700' },
   cardAmount: { flexShrink: 1, color: colors.primary, fontSize: 17, fontWeight: '700' },
   cardMeta: { ...typography.caption, color: colors.textMuted, marginTop: 2 },
+  cardPayout: { ...typography.caption, color: colors.warning, marginTop: 2, fontSize: 11 },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',

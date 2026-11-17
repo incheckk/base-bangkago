@@ -40,6 +40,9 @@ export function mapBangkeroRow(row: any): BangkeroDoc {
     ratingPenalty: row.rating_penalty ?? 0,
     // ?? null keeps this working before migration 011 adds the column
     gcashQrUrl: row.gcash_qr_url ?? null,
+    // 095 — null until the bangkero sets a payout account.
+    payoutAccountName: row.payout_account_name ?? null,
+    payoutAccountNumber: row.payout_account_number ?? null,
     updatedAt: row.updated_at,
   };
 }

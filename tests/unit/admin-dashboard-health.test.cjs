@@ -129,7 +129,7 @@ test('active vessel KPI counts Bangkas, not only vessels with GPS positions', as
   await loadDashboard(ctx);
 
   assert.equal(els.kpiActiveVessels.textContent, 2);
-  assert.match(els.opsSnapshotBody.innerHTML, /1 vessels tracked/);
+  assert.match(els.opsSnapshotBody.innerHTML, /1 bangka tracked/);
   assert.ok(subscriptions.includes('bangkas'), 'the page must subscribe to Bangka changes');
 });
 

@@ -17,6 +17,7 @@ import { updateParcelStatus } from '@/services/parcel.service';
 import { completeBooking, forceCompleteBooking, friendlyError } from '@/services/booking.service';
 import { completeManifest, stampManifestArrival } from '@/services/manifest.service';
 import { createNotification } from '@/services/notification.service';
+import { requestPayout } from '@/services/downpayment.service';
 import { supabase } from '@/services/supabase';
 import { manilaTodayIso } from '@/utils/date';
 import { colors, radii, spacing, typography } from '@/theme/tokens';
@@ -209,6 +210,13 @@ export default function ArrivedScreen() {
           }),
         );
         void results;
+      }
+      // 096: the trips are completed, so the payout queue trigger has fired.
+      // Ask the gateway to pay out now — batched, one provider ref for every
+      // booking on this sailing. Manual mode pays by hand, so stay out of it.
+      // Best-effort: the admin's Downpayments screen has "Retry payout".
+      if (user?.id && devFlags.data.manualPayments === false) {
+        await requestPayout(user.id).catch(() => {});
       }
       if (manifest) {
         // Close the manifest too (007 allows 'completed'); trip-summary

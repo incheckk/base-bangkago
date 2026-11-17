@@ -86,7 +86,7 @@ Demo credentials (in `bangkaGo-access.html:114`): `admin/admin123` → `admin-da
 |------|--------------|--------|
 | `index.html` | Public landing, navbar `id="mainNav"`, sections `#home/#about/#services/#how/#join/#blog/#contact` | Rename section ids (breaks `script.js` active-link) |
 | `style.css` | Tokens, `.btn-bgo` system, hero `background-attachment:scroll`, `fade-in`, `service-card`/`blog-card`, responsive `375/576/768/992` | Re-add `background-attachment:fixed`, add new `--blue-*` without syncing dashboard themes |
-| `script.js` | `rafThrottle` nav scroll `handleNavScroll`/`highlightNavLink`, smooth anchor offset, `heroSearch` validation, `joinForm`/`contactForm` helpers, `IntersectionObserver 0.15`, back-to-top, year | Add unthrottled scroll listeners, query `div[id]` instead of `section[id]` |
+| `script.js` | `rafThrottle` nav scroll `handleNavScroll`/`highlightNavLink`, smooth anchor offset, `heroSearch` validation, `contactForm` helper + Join Us Expo Go QR (redrawn from `BANGKAGO_WEB.EXPO_GO_URL` or the page's LAN host), `IntersectionObserver 0.15`, back-to-top, year | Add unthrottled scroll listeners, query `div[id]` instead of `section[id]` |
 | `bangkaGo-access.html` | Portal cards `.portal-card`, pills `.pill-admin/.pill-readonly`, modal `#loginModal` | Change grid to 1 col on desktop, remove `data-bs-toggle` |
 | `admin-dashboard/*.html` | Each page is a feature; `data-page="..."` drives `layout-loader.js` title; table `id="*Body"` + modals | Create new pages instead of editing existing; break `id="sidebarMount"/"topbarMount"` |
 | `coastguard-dashboard/*.html` | Read-only views; no status/role writes | Add write actions (violates read-only) |

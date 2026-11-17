@@ -8,4 +8,9 @@ window.BANGKAGO_WEB = {
   SUPABASE_URL: 'https://izsgvhcgnrtxcilwbuwo.supabase.co',
   SUPABASE_ANON_KEY:
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6c2d2aGNnbnJ0eGNpbHdidXdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3MTMwMDUsImV4cCI6MjEwMzI4OTAwNX0.eQxjMK2ceUMGssAYgoD7RwAMrmiScvhdfuXJsTXQ0nI',
+  // Expo dev server URL for the Join Us QR (printed by `npx expo start`).
+  // The QR derives exp:// from the page's own host when the site is opened
+  // over the LAN, so this value is only the localhost fallback — refresh it
+  // if the laptop's IP or the dev-server port (8081) changes.
+  EXPO_GO_URL: 'exp://192.168.1.39:8081',
 };

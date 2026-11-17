@@ -14,10 +14,10 @@ function mapRow(row: any): IslandPackageDoc {
   };
 }
 
-// 091 soft-deletes packages by stamping deleted_at; a DB that has not run it lacks the column.
+// 091 soft-deletes packages by stamping deleted_at; older DBs do not have the column.
 function isMissingDeletedAtColumn(error: { code?: string; message?: string }): boolean {
-  return (error.code === '42703' || error.code === 'PGRST204')
-    && /deleted_at/i.test(error.message ?? '');
+  if (error.code !== '42703' && error.code !== 'PGRST204') return false;
+  return /deleted_at/i.test(error.message ?? '');
 }
 
 async function queryCatalog(filterDeleted: boolean) {
@@ -25,14 +25,10 @@ async function queryCatalog(filterDeleted: boolean) {
     .from('island_packages')
     .select('*')
     .eq('is_active', true);
+
   return (filterDeleted ? base.is('deleted_at', null) : base).order('price');
 }
 
-/**
- * Packages are admin-managed catalog rows. They carry no boat: 084 allows
- * `bangka_id = NULL`, and dispatch assigns a bangkero from the accepted trip
- * (the boat also has to fit the seats, not just own the package).
- */
 export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
   let result = await queryCatalog(true);
   if (result.error && isMissingDeletedAtColumn(result.error)) {
@@ -45,12 +41,20 @@ export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
 
 // Soft-deleted packages stay readable here so booking and trip history still render.
 export async function getIslandPackage(packageId: string): Promise<IslandPackageDoc | null> {
-  const { data, error } = await supabase
+  let result = await supabase
     .from('island_packages')
     .select('*')
     .eq('id', packageId)
     .maybeSingle();
 
-  if (error) throw error;
-  return data ? mapRow(data) : null;
+  if (result.error && isMissingDeletedAtColumn(result.error)) {
+    result = await supabase
+      .from('island_packages')
+      .select('*')
+      .eq('id', packageId)
+      .maybeSingle();
+  }
+
+  if (result.error) throw result.error;
+  return result.data ? mapRow(result.data) : null;
 }

@@ -385,96 +385,34 @@ function setFormSubmitting(form, isSubmitting) {
 
 
 /* ——————————————————————————————————————————————
-   6. JOIN US FORM — Validation
+   6. JOIN US — Expo Go QR
 —————————————————————————————————————————————— */
-const joinForm = document.getElementById('joinForm');
+// Redrawn on every page load so it can never go stale: opened over the
+// LAN the exp:// URL is derived from this page's own host (tracks IP
+// changes automatically); otherwise it falls back to BANGKAGO_WEB.EXPO_GO_URL.
+(function () {
+    var img = document.getElementById('joinQrImg');
+    var urlOut = document.getElementById('joinQrUrl');
+    if (!img) return;
 
-if (joinForm) {
-    joinForm.addEventListener('submit', async function (e) {
-        e.preventDefault();
+    var cfg = (window.BANGKAGO_WEB && window.BANGKAGO_WEB.EXPO_GO_URL) || '';
+    var host = window.location.hostname;
+    var onLan = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host) || /\.local$/.test(host);
+    var url = onLan ? 'exp://' + host + ':8081' : cfg;
 
-        const name = document.getElementById('joinName');
-        const email = document.getElementById('joinEmail');
-        const phone = document.getElementById('joinPhone');
-        const role = document.getElementById('joinRole');
-        const message = document.getElementById('joinMessage');
+    if (urlOut) urlOut.textContent = url;
 
-        let isValid = true;
+    if (typeof qrcode !== 'function' || !/^exp:\/\/\S+$/.test(url)) {
+        img.alt = 'QR not configured — set EXPO_GO_URL in web/config.js';
+        return;
+    }
 
-        // Full Name
-        if (name.value.trim().length < 2) {
-            setInvalid(name, 'joinNameError', 'Please enter your full name (at least 2 characters).');
-            isValid = false;
-        } else {
-            setValid(name, 'joinNameError');
-        }
-
-        // Email
-        if (!isValidEmail(email.value.trim())) {
-            setInvalid(email, 'joinEmailError', 'Please enter a valid email address (e.g. you@example.com).');
-            isValid = false;
-        } else {
-            setValid(email, 'joinEmailError');
-        }
-
-        // Phone
-        if (phone.value.trim().length < 7) {
-            setInvalid(phone, 'joinPhoneError', 'Please enter a valid phone number.');
-            isValid = false;
-        } else {
-            setValid(phone, 'joinPhoneError');
-        }
-
-        // Role
-        if (role.value === '') {
-            setInvalid(role, 'joinRoleError', 'Please select the role you are applying for.');
-            isValid = false;
-        } else {
-            setValid(role, 'joinRoleError');
-        }
-
-        // Message
-        if (message.value.trim().length < 10) {
-            setInvalid(message, 'joinMessageError', 'Please tell us a bit about yourself (at least 10 characters).');
-            isValid = false;
-        } else {
-            setValid(message, 'joinMessageError');
-        }
-
-        if (isValid) {
-            document.getElementById('joinSuccess').classList.add('d-none');
-            document.getElementById('joinError').classList.add('d-none');
-            setFormSubmitting(joinForm, true);
-            try {
-                await saveFrontpageSubmission({
-                    submission_type: 'partner',
-                    full_name: name.value.trim(),
-                    email: email.value.trim(),
-                    phone: phone.value.trim(),
-                    partner_role: role.value,
-                    message: message.value.trim(),
-                });
-                showSuccess('joinSuccess');
-                resetForm(joinForm);
-            } catch (error) {
-                console.error('FrontPage partner application failed:', error);
-                document.getElementById('joinError').classList.remove('d-none');
-            } finally {
-                setFormSubmitting(joinForm, false);
-            }
-        }
-    });
-
-    // Live validation on blur
-    joinForm.querySelectorAll('.custom-input').forEach(function (field) {
-        field.addEventListener('blur', function () {
-            if (this.value.trim() !== '') {
-                this.classList.remove('is-invalid');
-                this.classList.add('is-valid');
-            }
-        });
-    });
-}
+    var qr = qrcode(0, 'M');
+    qr.addData(url);
+    qr.make();
+    // cellSize 7px; createDataURL's default margin is 4 modules — the spec's minimum quiet zone
+    img.src = qr.createDataURL(7);
+})();
 
 
 /* ——————————————————————————————————————————————

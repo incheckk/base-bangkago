@@ -19,7 +19,6 @@ function mapRow(row: any): IslandPackageDoc {
   };
 }
 
-<<<<<<< HEAD
 function isMissingPackageDeletedAtColumn(error: { code?: string; message?: string }): boolean {
   const message = (error.message ?? '').toLowerCase();
   if (error.code !== '42703' && error.code !== 'PGRST204') return false;
@@ -34,9 +33,7 @@ async function queryIslandPackages(includeDeletedAt: boolean) {
     .from('island_packages')
     .select(PACKAGE_SELECT)
     .eq('is_active', true);
-  const packageFilter = includeDeletedAt
-    ? base.is('deleted_at', null)
-    : base;
+  const packageFilter = includeDeletedAt ? base.is('deleted_at', null) : base;
 
   return packageFilter
     .eq('bangkas.is_active', true)
@@ -44,18 +41,6 @@ async function queryIslandPackages(includeDeletedAt: boolean) {
     .is('bangkas.deleted_at', null)
     .eq('bangkas.bangkeros.verification_stat', 'verified')
     .eq('bangkas.bangkeros.is_deleted', false)
-=======
-/**
- * Packages are admin-managed catalog rows. They carry no boat: 084 allows
- * `bangka_id = NULL`, and dispatch assigns a bangkero from the accepted trip
- * (the boat also has to fit the seats, not just own the package).
- */
-export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
-  const { data, error } = await supabase
-    .from('island_packages')
-    .select('*')
-    .eq('is_active', true)
->>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
     .order('price');
 }
 
@@ -70,7 +55,6 @@ export async function getIslandPackages(): Promise<IslandPackageDoc[]> {
 }
 
 export async function getIslandPackage(packageId: string): Promise<IslandPackageDoc | null> {
-<<<<<<< HEAD
   const query = (includeDeletedAt: boolean) => {
     const base = supabase
       .from('island_packages')
@@ -78,17 +62,11 @@ export async function getIslandPackage(packageId: string): Promise<IslandPackage
       .eq('id', packageId);
     return includeDeletedAt ? base.is('deleted_at', null) : base;
   };
+
   let result = await query(true).maybeSingle();
   if (result.error && isMissingPackageDeletedAtColumn(result.error)) {
     result = await query(false).maybeSingle();
   }
-=======
-  const { data, error } = await supabase
-    .from('island_packages')
-    .select('*')
-    .eq('id', packageId)
-    .maybeSingle();
->>>>>>> 3064bd3533f2b75d3a8d4cda7a29dd6c1b7c52bf
 
   if (result.error) throw result.error;
   return result.data ? mapRow(result.data) : null;

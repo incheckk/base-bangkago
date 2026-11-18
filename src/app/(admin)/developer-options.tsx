@@ -320,7 +320,7 @@ export default function DeveloperOptions() {
                 <Text style={styles.rowLabel}>Manual payments</Text>
                 <Text style={styles.rowHint}>
                   ON keeps the GCash receipt upload and the admin&apos;s release step. OFF sends
-                  passengers to the gateway&apos;s checkout page, confirms the downpayment by
+                  passengers to the gateway&apos;s checkout sheet, confirms the downpayment by
                   itself, and pays the bangkero&apos;s share automatically when the trip is
                   completed. Flip this back ON if the gateway is down during the demo.
                 </Text>

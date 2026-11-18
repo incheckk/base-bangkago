@@ -196,31 +196,66 @@ export async function getDownpaymentsForBookings(
 }
 
 /**
- * Opens the provider's checkout page for a pending downpayment (096).
- * Returns the URL to hand to the browser; the row flips to 'approved'
- * when the provider's webhook lands, not when this resolves.
+ * supabase.functions.invoke throws "Edge Function returned a non-2xx status
+ * code" and hides what the function actually said. The gateway answers with
+ * an actionable sentence (unrun 096, missing GATEWAY_SECRET, unknown boat),
+ * so read the response body before giving up.
  */
-export async function startGatewayCheckout(downpaymentId: string): Promise<string | null> {
-  const { data, error } = await supabase.functions.invoke('gateway', {
-    body: { action: 'create-checkout', downpayment_id: downpaymentId },
-  });
-  if (error) throw error;
-  if (data?.already) return null; // already settled — nothing to open
+async function invokeGateway(body: Record<string, unknown>): Promise<any> {
+  const { data, error } = await supabase.functions.invoke('gateway', { body });
+  if (!error) return data;
+
+  const response = (error as { context?: Response }).context;
+  const payload = response ? await response.json().catch(() => null) : null;
+  const detail = payload?.error ?? payload?.message;
+  if (detail) throw new Error(String(detail));
+  // A missing deployment is a network failure — that message is honest.
+  throw error;
+}
+
+/**
+ * Starts the provider's checkout for a pending downpayment (096).
+ *
+ * Sandbox hands back the details for the in-app sheet: Supabase rewrites
+ * `text/html` to `text/plain` on the function's own domain, so a hosted
+ * checkout page can never render. Live hands back the provider's URL.
+ */
+export type GatewayCheckout =
+  | { kind: 'browser'; url: string }
+  | { kind: 'sandbox'; ref: string; amount: number; label: string }
+  | { kind: 'settled'; status: string };
+
+export async function startGatewayCheckout(downpaymentId: string): Promise<GatewayCheckout> {
+  const data = await invokeGateway({ action: 'create-checkout', downpayment_id: downpaymentId });
+  if (data?.already) return { kind: 'settled', status: String(data.status ?? 'settled') };
+  if (data?.sandbox) {
+    return {
+      kind: 'sandbox',
+      ref: String(data.sandbox.ref ?? ''),
+      amount: Number(data.sandbox.amount ?? 0),
+      label: String(data.sandbox.label ?? ''),
+    };
+  }
   if (!data?.url) throw new Error(data?.error ?? 'The checkout could not be started.');
-  return data.url as string;
+  return { kind: 'browser', url: String(data.url) };
+}
+
+/**
+ * The sandbox "provider" approving a payment. Runs the same server-side
+ * confirmation a real webhook would; the row flips there, not here.
+ */
+export async function confirmSandboxCheckout(downpaymentId: string): Promise<void> {
+  await invokeGateway({ action: 'sandbox-authorize', downpayment_id: downpaymentId });
 }
 
 /**
  * Sends every completed, unpaid downpayment this bangkero is owed (096).
- * Called right after a trip closes out — batched per bangkero, so three
+ * Called right after a trip closes out - batched per bangkero, so three
  * bookings on one sailing is one payout with one provider ref. Returns the
  * amount paid; 0 means there was nothing queued.
  */
 export async function requestPayout(bangkeroId: string): Promise<number> {
-  const { data, error } = await supabase.functions.invoke('gateway', {
-    body: { action: 'payout', bangkero_id: bangkeroId },
-  });
-  if (error) throw error;
+  const data = await invokeGateway({ action: 'payout', bangkero_id: bangkeroId });
   return Number(data?.paid ?? 0);
 }
 

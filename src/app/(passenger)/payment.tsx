@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PassengerScreenHeader } from '@/components/PassengerScreenHeader';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -12,8 +12,8 @@ import { useDevFlags } from '@/hooks/useSupabase';
 import { getAdminGcashQr } from '@/services/app-settings.service';
 import { createBooking, friendlyError, isAdvanceDate } from '@/services/booking.service';
 import {
-  attachDownpaymentProof, createDownpayment, getDownpaymentByBooking, startGatewayCheckout,
-  uploadDownpaymentProof,
+  attachDownpaymentProof, confirmSandboxCheckout, createDownpayment, getDownpaymentByBooking,
+  startGatewayCheckout, uploadDownpaymentProof,
 } from '@/services/downpayment.service';
 import { pickImage } from '@/services/documents.service';
 import { createParcel, validateParcelItems } from '@/services/parcel.service';
@@ -48,7 +48,7 @@ function scheduleLabel(dateIso: string, time: string | null): string {
 }
 
 /**
- * The provider's webhook normally lands while the checkout page is still
+ * The provider's webhook normally lands while the checkout is still
  * open; this only covers the last hop back into the app. Gives up after
  * ~12 s — the booking screen keeps showing the real state either way.
  */
@@ -155,6 +155,16 @@ export default function PaymentScreen() {
   // gateway checkout that died reuses the row it already filed.
   const [manual, setManual] = useState(false);
   const [fallbackRowId, setFallbackRowId] = useState<string | null>(null);
+  // Sandbox checkout: Supabase serves text/html as text/plain, so the
+  // provider's page is drawn here instead of in a browser.
+  const [sandbox, setSandbox] = useState<{ ref: string; amount: number; label: string } | null>(null);
+  const sandboxDecision = useRef<((ok: boolean) => void) | null>(null);
+
+  function decideSandbox(ok: boolean) {
+    setSandbox(null);
+    sandboxDecision.current?.(ok);
+    sandboxDecision.current = null;
+  }
   // The receipt rail: manual mode (Developer Options) or "Pay by GCash
   // instead" chosen on the gateway rail.
   const manualRail = !gateway || manual;
@@ -195,7 +205,7 @@ export default function PaymentScreen() {
   async function fileDownpayment(
     bookingId: string,
     amount: number
-  ): Promise<'approved' | 'pending' | 'blocked' | 'failed'> {
+  ): Promise<'approved' | 'pending' | 'blocked' | 'declined' | 'failed'> {
     let proofPath: string | null = null;
     if (manualRail) {
       if (!proofUri) return 'failed';
@@ -235,13 +245,34 @@ export default function PaymentScreen() {
     if (manualRail) return 'pending';
 
     try {
-      const url = await startGatewayCheckout(rowId);
-      if (!url) return 'approved'; // already settled
-      await WebBrowser.openBrowserAsync(url);
+      const checkout = await startGatewayCheckout(rowId);
+      if (checkout.kind === 'settled') {
+        if (checkout.status === 'approved') return 'approved';
+        setError(`This downpayment is already ${checkout.status}.`);
+        return 'declined';
+      }
+      if (checkout.kind === 'browser') {
+        await WebBrowser.openBrowserAsync(checkout.url);
+        return (await waitForApproval(bookingId)) ? 'approved' : 'pending';
+      }
+      // Sandbox: authorize in-app. Same server-side confirmation a provider
+      // webhook fires; nothing is marked paid until this resolves true.
+      const approved = await new Promise<boolean>((resolve) => {
+        sandboxDecision.current = resolve;
+        setSandbox(checkout);
+      });
+      if (!approved) {
+        setError('Nothing was charged. You can try again.');
+        return 'declined';
+      }
+      await confirmSandboxCheckout(rowId);
       return (await waitForApproval(bookingId)) ? 'approved' : 'pending';
-    } catch {
+    } catch (e) {
       setManual(true);
-      setError('Online checkout is unavailable right now — scan the GCash QR and attach your receipt below.');
+      setError(
+        `Online checkout failed: ${e instanceof Error ? e.message : 'unknown error'}. ` +
+          'Scan the GCash QR and attach your receipt below.'
+      );
       return 'blocked';
     }
   }
@@ -262,7 +293,7 @@ export default function PaymentScreen() {
       // so only the escrow row is left to file.
       if (existingBookingId) {
         const downStatus = await fileDownpayment(existingBookingId, downAmount);
-        if (downStatus === 'blocked') {
+        if (downStatus === 'blocked' || downStatus === 'declined') {
           setBusy(false);
           return;
         }
@@ -445,10 +476,10 @@ export default function PaymentScreen() {
 
       // 097: file the escrow row — or reuse the row a failed checkout left
       // behind — and, on the gateway rail, walk through the hosted page.
-      let downStatus: 'approved' | 'pending' | 'blocked' | 'failed' = 'pending';
+      let downStatus: 'approved' | 'pending' | 'blocked' | 'declined' | 'failed' = 'pending';
       if (isEscrow) {
         downStatus = await fileDownpayment(bookingId, actualDownAmount);
-        if (downStatus === 'blocked') {
+        if (downStatus === 'blocked' || downStatus === 'declined') {
           setBusy(false);
           return;
         }
@@ -570,7 +601,7 @@ export default function PaymentScreen() {
 
               {!manualRail ? (
                 <Text style={styles.escrowHint}>
-                  You&apos;ll pay ₱{downAmount} on BangkaGo&apos;s secure checkout page. The
+                  You&apos;ll pay ₱{downAmount} at BangkaGo&apos;s secure checkout. The
                   downpayment is held by BangkaGo until your trip, then released to your
                   bangkero.
                 </Text>
@@ -625,7 +656,7 @@ export default function PaymentScreen() {
                 <Pressable onPress={() => setManual((v) => !v)} disabled={busy}>
                   <Text style={styles.railToggle}>
                     {manual
-                      ? 'Use the secure checkout page instead'
+                      ? 'Use the secure checkout instead'
                       : 'Pay by GCash instead — upload a receipt'}
                   </Text>
                 </Pressable>
@@ -703,6 +734,54 @@ export default function PaymentScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Sandbox gateway: the in-app stand-in for the provider's checkout
+          page. Supabase serves text/html as text/plain, so a hosted page on
+          the function's domain can never render in a browser. */}
+      <Modal
+        visible={!!sandbox}
+        transparent
+        animationType="fade"
+        onRequestClose={() => decideSandbox(false)}
+      >
+        <View style={styles.sheetBackdrop}>
+          <View style={styles.sheet}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetBrand}>
+                Bangka<Text style={styles.sheetBrandAccent}>Go</Text>
+              </Text>
+              <View style={styles.sheetBadge}>
+                <Text style={styles.sheetBadgeText}>SANDBOX</Text>
+              </View>
+            </View>
+            <Text style={styles.sheetLabel}>AMOUNT DUE</Text>
+            <Text style={styles.sheetAmount}>₱{(sandbox?.amount ?? 0).toFixed(2)}</Text>
+            <View style={styles.sheetRow}>
+              <Text style={styles.sheetKey}>Pay with</Text>
+              <Text style={styles.sheetValue}>GCash</Text>
+            </View>
+            <View style={styles.sheetRow}>
+              <Text style={styles.sheetKey}>For</Text>
+              <Text style={styles.sheetValue} numberOfLines={2}>
+                {sandbox?.label || 'Trip'}
+              </Text>
+            </View>
+            <View style={styles.sheetRow}>
+              <Text style={styles.sheetKey}>Reference</Text>
+              <Text style={styles.sheetValue} numberOfLines={1}>
+                {sandbox?.ref}
+              </Text>
+            </View>
+            <PrimaryButton label="Authorize payment" onPress={() => decideSandbox(true)} />
+            <PrimaryButton
+              label="Cancel"
+              variant="secondary"
+              onPress={() => decideSandbox(false)}
+              style={styles.sheetFail}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -862,4 +941,45 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   errorText: { flexShrink: 1, color: colors.danger, fontSize: 13, lineHeight: 18 },
+
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: colors.backdrop,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  sheet: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetBrand: { color: colors.text, fontSize: 20, fontWeight: '800', letterSpacing: -0.4 },
+  sheetBrandAccent: { color: colors.primary },
+  sheetBadge: {
+    backgroundColor: colors.warningTint,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  sheetBadgeText: { color: colors.warning, fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
+  sheetLabel: { ...typography.label },
+  sheetAmount: { color: colors.text, fontSize: 34, fontWeight: '800', marginTop: -spacing.sm },
+  sheetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    paddingTop: spacing.sm,
+  },
+  sheetKey: { ...typography.caption, color: colors.textMuted, fontSize: 13 },
+  sheetValue: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  sheetFail: { marginTop: -spacing.xs },
 });

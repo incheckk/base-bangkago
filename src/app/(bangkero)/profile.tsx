@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
+import { CapacityPicker } from '@/components/PassengerInfoFields';
 import { Icon, type IconName } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenContainer } from '@/components/ScreenContainer';
@@ -15,9 +16,8 @@ import { useBangkero } from '@/hooks/useSupabase';
 import { friendlyAuthError, signOut } from '@/services/auth.service';
 import { documentsRoute } from '@/services/documents.service';
 import {
-  friendlyError as profileFriendlyError, updateBoat, updateName,
+  friendlyError as profileFriendlyError, getMyBoat, updateBoat, updateName,
 } from '@/services/profile.service';
-import { supabase } from '@/services/supabase';
 import { getAverageRating, getEffectiveRating } from '@/services/rating.service';
 import { colors, radii, spacing, touchTarget, typography } from '@/theme/tokens';
 import { formatPhone } from '@/utils/phone';
@@ -104,19 +104,11 @@ export default function BangkeroProfileScreen() {
   const loadBangka = useCallback(async () => {
     if (!uid) return;
     try {
-      // `.limit(1)`: Pedro-style duplicate rows made maybeSingle() error and
-      // the screen fell back to the operator's display name.
-      const { data } = await supabase
-        .from('bangkas')
-        .select('bangka_name, capacity')
-        .eq('bangkero_id', uid)
-        .is('deleted_at', null)
-        .order('id')
-        .limit(1)
-        .maybeSingle();
-      if (data) {
-        setBangkaCapacity(String(data.capacity ?? ''));
-        setBangkaName((data.bangka_name as string) ?? '');
+      // Same selector updateBoat writes with — one boat, deleted rows out.
+      const boat = await getMyBoat(uid);
+      if (boat) {
+        setBangkaCapacity(boat.capacity != null ? String(boat.capacity) : '');
+        setBangkaName(boat.bangkaName);
       }
     } catch {
       // keep the last known capacity
@@ -272,13 +264,7 @@ export default function BangkeroProfileScreen() {
               editable={false}
               placeholder="Set by BangkaGo"
             />
-            <TextField
-              label="Capacity (passengers)"
-              value={capacity}
-              onChangeText={setCapacity}
-              keyboardType="number-pad"
-              placeholder="10"
-            />
+            <CapacityPicker value={capacity} onChange={setCapacity} />
             <View style={styles.editActions}>
               <PrimaryButton
                 label="Cancel"

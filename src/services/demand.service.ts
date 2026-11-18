@@ -46,10 +46,19 @@ export interface RouteDemandSummary {
   daysWithData: number;
 }
 
-export async function getRouteDemandSummary(): Promise<RouteDemandSummary[]> {
+/**
+ * One route's predicted passengers for ONE day (default today, Manila) —
+ * the same rows Admin → Analyze Demand reads for its default view. It used
+ * to sum every prediction date on file, so the phone said 22 where the
+ * console said 11.
+ */
+export async function getRouteDemandSummary(
+  date: string = manilaTodayIso()
+): Promise<RouteDemandSummary[]> {
   const { data, error } = await supabase
     .from('demand_predictions')
-    .select('route_id, predicted_passengers, prediction_date');
+    .select('route_id, predicted_passengers, prediction_date')
+    .eq('prediction_date', date);
 
   if (error) throw error;
 
@@ -57,7 +66,7 @@ export async function getRouteDemandSummary(): Promise<RouteDemandSummary[]> {
   for (const row of data ?? []) {
     if (!row.route_id) continue;
     const entry = byRoute.get(row.route_id) ?? { total: 0, dates: new Set<string>() };
-    entry.total += row.predicted_passengers ?? 0;
+    entry.total += Number(row.predicted_passengers) || 0;
     if (row.prediction_date) entry.dates.add(row.prediction_date);
     byRoute.set(row.route_id, entry);
   }
@@ -69,7 +78,8 @@ export async function getRouteDemandSummary(): Promise<RouteDemandSummary[]> {
       avgDailyPredicted: entry.dates.size > 0 ? Math.round(entry.total / entry.dates.size) : 0,
       daysWithData: entry.dates.size,
     }))
-    .sort((a, b) => b.totalPredicted - a.totalPredicted);
+    // Same tie-break as the admin table, so equal totals keep one order.
+    .sort((a, b) => b.totalPredicted - a.totalPredicted || a.routeId.localeCompare(b.routeId));
 }
 
 export async function getTodayPredictions(): Promise<DemandPredictionDoc[]> {

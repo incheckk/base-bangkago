@@ -42,6 +42,10 @@
     .network-value { font-size:1.6rem; font-weight:800; }
     .network-label { color:var(--gray-500); font-size:.78rem; }
     .empty-note { color:var(--gray-500); font-size:.9rem; padding:.6rem 0; }
+    .commission-editor { max-width:360px; }
+    .commission-table th, .commission-table td { vertical-align:middle; }
+    .commission-table .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .commission-table code { font-size:.78rem; }
     @media (max-width:575px) {
       .report-card { padding:.9rem; }
       .report-chart { height:120px; }
@@ -145,6 +149,79 @@
             </div>
 
             <div class="report-section">
+              <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+                <div>
+                  <h2 class="report-section-title mb-0">Commission</h2>
+                  <span class="report-meta">
+                    Completed booking fares in this period · commission is a share of the whole fare;
+                    BangkaGo withholds it from the downpayment it holds
+                  </span>
+                </div>
+                <div class="commission-editor">
+                  <label class="form-label fw-semibold mb-1" for="commissionRate">Commission rate</label>
+                  <div class="input-group input-group-sm">
+                    <input id="commissionRate" class="form-control" type="number" min="5" max="9"
+                      step="0.25" inputmode="decimal" aria-describedby="rateHint" />
+                    <span class="input-group-text">%</span>
+                    <button id="saveCommissionRate" class="btn btn-bangkago" type="button">Save</button>
+                    <button id="useRecommendedRate" class="btn btn-outline-secondary" type="button">Use recommended</button>
+                  </div>
+                  <div id="rateHint" class="form-text">
+                    Applies to every completed fare from now on — released payouts keep their own rate.
+                    <span id="recommendedHint"></span>
+                  </div>
+                  <div id="rateStatus" class="form-text d-block" role="status" aria-live="polite"></div>
+                </div>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-6 col-xl-3"><div class="report-card">
+                  <div class="report-card-title">Total booking revenue</div>
+                  <div id="commissionRevenue" class="report-card-value">—</div>
+                  <div id="commissionRevenueNote" class="report-card-note"></div>
+                </div></div>
+                <div class="col-6 col-xl-3"><div class="report-card">
+                  <div class="report-card-title">BangkaGo commission</div>
+                  <div id="commissionFee" class="report-card-value">—</div>
+                  <div id="commissionFeeNote" class="report-card-note"></div>
+                </div></div>
+                <div class="col-6 col-xl-3"><div class="report-card">
+                  <div class="report-card-title">Bangkero earnings</div>
+                  <div id="commissionEarnings" class="report-card-value">—</div>
+                  <div class="report-card-note">Fare − commission · the app lists gross fares</div>
+                </div></div>
+                <div class="col-6 col-xl-3"><div class="report-card">
+                  <div class="report-card-title">Commission percentage</div>
+                  <div id="commissionRateKpi" class="report-card-value">—</div>
+                  <div class="report-card-note">Of the whole fare, on every completed trip</div>
+                </div></div>
+              </div>
+
+              <div class="report-card mt-3">
+                <h2 class="report-section-title">Transaction breakdown</h2>
+                <p id="commissionNote" class="report-card-note"></p>
+                <div class="table-responsive">
+                  <table class="table table-theme align-middle mb-0 commission-table">
+                    <thead>
+                      <tr>
+                        <th>Booking</th>
+                        <th>Completed</th>
+                        <th>Route</th>
+                        <th class="num">Fare</th>
+                        <th class="num">Downpayment held</th>
+                        <th class="num">Commission</th>
+                        <th class="num">To bangkero</th>
+                        <th>Payout</th>
+                      </tr>
+                    </thead>
+                    <tbody id="commissionBody"></tbody>
+                  </table>
+                </div>
+                <p id="commissionFoot" class="report-card-note mb-0"></p>
+              </div>
+            </div>
+
+            <div class="report-section">
               <h2 class="report-section-title mb-2">Network now <span class="report-meta">(live snapshot)</span></h2>
               <div class="row g-3">
                 <div class="col-4"><div class="report-card">
@@ -203,6 +280,11 @@
           currency: 'PHP',
           maximumFractionDigits: 0
         }).format(Number(value) || 0);
+      }
+
+      function percent(rate) {
+        var value = Number(rate) || 0;
+        return (Math.round(value * 10000) / 100).toString().replace(/\.0+$/, '') + '%';
       }
 
       function escapeHtml(value) {
@@ -301,6 +383,101 @@
         }).join('');
       }
 
+      // The recommended rate lives as a percentage (not a float) so the
+      // input, the RPC and the hint can never disagree on rounding.
+      var RECOMMENDED_PERCENT = 8;
+      var RECOMMENDED_RATE = RECOMMENDED_PERCENT / 100;
+      var rateBusy = false;
+      // Where BangkaGo's share of the fare currently is.
+      var FEE_STATE = { withheld: 'withheld', reserved: 'in escrow', notWithheld: 'not withheld' };
+
+      function paintRate(rate) {
+        var input = document.getElementById('commissionRate');
+        if (document.activeElement !== input) input.value = percent(rate).replace('%', '');
+      }
+
+      function renderCommission(commission) {
+        document.getElementById('commissionRevenue').textContent = peso(commission.gross);
+        document.getElementById('commissionRevenueNote').textContent =
+          number(commission.rows.length) + ' completed trip' + (commission.rows.length === 1 ? '' : 's');
+        document.getElementById('commissionFee').textContent = peso(commission.platform);
+        var split = [];
+        if (commission.withheld) split.push(peso(commission.withheld) + ' withheld');
+        if (commission.reserved) split.push(peso(commission.reserved) + ' in escrow');
+        if (commission.notWithheld) split.push(peso(commission.notWithheld) + ' not withheld');
+        document.getElementById('commissionFeeNote').textContent = commission.gross
+          ? split.join(' · ')
+          : 'no completed revenue in range';
+        document.getElementById('commissionEarnings').textContent = peso(commission.bangkero);
+        document.getElementById('commissionRateKpi').textContent = percent(commission.rate);
+        paintRate(commission.rate);
+
+        document.getElementById('commissionNote').textContent = !commission.rows.length
+          ? 'No completed booking in this period, so there is no commission to report.'
+          : commission.notWithheld
+            ? 'Commission is ' + percent(commission.rate) + ' of every completed fare. A held downpayment is where it is taken from; a fare paid on board has no downpayment, so that share is not withheld.'
+            : 'Commission is ' + percent(commission.rate) + ' of every completed fare — every trip in this period had a held downpayment, so the whole share is taken from escrow.';
+
+        var body = document.getElementById('commissionBody');
+        // The totals above cover every row; the table shows the newest slice.
+        body.innerHTML = commission.rows.length
+          ? commission.rows.slice(0, 200).map(function(row) {
+              return '<tr>' +
+                '<td><code>' + escapeHtml(row.ref) + '</code></td>' +
+                '<td>' + escapeHtml(formatDate(row.completedAt)) + '</td>' +
+                '<td>' + escapeHtml(row.route) + '</td>' +
+                '<td class="num">' + peso(row.fare) + '</td>' +
+                '<td class="num">' + (row.held ? peso(row.held) : '—') + '</td>' +
+                '<td class="num">' + peso(row.fee) +
+                  '<div class="text-muted">' + percent(row.rate) + ' · ' +
+                  escapeHtml(FEE_STATE[row.state]) + '</div></td>' +
+                '<td class="num">' + peso(row.net) + '</td>' +
+                '<td>' + escapeHtml(row.payout) + '</td>' +
+                '</tr>';
+            }).join('')
+          : '<tr><td colspan="8" class="empty-note">No completed booking in this period.</td></tr>';
+
+        var foot = 'Each payout keeps the commission it was released at, so changing the rate never rewrites history.';
+        if (commission.notWithheld) {
+          foot += ' The app does not collect the same-day share yet — it is settled with the operator outside the payout.';
+        }
+        document.getElementById('commissionFoot').textContent = commission.rows.length > 200
+          ? 'Showing the newest 200 of ' + number(commission.rows.length) + ' transactions — the totals above cover all of them. ' + foot
+          : foot;
+      }
+
+      /**
+       * 096 stores the rate once, in app_settings.commission_rate — the same
+       * row the mobile app and both payout rails read. Saving here changes
+       * every rail at once; it is never a second hardcoded number.
+       */
+      async function saveCommissionRate(nextPercent) {
+        if (rateBusy) return;
+        var status = document.getElementById('rateStatus');
+        status.className = 'form-text d-block';
+        status.textContent = '';
+        if (!Number.isFinite(nextPercent) || nextPercent < 5 || nextPercent > 9) {
+          status.classList.add('text-danger');
+          status.textContent = 'Enter a rate between 5% and 9%.';
+          return;
+        }
+        rateBusy = true;
+        try {
+          await window.bangkagoStats.setCommissionRate(nextPercent / 100);
+          document.getElementById('commissionRate').value = nextPercent;
+          status.classList.add('text-success');
+          status.textContent = 'Saved — new payouts use ' + percent(nextPercent / 100) + '.';
+          await loadReports();
+        } catch (error) {
+          var message = error && error.message ? error.message : 'Could not save the rate.';
+          status.classList.add('text-danger');
+          status.textContent = /does not exist|not find/i.test(message)
+            ? 'The commission setting is not in this database yet — run migration 096.'
+            : message;
+        }
+        rateBusy = false;
+      }
+
       function render(data) {
         document.getElementById('periodCaption').textContent =
           formatDate(data.startIso) + ' – ' + formatDate(data.endIso) + ' · ' + RANGE_LABELS[data.range];
@@ -325,6 +502,9 @@
           'Completed trips by ' + (data.range === '6m' || data.range === '1y' ? 'month' : 'day'));
         renderStatus(data.statusCounts);
         renderRoutes(data.topRoutes);
+        // A stale cached stats.js (no commission block) must not blank the
+        // whole report after this point.
+        if (data.commission) renderCommission(data.commission);
         document.getElementById('noActivity').classList.toggle('d-none', data.requests > 0 || data.completed > 0);
         reportContent.classList.remove('d-none');
         loadingState.classList.add('d-none');
@@ -356,10 +536,23 @@
       });
       document.getElementById('refreshReports').addEventListener('click', loadReports);
       document.getElementById('retryReports').addEventListener('click', loadReports);
+      document.getElementById('saveCommissionRate').addEventListener('click', function() {
+        saveCommissionRate(Number(document.getElementById('commissionRate').value));
+      });
+      document.getElementById('useRecommendedRate').addEventListener('click', function() {
+        document.getElementById('commissionRate').value = percent(RECOMMENDED_RATE).replace('%', '');
+        saveCommissionRate(RECOMMENDED_PERCENT);
+      });
+      // The recommendation is written once, above; labels follow it.
+      document.getElementById('useRecommendedRate').textContent = 'Use ' + percent(RECOMMENDED_RATE);
+      document.getElementById('recommendedHint').innerHTML =
+        'Recommended <strong>' + percent(RECOMMENDED_RATE) + '</strong> — about ' +
+        peso(100 * RECOMMENDED_RATE) + ' per ₱100 of fare, and ' +
+        percent(RECOMMENDED_RATE / 0.5) + ' of the 50% downpayment BangkaGo holds.';
 
       window.bangkagoAuthReady.then(function(role) {
         if (role !== 'admin') return;
-        ['users', 'bangkeros', 'bookings', 'safety_alerts'].forEach(function(table) {
+        ['users', 'bangkeros', 'bookings', 'safety_alerts', 'downpayments'].forEach(function(table) {
           window.bangkagoRealtime.subscribe(table, null, loadReports);
         });
         loadReports();

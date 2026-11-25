@@ -10,40 +10,60 @@ interface PersonalDetailsArgs {
   uid: string;
   age: number;
   address: string;
+  sex: string;
 }
 
+const SEX_VALUES = ['male', 'female', 'other'];
+
 /**
- * The main booker's manifest details (079). Companions have carried both
- * since 028; without these the bangkero sees a name and a phone only.
+ * The main booker's manifest details (079, 101). Companions carry their own
+ * details in passenger_details; without these the bangkero sees less than
+ * the passenger manifest requires.
  * users_update_own (002) allows the write; 065 only guards is_suspended.
  */
-export async function updatePersonalDetails({ uid, age, address }: PersonalDetailsArgs): Promise<void> {
+export async function updatePersonalDetails({
+  uid, age, address, sex,
+}: PersonalDetailsArgs): Promise<void> {
   if (!Number.isInteger(age) || age < 1 || age > 120) {
     throw new Error('Enter an age between 1 and 120.');
   }
   const addrErr = addressError(address);
   if (addrErr) throw new Error(addrErr);
+  if (!SEX_VALUES.includes(sex)) {
+    throw new Error('Choose a gender.');
+  }
+
+  const patch = {
+    age,
+    address: address.trim(),
+    sex,
+  };
 
   const { error } = await supabase
     .from('users')
-    .update({ age, address: address.trim() })
+    .update(patch)
     .eq('id', uid);
   if (error) throw error;
 }
 
 /**
  * Gate before any new booking/charter: the operator's manifest needs the
- * booker's age and address, so a row still missing them cannot book.
+ * booker's age, address and gender, so an incomplete profile cannot book.
  */
 export async function requirePersonalDetails(uid: string): Promise<void> {
   const { data, error } = await supabase
     .from('users')
-    .select('age, address')
+    .select('age, address, sex')
     .eq('id', uid)
     .maybeSingle();
   if (error) throw error;
-  if (!data || data.age == null || !String(data.address ?? '').trim()) {
-    throw new Error('Add your age and home address in Profile before booking.');
+  if (
+    !data ||
+    data.age == null ||
+    !String(data.address ?? '').trim() ||
+    !SEX_VALUES.includes(data.sex)
+  ) {
+    throw new Error('Add your age, home address, and gender in Profile before booking.');
   }
 }
 

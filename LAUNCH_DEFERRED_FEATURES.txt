@@ -398,10 +398,20 @@ B15. PAYMENT GATEWAY — SANDBOX ONLY (095 + 096, 2026-11-17)
      provider ref, and a failed batch marks every row failed (retry from
      Admin → Downpayments).
      Fee: none. Commission is app_settings.commission_rate (default 7%,
-     Admin → Downpayments), a share of the WHOLE FARE deducted from the
+     Admin → Downpayments, and editable from Admin web → View Reports →
+     Commission since 2026-11-26 — one stored value, both consoles),
+     a share of the WHOLE FARE deducted from the
      downpayment, snapshotted onto each row when the payout is claimed so
      a later rate change never rewrites history. Admins see it; the
-     bangkero app shows GROSS / RELEASED only.
+     bangkero app shows GROSS / RELEASED only. The web Commission report
+     covers completed BOOKINGS only — a charter's downpayment carries the
+     same commission rule but is settled under Boat Rentals / Downpayments
+     and is not in that split yet. That report charges the share on EVERY
+     completed fare (the rule above) and separates where it is: withheld
+     (released), in escrow (approved, deducted at release), or NOT
+     WITHHELD — a same-day fare has no downpayment to take it from, so
+     nothing in the app collects that share yet; it would be settled with
+     the operator outside the payout.
      Payout account: 095 adds bangkeros.payout_account_name / _number /
      _channel (gcash only). A bangkero without one can still sail — no
      gate — but there is nowhere for the money to land, so the app

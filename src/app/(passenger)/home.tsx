@@ -321,15 +321,20 @@ export default function PassengerHome() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [ageInput, setAgeInput] = useState('');
   const [addressInput, setAddressInput] = useState('');
+  const [sexInput, setSexInput] = useState('');
+  const [detailsFormKey, setDetailsFormKey] = useState(0);
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
-  const missingDetails = !!profile && (profile.age == null || !profile.address);
+  const missingDetails = !!profile &&
+    (profile.age == null || !profile.address || !profile.sex);
 
   function finishTour() {
     tour.dismiss();
     if (!missingDetails) return;
-    setAgeInput('');
-    setAddressInput('');
+    setAgeInput(profile?.age != null ? String(profile.age) : '');
+    setAddressInput(profile?.address ?? '');
+    setSexInput(profile?.sex ?? '');
+    setDetailsFormKey((key) => key + 1);
     setDetailsError(null);
     setDetailsOpen(true);
   }
@@ -337,9 +342,9 @@ export default function PassengerHome() {
   async function saveDetails() {
     if (!profile || savingDetails) return;
     const parsedAge = Number(ageInput.trim());
-    const invalid = Number.isInteger(parsedAge) && parsedAge >= 1 && parsedAge <= 120
-      ? addressError(addressInput)
-      : 'Pick your age.';
+    const invalid = !Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120
+      ? 'Pick your age.'
+      : addressError(addressInput) ?? (!sexInput ? 'Choose your gender.' : null);
     if (invalid) {
       setDetailsError(invalid);
       return;
@@ -347,7 +352,12 @@ export default function PassengerHome() {
     setSavingDetails(true);
     setDetailsError(null);
     try {
-      await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address: addressInput });
+      await updatePersonalDetails({
+        uid: profile.uid,
+        age: parsedAge,
+        address: addressInput,
+        sex: sexInput,
+      });
       await refreshProfile();
       setDetailsOpen(false);
       // Land on Home, never on a stale booking screen underneath.
@@ -799,7 +809,7 @@ export default function PassengerHome() {
         </View>
       </Modal>
 
-      {/* Tutorial exit: collect the two manifest fields before the first
+      {/* Tutorial exit: collect the manifest details before the first
           booking can fail on them. */}
       <Modal
         visible={detailsOpen}
@@ -811,17 +821,44 @@ export default function PassengerHome() {
           <View style={[styles.noticeCard, styles.detailsCard]}>
             <Text style={styles.noticeTitle}>One last thing</Text>
             <Text style={styles.detailsBody}>
-              Your bangkero&apos;s manifest needs your age and home address. You only
-              enter these once.
+              Your bangkero&apos;s manifest needs your age, home address and gender.
+              You only enter these once.
             </Text>
             <AgePicker value={ageInput} onChange={setAgeInput} />
-            <AddressPicker value={addressInput} onChange={setAddressInput} error={detailsError} />
+            <AddressPicker
+              key={detailsFormKey}
+              value={addressInput}
+              onChange={setAddressInput}
+            />
+            <Text style={styles.detailsLabel}>GENDER</Text>
+            <View style={styles.detailsSexRow}>
+              {(['female', 'male', 'other'] as const).map((value) => {
+                const active = sexInput === value;
+                return (
+                  <Pressable
+                    key={value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    onPress={() => setSexInput(value)}
+                    style={({ pressed }) => [
+                      styles.detailsSexChip,
+                      active && styles.detailsSexChipActive,
+                      pressed && styles.detailsSexChipPressed,
+                    ]}
+                  >
+                    <Text style={[styles.detailsSexText, active && styles.detailsSexTextActive]}>
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             {!!detailsError && <Text style={styles.detailsError}>{detailsError}</Text>}
             <PrimaryButton
               label="Save details"
               onPress={() => void saveDetails()}
               loading={savingDetails}
-              disabled={savingDetails || !ageInput.trim() || !addressInput.trim()}
+              disabled={savingDetails || !ageInput.trim() || !addressInput.trim() || !sexInput}
             />
           </View>
         </View>
@@ -1126,5 +1163,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
+  detailsLabel: { ...typography.label, marginBottom: spacing.xs },
+  detailsSexRow: { flexDirection: 'row', gap: spacing.sm },
+  detailsSexChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 36,
+    justifyContent: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surface,
+  },
+  detailsSexChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  detailsSexChipPressed: { opacity: 0.72 },
+  detailsSexText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  detailsSexTextActive: { color: colors.primary },
   detailsError: { ...typography.caption, color: colors.danger, textAlign: 'center' },
 });

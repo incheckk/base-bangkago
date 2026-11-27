@@ -8,7 +8,6 @@ import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { PassengerEditModal } from '@/components/PassengerEditModal';
 import { ScreenContainer } from '@/components/ScreenContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/States';
-import { StatusPill } from '@/components/StatusPill';
 import { useRealtimeQuery } from '@/hooks/useRealtimeQuery';
 import { useBooking } from '@/hooks/useSupabase';
 import { type BookerDetails, getBookersForBookings } from '@/services/booking.service';
@@ -121,7 +120,6 @@ export default function BookingManifestScreen() {
               <Text style={styles.refLabel}>BOOKING REFERENCE</Text>
               <Text style={styles.ref}>{b.ref}</Text>
             </View>
-            <StatusPill status={b.status} />
           </View>
 
           <View style={styles.grid}>
@@ -194,7 +192,7 @@ export default function BookingManifestScreen() {
               <Text style={styles.passengerMeta}>
                 {formatPhone(passenger.contactNumber || '') || 'No contact number'}
                 {passenger.age != null ? `  -  ${passenger.age} yrs` : ''}
-                {passenger.sex ? `  -  ${passenger.sex}` : ''}
+                {passenger.sex ? `  -  ${passenger.sex.charAt(0).toUpperCase() + passenger.sex.slice(1)}` : ''}
               </Text>
               <Text style={styles.passengerAddress} numberOfLines={2}>
                 {passenger.address || 'Address not on file'}

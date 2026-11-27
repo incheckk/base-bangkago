@@ -70,6 +70,8 @@ export interface UserDoc {
   /** Manifest details for the booker (079). Null until the user fills them. */
   age: number | null;
   address: string | null;
+  /** Gender picked in Profile (101). Null until the user picks one. */
+  sex: string | null;
 }
 
 export interface BangkeroDoc {

@@ -59,6 +59,34 @@
     };
   }
 
+  // ---------------------------------------------------------------
+  // Commission (096/097). ONE value lives in app_settings, the same row
+  // the mobile app writes through set_commission_rate and both payout
+  // rails read (claim_gateway_payouts, release_downpayment). The
+  // fallback only applies before 096 and mirrors the SQL default.
+  // ---------------------------------------------------------------
+  var COMMISSION_KEY = 'commission_rate';
+  var COMMISSION_FALLBACK = 0.07;
+  var COMMISSION_MIN = 0.05;
+  var COMMISSION_MAX = 0.09;
+
+  async function getCommissionRate() {
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.from('app_settings').select('value').eq('key', COMMISSION_KEY).maybeSingle();
+    if (r.error) throw r.error;
+    var rate = Number(r.data && r.data.value);
+    return Number.isFinite(rate) && rate > 0 ? rate : COMMISSION_FALLBACK;
+  }
+
+  async function setCommissionRate(rate) {
+    if (!Number.isFinite(rate) || rate < COMMISSION_MIN || rate > COMMISSION_MAX) {
+      throw new Error('The commission rate must be between 5% and 9%.');
+    }
+    var c = svc.getClient(); if (!c) throw new Error('No client');
+    var r = await c.rpc('set_commission_rate', { p_rate: rate });
+    if (r.error) throw r.error;
+  }
+
   var REPORT_RANGES = {
     today: 0,
     '7d': 6,
@@ -86,6 +114,30 @@
     if (!value) return null;
     var date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : manilaDayIso(date);
+  }
+
+  function round2(value) {
+    return Math.round((Number(value) || 0) * 100) / 100;
+  }
+
+  /** PostgREST returns one row either as an object or a single-item array. */
+  function escrowOf(row) {
+    var d = row.downpayments;
+    if (Array.isArray(d)) return d[0] || null;
+    return d || null;
+  }
+
+  /** Where the bangkero's money is, in the admin's words. */
+  function payoutLabel(d) {
+    if (!d) return 'On-board';
+    if (d.released_at || d.payout_status === 'paid') return 'Released';
+    if (d.status === 'refunded') return 'Refunded';
+    if (d.status === 'rejected') return 'Receipt rejected';
+    if (d.status === 'pending') return 'Receipt unreviewed';
+    if (d.payout_status === 'processing') return 'Processing';
+    if (d.payout_status === 'queued') return 'Queued';
+    if (d.payout_status === 'failed') return 'Payout failed';
+    return 'Awaiting release';
   }
 
   function makeBuckets(range, startIso, endIso) {
@@ -126,8 +178,10 @@
   async function fetchReportBookings(client, startTs, endTs) {
     var rows = [];
     for (var from = 0; ; from += REPORT_PAGE_SIZE) {
+      // `downpayments(*)` (not named columns): pre-096 databases have no
+      // commission columns, and naming them would break the whole page.
       var result = await client.from('bookings')
-        .select('trip_stat, total_price, created_at, completed_at, from_port_name, to_port_name')
+        .select('id, ref, trip_stat, total_price, created_at, completed_at, from_port_name, to_port_name, downpayments(*)')
         .or('and(created_at.gte.' + startTs + ',created_at.lt.' + endTs + '),and(completed_at.gte.' + startTs + ',completed_at.lt.' + endTs + ')')
         .order('id', { ascending: true })
         .range(from, from + REPORT_PAGE_SIZE - 1);
@@ -159,13 +213,15 @@
         .eq('is_available', true).eq('is_deleted', false),
       client.from('bangkeros').select('*', { count: 'exact', head: true })
         .eq('verification_stat', 'pending').eq('is_deleted', false),
-      client.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false)
+      client.from('safety_alerts').select('*', { count: 'exact', head: true }).eq('is_resolved', false),
+      getCommissionRate().catch(function() { return COMMISSION_FALLBACK; })
     ]);
     var bookings = results[0];
     var users = results[1];
     var bangkeros = results[2];
     var pending = results[3];
     var alerts = results[4];
+    var rate = results[5];
     [users, bangkeros, pending, alerts].forEach(function(result) {
       if (result.error) throw result.error;
     });
@@ -180,6 +236,13 @@
     var cancelled = 0;
     var statusCounts = {};
     var routes = new Map();
+    // 096/097 money split: fare = bangkero share + BangkaGo commission.
+    var commissionTotal = 0;
+    var heldTotal = 0;
+    var withheldTotal = 0;
+    var reservedTotal = 0;
+    var notWithheldTotal = 0;
+    var transactions = [];
 
     bookings.forEach(function(row) {
       var createdDay = timestampDay(row.created_at);
@@ -209,6 +272,36 @@
       entry.trips += 1;
       entry.revenue += price;
       routes.set(route, entry);
+
+      // 096/097: commission is a share of the WHOLE fare. The downpayment
+      // is only where it is TAKEN from — a released row carries the exact
+      // frozen amount, an approved row will deduct it at release, and a
+      // fare with nothing held (same-day, refunded) still owes the share;
+      // it was simply never withheld. Reporting it as ₱0 hid the platform's
+      // earning entirely.
+      var escrow = escrowOf(row);
+      var held = escrow && escrow.status === 'approved' ? Number(escrow.amount) || 0 : 0;
+      var frozen = escrow && escrow.commission_amount != null ? Number(escrow.commission_amount) : null;
+      var fee = frozen != null ? frozen : round2(price * rate);
+      var released = !!(escrow && (escrow.released_at || escrow.payout_status === 'paid'));
+      var state = released ? 'withheld' : held > 0 ? 'reserved' : 'notWithheld';
+      heldTotal += held;
+      commissionTotal += fee;
+      if (state === 'withheld') withheldTotal += fee;
+      else if (state === 'reserved') reservedTotal += fee;
+      else notWithheldTotal += fee;
+      transactions.push({
+        ref: row.ref || String(row.id || '').slice(0, 8).toUpperCase(),
+        completedAt: completedDay,
+        route: route,
+        fare: price,
+        held: held,
+        rate: escrow && escrow.commission_rate != null ? Number(escrow.commission_rate) : rate,
+        fee: fee,
+        state: state,
+        net: round2(price - fee),
+        payout: payoutLabel(escrow)
+      });
     });
 
     return {
@@ -226,9 +319,30 @@
       activeAlerts: alerts.count || 0,
       statusCounts: statusCounts,
       buckets: buckets,
-      topRoutes: Array.from(routes.values()).sort(function(a, b) { return b.revenue - a.revenue; }).slice(0, 5)
+      topRoutes: Array.from(routes.values()).sort(function(a, b) { return b.revenue - a.revenue; }).slice(0, 5),
+      commission: {
+        rate: rate,
+        gross: revenue,
+        collected: round2(heldTotal),
+        platform: round2(commissionTotal),
+        bangkero: round2(revenue - commissionTotal),
+        // Where the platform's share is: already taken, still in escrow,
+        // or never withheld because the fare was paid on board.
+        withheld: round2(withheldTotal),
+        reserved: round2(reservedTotal),
+        notWithheld: round2(notWithheldTotal),
+        // Newest first — the table shows the latest slice of this.
+        rows: transactions.sort(function(a, b) {
+          return a.completedAt < b.completedAt ? 1 : a.completedAt > b.completedAt ? -1 : 0;
+        })
+      }
     };
   }
 
-  window.bangkagoStats = { getAdminStats: getAdminStats, getReportData: getReportData };
+  window.bangkagoStats = {
+    getAdminStats: getAdminStats,
+    getReportData: getReportData,
+    getCommissionRate: getCommissionRate,
+    setCommissionRate: setCommissionRate
+  };
 })();

@@ -58,7 +58,9 @@
                 <tr>
                   <th>Payer</th>
                   <th>Trip / Rental</th>
-                  <th>Amount</th>
+                  <th aria-sort="ascending">
+                    Amount <i class="bi bi-arrow-up-short" aria-hidden="true"></i>
+                  </th>
                   <th>Receipt</th>
                   <th>Filed</th>
                   <th>Status</th>
@@ -79,6 +81,33 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- ENTRY CONFIRMATION -->
+  <div class="modal fade" id="continueDownpaymentsModal" tabindex="-1"
+    aria-labelledby="continueDownpaymentsTitle" aria-describedby="continueDownpaymentsMessage"
+    aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="continueDownpaymentsTitle">Continue to Downpayments?</h5>
+        </div>
+        <div class="modal-body" id="continueDownpaymentsMessage">
+          Before approving, compare the receipt Ref No., amount, and date with your GCash
+          Transactions, then confirm the money reached the Admin GCash account. Reject invalid
+          receipts with a reason; refund only when the payment must be returned.
+          <p class="mb-0 mt-3 fw-semibold">Do you want to continue?</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" id="continueDownpaymentsNo">
+            No
+          </button>
+          <button type="button" class="btn btn-bangkago" id="continueDownpaymentsYes">
+            Yes, continue
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- REVIEW DECISION MODAL -->
@@ -167,6 +196,7 @@
     let downpayments = [];
     let selectedDownpaymentId = null;
     let deepLinkHandled = false;
+    let continueToDownpayments = false;
 
     const dpBody = document.getElementById('dpBody');
     const dpSearch = document.getElementById('dpSearch');
@@ -181,6 +211,10 @@
     const mRejectBtn = document.getElementById('mRejectBtn');
     const mRejectBox = document.getElementById('mRejectBox');
     const mRejectReason = document.getElementById('mRejectReason');
+    const continueDownpaymentsModal = new bootstrap.Modal(
+      document.getElementById('continueDownpaymentsModal'),
+      { backdrop: 'static', keyboard: false }
+    );
     let photoRequestId = 0;
 
     function peso(n){ return `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`; }
@@ -293,6 +327,7 @@
         const hay = `${payerName(d)} ${d.label || ''} ${d.serviceLabel || ''} ${targetStatusLabel(d.targetStatus)}`.toLowerCase();
         return (!s || d.status === s) && (!q || hay.includes(q));
       });
+      rows.sort((a, b) => Number(a.amount) - Number(b.amount));
       render(rows);
     }
 
@@ -390,6 +425,16 @@
     document.getElementById('receiptPhotoModal').addEventListener('hidden.bs.modal', () => {
       photoRequestId++;
       document.getElementById('receiptPhotoBox').replaceChildren();
+    });
+
+    document.getElementById('continueDownpaymentsNo').addEventListener('click', () => {
+      window.location.replace('admin-dashboard.html');
+    });
+    document.getElementById('continueDownpaymentsYes').addEventListener('click', () => {
+      if (continueToDownpayments) return;
+      continueToDownpayments = true;
+      continueDownpaymentsModal.hide();
+      void loadDownpayments();
     });
 
     function applyReviewState(d){
@@ -505,7 +550,7 @@
     // Real-time updates: escrow rows and the booking status shown beside them.
     ['downpayments', 'bookings', 'boat_rentals'].forEach(function(table) {
       window.bangkagoRealtime.subscribe(table, null, function() {
-        loadDownpayments();
+        if (continueToDownpayments) loadDownpayments();
       });
     });
 
@@ -513,7 +558,7 @@
     (async function () {
       try {
         await window.bangkagoAuthReady;
-        await loadDownpayments();
+        continueDownpaymentsModal.show();
       } catch (e) {
         console.error('Auth guard failed:', e);
         // Never auto-redirect from here: the guard already distinguishes

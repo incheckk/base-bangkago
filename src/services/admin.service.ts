@@ -16,6 +16,7 @@ function mapUserRow(row: any): UserDoc {
     createdAt: row.created_at,
     age: row.age ?? null,
     address: row.address ?? null,
+    sex: row.sex ?? null,
   };
 }
 

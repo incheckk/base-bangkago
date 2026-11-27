@@ -41,6 +41,61 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+- **2026-11-26 — Admin web commission desk + Commission report (no
+  migration; gates: unit tests 69/69 (+8 commission), edited web service
+  and inline page script pass `node --check`/parse; the report reads only
+  columns that already exist).**
+  - **The gap:** the commission percentage existed only on mobile (Admin →
+    Downpayments). The admin website only printed a frozen "Comm ₱x" on a
+    row, and View Reports had no commission view at all. The rate was
+    reachable in one console and invisible in the other.
+  - **One value, two consoles:** `web/assets/js/services/stats.js` gained
+    `getCommissionRate`/`setCommissionRate`, reading and writing the same
+    `app_settings.commission_rate` row the app uses through
+    `set_commission_rate`; both payout rails (096 `claim_gateway_payouts`,
+    097 `release_downpayment`) keep reading that same row. Nothing is
+    redefined — the report recomputes with that rate only for rows release
+    has not stamped yet, and uses `commission_amount` verbatim when it has.
+    The 0.07 fallback in the web service exists only for pre-096 databases
+    and is commented as such.
+  - **`view-reports.html` Commission section:** rate editor (5–9%, saved
+    through the guarded RPC; "Use 8%" applies the recommendation) plus
+    four honest tiles — total booking revenue, BangkaGo commission (split
+    into withheld / in escrow / not withheld), bangkero earnings,
+    commission percentage — and a transaction breakdown (ref, completed
+    date, route, fare, held downpayment, commission + rate + where it is,
+    net to bangkero, payout state). Same range chips as the rest of the
+    report, realtime on `downpayments` and the existing 30 s poll, so an
+    approval/release updates the split.
+  - **The maths is 096/097's rule — a share of the WHOLE fare:** the
+    downpayment is only where it is *taken from*. A released/paid row uses
+    its frozen `commission_amount`; an approved row projects
+    `round(fare × rate, 2)` (in escrow, deducted at release); a fare with
+    nothing held (same-day, refunded, rejected) still owes its share but it
+    was never withheld, and the tile names that amount instead of reporting
+    ₱0 and hiding the platform's earning. `downpayments(*)` is selected on
+    purpose so a pre-096 database still renders the page.
+  - **Recommended 8%:** ₱8 on the ₱100 seat fare, 16% of the 50%
+    downpayment BangkaGo holds — mid-band in 096's 5–9% guard, leaves
+    ₱92/seat with the bangkero, and earns ₱64–80 on a full 8–10 seat demo
+    boat for receipt review + escrow. It is a recommendation in the UI,
+    not a silent data change: the admin applies it with **Use
+    recommended** so history and the mobile console stay on one stored
+    value.
+  - **Deferred:** the report covers completed *bookings* (the same scope as
+    the rest of View Reports); rentals carry their own downpayments and
+    are not in this split (tracker B15). Nothing in the app *collects* the
+    share of a fare with no downpayment (same-day) — the report shows it as
+    "not withheld", settled with the operator outside the payout, and the
+    bangkero app still lists gross fares. The mobile admin report has no
+    commission section yet.
+  - **Next:** open Admin → View Reports on 7 days, check
+    `revenue = bangkero + commission` and that a same-day trip now shows a
+    commission (not ₱0) marked "not withheld", press **Use recommended**
+    and confirm Admin → Downpayments (app) shows the new rate and an
+    unreleased row's net moves, then release that row and lower the rate
+    again to confirm the report keeps the released amount.
+
 - **2026-11-17 — Dispatch rotation, Analyze Demand, Coast Guard alerts,
   dashboard polish, offer countdown, GPS heartbeat, batched padala
   (migration **100 PENDING — USER MUST RUN, after 099**; gates: tsc clean,

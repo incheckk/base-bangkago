@@ -27,6 +27,7 @@ export default function PassengerProfile() {
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
   const [address, setAddress] = useState('');
+  const [sex, setSex] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
   const [savedName, setSavedName] = useState<{ first: string; last: string } | null>(null);
 
@@ -35,6 +36,7 @@ export default function PassengerProfile() {
     setLastName(profile?.lastName ?? '');
     setAge(profile?.age != null ? String(profile.age) : '');
     setAddress(profile?.address ?? '');
+    setSex(profile?.sex ?? '');
     setError(null);
     setEditing(true);
   }
@@ -48,11 +50,12 @@ export default function PassengerProfile() {
       ? null
       : 'Enter an age between 1 and 120.';
     const addrErr = addressError(address);
+    const sexErr = sex ? null : 'Choose your gender.';
     const invalid = firstErr
       ? `First name: ${firstErr}`
       : lastErr
         ? `Last name: ${lastErr}`
-        : ageErr ?? addrErr;
+        : ageErr ?? addrErr ?? sexErr;
     if (invalid) {
       setError(invalid);
       return;
@@ -66,7 +69,7 @@ export default function PassengerProfile() {
         lastName,
         isBangkero: false,
       });
-      await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address });
+      await updatePersonalDetails({ uid: profile.uid, age: parsedAge, address, sex });
       setSavedName({ first: firstName.trim(), last: lastName.trim() });
       setEditing(false);
     } catch (e) {
@@ -114,9 +117,17 @@ export default function PassengerProfile() {
         <View style={styles.info}>
           <Text style={styles.name} numberOfLines={1}>{displayFirst} {displayLast}</Text>
           <Text style={styles.phone}>{formatPhone(profile.phone)}</Text>
-          {profile.age != null && (
+          {(profile.age != null || profile.sex || profile.address) && (
             <Text style={styles.phone}>
-              {profile.age} years old{profile.address ? ` · ${profile.address}` : ''}
+              {[
+                profile.age != null ? `${profile.age} years old` : null,
+                profile.sex
+                  ? profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1)
+                  : null,
+                profile.address || null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </Text>
           )}
         </View>
@@ -150,9 +161,30 @@ export default function PassengerProfile() {
               onChangeText={setAddress}
               placeholder="House, street, barangay, city"
             />
+            <Text style={styles.fieldLabel}>GENDER</Text>
+            <View style={styles.sexRow}>
+              {(['female', 'male', 'other'] as const).map((s) => {
+                const active = sex === s;
+                return (
+                  <Pressable
+                    key={s}
+                    onPress={() => setSex(s)}
+                    style={({ pressed }) => [
+                      styles.sexChip,
+                      active && styles.sexChipActive,
+                      pressed && !active && styles.pressed,
+                    ]}
+                  >
+                    <Text style={[styles.sexChipText, active && styles.sexChipTextActive]}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
             <Text style={styles.editHint}>
-              Age and address appear on the bangkero&apos;s manifest and are required
-              before booking.
+              Age, gender and address appear on the bangkero&apos;s manifest and are
+              required before booking.
             </Text>
             <View style={styles.editActions}>
               <PrimaryButton
@@ -262,6 +294,23 @@ const styles = StyleSheet.create({
   editActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
   editActionBtn: { flex: 1 },
   editHint: { ...typography.caption, color: colors.textMuted, lineHeight: 17 },
+
+  fieldLabel: { ...typography.label, marginBottom: spacing.sm },
+  sexRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  sexChip: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  sexChipActive: { backgroundColor: colors.primaryTint, borderColor: colors.primary },
+  sexChipText: { ...typography.caption, color: colors.textSecondary, fontWeight: '600' },
+  sexChipTextActive: { color: colors.primary },
+  pressed: { opacity: 0.72 },
 
   menu: {
     backgroundColor: colors.surface,

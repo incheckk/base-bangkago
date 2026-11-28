@@ -12,6 +12,44 @@
   <link rel="stylesheet" href="../../assets/css/admin-theme.css"/>
   <style>
     .info-box{border:1px solid var(--gray-200);border-radius:12px;padding:.65rem .8rem;background:var(--gray-50);}
+    .table-theme tbody tr.booking-row-completed{
+      --bs-table-color:#fff;
+      --bs-table-bg:#14532d;
+      --bs-table-border-color:#2b6540;
+      --bs-table-striped-color:#fff;
+      --bs-table-striped-bg:#1a5b35;
+      --bs-table-active-color:#fff;
+      --bs-table-active-bg:#2b6842;
+      --bs-table-hover-color:#fff;
+      --bs-table-hover-bg:#1b6039;
+    }
+    .table-theme tbody tr.booking-row-completed > td{color:#fff;}
+    .booking-row-completed .text-muted{color:rgba(255,255,255,.82)!important;}
+    .booking-row-completed .action-btn.btn-outline-primary,
+    .booking-row-completed .action-btn.btn-outline-danger{
+      color:#fff;
+      border-color:rgba(255,255,255,.8);
+    }
+
+    /* View Manifest report: 8 passenger + 7 parcel columns have to stay
+       readable inside modal-lg, so the report runs on a compact scale
+       (short cells stay on one line; name/address wrap instead of clipping). */
+    #manifestModal .modal-body{font-size:.9rem;}
+    #manifestModal .info-box{font-size:.85rem;padding:.55rem .7rem;}
+    #manifestModal .table{font-size:.82rem;}
+    #manifestModal .table thead th{
+      font-size:.75rem;font-weight:600;
+      padding:.5rem;white-space:nowrap;
+      border-bottom-width:1px;
+    }
+    #manifestModal .table td{padding:.5rem;vertical-align:middle;white-space:nowrap;}
+    #manifestModal .table td.wrap{white-space:normal;min-width:8rem;}
+    #manifestModal .table .badge{font-size:.7rem;}
+    #manifestModal .modal-footer{flex-wrap:wrap;gap:.5rem;}
+    @media (max-width:576px){
+      #manifestModal .table{font-size:.78rem;}
+      #manifestModal .table td{white-space:normal;}
+    }
   </style>
 </head>
 <body data-page="manage-bookings">
@@ -293,8 +331,11 @@
         const downNote = b.downpaymentStatus
           ? `<div class="small text-muted">Downpayment: ${esc(mapDownpaymentStatus(b.downpaymentStatus))}</div>`
           : '';
+        // Completed rows use a darker green; cancelled rows remain blue.
+        const rowClass = b.status === 'completed' ? 'booking-row-completed'
+                       : b.status === 'cancelled' ? 'table-primary' : '';
         return `
-          <tr>
+          <tr class="${rowClass}">
             <td>
               <div class="fw-semibold">${esc(b.ref)}</div>
               <div class="small text-muted">${esc(b.serviceType || 'passenger')}</div>
@@ -453,21 +494,21 @@
       const paxRows = [
         `<tr>
            <td>1</td>
-           <td>${esc(b.customerName || b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
+           <td class="wrap">${esc(b.customerName || b.passengerName || 'Unknown')} <span class="badge text-bg-primary ms-1">Booker</span></td>
            <td>${esc(b.customerPhone || b.passengerPhone || '—')}</td>
            <td>${b.customerAge != null ? esc(b.customerAge) : 'Not on file'}</td>
-           <td>Booker</td>
-           <td>${esc(b.customerAddress || 'Not on file')}</td>
+           <td>${b.customerSex ? esc(label(b.customerSex)) : 'Not on file'}</td>
+           <td class="wrap">${esc(b.customerAddress || 'Not on file')}</td>
            <td>${b.onboardedAt ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
          </tr>`,
         ...companions.map((p, i) => `
          <tr>
            <td>${i + 2}</td>
-           <td>${esc((p.first_name || '') + ' ' + (p.last_name || ''))}</td>
+           <td class="wrap">${esc((p.first_name || '') + ' ' + (p.last_name || ''))}</td>
            <td>${esc(p.contact_number || '—')}</td>
            <td>${p.age ?? 'Not on file'}</td>
-           <td>${esc(label(p.passenger_type || 'regular'))}</td>
-           <td>${esc(p.address || 'Not on file')}</td>
+           <td>${p.sex ? esc(label(p.sex)) : 'Not on file'}</td>
+           <td class="wrap">${esc(p.address || 'Not on file')}</td>
            <td>${p.boarded_at ? '<span class="badge text-bg-success">Yes</span>' : '<span class="badge text-bg-warning">No</span>'}</td>
          </tr>`)
       ].join('');
@@ -478,12 +519,11 @@
         const kg = list.reduce((s, it) => s + Number(it.kilogram || 0), 0);
         return `<tr>
            <td>${i + 1}</td>
-           <td>${esc(p.receiver_name || '—')}</td>
+           <td class="wrap">${esc(p.receiver_name || '—')}</td>
            <td>${esc(p.receiver_contact || '—')}</td>
            <td>${esc(label(p.delivery_type || 'accompanied'))}</td>
-           <td>${esc(desc)}</td>
+           <td class="wrap">${esc(desc)}</td>
            <td>${kg ? kg.toFixed(1) : '—'}</td>
-           <td>${esc(p.status || 'pending')}</td>
            <td>${peso(p.total_price || 0)}</td>
          </tr>`;
       }).join('');
@@ -491,7 +531,6 @@
       return `
         <div class="row g-2 mb-3">
           <div class="col-md-6"><div class="info-box"><strong>Booking Ref:</strong> ${esc(b.ref)}</div></div>
-          <div class="col-md-6"><div class="info-box"><strong>Status:</strong> <span class="badge ${mapStatusToBadge(b.status)}">${mapStatusToDisplay(b.status)}</span></div></div>
           <div class="col-md-6"><div class="info-box"><strong>Booker:</strong> ${esc(b.customerName || b.passengerName || 'Unknown')} (${esc(b.customerPhone || b.passengerPhone || 'no number')})</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Route:</strong> ${esc(b.fromPortName || '')} → ${esc(b.toPortName || '')}</div></div>
           <div class="col-md-6"><div class="info-box"><strong>Trip Date:</strong> ${esc(tripDateText(b))}</div></div>
@@ -507,9 +546,9 @@
               <tr>
                 <th>#</th>
                 <th>Name</th>
-                <th>Contact</th>
+                <th>Contact Person</th>
                 <th>Age</th>
-                <th>Type</th>
+                <th>Gender</th>
                 <th>Address</th>
                 <th>Boarded</th>
               </tr>
@@ -529,11 +568,10 @@
                 <th>Mode</th>
                 <th>Items</th>
                 <th>Weight (kg)</th>
-                <th>Status</th>
                 <th>Price</th>
               </tr>
             </thead>
-            <tbody>${parcelRows || '<tr><td colspan="8" class="text-center text-muted">No parcels</td></tr>'}</tbody>
+            <tbody>${parcelRows || '<tr><td colspan="7" class="text-center text-muted">No parcels</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -640,7 +678,6 @@
           head: [['Manifest summary', 'Details']],
           body: [
             ['Booking reference', b.ref || '-'],
-            ['Status', mapStatusToDisplay(b.status)],
             ['Booker', (b.customerName || b.passengerName || 'Unknown') + (b.customerPhone || b.passengerPhone ? ' - ' + (b.customerPhone || b.passengerPhone) : '')],
             ['Route', (b.fromPortName || '-') + ' to ' + (b.toPortName || '-')],
             ['Trip date', tripDateText(b)],
@@ -661,7 +698,7 @@
             (b.customerName || b.passengerName || 'Unknown') + ' (Booker)',
             b.customerPhone || b.passengerPhone || '-',
             b.customerAge != null ? String(b.customerAge) : 'Not on file',
-            'Booker',
+            b.customerSex ? label(b.customerSex) : 'Not on file',
             b.customerAddress || 'Not on file',
             b.onboardedAt ? 'Yes' : 'No'
           ],
@@ -670,7 +707,7 @@
             ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || 'Unknown',
             p.contact_number || '-',
             p.age != null ? String(p.age) : 'Not on file',
-            label(p.passenger_type || 'regular'),
+            p.sex ? label(p.sex) : 'Not on file',
             p.address || 'Not on file',
             p.boarded_at ? 'Yes' : 'No'
           ])
@@ -678,7 +715,7 @@
 
         doc.autoTable({
           startY: doc.lastAutoTable.finalY + 8,
-          head: [['#', 'Name', 'Contact', 'Age', 'Type', 'Address', 'Boarded']],
+          head: [['#', 'Name', 'Contact Person', 'Age', 'Gender', 'Address', 'Boarded']],
           body: passengerRows,
           styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
           headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
@@ -686,9 +723,9 @@
           margin: { left: margin, right: margin },
           columnStyles: {
             0: { cellWidth: 8 },
-            3: { cellWidth: 16 },
-            4: { cellWidth: 20 },
-            6: { cellWidth: 18 }
+            3: { cellWidth: 14 },
+            4: { cellWidth: 18 },
+            6: { cellWidth: 16 }
           }
         });
 
@@ -710,14 +747,13 @@
               label(p.delivery_type || 'accompanied'),
               description,
               kg ? kg.toFixed(1) : '-',
-              p.status || 'pending',
               'PHP ' + Number(p.total_price || 0).toFixed(2)
             ];
           });
 
           doc.autoTable({
             startY: doc.lastAutoTable.finalY + 8,
-            head: [['#', 'Receiver', 'Contact', 'Mode', 'Items', 'Weight (kg)', 'Status', 'Price']],
+            head: [['#', 'Receiver', 'Contact', 'Mode', 'Items', 'Weight (kg)', 'Price']],
             body: parcelRows,
             styles: { fontSize: 8, cellPadding: 2, overflow: 'linebreak', valign: 'top' },
             headStyles: { fillColor: [23, 42, 66], textColor: 255, fontStyle: 'bold' },
@@ -726,7 +762,7 @@
             columnStyles: {
               0: { cellWidth: 8 },
               5: { cellWidth: 18 },
-              7: { cellWidth: 20 }
+              6: { cellWidth: 20 }
             }
           });
         }
@@ -795,3 +831,17 @@
   </script>
 </body>
 </html>
+
+
+
+
+#- Manage Bookings - change the row background color based on the status
+     green - completed
+     blue - cancelled  
+
+# - Apply alert message once the button is checked Downpayments.
+
+# - Arrange the list in ascending order based on the amount. 
+
+
+Give me the Explaination what you change 

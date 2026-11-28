@@ -45,6 +45,7 @@ export async function signUp({
     createdAt: new Date().toISOString(),
     age: null,
     address: null,
+    sex: null,
   };
 
   const { error: profileError } = await supabase.from('users').insert({
@@ -178,6 +179,8 @@ export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
     createdAt: data.created_at,
     age: data.age ?? null,
     address: data.address ?? null,
+    // Pre-101 the column does not exist — read as null, never undefined.
+    sex: data.sex ?? null,
   };
 }
 

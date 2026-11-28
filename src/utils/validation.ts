@@ -54,6 +54,19 @@ export function textError(value: string): string | null {
   return null;
 }
 
+/** Every boat in this fleet carries 10–25 passengers; the app offers it as a picker. */
+export const MIN_CAPACITY = 10;
+export const MAX_CAPACITY = 25;
+
+/** null = valid. Boat capacity, in the 10–25 the app offers. */
+export function capacityError(value: string | number): string | null {
+  const n = Number(String(value).trim());
+  if (!Number.isInteger(n) || n < MIN_CAPACITY || n > MAX_CAPACITY) {
+    return `Capacity must be between ${MIN_CAPACITY} and ${MAX_CAPACITY}.`;
+  }
+  return null;
+}
+
 /**
  * Payout destination (095): a GCash mobile number. Stored one way —
  * 09XXXXXXXXX — so the payout call never has to guess between +63 and 0.

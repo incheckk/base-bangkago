@@ -1,22 +1,25 @@
 // BangkaGo payment gateway — ONE edge function, five actions.
 //
 // The point of this file is that the money loop has no admin in it:
-//   passenger taps Pay  -> create-checkout -> hosted page -> Authorize
-//   -> webhook -> confirm_gateway_downpayment() flips the booking open
+//   passenger taps Pay  -> create-checkout -> checkout -> Authorize
+//   -> confirm_gateway_downpayment() flips the booking open
 //   -> trip completes -> queue_gateway_payout trigger
 //   -> payout -> claim_gateway_payouts() -> provider -> record_gateway_payout()
 //
-// TODAY IT RUNS IN SANDBOX: the "provider" is the signed page this same
-// function renders ("BangkaGo Sandbox Checkout"), so a panel can watch a real
-// redirect -> approve -> app-flips sequence without a paused PayMongo sign-up.
-// The provider contract is the same one PayMongo/Maya expose, so going live is
-// GATEWAY_MODE=live + GATEWAY_BASE_URL + GATEWAY_KEY, not a rewrite.
+// TODAY IT RUNS IN SANDBOX: the "provider" is our own checkout sheet, drawn by
+// the app (payment.tsx), because Supabase rewrites text/html to text/plain on
+// the default domain — a hosted page here can never render. Same money path
+// either way. The provider contract is the one PayMongo/Maya expose, so going
+// live is GATEWAY_MODE=live + GATEWAY_BASE_URL + GATEWAY_KEY, not a rewrite:
+// live hands the app a real provider URL to open instead.
 //
 // Deploy: Supabase dashboard -> Edge Functions -> new function "gateway" ->
-// paste this file -> turn OFF "Enforce JWT verification" (the sandbox page and
-// the webhook are called by a browser/provider, not a signed-in user; every
-// action below authenticates itself). Secrets: GATEWAY_SECRET (required),
+// paste this file -> turn OFF "Enforce JWT verification" (the webhook is called
+// by a provider, not a signed-in user; every action below authenticates itself
+// or its signature). Secrets: GATEWAY_SECRET (webhook signing, required),
 // GATEWAY_MODE ("sandbox" default), GATEWAY_BASE_URL, GATEWAY_KEY (live only).
+// Verify a deploy with GET .../functions/v1/gateway?health=1 — it names the
+// missing secret or unrun migration instead of guessing.
 //
 // shortcut: the live payout branch posts PayMongo's disbursement shape and is
 // untested against a real account, because sign-ups are paused; verify it with
@@ -92,13 +95,6 @@ function same(a: string, b: string): boolean {
   return diff === 0;
 }
 
-const peso = (n: number) =>
-  `₱${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-
 // ---------------------------------------------------------------- identity
 
 async function callerId(req: Request): Promise<string | null> {
@@ -133,8 +129,10 @@ interface CheckoutRow {
   label: string;
 }
 
-async function loadCheckout(downpaymentId: string): Promise<CheckoutRow | null> {
-  const { data } = await admin
+async function loadCheckout(
+  downpaymentId: string,
+): Promise<{ row: CheckoutRow | null; error: string | null }> {
+  const { data, error } = await admin
     .from('downpayments')
     .select(
       'id, amount, status, gateway_checkout_ref, booking_id, boat_rental_id,' +
@@ -143,19 +141,24 @@ async function loadCheckout(downpaymentId: string): Promise<CheckoutRow | null> 
     )
     .eq('id', downpaymentId)
     .maybeSingle();
-  if (!data) return null;
+  // 096 not run is the common one: the column does not exist. Say it.
+  if (error) return { row: null, error: error.message };
+  if (!data) return { row: null, error: null };
   const row = data as any;
   const booking = row.booking ?? null;
   const rental = row.rental ?? null;
   return {
-    id: row.id,
-    amount: Number(row.amount),
-    status: row.status,
-    gateway_checkout_ref: row.gateway_checkout_ref ?? null,
-    owner: booking?.user_id ?? rental?.user_id ?? null,
-    label: booking
-      ? `${booking.ref ?? 'Trip'} · ${booking.from_port_name ?? ''} → ${booking.to_port_name ?? ''}`.trim()
-      : rental?.event_name ?? 'Boat rental',
+    error: null,
+    row: {
+      id: row.id,
+      amount: Number(row.amount),
+      status: row.status,
+      gateway_checkout_ref: row.gateway_checkout_ref ?? null,
+      owner: booking?.user_id ?? rental?.user_id ?? null,
+      label: booking
+        ? `${booking.ref ?? 'Trip'} · ${booking.from_port_name ?? ''} → ${booking.to_port_name ?? ''}`.trim()
+        : rental?.event_name ?? 'Boat rental',
+    },
   };
 }
 
@@ -166,7 +169,9 @@ async function createCheckout(req: Request, input: any): Promise<Response> {
   const downpayment_id = input?.downpayment_id;
   if (!downpayment_id) return json({ error: 'downpayment_id is required.' }, 400);
 
-  const row = await loadCheckout(String(downpayment_id));
+  const loaded = await loadCheckout(String(downpayment_id));
+  if (loaded.error) return json({ error: loaded.error }, 500);
+  const row = loaded.row;
   if (!row) return json({ error: 'Downpayment not found.' }, 404);
   if (row.owner !== uid && !(await isAdmin(uid))) {
     return json({ error: 'That downpayment is not yours.' }, 403);
@@ -185,7 +190,7 @@ async function createCheckout(req: Request, input: any): Promise<Response> {
       .is('gateway_checkout_ref', null);
     if (error) return json({ error: error.message }, 500);
     const again = await loadCheckout(row.id);
-    ref = again?.gateway_checkout_ref ?? ref;
+    ref = again.row?.gateway_checkout_ref ?? ref;
   }
 
   if (MODE === 'live') {
@@ -221,150 +226,55 @@ async function createCheckout(req: Request, input: any): Promise<Response> {
     return json({ url });
   }
 
-  const sig = await hmac(ref);
-  const url = `${SUPABASE_URL}/functions/v1/gateway?sandbox=1&ref=${encodeURIComponent(ref)}&sig=${sig}`;
-  return json({ url });
+  // Sandbox: the app draws the checkout sheet and calls sandbox-authorize,
+  // because a hosted page on *.supabase.co is served as text/plain.
+  return json({ sandbox: { ref, amount: row.amount, label: row.label } });
 }
 
-// ---------------------------------------------------------------- sandbox page
+// ---------------------------------------------------------------- sandbox authorize
 
-function page(title: string, inner: string): Response {
-  return new Response(
-    `<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)}</title>
-<style>
-  *{box-sizing:border-box}
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-    background:#0A1620;color:#F7F8F6;font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;padding:24px}
-  .card{width:100%;max-width:420px;background:#12222F;border:1px solid #24384A;border-radius:18px;padding:28px}
-  .brand{font-size:20px;font-weight:800;letter-spacing:-.4px;margin-bottom:2px}
-  .brand span{color:#2FB69B}
-  .sandbox{display:inline-block;margin-bottom:22px;padding:3px 10px;border-radius:999px;
-    background:#3A2A10;color:#F2B54B;font-size:11px;font-weight:800;letter-spacing:1.4px}
-  .row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-top:1px solid #1E3346}
-  .row:first-of-type{border-top:0}
-  .k{color:#9FB0BF;font-size:13px}
-  .v{font-size:14px;font-weight:600;text-align:right;word-break:break-word}
-  .amount{font-size:34px;font-weight:800;margin:18px 0 6px}
-  button{width:100%;height:52px;border:0;border-radius:12px;font-size:15px;font-weight:700;
-    margin-top:12px;cursor:pointer}
-  .ok{background:#2FB69B;color:#04141A}
-  .no{background:transparent;color:#C9D6E1;border:1px solid #33495E}
-  .note{color:#8496A6;font-size:12px;line-height:1.5;margin-top:18px}
-  .tick{width:56px;height:56px;border-radius:28px;background:#173A33;color:#2FB69B;display:flex;
-    align-items:center;justify-content:center;font-size:28px;font-weight:800;margin-bottom:18px}
-</style></head><body><div class="card">${inner}</div></body></html>`,
-    { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
-  );
-}
-
-async function sandboxPage(url: URL): Promise<Response> {
-  const ref = url.searchParams.get('ref') ?? '';
-  const sig = url.searchParams.get('sig') ?? '';
-  if (!SECRET || !ref || !same(sig, await hmac(ref))) {
-    return page('Invalid link', '<div class="brand">BangkaGo</div><p class="note">This checkout link is not valid.</p>');
+/**
+ * The sandbox "provider" approving a payment. The caller is the app, already
+ * signed in, so a JWT + ownership check replaces the old page signature.
+ */
+async function sandboxAuthorize(req: Request, input: any): Promise<Response> {
+  if (MODE === 'live') {
+    return json({ error: 'Sandbox checkout is off in live mode.' }, 400);
   }
 
-  const { data } = await admin
-    .from('downpayments')
-    .select('amount, status, booking:bookings(ref, from_port_name, to_port_name), rental:boat_rentals(event_name)')
-    .eq('gateway_checkout_ref', ref)
-    .maybeSingle();
-  if (!data) {
-    return page('Not found', '<div class="brand">BangkaGo</div><p class="note">This checkout no longer exists.</p>');
+  const uid = await callerId(req);
+  if (!uid) return json({ error: 'Sign in first.' }, 401);
+
+  const loaded = await loadCheckout(String(input?.downpayment_id ?? ''));
+  if (loaded.error) return json({ error: loaded.error }, 500);
+  const row = loaded.row;
+  if (!row) return json({ error: 'Downpayment not found.' }, 404);
+  if (row.owner !== uid && !(await isAdmin(uid))) {
+    return json({ error: 'That downpayment is not yours.' }, 403);
   }
+  if (row.status !== 'pending') return json({ already: true, status: row.status });
 
-  const row = data as any;
-  const label = row.booking
-    ? `${row.booking.ref ?? 'Trip'} · ${row.booking.from_port_name ?? ''} → ${row.booking.to_port_name ?? ''}`.trim()
-    : row.rental?.event_name ?? 'Boat rental';
+  const ref = row.gateway_checkout_ref;
+  if (!ref) return json({ error: 'No checkout reference on this downpayment.' }, 400);
 
-  if (row.status !== 'pending') {
-    return page(
-      'Already settled',
-      `<div class="tick">✓</div><div class="brand">BangkaGo</div>
-       <p class="note">This downpayment is already <strong>${esc(String(row.status))}</strong>. Nothing more to pay.</p>`,
-    );
-  }
-
-  // Live mode still gets a page, but only as the "return to the app" landing.
-  const action = `${SUPABASE_URL}/functions/v1/gateway?sandbox_pay=1`;
-  return page(
-    'BangkaGo Sandbox Checkout',
-    `<div class="brand">Bangka<span>Go</span></div>
-     <div class="sandbox">SANDBOX · NO REAL MONEY</div>
-     <div class="k">Amount due</div>
-     <div class="amount">${peso(Number(row.amount))}</div>
-     <div class="row"><span class="k">Pay with</span><span class="v">GCash</span></div>
-     <div class="row"><span class="k">For</span><span class="v">${esc(label)}</span></div>
-     <div class="row"><span class="k">Reference</span><span class="v">${esc(ref)}</span></div>
-     <form method="post" action="${esc(action)}">
-       <input type="hidden" name="ref" value="${esc(ref)}">
-       <input type="hidden" name="sig" value="${esc(sig)}">
-       <button class="ok" name="decision" value="authorize">Authorize payment</button>
-       <button class="no" name="decision" value="fail">Fail payment</button>
-     </form>
-     <p class="note">This is BangkaGo's own sandbox gateway, standing in for PayMongo while
-     sign-ups are paused. Authorizing moves no pesos — it fires the same webhook a
-     real provider would.</p>`,
-  );
-}
-
-async function sandboxPay(req: Request): Promise<Response> {
-  const form = new URLSearchParams(await req.text());
-  const ref = form.get('ref') ?? '';
-  const sig = form.get('sig') ?? '';
-  const decision = form.get('decision');
-
-  if (!SECRET || !ref || !same(sig, await hmac(ref))) {
-    return page('Invalid link', '<div class="brand">BangkaGo</div><p class="note">This checkout link is not valid.</p>');
-  }
-
-  const { data } = await admin
-    .from('downpayments')
-    .select('amount')
-    .eq('gateway_checkout_ref', ref)
-    .maybeSingle();
-  if (!data) {
-    return page('Not found', '<div class="brand">BangkaGo</div><p class="note">This checkout no longer exists.</p>');
-  }
-
-  if (decision !== 'authorize') {
-    return page(
-      'Payment failed',
-      `<div class="tick" style="background:#3A1A1A;color:#F26B6B">×</div>
-       <div class="brand">BangkaGo</div>
-       <p class="note">Nothing was charged. Close this page and try again from the app.</p>`,
-    );
-  }
-
-  const eventId = `sandbox:${ref}`;
   const { error: eventError } = await admin
     .from('gateway_events')
-    .insert({ event_id: eventId, kind: 'sandbox.paid', payload: { ref } });
+    .insert({ event_id: `sandbox:${ref}`, kind: 'sandbox.paid', payload: { ref } });
   // A replay from a double tap is a success, not an error.
   if (eventError && eventError.code !== '23505') {
-    return page('Gateway error', `<div class="brand">BangkaGo</div><p class="note">${esc(eventError.message)}</p>`);
+    return json({ error: eventError.message }, 500);
   }
 
   const providerRef = `SBX-${Date.now().toString(36).toUpperCase()}`;
   const { error } = await admin.rpc('confirm_gateway_downpayment', {
     p_checkout_ref: ref,
     p_provider_ref: providerRef,
-    p_paid_amount: Number(data.amount),
+    p_paid_amount: row.amount,
   });
   if (error && !/already|approved/i.test(error.message)) {
-    return page('Gateway error', `<div class="brand">BangkaGo</div><p class="note">${esc(error.message)}</p>`);
+    return json({ error: error.message }, 500);
   }
-
-  return page(
-    'Payment authorized',
-    `<div class="tick">✓</div>
-     <div class="brand">BangkaGo</div>
-     <p class="note">Downpayment received. Return to the BangkaGo app — it will pick this up
-     on its own. You can close this page.</p>`,
-  );
+  return json({ ok: true, provider_ref: providerRef });
 }
 
 // ---------------------------------------------------------------- webhook
@@ -491,6 +401,39 @@ async function payout(req: Request, input: any): Promise<Response> {
   return json({ paid: net, count: batch.length, ref });
 }
 
+// ---------------------------------------------------------------- health
+
+/**
+ * Unauthenticated probe for a deploy in a hurry: open
+ * `.../functions/v1/gateway?health=1` in a browser. It answers whether the
+ * function is live, whether its secrets exist and whether 096 ran — with
+ * booleans only, never the secrets themselves.
+ */
+async function health(): Promise<Response> {
+  const [downpayments, flags] = await Promise.all([
+    admin.from('downpayments').select('gateway_checkout_ref').limit(1),
+    admin.from('dev_flags').select('manual_payments').eq('id', 1).maybeSingle(),
+  ]);
+  const needs: string[] = [];
+  if (!SECRET) needs.push('set GATEWAY_SECRET (Edge Functions → Secrets)');
+  if (!SERVICE_KEY) needs.push('SUPABASE_SERVICE_ROLE_KEY is missing');
+  if (!ANON_KEY) needs.push('SUPABASE_ANON_KEY is missing (callers cannot be verified)');
+  if (downpayments.error || flags.error) needs.push('run migrations 095 → 100');
+  if (flags.data?.manual_payments !== false) {
+    needs.push('Developer Options → Manual payments OFF');
+  }
+  return json({
+    ok: needs.length === 0,
+    mode: MODE,
+    hasSecret: !!SECRET,
+    hasServiceKey: !!SERVICE_KEY,
+    hasAnonKey: !!ANON_KEY,
+    migration096: !downpayments.error && !flags.error,
+    manualPayments: flags.data?.manual_payments ?? null,
+    needs,
+  });
+}
+
 // ---------------------------------------------------------------- router
 
 Deno.serve(async (req) => {
@@ -498,16 +441,10 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
 
-  // The browser's two hops through the sandbox: the page, then its form.
-  if (url.searchParams.has('sandbox')) return sandboxPage(url);
-  if (url.searchParams.has('sandbox_pay') && req.method === 'POST') return sandboxPay(req);
-  if (url.searchParams.has('done')) {
-    return page(
-      'BangkaGo',
-      `<div class="brand">Bangka<span>Go</span></div>
-       <p class="note">Payment finished. Return to the BangkaGo app.</p>`,
-    );
-  }
+  if (url.searchParams.has('health')) return health();
+
+  // Live mode's provider redirect lands here; sandbox never leaves the app.
+  if (url.searchParams.has('done')) return json({ ok: true });
 
   let raw = '';
   let body: any = {};
@@ -523,6 +460,8 @@ Deno.serve(async (req) => {
   switch (body.action) {
     case 'create-checkout':
       return createCheckout(req, body);
+    case 'sandbox-authorize':
+      return sandboxAuthorize(req, body);
     case 'webhook':
       return webhook(raw, req.headers.get('x-gateway-signature') ?? '');
     case 'payout':

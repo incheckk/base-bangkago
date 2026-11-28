@@ -273,7 +273,11 @@
           avgDailyPredicted: meta ? meta.avgDailyPredicted : Math.round(r.totalPredicted / r.dates.size),
           daysWithData: meta ? meta.daysWithData : r.dates.size
         };
-      }).sort(function(a, b) { return b.totalPredicted - a.totalPredicted; });
+      }).sort(function(a, b) {
+        // Equal totals keep a stable order so the mobile top-three and this
+        // table agree (the phone applies the same tie-break).
+        return b.totalPredicted - a.totalPredicted || a.routeId.localeCompare(b.routeId);
+      });
     }
 
     function renderAll(stats) {

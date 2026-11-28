@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  nameError, addressError, textError, normalizePayoutNumber, payoutNumberError,
+  nameError, addressError, textError, capacityError,
+  normalizePayoutNumber, payoutNumberError,
 } = require('./load-ts.cjs')('src/utils/validation.ts');
 
 test('nameError accepts real passenger names', () => {
@@ -51,6 +52,21 @@ test('textError accepts parcel item names and rejects junk', () => {
   assert.equal(textError('A'), 'At least 2 characters');
   assert.equal(textError('TV 50%'), null);
   assert.equal(textError('Item; DROP'), 'Letters, numbers and basic punctuation only');
+});
+
+test('capacityError accepts the 10–25 the picker offers', () => {
+  assert.equal(capacityError(10), null);
+  assert.equal(capacityError('12'), null);
+  assert.equal(capacityError(25), null);
+});
+
+test('capacityError rejects values outside 10–25, blanks and fractions', () => {
+  const outside = 'Capacity must be between 10 and 25.';
+  assert.equal(capacityError(9), outside);
+  assert.equal(capacityError(26), outside);
+  assert.equal(capacityError(''), outside);
+  assert.equal(capacityError('12.5'), outside);
+  assert.equal(capacityError('abc'), outside);
 });
 
 test('payoutNumberError accepts PH GCash numbers and normalises them', () => {

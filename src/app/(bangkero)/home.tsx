@@ -4,6 +4,7 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } f
 
 import { BangkeroScreenHeader } from '@/components/BangkeroScreenHeader';
 import { BangkeroTripSheet } from '@/components/BangkeroTripSheet';
+import { CapacityPicker } from '@/components/PassengerInfoFields';
 import { DemandBadge } from '@/components/DemandBadge';
 import { CoachOverlay, useCoachRects, useCoachTarget, type CoachStep } from '@/components/CoachMark';
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -32,9 +33,10 @@ import { getIslandPackages } from '@/services/island-package.service';
 import { savePayoutAccount } from '@/services/documents.service';
 import { createNotification, scheduleLocalNotification } from '@/services/notification.service';
 import {
-  DWELL_MS, endPortOf, formatDistance, getMyBangkaCapacity, getMyLastFix, haversineM, startPortOf,
+  DWELL_MS, endPortOf, formatDistance, getMyLastFix, haversineM, startPortOf,
 } from '@/services/queue.service';
 import { MIN_ACCEPT_RATING, getEffectiveRating } from '@/services/rating.service';
+import { getMyBoat, updateBoat, type MyBoat } from '@/services/profile.service';
 import { acceptPiggybackRequest, rejectPiggyback } from '@/services/parcel-piggyback.service';
 import { type BangkeroRentalRow, getRentalsForBangkero } from '@/services/rental.service';
 import { STRAIT_POINT } from '@/services/weather.service';
@@ -44,7 +46,7 @@ import type { BookingDoc, ParcelDoc } from '@/types/models';
 import { formatPhone } from '@/utils/phone';
 import { alertPing } from '@/utils/feedback';
 import { bookingTypeLabel } from '@/utils/booking-label';
-import { nameError, payoutNumberError } from '@/utils/validation';
+import { nameError, payoutNumberError, capacityError } from '@/utils/validation';
 import { groupAcceptedBookings, type TripGroup } from '@/utils/trip-groups';
 
 /** 45000 → "0:45" — the hold and dwell countdowns. */
@@ -56,8 +58,9 @@ const clock = (ms: number) => {
 /** Future-dated trip → escrow + admin gate; today stays the fast same-day flow. */
 const isAdvance = (b: BookingDoc) => !!b.scheduledDate && b.scheduledDate > todayIso();
 
-const demandLevel = (pax: number): 'low' | 'steady' | 'high' =>
-  pax > 100 ? 'high' : pax >= 50 ? 'steady' : 'low';
+/** Today's top three, worst → calmest. Ranking, not absolute pax: one day's
+ *  per-route totals are small, so >100 would label everything Low. */
+const DEMAND_RANKS = ['high', 'steady', 'low'] as const;
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -125,11 +128,13 @@ export default function BangkeroHome() {
 
   function finishTour() {
     tour.dismiss();
-    if (hasPayoutAccount) return;
-    setPayoutName(bangkero.data?.payoutAccountName ?? `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim());
-    setPayoutNumber(bangkero.data?.payoutAccountNumber ?? '');
-    setPayoutError(null);
-    setPayoutOpen(true);
+    // The boat first: without capacity the bangkero cannot accept a single
+    // trip, while the payout account only decides where the money lands.
+    if (boatChecked && (!boatNamed || myCapacity === null)) {
+      openBoat();
+      return;
+    }
+    afterCapacity();
   }
 
   async function savePayout() {
@@ -149,6 +154,77 @@ export default function BangkeroHome() {
     }
     setSavingPayout(false);
   }
+
+  // 081's fits_booking reads coalesce(capacity,0), so a boat with no capacity
+  // can never accept a booking - and nothing on this screen offered to set
+  // one. Asked whenever it is missing, not only after the tour.
+  // Read with the SAME selector updateBoat writes with: filtering is_active
+  // made a just-saved capacity read back as "missing" on the next mount.
+  const [myBoat, setMyBoat] = useState<MyBoat | null>(null);
+  const [boatChecked, setBoatChecked] = useState(false);
+  const myCapacity = myBoat?.capacity ?? null;
+  const boatNamed = !!myBoat?.bangkaName && myBoat.bangkaName !== 'My Bangka';
+
+  const loadBoat = useCallback(async () => {
+    if (!uid) return;
+    try {
+      setMyBoat(await getMyBoat(uid));
+    } catch {
+      // keep the last known boat
+    } finally {
+      setBoatChecked(true);
+    }
+  }, [uid]);
+  useEffect(() => { void loadBoat(); }, [loadBoat]);
+  useRealtimeQuery(loadBoat, [{ table: 'bangkas' }]);
+
+  const [boatOpen, setBoatOpen] = useState(false);
+  const [boatNameValue, setBoatNameValue] = useState('');
+  const [capacityValue, setCapacityValue] = useState('');
+  const [savingBoat, setSavingBoat] = useState(false);
+  const [boatError, setBoatError] = useState<string | null>(null);
+
+  function openBoat() {
+    // "My Bangka" is the placeholder a blank signup leaves behind — asking
+    // for a real name means showing an empty field, not the placeholder.
+    setBoatNameValue(boatNamed ? myBoat?.bangkaName ?? '' : '');
+    setCapacityValue(myCapacity !== null ? String(myCapacity) : '');
+    setBoatError(null);
+    setBoatOpen(true);
+  }
+
+  /** Both prompts live in the same exit path: capacity blocks work, the
+   *  payout account only blocks getting paid. */
+  function afterCapacity() {
+    if (hasPayoutAccount) return;
+    setPayoutName(bangkero.data?.payoutAccountName ?? `${profile?.firstName ?? ''} ${profile?.lastName ?? ''}`.trim());
+    setPayoutNumber(bangkero.data?.payoutAccountNumber ?? '');
+    setPayoutError(null);
+    setPayoutOpen(true);
+  }
+
+  async function saveBoat() {
+    if (!uid || savingBoat) return;
+    const invalid = nameError(boatNameValue) ?? capacityError(capacityValue);
+    if (invalid) {
+      setBoatError(invalid);
+      return;
+    }
+    setSavingBoat(true);
+    setBoatError(null);
+    try {
+      await updateBoat({ uid, boatName: boatNameValue, capacity: capacityValue });
+      // Read it back before closing: what this screen says on the next
+      // mount must be what the database actually holds.
+      setMyBoat(await getMyBoat(uid));
+      setBoatOpen(false);
+      afterCapacity();
+    } catch (e) {
+      setBoatError(e instanceof Error ? e.message : 'Could not save your boat.');
+    }
+    setSavingBoat(false);
+  }
+
   /** Ping for a request that just arrived — the first load is the baseline. */
   const seenRequests = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -165,18 +241,20 @@ export default function BangkeroHome() {
       .then((rows) => setPkgNames(Object.fromEntries(rows.map((r) => [r.packageId, r.packageName]))))
       .catch(() => {});
   }, []);
+  // Today's route demand, the same rows Admin → Analyze Demand shows for
+  // today: the service scopes to the Manila date and breaks ties by route id,
+  // so the phone's top three matches the console's table order.
   const [demandSummary, setDemandSummary] = useState<RouteDemandSummary[]>([]);
-  useEffect(() => {
-    let alive = true;
-    getRouteDemandSummary()
-      .then((rows) => { if (alive) setDemandSummary(rows); })
-      .catch(() => {});
-    return () => { alive = false; };
+  const loadDemand = useCallback(async () => {
+    try {
+      setDemandSummary(await getRouteDemandSummary());
+    } catch {
+      // keep the last known prediction
+    }
   }, []);
-  const topDemand = useMemo(
-    () => [...demandSummary].sort((a, b) => b.totalPredicted - a.totalPredicted).slice(0, 3),
-    [demandSummary],
-  );
+  useEffect(() => { void loadDemand(); }, [loadDemand]);
+  useRealtimeQuery(loadDemand, [{ table: 'demand_predictions' }]);
+  const topDemand = demandSummary.slice(0, 3);
   const trips = useMyTrips(uid);
   // The working set (accepted only, no 10-row cap) drives active trips and
   // the offline gate; `trips` stays for earnings history.
@@ -386,15 +464,6 @@ export default function BangkeroHome() {
   // already accepted (mirrors fits_booking in 008). `boatChecked`
   // separates "no boat yet" from "not fetched yet" so the gate row and
   // the switch don't flash red while the lookup is in flight.
-  const [myCapacity, setMyCapacity] = useState<number | null>(null);
-  const [boatChecked, setBoatChecked] = useState(false);
-  useEffect(() => {
-    if (!uid) return;
-    getMyBangkaCapacity(uid)
-      .then(setMyCapacity)
-      .catch(() => {})
-      .finally(() => setBoatChecked(true));
-  }, [uid]);
   // Cargo stubs (piggyback/batched/solo before promotion) carry a synthetic
   // 1 pax; only accompanied cargo actually boards a person. 077 batch
   // members are accepted with is_dispatchable = true, so exclude them by
@@ -491,6 +560,13 @@ export default function BangkeroHome() {
     // lock or offer hold (accept_booking_hold skips them too via v_advance).
     // The gates below (online, docs, rating, capacity) still apply.
     const advance = isAdvance(b);
+
+    // fits_booking (081) reads coalesce(capacity,0), so a boat with no
+    // capacity is refused as "not enough space" on every trip. Say the real
+    // reason; the readiness row below opens the form.
+    if (boatBlocked) {
+      return { text: 'Set your boat capacity first', tone: 'block', canAccept: false, distance };
+    }
 
     // A boat at sea cannot take another same-day booking (the trip must
     // close first). Advance bookings are a different day — still allowed.
@@ -969,7 +1045,7 @@ export default function BangkeroHome() {
               : docsBlocked
                 ? 'Your documents must be verified by BangkaGo before you can go online.'
                 : boatBlocked
-                  ? 'Register your boat (Profile → Edit Profile) before going online.'
+                  ? 'Set your boat capacity to go online — tap Boat below.'
                   : available
                     ? 'You are receiving booking requests.'
                     : 'Turn on to start receiving booking requests.'}
@@ -992,7 +1068,7 @@ export default function BangkeroHome() {
           <View style={styles.boatRow}>
             <Icon name="boat" size={18} color={colors.textSecondary} />
             <Text style={styles.boatName} numberOfLines={1}>
-              {bangkero.data?.displayName ?? 'No boat name set'}
+              {myBoat?.bangkaName || bangkero.data?.displayName || 'No boat name set'}
             </Text>
             {bangkero.data?.verificationStat === 'verified' ? (
               <View style={styles.verifiedPill}>
@@ -1025,7 +1101,16 @@ export default function BangkeroHome() {
             <GateRow
               ok={gatesBypass || !boatBlocked}
               label="Boat"
-              detail={!boatChecked ? '…' : myCapacity !== null ? `${myCapacity} pax` : 'missing'}
+              detail={
+                !boatChecked
+                  ? '…'
+                  : myCapacity === null
+                    ? 'missing — tap to set'
+                    : boatNamed
+                      ? `${myCapacity} pax`
+                      : 'unnamed — tap to set'
+              }
+              onPress={boatChecked ? openBoat : undefined}
             />
             <GateRow ok={!!myFixLive} label="GPS" detail={fixAgeLabel} />
             {gatesBypass && (
@@ -1356,14 +1441,14 @@ export default function BangkeroHome() {
           <>
             <Text style={styles.sectionLabel}>TODAY&apos;S PREDICTION</Text>
             <View style={styles.demandList}>
-              {topDemand.map((row) => {
-                const pax = Math.round(row.avgDailyPredicted);
+              {topDemand.map((row, i) => {
+                const pax = Math.round(row.totalPredicted);
                 return (
                   <View key={row.routeId} style={styles.demandRow}>
                     <Text style={styles.demandRoute} numberOfLines={1}>
                       {demandRouteName(row.routeId)}
                     </Text>
-                    <DemandBadge level={demandLevel(pax)} predictedPassengers={pax} />
+                    <DemandBadge level={DEMAND_RANKS[i] ?? 'low'} predictedPassengers={pax} />
                   </View>
                 );
               })}
@@ -1384,6 +1469,54 @@ export default function BangkeroHome() {
         onOpenDeparture={openDepartureChecklist}
         onSail={askSail}
       />
+
+      {/* 081's fits_booking treats a missing capacity as zero seats, so this
+          is the difference between "cannot accept anything" and working.
+          The name rides along: a fresh account's boat is otherwise stuck as
+          "My Bangka", and nothing else in the app writes it. */}
+      <Modal
+        visible={boatOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBoatOpen(false)}
+      >
+        <View style={styles.payoutBackdrop}>
+          <View style={styles.payoutCard}>
+            <Text style={styles.payoutTitle}>Your bangka</Text>
+            <Text style={styles.payoutBody}>
+              Passengers and the Coast Guard see this name. Dispatch only offers
+              trips your boat has room for, so a boat with no capacity on file
+              cannot accept a booking. You can change both later in Profile.
+            </Text>
+            <TextField
+              label="Bangka name"
+              value={boatNameValue}
+              onChangeText={setBoatNameValue}
+              placeholder="e.g. MB San Roque"
+              autoCapitalize="words"
+              maxLength={60}
+            />
+            <CapacityPicker value={capacityValue} onChange={setCapacityValue} />
+            {!!boatError && <Text style={styles.payoutError}>{boatError}</Text>}
+            <PrimaryButton
+              label="Save boat"
+              onPress={() => void saveBoat()}
+              loading={savingBoat}
+              disabled={savingBoat || !boatNameValue.trim() || !capacityValue}
+            />
+            <Pressable
+              onPress={() => {
+                setBoatOpen(false);
+                afterCapacity();
+              }}
+              style={styles.payoutLater}
+              accessibilityRole="button"
+            >
+              <Text style={styles.payoutLaterText}>Later</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Tutorial exit (095): a payout needs an account number, and the
           bangkero is already here signing up. */}
@@ -1446,8 +1579,18 @@ export default function BangkeroHome() {
 }
 
 /** One readiness row: icon + label + the concrete value behind it. */
-function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {
-  return (
+function GateRow({
+  ok,
+  label,
+  detail,
+  onPress,
+}: {
+  ok: boolean;
+  label: string;
+  detail: string;
+  onPress?: () => void;
+}) {
+  const row = (
     <View style={styles.gateRow}>
       <Icon name={ok ? 'check' : 'close'} size={14} color={ok ? colors.success : colors.danger} />
       <Text style={styles.gateLabel}>{label}</Text>
@@ -1455,6 +1598,12 @@ function GateRow({ ok, label, detail }: { ok: boolean; label: string; detail: st
         {detail}
       </Text>
     </View>
+  );
+  if (!onPress) return row;
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${detail}`}>
+      {row}
+    </Pressable>
   );
 }
 

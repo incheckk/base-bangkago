@@ -6,13 +6,16 @@ import { Icon } from './Icon';
 import { TextField } from './TextField';
 import { REGION7_CITIES } from '../data/region7';
 import { addressCity, cityOptionLabel, composeAddress, parseAddress } from '../utils/address';
+import { MAX_CAPACITY, MIN_CAPACITY } from '../utils/validation';
 import { colors, elevation, radii, spacing, touchTarget, typography } from '../theme/tokens';
 
 /**
- * Age and address fields for the two passenger-information surfaces
- * (CompanionForm and PassengerEditModal). A typing field for either was
- * error-prone: ages outside 1–120, addresses that are half a street. This
- * picks from lists instead, so every saved row is a real place.
+ * Age, address and boat-capacity fields for the forms that ask for them:
+ * the two passenger-information surfaces (CompanionForm and
+ * PassengerEditModal) and the bangkero's own boat. A typing field for any
+ * of them was error-prone: ages outside 1–120, addresses that are half a
+ * street, capacities the fleet does not have. This picks from lists
+ * instead, so every saved row is a real value.
  *
  * The address stays ONE string in `passenger_details.address` (028) — no
  * migration — composed from house/street + barangay + city + Region VII.
@@ -20,6 +23,10 @@ import { colors, elevation, radii, spacing, touchTarget, typography } from '../t
  */
 
 const AGE_OPTIONS = Array.from({ length: 120 }, (_, i) => String(i + 1));
+const CAPACITY_OPTIONS = Array.from(
+  { length: MAX_CAPACITY - MIN_CAPACITY + 1 },
+  (_, i) => String(MIN_CAPACITY + i),
+);
 
 function ChoiceSheet({
   visible, title, options, selected, onSelect, onClose,
@@ -148,6 +155,29 @@ export function AgePicker({
       options={AGE_OPTIONS}
       onSelect={onChange}
       error={error}
+    />
+  );
+}
+
+/**
+ * Boat capacity, 10–25 (validation.ts). Lives here because it reuses the
+ * choice sheet below — the same list-instead-of-typing rule as age.
+ */
+export function CapacityPicker({
+  value, onChange,
+}: {
+  /** '' until the picker is used. */
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ChoiceField
+      label="Capacity (passengers)"
+      title="Boat capacity"
+      value={value}
+      placeholder="Select capacity"
+      options={CAPACITY_OPTIONS}
+      onSelect={onChange}
     />
   );
 }

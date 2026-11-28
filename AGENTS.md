@@ -41,6 +41,7 @@ gracefully. Don't mass-refactor hooks to silence warnings.
 
 **Rule: update this section in every push that changes project status.**
 
+<<<<<<< HEAD
 - **2026-11-26 — Admin web commission desk + Commission report (no
   migration; gates: unit tests 69/69 (+8 commission), edited web service
   and inline page script pass `node --check`/parse; the report reads only
@@ -95,6 +96,134 @@ gracefully. Don't mass-refactor hooks to silence warnings.
     and confirm Admin → Downpayments (app) shows the new rate and an
     unreleased row's net moves, then release that row and lower the rate
     again to confirm the report keeps the released amount.
+=======
+- **2026-11-18 — Demo-bug batch: capacity prompt, readable alert badges,
+  Philippines-only fleet map, Coast Guard weather/queues, gateway health
+  probe, checkout sheet copy (migration **101 PENDING — USER MUST RUN, after
+  100**; the 095–100 schema is live — its columns,
+  `gateway_events` and `app_settings.commission_rate` were verified through
+  the REST API — and `dev_flags.manual_payments` is already FALSE; gates:
+  tsc clean, lint 0 errors / 138 known warnings (the two new effects follow
+  the known demoted `set-state-in-effect` pattern), unit tests 63/63, edited
+  inline web scripts parse, `gateway/index.ts` bundles with esbuild;
+  expo-doctor not re-run — nothing dependency-related).**
+  - **Bangkero boat prompt (the "cannot accept a booking" wall).** 081's
+    `fits_booking` reads `coalesce(capacity,0)`, so a boat with no
+    capacity on file is refused as "not enough space" on every trip and
+    Home blocked Go Online without offering a fix — and the saved value
+    read back as missing: `getMyBangkaCapacity` filtered `is_active =
+    true`, so the live Lapu Lapu boat (capacity **12**, active false)
+    looked empty on the next mount. `getMyBoat`
+    (`profile.service.ts`) replaces it and reads with the SAME selector
+    `updateBoat` writes with (`deleted_at IS NULL`, newest row); capacity
+    is not filtered by `is_active`. Saving the boat sets
+    `is_active = true` — 081 refuses accepts on an inactive boat and the
+    app has no other activation path. One **Bangka name + Capacity**
+    `Modal` opens from `finishTour()` (finish **or replay**) and from the
+    always-tappable READINESS **Boat** row; capacity is a **10–25
+    picker** (`CapacityPicker`, shared `ChoiceField`), validated in
+    `utils/validation.ts` (`MIN/MAX_CAPACITY`, `capacityError`) and again
+    in `updateBoat`. A fresh account can finally replace the "My Bangka"
+    placeholder; the save re-reads the boat before closing, so what the
+    screen shows next mount is what the DB holds. `chipFor()` says "Set
+    your boat capacity first" instead of an Accept the server would
+    refuse. Prompts chain boat → payout account.
+  - **Bangkero TODAY'S PREDICTION now agrees with Admin → Analyze
+    Demand.** `getRouteDemandSummary` summed **every** prediction date on
+    file, so today's 11 read as 22 with Nov 13–19 on file. It now takes a
+    Manila date (default today) and filters `prediction_date`, then
+    breaks ties by route id — the same tie-break added to the admin
+    page's `aggregateByRoute`, so equal totals keep one order on both
+    screens. Home subscribes to `demand_predictions` through
+    `useRealtimeQuery` and shows the top three by **today's** total,
+    ranked 1st High / 2nd Steady / 3rd Low (the old absolute >100
+    thresholds labelled every one-day route Low). Frontend only; no
+    schema change.
+  - **Admin `system-alerts.html` severity badges were grey on
+    crimson.** `.alert-card > .mb-2 > span { color:#667085 !important }`
+    also matched `.severity-badge` (a direct child of that row), and its
+    `::before` drew a stray dot. Both rules are scoped to
+    `span.text-muted` (the location line they were written for), so the
+    badge is white-on-`#b42318` again.
+  - **The "bangka in the USA" was real data, not a hardcode.**
+    `fleet-map.js` fits bounds to every plotted newest fix, so one
+    out-of-country `vessel_tracking` row zoomed the map to the world.
+    `web/assets/js/services/vessels.js` now drops fixes outside the
+    Philippines bbox (4.5–21.5 / 116–127) in `getAllLatestPositions()`
+    — one choke point for the coast guard index, both monitor-fleet
+    pages, search-vessel and the admin dashboard. Rows stay in the DB
+    (filter-only by request).
+  - **Coast Guard View Weather was reading an empty `weather_data`
+    table.** `coastguard-dashboard/view-weather.html` is now the admin
+    Open-Meteo page (title + `coastguard-theme.css` only): live
+    condition, wind, wave, visibility, per-route safety table and the
+    Open-Meteo credit, with loading/error/empty states.
+  - **Coast Guard web has Port Queues.** New
+    `coastguard-dashboard/port-queues.html` (admin page retitled, cg
+    theme) sharing `services/queues.js`, plus a sidebar link under
+    Operations and a `port-queues` topbar entry in the **shared**
+    `web/BangkaGO-WEB/assets/js/layout-loader.js` (the per-dashboard
+    copies are dead; pages load `../assets/js/…`).
+  - **Gateway is diagnosable now.** `?health=1` returns
+    `{ ok, mode, hasSecret, hasServiceKey, migration096,
+    manualPayments, needs }`; `invokeGateway` unwraps the function's own
+    error body and `payment.tsx` shows it ("Online checkout failed:
+    <reason>…"); `loadCheckout` reports the Postgres error instead of
+    "Downpayment not found." so an unrun 096 says so. `GATEWAY_SECRET`
+    is set now (the sandbox no longer depends on it — see the next bullet).
+  - **The sandbox checkout can never be a web page — it lives in the app.**
+    Supabase rewrites `text/html` to `text/plain` on the function's own
+    domain (plus `CSP: default-src 'none'; sandbox`); `curl -D-` on
+    `?done=1` answers `Content-Type: text/plain`, which is why the browser
+    showed the HTML source with `Â·`/`â‚±` mojibake. Only a Pro custom
+    domain renders HTML, so `page()`, `sandboxPage`, `sandboxPay` and the
+    `?sandbox`/`?sandbox_pay` routes are **deleted**.
+    `create-checkout` (sandbox) returns `{ sandbox: { ref, amount, label } }`;
+    the app draws the same card in a `Modal` and **Authorize payment**
+    calls the new `sandbox-authorize` action — JWT + owner check replaces
+    the page signature, then the same `gateway_events` insert and
+    `confirm_gateway_downpayment` the browser form fired. **Cancel**
+    (or Android back) leaves the row `pending` and the screen says
+    "Nothing was charged. You can try again." (new `declined` status: the
+    booking screen has no retry for a pending row). `startGatewayCheckout`
+    now returns `{ kind: 'browser' | 'sandbox' | 'settled' }`, so an
+    already-settled row is reported instead of throwing. Live mode is
+    unchanged (`{ url }` → browser). This also kills the "app restarts"
+    report: the Custom Tab backgrounded Expo Go, and an in-app sheet never
+    leaves the app.
+  - **"Online checkout failed: not authenticated" was the dispatch guard.**
+    The checkout was never wrong: `confirm_gateway_downpayment` (096)
+    flips the booking `pending → open` and then `PERFORM
+    assign_next_hold(...)`, whose 100 body opens with `IF auth.uid() IS NULL
+    THEN RAISE 'not authenticated'`. The gateway runs as the service role
+    (no JWT), so the confirm **rolled back whole** — downpayment stayed
+    `pending`, booking stayed `pending` — and the app printed the gate's own
+    sentence. Proof from the live DB: the failed attempt left
+    `gateway_events` `sandbox:bg_d057c1…`, the row `1446f590…` is still
+    `pending`, and `BGO-F5BFE4` is still `pending` with no hold; calling
+    `assign_next_hold` with the service key answers exactly `not
+    authenticated` (P0001) for a UUID that cannot exist, so it never reached
+    a single write. 100 grants the function to `service_role` while its
+    guard refuses it. **101** recreates `assign_next_hold` with 100's body
+    verbatim and one line changed — `IF auth.uid() IS NULL AND
+    COALESCE(auth.role(), '') <> 'service_role'` — so the gateway is let
+    through and people are not (anon has neither a uid nor that role).
+    Nothing else in the money path changed.
+  - **Sandbox sheet copy:** **Fail payment** is **Cancel**, and the "No real
+    money moves … same confirmation a provider webhook would" note is gone
+    at the user's request. The SANDBOX chip stays.
+  - **Next:** run **101** after 100, then in the app book an advance trip and
+    tap Pay downpayment — the sheet must open **in the app**, **Authorize**
+    must flip the booking to open within ~12 s (retrying `BGO-F5BFE4` is
+    safe: its `gateway_events` row is replayed as a 23505 success), and
+    **Cancel** must leave it pending with "Nothing was charged." Then smoke
+    the boat prompt (replay the tutorial on a boat with no capacity, name it,
+    pick 10–25, save, accept a trip; leave Home and return — the Boat row
+    must still show both), a CRITICAL/HIGH card on Admin System Alerts,
+    the coast guard index map (no USA marker, PH bounds), View Weather
+    and Port Queues, and Home's TODAY'S PREDICTION beside Admin → Analyze
+    Demand on today (same top three, same order, same counts).
+>>>>>>> 1ada67b5f2865aab01010a98a9fe182a7fa96ebe
 
 - **2026-11-17 — Dispatch rotation, Analyze Demand, Coast Guard alerts,
   dashboard polish, offer countdown, GPS heartbeat, batched padala

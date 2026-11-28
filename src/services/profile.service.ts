@@ -1,10 +1,8 @@
 import { friendlyAuthError } from './auth.service';
-import { addressError } from '../utils/validation';
+import { addressError, capacityError, nameError } from '../utils/validation';
 import { supabase } from './supabase';
 
 export const friendlyError = friendlyAuthError;
-
-export const MAX_CAPACITY = 50;
 
 interface PersonalDetailsArgs {
   uid: string;
@@ -105,20 +103,26 @@ interface BoatArgs {
  */
 export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise<void> {
   const name = boatName.trim();
+  if (name) {
+    const nameErr = nameError(name);
+    if (nameErr) throw new Error(`Bangka name: ${nameErr}.`);
+  }
 
   let parsed: number | null = null;
   if (capacity.trim()) {
+    const invalid = capacityError(capacity);
+    if (invalid) throw new Error(invalid);
     parsed = Number(capacity.trim());
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_CAPACITY) {
-      throw new Error(`Capacity must be a whole number between 1 and ${MAX_CAPACITY}.`);
-    }
   }
 
-  // Update bangkeros display name
-  const { error: bangkeroError } = await supabase
+  // Update bangkeros display name. The boat fallback below uses it so a
+  // capacity-only save never creates a boat called "My Bangka" again.
+  const { data: operator, error: bangkeroError } = await supabase
     .from('bangkeros')
     .update({ updated_at: new Date().toISOString() })
-    .eq('id', uid);
+    .eq('id', uid)
+    .select('display_name')
+    .maybeSingle();
   if (bangkeroError) throw bangkeroError;
 
   // Upsert the boat. `.limit(1)` matters: duplicate bangkas rows used to
@@ -137,10 +141,12 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
     if (existing) {
       // UPDATE sends dirty fields only — the old `|| 'My Bangka' /
       // || 10` fallbacks clobbered the untouched column on every save.
-      const patch: { bangka_name?: string; capacity?: number } = {};
+      const patch: { bangka_name?: string; capacity?: number; is_active?: boolean } = {};
       if (name) patch.bangka_name = name;
       if (parsed !== null) patch.capacity = parsed;
-      if (Object.keys(patch).length === 0) return;
+      // 081 refuses every accept on a boat with is_active = false, and the
+      // app has no other activation path — saving your own boat re-arms it.
+      patch.is_active = true;
       const { error } = await supabase
         .from('bangkas')
         .update(patch)
@@ -150,7 +156,7 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
       const { error } = await supabase
         .from('bangkas')
         .insert({
-          bangka_name: name || 'My Bangka',
+          bangka_name: name || operator?.display_name || 'My Bangka',
           bangka_type: 'pump_boat',
           capacity: parsed || 10,
           bangkero_id: uid,
@@ -158,4 +164,32 @@ export async function updateBoat({ uid, boatName, capacity }: BoatArgs): Promise
       if (error) throw error;
     }
   }
+}
+
+export interface MyBoat {
+  bangkaName: string;
+  capacity: number | null;
+}
+
+/**
+ * The bangkero's own boat, read with the SAME selector `updateBoat` writes
+ * with. `is_active` deliberately stays out of it: that is an admin
+ * availability flag, and filtering it made a saved capacity read as
+ * "missing" on the next mount (081).
+ */
+export async function getMyBoat(uid: string): Promise<MyBoat | null> {
+  const { data, error } = await supabase
+    .from('bangkas')
+    .select('bangka_name, capacity')
+    .eq('bangkero_id', uid)
+    .is('deleted_at', null)
+    .order('id')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    bangkaName: (data.bangka_name as string) ?? '',
+    capacity: data.capacity != null ? Number(data.capacity) : null,
+  };
 }

@@ -173,20 +173,6 @@ export async function getMyLastFix(
   };
 }
 
-/** This operator's boat capacity — the client-side fit-check chip. */
-export async function getMyBangkaCapacity(bangkeroUid: string): Promise<number | null> {
-  const { data, error } = await supabase
-    .from('bangkas')
-    .select('capacity')
-    .eq('bangkero_id', bangkeroUid)
-    .eq('is_active', true)
-    .order('id')
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.capacity != null ? Number(data.capacity) : null;
-}
-
 /**
  * Sweep every open request whose hold is missing or expired. Safe to
  * call as often as you like: when nothing would change the RPC only

@@ -21,6 +21,16 @@
     return (r.data || []).map(mapBangka);
   }
 
+  /**
+   * A junk GPS fix (a phone that booted with a mock/US location) used to
+   * zoom every dashboard map out to the whole planet. The Philippines
+   * bounding box is the honest filter for a Cebu sea service; the rows
+   * stay in the DB, they just never plot.
+   */
+  function inPhilippines(lat, lng) {
+    return lat >= 4.5 && lat <= 21.5 && lng >= 116 && lng <= 127;
+  }
+
   async function getAllLatestPositions() {
     var c = svc.getClient(); if (!c) throw new Error('No client');
     // vessel_tracking is an append-only GPS log that grows forever —
@@ -32,6 +42,7 @@
     if (r.error) throw r.error;
     var seen = new Set(), latest = [];
     for (var row of r.data || []) {
+      if (!inPhilippines(row.latitude, row.longitude)) continue;
       if (!seen.has(row.bangka_id)) { seen.add(row.bangka_id); latest.push(mapTracking(row)); }
     }
     return latest;

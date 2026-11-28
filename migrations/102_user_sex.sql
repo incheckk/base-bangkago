@@ -1,5 +1,5 @@
 -- =============================================================
--- 101 — BOOKER GENDER FOR THE MANIFEST
+-- 102 — BOOKER GENDER FOR THE MANIFEST
 --
 -- The View Manifest report shows a Gender column per passenger. Companions
 -- have carried `passenger_details.sex` since 002, but the booker is a `users`
@@ -10,7 +10,7 @@
 -- rows remain null until the passenger picks a gender in Profile; the app now
 -- requires the profile details before allowing a new booking.
 --
--- Run in the SQL editor AFTER 100.
+-- Run in the SQL editor AFTER 101.
 -- =============================================================
 
 BEGIN;
